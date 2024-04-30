@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ViltConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViLTModel`]. It is used to instantiate an ViLT
@@ -142,3 +144,7 @@ class ViltConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
         self.num_images = num_images
+
+__all__ = [
+    "ViltConfig"
+]

@@ -47,6 +47,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_pegasus import PegasusConfig
 
 
@@ -886,6 +887,7 @@ class FlaxPegasusModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix: str = "model"
@@ -1220,6 +1222,7 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
     "The bare Pegasus Model transformer outputting raw hidden-states without any specific head on top.",
     PEGASUS_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxPegasusModel(FlaxPegasusPreTrainedModel):
     config: PegasusConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1305,6 +1308,7 @@ class FlaxPegasusForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
+@register(backends=("flax",))
 class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
     module_class = FlaxPegasusForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1528,3 +1532,9 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxPegasusForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxPegasusPreTrainedModel",
+    "FlaxPegasusModel",
+    "FlaxPegasusForConditionalGeneration"
+]

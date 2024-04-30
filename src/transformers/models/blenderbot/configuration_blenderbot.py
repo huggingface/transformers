@@ -23,11 +23,13 @@ from ...file_utils import TensorType, is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BlenderbotConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotModel`]. It is used to instantiate an
@@ -165,6 +167,7 @@ class BlenderbotConfig(PretrainedConfig):
         )
 
 
+@register()
 class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -390,3 +393,8 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+
+__all__ = [
+    "BlenderbotConfig",
+    "BlenderbotOnnxConfig"
+]

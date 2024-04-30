@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ReformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ReformerModel`]. It is used to instantiate a
@@ -230,3 +232,7 @@ class ReformerConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "ReformerConfig"
+]

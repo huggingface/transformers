@@ -36,6 +36,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -48,6 +49,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class BeitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BEiT image processor.
@@ -529,3 +531,7 @@ class BeitImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+__all__ = [
+    "BeitImageProcessor"
+]

@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PLBartConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PLBartModel`]. It is used to instantiate an
@@ -187,3 +189,7 @@ class PLBartOnnxConfig(OnnxConfigWithPast):
                     ("encoder_last_hidden_state", {0: "batch", 1: "sequence"}),
                 ]
             )
+
+__all__ = [
+    "PLBartConfig"
+]

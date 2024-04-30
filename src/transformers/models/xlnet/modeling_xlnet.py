@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_xlnet import XLNetConfig
 
 
@@ -127,6 +128,7 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
     return tf_to_pt_map
 
 
+@register()
 def load_tf_weights_in_xlnet(model, config, tf_path):
     """Load tf checkpoints in a pytorch model"""
     try:
@@ -527,6 +529,7 @@ class XLNetLayer(nn.Module):
         return output_x
 
 
+@register(backends=("torch",))
 class XLNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -922,6 +925,7 @@ XLNET_INPUTS_DOCSTRING = r"""
     "The bare XLNet Model transformer outputting raw hidden-states without any specific head on top.",
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetModel(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1285,6 +1289,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetLMHeadModel(XLNetPreTrainedModel):
     _tied_weights_keys = ["lm_loss.weight"]
 
@@ -1491,6 +1496,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1600,6 +1606,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetForTokenClassification(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1687,6 +1694,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1790,6 +1798,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1900,6 +1909,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
     """,
     XLNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2078,3 +2088,15 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                     hidden_states=transformer_outputs.hidden_states,
                     attentions=transformer_outputs.attentions,
                 )
+
+__all__ = [
+    "load_tf_weights_in_xlnet",
+    "XLNetPreTrainedModel",
+    "XLNetModel",
+    "XLNetLMHeadModel",
+    "XLNetForSequenceClassification",
+    "XLNetForTokenClassification",
+    "XLNetForMultipleChoice",
+    "XLNetForQuestionAnsweringSimple",
+    "XLNetForQuestionAnswering"
+]

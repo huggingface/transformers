@@ -44,6 +44,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_longt5 import LongT5Config
 
 
@@ -1663,6 +1664,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("flax",))
 class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2105,6 +2107,7 @@ class FlaxLongT5Module(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Model with T5->LongT5
+@register(backends=("flax",))
 class FlaxLongT5Model(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5Module
 
@@ -2250,6 +2253,7 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5ForConditionalGenerationModule
 
@@ -2445,3 +2449,9 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxLongT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxLongT5PreTrainedModel",
+    "FlaxLongT5Model",
+    "FlaxLongT5ForConditionalGeneration"
+]

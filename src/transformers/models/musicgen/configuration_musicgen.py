@@ -16,12 +16,14 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MusicgenDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
@@ -131,6 +133,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         )
 
 
+@register()
 class MusicgenConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
@@ -253,3 +256,8 @@ class MusicgenConfig(PretrainedConfig):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
         self.decoder._attn_implementation = value
+
+__all__ = [
+    "MusicgenDecoderConfig",
+    "MusicgenConfig"
+]

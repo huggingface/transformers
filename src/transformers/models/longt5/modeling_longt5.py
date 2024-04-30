@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_longt5 import LongT5Config
 
 
@@ -1263,6 +1264,7 @@ class LongT5Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
+@register(backends=("torch",))
 class LongT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1746,6 +1748,7 @@ num_heads)`.
     "The bare LONGT5 Model transformer outputting raw hidden-states without any specific head on top.",
     LONGT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongT5Model(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
@@ -1901,6 +1904,7 @@ class LongT5Model(LongT5PreTrainedModel):
 
 
 @add_start_docstrings("""LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING)
+@register(backends=("torch",))
 class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
@@ -2153,6 +2157,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     "The bare LONGT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     LONGT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongT5EncoderModel(LongT5PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
@@ -2232,3 +2237,10 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         )
 
         return encoder_outputs
+
+__all__ = [
+    "LongT5PreTrainedModel",
+    "LongT5Model",
+    "LongT5ForConditionalGeneration",
+    "LongT5EncoderModel"
+]

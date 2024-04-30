@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class TimesformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TimesformerModel`]. It is used to instantiate a
@@ -124,3 +126,7 @@ class TimesformerConfig(PretrainedConfig):
 
         self.attention_type = attention_type
         self.drop_path_rate = drop_path_rate
+
+__all__ = [
+    "TimesformerConfig"
+]

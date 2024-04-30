@@ -51,6 +51,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bart import BartConfig
 
 
@@ -842,6 +843,7 @@ class BartClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class BartPreTrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
@@ -874,6 +876,7 @@ class BartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
+@register(backends=("torch",))
 class PretrainedBartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
@@ -882,6 +885,7 @@ class PretrainedBartModel(BartPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class BartPretrainedModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
@@ -1235,6 +1239,7 @@ class BartEncoder(BartPreTrainedModel):
         )
 
 
+@register()
 class BartDecoder(BartPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`BartDecoderLayer`]
@@ -1526,6 +1531,7 @@ class BartDecoder(BartPreTrainedModel):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BartModel(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1658,6 +1664,7 @@ class BartModel(BartPreTrainedModel):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
+@register(backends=("torch",))
 class BartForConditionalGeneration(BartPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1843,6 +1850,7 @@ class BartForConditionalGeneration(BartPreTrainedModel):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BartForSequenceClassification(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1973,6 +1981,7 @@ class BartForSequenceClassification(BartPreTrainedModel):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BartForQuestionAnswering(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2111,6 +2120,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BartForCausalLM(BartPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -2323,3 +2333,15 @@ class BartForCausalLM(BartPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "BartPreTrainedModel",
+    "PretrainedBartModel",
+    "BartPretrainedModel",
+    "BartDecoder",
+    "BartModel",
+    "BartForConditionalGeneration",
+    "BartForSequenceClassification",
+    "BartForQuestionAnswering",
+    "BartForCausalLM"
+]

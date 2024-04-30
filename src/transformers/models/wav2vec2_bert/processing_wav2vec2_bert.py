@@ -18,10 +18,12 @@ Speech processor class for Wav2Vec2-BERT
 import warnings
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
+@register()
 class Wav2Vec2BertProcessor(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2-BERT processor which wraps a Wav2Vec2-BERT feature extractor and a Wav2Vec2 CTC tokenizer into a single
@@ -143,3 +145,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = [
+    "Wav2Vec2BertProcessor"
+]

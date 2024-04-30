@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 import numpy as np
 
 from ...utils import is_tf_available, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class CodeGenTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" CodeGen tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
@@ -271,3 +273,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
             return completion[: min(terminals_pos)]
         else:
             return completion
+
+__all__ = [
+    "CodeGenTokenizerFast"
+]

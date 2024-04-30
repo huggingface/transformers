@@ -23,6 +23,7 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_fuyu import FuyuConfig
 
 
@@ -52,6 +53,7 @@ FUYU_START_DOCSTRING = r"""
     "The bare Fuyu Model outputting raw hidden-states without any specific head on top.",
     FUYU_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig
     base_model_prefix = "fuyu"
@@ -144,6 +146,7 @@ FUYU_INPUTS_DOCSTRING = r"""
     "Fuyu Model with a language modeling head on top for causal language model conditioned on image patches and text.",
     FUYU_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FuyuForCausalLM(FuyuPreTrainedModel):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
@@ -358,3 +361,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             }
         )
         return model_inputs
+
+__all__ = [
+    "FuyuPreTrainedModel",
+    "FuyuForCausalLM"
+]

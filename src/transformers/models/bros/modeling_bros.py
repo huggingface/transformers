@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bros import BrosConfig
 
 
@@ -750,6 +751,7 @@ class BrosRelationExtractor(nn.Module):
         return relation_score
 
 
+@register(backends=("torch",))
 class BrosPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -780,6 +782,7 @@ class BrosPreTrainedModel(PreTrainedModel):
     "The bare Bros Model transformer outputting raw hidden-states without any specific head on top.",
     BROS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BrosModel(BrosPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -958,6 +961,7 @@ class BrosModel(BrosPreTrainedModel):
     """,
     BROS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BrosForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1065,6 +1069,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
     """,
     BROS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1208,6 +1213,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     """,
     BROS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1313,3 +1319,11 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "BrosPreTrainedModel",
+    "BrosModel",
+    "BrosForTokenClassification",
+    "BrosSpadeEEForTokenClassification",
+    "BrosSpadeELForTokenClassification"
+]

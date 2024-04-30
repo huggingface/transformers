@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("sentencepiece",))
 class FNetTokenizer(PreTrainedTokenizer):
     """
     Construct an FNet tokenizer. Adapted from [`AlbertTokenizer`]. Based on
@@ -336,3 +338,7 @@ class FNetTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "FNetTokenizer"
+]

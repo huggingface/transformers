@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pegasus import PegasusConfig
 
 
@@ -563,6 +564,7 @@ class TFPegasusDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFPegasusPreTrainedModel(TFPreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix = "model"
@@ -1262,6 +1264,7 @@ class TFPegasusMainLayer(keras.layers.Layer):
     "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFPegasusModel(TFPegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1375,6 +1378,7 @@ class BiasLayer(keras.layers.Layer):
     "The PEGASUS Model with a language modeling head. Can be used for summarization.",
     PEGASUS_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
@@ -1570,3 +1574,9 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+__all__ = [
+    "TFPegasusPreTrainedModel",
+    "TFPegasusModel",
+    "TFPegasusForConditionalGeneration"
+]

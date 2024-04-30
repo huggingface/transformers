@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
@@ -1327,6 +1328,7 @@ class Kosmos2TextTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class Kosmos2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1733,6 +1735,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
     """,
     KOSMOS2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Kosmos2Model(Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
@@ -1865,6 +1868,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     """,
     KOSMOS2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
     main_input_name = "pixel_values"
@@ -2049,3 +2053,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         )
 
         return output
+
+__all__ = [
+    "Kosmos2PreTrainedModel",
+    "Kosmos2Model",
+    "Kosmos2ForConditionalGeneration"
+]

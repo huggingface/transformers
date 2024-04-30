@@ -33,6 +33,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, logging
+from ...utils.import_utils import register
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
@@ -625,6 +626,7 @@ class FlaxCLIPVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPTextConfig
     module_class: nn.Module = None
@@ -704,6 +706,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -776,6 +779,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
     config_class = CLIPConfig
     module_class: nn.Module = None
@@ -1009,6 +1013,7 @@ class FlaxCLIPTextModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPTextModel(FlaxCLIPTextPreTrainedModel):
     module_class = FlaxCLIPTextModule
 
@@ -1080,6 +1085,7 @@ class FlaxCLIPTextModelWithProjectionModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPTextModelWithProjection(FlaxCLIPTextPreTrainedModel):
     module_class = FlaxCLIPTextModelWithProjectionModule
 
@@ -1134,6 +1140,7 @@ class FlaxCLIPVisionModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxCLIPVisionModel(FlaxCLIPVisionPreTrainedModel):
     module_class = FlaxCLIPVisionModule
 
@@ -1260,6 +1267,7 @@ class FlaxCLIPModule(nn.Module):
 
 
 @add_start_docstrings(CLIP_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxCLIPModel(FlaxCLIPPreTrainedModel):
     module_class = FlaxCLIPModule
 
@@ -1293,3 +1301,13 @@ FLAX_CLIP_MODEL_DOCSTRING = """
 
 overwrite_call_docstring(FlaxCLIPModel, CLIP_INPUTS_DOCSTRING + FLAX_CLIP_MODEL_DOCSTRING)
 append_replace_return_docstrings(FlaxCLIPModel, output_type=FlaxCLIPOutput, config_class=CLIPConfig)
+
+__all__ = [
+    "FlaxCLIPTextPreTrainedModel",
+    "FlaxCLIPVisionPreTrainedModel",
+    "FlaxCLIPPreTrainedModel",
+    "FlaxCLIPTextModel",
+    "FlaxCLIPTextModelWithProjection",
+    "FlaxCLIPVisionModel",
+    "FlaxCLIPModel"
+]

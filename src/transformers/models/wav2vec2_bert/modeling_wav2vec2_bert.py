@@ -43,6 +43,7 @@ from ...utils import (
     is_peft_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
@@ -911,6 +912,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2Conformer->Wav2Vec2Bert,wav2vec2_conformer->wav2vec2_bert, input_values->input_features
+@register(backends=("torch",))
 class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1042,6 +1044,7 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
     "The bare Wav2Vec2Bert Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
@@ -1170,6 +1173,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     """Wav2Vec2Bert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForCTC.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config, target_lang: Optional[str] = None):
@@ -1284,6 +1288,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert
     def __init__(self, config):
@@ -1387,6 +1392,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
@@ -1538,6 +1544,7 @@ class TDNNLayer(nn.Module):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
@@ -1666,3 +1673,12 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Wav2Vec2BertPreTrainedModel",
+    "Wav2Vec2BertModel",
+    "Wav2Vec2BertForCTC",
+    "Wav2Vec2BertForSequenceClassification",
+    "Wav2Vec2BertForAudioFrameClassification",
+    "Wav2Vec2BertForXVector"
+]

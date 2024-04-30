@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MarkupLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarkupLMModel`]. It is used to instantiate a
@@ -151,3 +153,7 @@ class MarkupLMConfig(PretrainedConfig):
         self.tag_pad_id = tag_pad_id
         self.subs_pad_id = subs_pad_id
         self.xpath_unit_hidden_size = xpath_unit_hidden_size
+
+__all__ = [
+    "MarkupLMConfig"
+]

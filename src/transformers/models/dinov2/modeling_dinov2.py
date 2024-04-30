@@ -41,6 +41,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_dinov2 import Dinov2Config
 
 
@@ -468,6 +469,7 @@ class Dinov2Encoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class Dinov2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -571,6 +573,7 @@ DINOV2_INPUTS_DOCSTRING = r"""
     "The bare DINOv2 Model transformer outputting raw hidden-states without any specific head on top.",
     DINOV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Dinov2Model(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config):
         super().__init__(config)
@@ -660,6 +663,7 @@ class Dinov2Model(Dinov2PreTrainedModel):
     """,
     DINOV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Dinov2ForImageClassification(Dinov2PreTrainedModel):
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__(config)
@@ -759,6 +763,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
     """,
     DINOV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -852,3 +857,10 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions if output_attentions else None,
         )
+
+__all__ = [
+    "Dinov2PreTrainedModel",
+    "Dinov2Model",
+    "Dinov2ForImageClassification",
+    "Dinov2Backbone"
+]

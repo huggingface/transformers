@@ -38,6 +38,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -2785,6 +2786,7 @@ ONEFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class OneFormerPreTrainedModel(PreTrainedModel):
     config_class = OneFormerConfig
     base_model_prefix = "model"
@@ -2904,6 +2906,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     "The bare OneFormer Model outputting raw hidden-states without any specific head on top.",
     ONEFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OneFormerModel(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
 
@@ -3033,6 +3036,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
     "OneFormer Model for instance, semantic and panoptic image segmentation.",
     ONEFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
     main_input_name = ["pixel_values", "task_inputs"]
 
@@ -3254,3 +3258,9 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             if loss is not None:
                 output = (loss) + output
         return output
+
+__all__ = [
+    "OneFormerPreTrainedModel",
+    "OneFormerModel",
+    "OneFormerForUniversalSegmentation"
+]

@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import register
 from .image_processing_vit import ViTImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class ViTFeatureExtractor(ViTImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,7 @@ class ViTFeatureExtractor(ViTImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+__all__ = [
+    "ViTFeatureExtractor"
+]

@@ -21,6 +21,7 @@ from tokenizers import pre_tokenizers, processors
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_blenderbot import BlenderbotTokenizer
 
 
@@ -34,6 +35,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -301,3 +303,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             "{% endfor %}"
             "{{ eos_token }}"
         )
+
+__all__ = [
+    "BlenderbotTokenizerFast"
+]

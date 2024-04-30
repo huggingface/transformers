@@ -19,11 +19,13 @@ import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SEWDConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to instantiate a SEW-D
@@ -291,3 +293,7 @@ class SEWDConfig(PretrainedConfig):
         output = super().to_dict()
         output["hidden_dropout"] = output.pop("_hidden_dropout")
         return output
+
+__all__ = [
+    "SEWDConfig"
+]

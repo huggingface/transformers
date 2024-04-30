@@ -23,8 +23,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class SiglipProcessor(ProcessorMixin):
     r"""
     Constructs a Siglip processor which wraps a Siglip image processor and a Siglip tokenizer into a single processor.
@@ -140,3 +142,7 @@ class SiglipProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+__all__ = [
+    "SiglipProcessor"
+]

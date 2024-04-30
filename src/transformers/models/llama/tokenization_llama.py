@@ -28,6 +28,7 @@ import sentencepiece as spm
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@register(backends=("sentencepiece",))
 class LlamaTokenizer(PreTrainedTokenizer):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
@@ -463,3 +465,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
 
         return template
+
+__all__ = [
+    "LlamaTokenizer"
+]

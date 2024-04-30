@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -35,6 +36,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" XLM-RoBERTa tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -194,3 +196,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "XLMRobertaTokenizerFast"
+]

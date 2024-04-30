@@ -18,6 +18,7 @@ from typing import List, Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +32,7 @@ def load_vocab_file(vocab_file):
         return [l.strip() for l in lines]
 
 
+@register()
 class EsmTokenizer(PreTrainedTokenizer):
     """
     Constructs an ESM tokenizer.
@@ -141,3 +143,7 @@ class EsmTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.all_tokens)
+
+__all__ = [
+    "EsmTokenizer"
+]

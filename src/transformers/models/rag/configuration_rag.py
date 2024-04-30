@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
+from ...utils.import_utils import register
 
 
 RAG_CONFIG_DOC = r"""
@@ -78,6 +79,7 @@ RAG_CONFIG_DOC = r"""
 
 
 @add_start_docstrings(RAG_CONFIG_DOC)
+@register()
 class RagConfig(PretrainedConfig):
     model_type = "rag"
     is_composition = True
@@ -180,3 +182,7 @@ class RagConfig(PretrainedConfig):
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
+
+__all__ = [
+    "RagConfig"
+]

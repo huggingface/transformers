@@ -39,6 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_table_transformer import TableTransformerConfig
 
 
@@ -801,6 +802,7 @@ class TableTransformerClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class TableTransformerPreTrainedModel(PreTrainedModel):
     config_class = TableTransformerConfig
     base_model_prefix = "model"
@@ -1200,6 +1202,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """,
     TABLE_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TableTransformerModel(TableTransformerPreTrainedModel):
     # Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
@@ -1369,6 +1372,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
     """,
     TABLE_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
     # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
@@ -2001,3 +2005,9 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
+
+__all__ = [
+    "TableTransformerPreTrainedModel",
+    "TableTransformerModel",
+    "TableTransformerForObjectDetection"
+]

@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -774,6 +775,7 @@ class SwitchTransformersBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
 
 
+@register(backends=("torch",))
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1276,6 +1278,7 @@ num_heads)`.
     "The bare SWITCH_TRANSFORMERS Model transformer outputting raw hidden-states without any specific head on top.",
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1449,6 +1452,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 @add_start_docstrings(
     """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
+@register(backends=("torch",))
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1774,6 +1778,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     " on top.",
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
 
@@ -1857,3 +1862,10 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         )
 
         return encoder_outputs
+
+__all__ = [
+    "SwitchTransformersPreTrainedModel",
+    "SwitchTransformersModel",
+    "SwitchTransformersForConditionalGeneration",
+    "SwitchTransformersEncoderModel"
+]

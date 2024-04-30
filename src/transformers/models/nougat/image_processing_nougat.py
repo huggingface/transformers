@@ -42,7 +42,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
-from ...utils.import_utils import is_cv2_available, is_vision_available
+from ...utils.import_utils import is_cv2_available, is_vision_available, register
 
 
 logger = logging.get_logger(__name__)
@@ -56,6 +56,7 @@ if is_vision_available():
     import PIL
 
 
+@register(backends=("vision",))
 class NougatImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Nougat image processor.
@@ -530,3 +531,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "NougatImageProcessor"
+]

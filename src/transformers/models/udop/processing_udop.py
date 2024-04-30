@@ -22,8 +22,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class UdopProcessor(ProcessorMixin):
     r"""
     Constructs a UDOP processor which combines a LayoutLMv3 image processor and a UDOP tokenizer into a single processor.
@@ -202,3 +204,7 @@ class UdopProcessor(ProcessorMixin):
     # Copied from transformers.models.layoutlmv3.processing_layoutlmv3.LayoutLMv3Processor.model_input_names
     def model_input_names(self):
         return ["input_ids", "bbox", "attention_mask", "pixel_values"]
+
+__all__ = [
+    "UdopProcessor"
+]

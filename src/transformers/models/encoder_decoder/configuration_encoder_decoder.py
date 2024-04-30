@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class EncoderDecoderConfig(PretrainedConfig):
     r"""
     [`EncoderDecoderConfig`] is the configuration class to store the configuration of a [`EncoderDecoderModel`]. It is
@@ -104,3 +106,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         decoder_config.add_cross_attention = True
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
+
+__all__ = [
+    "EncoderDecoderConfig"
+]

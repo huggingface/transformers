@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_vit_msn import ViTMSNConfig
 
 
@@ -409,6 +410,7 @@ class ViTMSNEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ViTMSNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -476,6 +478,7 @@ VIT_MSN_INPUTS_DOCSTRING = r"""
     "The bare ViTMSN Model outputting raw hidden-states without any specific head on top.",
     VIT_MSN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTMSNModel(ViTMSNPreTrainedModel):
     def __init__(self, config: ViTMSNConfig, use_mask_token: bool = False):
         super().__init__(config)
@@ -585,6 +588,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
     """,
     VIT_MSN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
     def __init__(self, config: ViTMSNConfig) -> None:
         super().__init__(config)
@@ -685,3 +689,9 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ViTMSNPreTrainedModel",
+    "ViTMSNModel",
+    "ViTMSNForImageClassification"
+]

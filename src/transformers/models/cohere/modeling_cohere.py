@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_cohere import CohereConfig
 
 
@@ -717,6 +718,7 @@ COHERE_START_DOCSTRING = r"""
     COHERE_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Cohere
+@register(backends=("torch",))
 class CoherePreTrainedModel(PreTrainedModel):
     config_class = CohereConfig
     base_model_prefix = "model"
@@ -814,6 +816,7 @@ COHERE_INPUTS_DOCSTRING = r"""
     COHERE_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere
+@register(backends=("torch",))
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]
@@ -1046,6 +1049,7 @@ class CohereModel(CoherePreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with Llama->Cohere
+@register(backends=("torch",))
 class CohereForCausalLM(CoherePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1256,3 +1260,9 @@ class CohereForCausalLM(CoherePreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "CoherePreTrainedModel",
+    "CohereModel",
+    "CohereForCausalLM"
+]

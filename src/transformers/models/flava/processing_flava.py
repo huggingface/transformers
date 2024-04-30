@@ -23,8 +23,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register(backends=("vision",))
 class FlavaProcessor(ProcessorMixin):
     r"""
     Constructs a FLAVA processor which wraps a FLAVA image processor and a FLAVA tokenizer into a single processor.
@@ -163,3 +165,7 @@ class FlavaProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "FlavaProcessor"
+]

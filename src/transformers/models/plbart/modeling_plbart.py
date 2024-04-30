@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_plbart import PLBartConfig
 
 
@@ -493,6 +494,7 @@ class PLBartClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class PLBartPreTrainedModel(PreTrainedModel):
     config_class = PLBartConfig
     base_model_prefix = "model"
@@ -1130,6 +1132,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
     "The bare PLBART Model outputting raw hidden-states without any specific head on top.",
     PLBART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PLBartModel(PLBartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1253,6 +1256,7 @@ class PLBartModel(PLBartPreTrainedModel):
     "The PLBART Model with a language modeling head. Can be used for code-to-text, text-to-code and code-to-code.",
     PLBART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1429,6 +1433,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
     """,
     PLBART_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PLBartForSequenceClassification(PLBartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1567,6 +1572,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->PLBart, facebook/bart-base->uclanlp/plbart-base
+@register(backends=("torch",))
 class PLBartForCausalLM(PLBartPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1779,3 +1785,11 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "PLBartPreTrainedModel",
+    "PLBartModel",
+    "PLBartForConditionalGeneration",
+    "PLBartForSequenceClassification",
+    "PLBartForCausalLM"
+]

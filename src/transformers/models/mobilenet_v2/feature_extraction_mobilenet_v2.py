@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import register
 from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class MobileNetV2FeatureExtractor(MobileNetV2ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,7 @@ class MobileNetV2FeatureExtractor(MobileNetV2ImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+__all__ = [
+    "MobileNetV2FeatureExtractor"
+]

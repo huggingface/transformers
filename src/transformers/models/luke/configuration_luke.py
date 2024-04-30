@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LukeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LukeModel`]. It is used to instantiate a LUKE
@@ -137,3 +139,7 @@ class LukeConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
         self.classifier_dropout = classifier_dropout
+
+__all__ = [
+    "LukeConfig"
+]

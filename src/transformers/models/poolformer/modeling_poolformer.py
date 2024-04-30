@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -256,6 +257,7 @@ class PoolFormerEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
+@register(backends=("torch",))
 class PoolFormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -301,6 +303,7 @@ POOLFORMER_INPUTS_DOCSTRING = r"""
     "The bare PoolFormer Model transformer outputting raw hidden-states without any specific head on top.",
     POOLFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PoolFormerModel(PoolFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -368,6 +371,7 @@ class PoolFormerFinalPooler(nn.Module):
     """,
     POOLFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -444,3 +448,9 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+__all__ = [
+    "PoolFormerPreTrainedModel",
+    "PoolFormerModel",
+    "PoolFormerForImageClassification"
+]

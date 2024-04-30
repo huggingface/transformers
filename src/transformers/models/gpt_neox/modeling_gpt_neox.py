@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
+from ...utils.import_utils import register
 from .configuration_gpt_neox import GPTNeoXConfig
 
 
@@ -66,6 +67,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
+@register(backends=("torch",))
 class GPTNeoXPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -777,6 +779,7 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
     "The bare GPTNeoX Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEOX_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoXModel(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -953,6 +956,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 @add_start_docstrings(
     """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
 )
+@register(backends=("torch",))
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     _tied_weights_keys = ["embed_out.weight"]
 
@@ -1136,6 +1140,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
     """,
     GPT_NEOX_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1249,6 +1254,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1333,6 +1339,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     """,
     GPT_NEOX_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1422,3 +1429,12 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "GPTNeoXPreTrainedModel",
+    "GPTNeoXModel",
+    "GPTNeoXForCausalLM",
+    "GPTNeoXForSequenceClassification",
+    "GPTNeoXForTokenClassification",
+    "GPTNeoXForQuestionAnswering"
+]

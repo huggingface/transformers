@@ -47,6 +47,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_gptj import GPTJConfig
 
 
@@ -558,6 +559,7 @@ class TFGPTJMainLayer(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFGPTJPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -679,6 +681,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
     "The bare GPT-J Model transformer outputting raw hidden-states without any specific head on top.",
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPTJModel(TFGPTJPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -744,6 +747,7 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -877,6 +881,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"h.\d+.attn.masked_bias", r"h.\d+.attn.bias", r"lm_head.weight"]
 
@@ -1003,6 +1008,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss):
     _keys_to_ignore_on_load_missing = [r"h.\d+.attn.masked_bias", r"h.\d+.attn.bias", r"lm_head.weight"]
 
@@ -1097,3 +1103,11 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFGPTJPreTrainedModel",
+    "TFGPTJModel",
+    "TFGPTJForCausalLM",
+    "TFGPTJForSequenceClassification",
+    "TFGPTJForQuestionAnswering"
+]

@@ -62,6 +62,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bert import BertConfig
 
 
@@ -1014,6 +1015,7 @@ class TFBertMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1157,6 +1159,7 @@ BERT_INPUTS_DOCSTRING = r"""
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertModel(TFBertPreTrainedModel):
     def __init__(self, config: BertConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1241,6 +1244,7 @@ Bert Model with two heads on top as done during the pretraining:
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1361,6 +1365,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1457,6 +1462,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
                 self.mlm.build(None)
 
 
+@register(backends=("tf",))
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1597,6 +1603,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"cls.predictions"]
@@ -1693,6 +1700,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
@@ -1791,6 +1799,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
@@ -1902,6 +1911,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -2004,6 +2014,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     """,
     BERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -2109,3 +2120,16 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFBertPreTrainedModel",
+    "TFBertModel",
+    "TFBertForPreTraining",
+    "TFBertForMaskedLM",
+    "TFBertLMHeadModel",
+    "TFBertForNextSentencePrediction",
+    "TFBertForSequenceClassification",
+    "TFBertForMultipleChoice",
+    "TFBertForTokenClassification",
+    "TFBertForQuestionAnswering"
+]

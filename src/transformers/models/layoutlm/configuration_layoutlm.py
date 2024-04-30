@@ -19,11 +19,13 @@ from typing import Any, List, Mapping, Optional
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LayoutLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
@@ -133,6 +135,7 @@ class LayoutLMConfig(PretrainedConfig):
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 
+@register()
 class LayoutLMOnnxConfig(OnnxConfig):
     def __init__(
         self,
@@ -193,3 +196,8 @@ class LayoutLMOnnxConfig(OnnxConfig):
         batch_size, seq_length = input_dict["input_ids"].shape
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
+
+__all__ = [
+    "LayoutLMConfig",
+    "LayoutLMOnnxConfig"
+]

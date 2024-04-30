@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_cpmant import CpmAntConfig
 
 
@@ -523,6 +524,7 @@ class CpmAntOutput(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class CpmAntPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -590,6 +592,7 @@ CPMANT_INPUTS_DOCSTRING = r"""
     "The bare CPMAnt Model outputting raw hidden-states without any specific head on top.",
     CPMANT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CpmAntModel(CpmAntPreTrainedModel):
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
@@ -737,6 +740,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """,
     CPMANT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CpmAntForCausalLM(CpmAntPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -867,3 +871,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel):
             key_value_layer[0] = key_value_layer[0][beam_idx]
             key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
+
+__all__ = [
+    "CpmAntPreTrainedModel",
+    "CpmAntModel",
+    "CpmAntForCausalLM"
+]

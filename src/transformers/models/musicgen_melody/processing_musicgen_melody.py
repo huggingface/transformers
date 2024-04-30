@@ -21,8 +21,10 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...utils import to_numpy
+from ...utils.import_utils import register
 
 
+@register(backends=("torchaudio",))
 class MusicgenMelodyProcessor(ProcessorMixin):
     r"""
     Constructs a MusicGen Melody processor which wraps a Wav2Vec2 feature extractor - for raw audio waveform processing - and a T5 tokenizer into a single processor
@@ -172,3 +174,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         inputs["attention_mask"][:] = 0
 
         return inputs
+
+__all__ = [
+    "MusicgenMelodyProcessor"
+]

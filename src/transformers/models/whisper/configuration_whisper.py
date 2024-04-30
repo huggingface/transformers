@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -56,6 +57,7 @@ NON_SPEECH_TOKENS_MULTI = [
 # fmt: on
 
 
+@register()
 class WhisperConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate a
@@ -281,6 +283,7 @@ class WhisperConfig(PretrainedConfig):
         )
 
 
+@register()
 class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -338,3 +341,8 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+__all__ = [
+    "WhisperConfig",
+    "WhisperOnnxConfig"
+]

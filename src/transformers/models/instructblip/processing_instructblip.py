@@ -24,9 +24,11 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 from ..auto import AutoTokenizer
 
 
+@register()
 class InstructBlipProcessor(ProcessorMixin):
     r"""
     Constructs an InstructBLIP processor which wraps a BLIP image processor and a LLaMa/T5 tokenizer into a single
@@ -171,3 +173,7 @@ class InstructBlipProcessor(ProcessorMixin):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(qformer_tokenizer)
         return cls(*args)
+
+__all__ = [
+    "InstructBlipProcessor"
+]

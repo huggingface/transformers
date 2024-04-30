@@ -23,11 +23,13 @@ import numpy as np
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
@@ -238,3 +240,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+__all__ = [
+    "Wav2Vec2FeatureExtractor"
+]

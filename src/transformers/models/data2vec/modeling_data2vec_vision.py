@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
 
@@ -561,6 +562,7 @@ class Data2VecVisionEncoder(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
+@register(backends=("torch",))
 class Data2VecVisionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -629,6 +631,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     DATA2VEC_VISION_START_DOCSTRING,
 )
 # Copied from transformers.models.beit.modeling_beit.BeitModel with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,True->False
+@register(backends=("torch",))
 class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False) -> None:
         super().__init__(config)
@@ -746,6 +749,7 @@ class Data2VecVisionPooler(nn.Module):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 # Copied from transformers.models.beit.modeling_beit.BeitForImageClassification with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,beit->data2vec_vision
+@register(backends=("torch",))
 class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__(config)
@@ -1081,6 +1085,7 @@ class Data2VecVisionFCNHead(nn.Module):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 # Copied from transformers.models.beit.modeling_beit.BeitForSemanticSegmentation with BEIT->DATA2VEC_VISION,Beit->Data2VecVision,microsoft/beit-base-finetuned-ade-640-640->facebook/data2vec-vision-base,beit->data2vec_vision
+@register(backends=("torch",))
 class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig) -> None:
         super().__init__(config)
@@ -1224,3 +1229,10 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Data2VecVisionPreTrainedModel",
+    "Data2VecVisionModel",
+    "Data2VecVisionForImageClassification",
+    "Data2VecVisionForSemanticSegmentation"
+]

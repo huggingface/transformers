@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -55,6 +56,7 @@ SPECIAL_CODEPOINTS: Dict[int, str] = {
 SPECIAL_CODEPOINTS_BY_NAME: Dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
 
 
+@register()
 class CanineTokenizer(PreTrainedTokenizer):
     r"""
     Construct a CANINE tokenizer (i.e. a character splitter). It turns text into a sequence of characters, and then
@@ -239,3 +241,7 @@ class CanineTokenizer(PreTrainedTokenizer):
     # CanineTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
         return ()
+
+__all__ = [
+    "CanineTokenizer"
+]

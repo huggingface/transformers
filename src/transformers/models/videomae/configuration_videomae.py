@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VideoMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate a
@@ -143,3 +145,7 @@ class VideoMAEConfig(PretrainedConfig):
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
+
+__all__ = [
+    "VideoMAEConfig"
+]

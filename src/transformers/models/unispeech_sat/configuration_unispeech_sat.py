@@ -19,11 +19,13 @@ import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class UniSpeechSatConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UniSpeechSatModel`]. It is used to instantiate an
@@ -322,3 +324,7 @@ class UniSpeechSatConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+__all__ = [
+    "UniSpeechSatConfig"
+]

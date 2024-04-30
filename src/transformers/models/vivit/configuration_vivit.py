@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VivitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VivitModel`]. It is used to instantiate a ViViT
@@ -114,3 +116,7 @@ class VivitConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "VivitConfig"
+]

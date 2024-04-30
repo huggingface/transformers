@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LxmertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LxmertModel`] or a [`TFLxmertModel`]. It is used
@@ -165,3 +167,7 @@ class LxmertConfig(PretrainedConfig):
         self.visual_feat_loss = visual_feat_loss
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
         super().__init__(**kwargs)
+
+__all__ = [
+    "LxmertConfig"
+]

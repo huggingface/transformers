@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, stable_softmax
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_esm import EsmConfig
 
 
@@ -799,6 +800,7 @@ class TFEsmPooler(keras.layers.Layer):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
+@register(backends=("tf",))
 class TFEsmPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1096,6 +1098,7 @@ class TFEsmMainLayer(keras.layers.Layer):
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFEsmModel(TFEsmPreTrainedModel):
     def __init__(self, config: EsmConfig, add_pooling_layer=True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1175,6 +1178,7 @@ class TFEsmModel(TFEsmPreTrainedModel):
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
+@register(backends=("tf",))
 class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1345,6 +1349,7 @@ class TFEsmLMHead(keras.layers.Layer):
     """,
     ESM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1430,6 +1435,7 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     """,
     ESM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLoss):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1565,3 +1571,11 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = tf.cast(input_ids != padding_idx, tf.int64)
     incremental_indices = (tf.cumsum(mask, axis=1) + past_key_values_length) * mask
     return incremental_indices + padding_idx
+
+__all__ = [
+    "TFEsmPreTrainedModel",
+    "TFEsmModel",
+    "TFEsmForMaskedLM",
+    "TFEsmForSequenceClassification",
+    "TFEsmForTokenClassification"
+]

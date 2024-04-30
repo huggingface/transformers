@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_hubert import HubertConfig
 
 
@@ -1197,6 +1198,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class HubertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1324,6 +1326,7 @@ HUBERT_INPUTS_DOCSTRING = r"""
     "The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.",
     HUBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class HubertModel(HubertPreTrainedModel):
     def __init__(self, config: HubertConfig):
         super().__init__(config)
@@ -1468,6 +1471,7 @@ class HubertModel(HubertPreTrainedModel):
     HUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
+@register(backends=("torch",))
 class HubertForCTC(HubertPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1628,6 +1632,7 @@ class HubertForCTC(HubertPreTrainedModel):
     HUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->Hubert, wav2vec2->hubert, WAV_2_VEC_2->HUBERT
+@register(backends=("torch",))
 class HubertForSequenceClassification(HubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1742,3 +1747,10 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "HubertPreTrainedModel",
+    "HubertModel",
+    "HubertForCTC",
+    "HubertForSequenceClassification"
+]

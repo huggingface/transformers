@@ -19,6 +19,7 @@ from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 # TODO Update this
 
 
+@register()
 class EsmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
@@ -357,3 +359,7 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
+
+__all__ = [
+    "EsmConfig"
+]

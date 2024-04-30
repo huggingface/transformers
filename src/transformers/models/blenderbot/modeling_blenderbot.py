@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
@@ -455,6 +456,7 @@ class BlenderbotDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class BlenderbotPreTrainedModel(PreTrainedModel):
     config_class = BlenderbotConfig
     base_model_prefix = "model"
@@ -1057,6 +1059,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
     "The bare Blenderbot Model outputting raw hidden-states without any specific head on top.",
     BLENDERBOT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlenderbotModel(BlenderbotPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
@@ -1197,6 +1200,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 @add_start_docstrings(
     "The Blenderbot Model with a language modeling head. Can be used for summarization.", BLENDERBOT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1398,6 +1402,7 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
+@register(backends=("torch",))
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1610,3 +1615,10 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "BlenderbotPreTrainedModel",
+    "BlenderbotModel",
+    "BlenderbotForConditionalGeneration",
+    "BlenderbotForCausalLM"
+]

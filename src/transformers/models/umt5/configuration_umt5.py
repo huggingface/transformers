@@ -18,11 +18,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class UMT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UMT5Model`]. It is used to instantiate a UMT5
@@ -141,6 +143,7 @@ class UMT5Config(PretrainedConfig):
         )
 
 
+@register()
 class UMT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.inputs
@@ -170,3 +173,8 @@ class UMT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 5e-4
+
+__all__ = [
+    "UMT5Config",
+    "UMT5OnnxConfig"
+]

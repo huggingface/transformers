@@ -33,6 +33,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_vitdet import VitDetConfig
 
 
@@ -604,6 +605,7 @@ def caffe2_msra_fill(module: nn.Module) -> None:
         nn.init.constant_(module.bias, 0)
 
 
+@register(backends=("torch",))
 class VitDetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -698,6 +700,7 @@ VITDET_INPUTS_DOCSTRING = r"""
     "The bare VitDet Transformer model outputting raw hidden-states without any specific head on top.",
     VITDET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VitDetModel(VitDetPreTrainedModel):
     def __init__(self, config: VitDetConfig):
         super().__init__(config)
@@ -794,6 +797,7 @@ class VitDetModel(VitDetPreTrainedModel):
     """,
     VITDET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -873,3 +877,9 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "VitDetPreTrainedModel",
+    "VitDetModel",
+    "VitDetBackbone"
+]

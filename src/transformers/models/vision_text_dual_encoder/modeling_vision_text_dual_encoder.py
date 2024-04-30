@@ -22,6 +22,7 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -159,6 +160,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @add_start_docstrings(VISION_TEXT_DUAL_ENCODER_START_DOCSTRING)
+@register(backends=("torch",))
 class VisionTextDualEncoderModel(PreTrainedModel):
     config_class = VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
@@ -533,3 +535,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         )
 
         return model
+
+__all__ = [
+    "VisionTextDualEncoderModel"
+]

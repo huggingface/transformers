@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -32,6 +33,7 @@ VISION_MODEL_CONFIGS = {
 }
 
 
+@register()
 class VisionTextDualEncoderConfig(PretrainedConfig):
     r"""
     [`VisionTextDualEncoderConfig`] is the configuration class to store the configuration of a
@@ -117,3 +119,7 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
         """
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
+
+__all__ = [
+    "VisionTextDualEncoderConfig"
+]

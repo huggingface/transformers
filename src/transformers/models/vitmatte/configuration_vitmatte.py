@@ -19,12 +19,14 @@ from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VitMatteConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
@@ -131,3 +133,7 @@ class VitMatteConfig(PretrainedConfig):
         output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "VitMatteConfig"
+]

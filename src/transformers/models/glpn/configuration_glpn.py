@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GLPNConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GLPNModel`]. It is used to instantiate an GLPN
@@ -130,3 +132,7 @@ class GLPNConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
         self.head_in_index = head_in_index
+
+__all__ = [
+    "GLPNConfig"
+]

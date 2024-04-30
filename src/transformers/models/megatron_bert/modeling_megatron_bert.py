@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_megatron_bert import MegatronBertConfig
 
 
@@ -698,6 +699,7 @@ class MegatronBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("torch",))
 class MegatronBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -827,6 +829,7 @@ MEGATRON_BERT_INPUTS_DOCSTRING = r"""
     "The bare MegatronBert Model transformer outputting raw hidden-states without any specific head on top.",
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertModel(MegatronBertPreTrainedModel):
     """
 
@@ -1004,6 +1007,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1111,6 +1115,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning.""",
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1267,6 +1272,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
 
 
 @add_start_docstrings("""MegatronBert Model with a `language modeling` head on top.""", MEGATRON_BERT_START_DOCSTRING)
+@register(backends=("torch",))
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder"]
 
@@ -1375,6 +1381,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     """MegatronBert Model with a `next sentence prediction (classification)` head on top.""",
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1479,6 +1486,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1576,6 +1584,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1669,6 +1678,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1747,6 +1757,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1837,3 +1848,16 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "MegatronBertPreTrainedModel",
+    "MegatronBertModel",
+    "MegatronBertForPreTraining",
+    "MegatronBertForCausalLM",
+    "MegatronBertForMaskedLM",
+    "MegatronBertForNextSentencePrediction",
+    "MegatronBertForSequenceClassification",
+    "MegatronBertForMultipleChoice",
+    "MegatronBertForTokenClassification",
+    "MegatronBertForQuestionAnswering"
+]

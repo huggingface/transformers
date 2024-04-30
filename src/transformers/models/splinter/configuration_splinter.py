@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SplinterConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SplinterModel`]. It is used to instantiate an
@@ -118,3 +120,7 @@ class SplinterConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.question_token_id = question_token_id
+
+__all__ = [
+    "SplinterConfig"
+]

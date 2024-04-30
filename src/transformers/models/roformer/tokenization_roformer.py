@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -270,6 +271,7 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
+@register()
 class RoFormerTokenizer(PreTrainedTokenizer):
     r"""
     Construct a RoFormer tokenizer. Based on [Rust Jieba](https://pypi.org/project/rjieba/).
@@ -535,3 +537,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 writer.write(token + "\n")
                 index += 1
         return (vocab_file,)
+
+__all__ = [
+    "RoFormerTokenizer"
+]

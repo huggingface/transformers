@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class QDQBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`QDQBertModel`]. It is used to instantiate an
@@ -118,3 +120,7 @@ class QDQBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+
+__all__ = [
+    "QDQBertConfig"
+]

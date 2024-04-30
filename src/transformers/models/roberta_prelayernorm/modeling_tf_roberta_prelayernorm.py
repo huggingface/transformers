@@ -57,6 +57,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 
@@ -873,6 +874,7 @@ class TFRobertaPreLayerNormMainLayer(keras.layers.Layer):
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaPreTrainedModel with Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("tf",))
 class TFRobertaPreLayerNormPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -986,6 +988,7 @@ ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING = r"""
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaModel with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("tf",))
 class TFRobertaPreLayerNormModel(TFRobertaPreLayerNormPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1127,6 +1130,7 @@ class TFRobertaPreLayerNormLMHead(keras.layers.Layer):
 @add_start_docstrings(
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
 )
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1220,6 +1224,7 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForCausalLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForCausalLM(TFRobertaPreLayerNormPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1498,6 +1503,7 @@ class TFRobertaPreLayerNormForSequenceClassification(
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMultipleChoice with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"lm_head"]
@@ -1602,6 +1608,7 @@ class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedMode
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1698,6 +1705,7 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1794,3 +1802,13 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFRobertaPreLayerNormPreTrainedModel",
+    "TFRobertaPreLayerNormModel",
+    "TFRobertaPreLayerNormForMaskedLM",
+    "TFRobertaPreLayerNormForCausalLM",
+    "TFRobertaPreLayerNormForMultipleChoice",
+    "TFRobertaPreLayerNormForTokenClassification",
+    "TFRobertaPreLayerNormForQuestionAnswering"
+]

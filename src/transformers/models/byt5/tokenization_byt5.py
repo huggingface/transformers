@@ -20,11 +20,13 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ByT5Tokenizer(PreTrainedTokenizer):
     """
     Construct a ByT5 tokenizer. ByT5 simply uses raw bytes utf-8 encoding.
@@ -232,3 +234,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
     # ByT5Tokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
+
+__all__ = [
+    "ByT5Tokenizer"
+]

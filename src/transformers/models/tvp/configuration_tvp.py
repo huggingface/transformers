@@ -18,12 +18,14 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class TvpConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
@@ -196,3 +198,7 @@ class TvpConfig(PretrainedConfig):
             output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+__all__ = [
+    "TvpConfig"
+]

@@ -44,6 +44,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_t5 import T5Config
 
 
@@ -924,6 +925,7 @@ T5_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("flax",))
 class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1364,6 +1366,7 @@ class FlaxT5Module(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxT5Model(FlaxT5PreTrainedModel):
     module_class = FlaxT5Module
 
@@ -1451,6 +1454,7 @@ class FlaxT5EncoderModule(nn.Module):
         return encoder_outputs
 
 
+@register(backends=("flax",))
 class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
     module_class = FlaxT5EncoderModule
 
@@ -1602,6 +1606,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
     module_class = FlaxT5ForConditionalGenerationModule
 
@@ -1797,3 +1802,10 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxT5PreTrainedModel",
+    "FlaxT5Model",
+    "FlaxT5EncoderModel",
+    "FlaxT5ForConditionalGeneration"
+]

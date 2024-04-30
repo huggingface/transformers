@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -259,6 +260,7 @@ class Blip2EncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class Blip2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -493,6 +495,7 @@ class Blip2Encoder(nn.Module):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
+@register(backends=("torch",))
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = Blip2VisionConfig
@@ -981,6 +984,7 @@ class Blip2QFormerEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class Blip2QFormerModel(Blip2PreTrainedModel):
     """
     Querying Transformer (Q-Former), used in BLIP-2.
@@ -1177,6 +1181,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     """,
     BLIP_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
@@ -1536,6 +1541,7 @@ class Blip2Model(Blip2PreTrainedModel):
     """,
     BLIP_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
@@ -1856,3 +1862,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             else:
                 outputs = torch.cat([bos_tokens, outputs], dim=-1)
         return outputs
+
+__all__ = [
+    "Blip2PreTrainedModel",
+    "Blip2VisionModel",
+    "Blip2QFormerModel",
+    "Blip2Model",
+    "Blip2ForConditionalGeneration"
+]

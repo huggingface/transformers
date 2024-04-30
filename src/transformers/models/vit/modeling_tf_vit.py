@@ -37,6 +37,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_vit import ViTConfig
 
 
@@ -650,6 +651,7 @@ class TFViTMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFViTPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -738,6 +740,7 @@ VIT_INPUTS_DOCSTRING = r"""
     "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFViTModel(TFViTPreTrainedModel):
     def __init__(self, config: ViTConfig, *inputs, add_pooling_layer=True, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -828,6 +831,7 @@ class TFViTPooler(keras.layers.Layer):
     """,
     VIT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: ViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -903,3 +907,9 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFViTPreTrainedModel",
+    "TFViTModel",
+    "TFViTForImageClassification"
+]

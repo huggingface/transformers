@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Data2VecTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecTextModel`] and [`Data2VecTextModel`]. It
@@ -135,6 +137,7 @@ class Data2VecTextConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class Data2VecTextOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -148,3 +151,8 @@ class Data2VecTextOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "Data2VecTextConfig",
+    "Data2VecTextOnnxConfig"
+]

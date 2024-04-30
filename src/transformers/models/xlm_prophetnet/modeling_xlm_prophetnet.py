@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_xlm_prophetnet import XLMProphetNetConfig
 
 
@@ -551,6 +552,7 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
 
 
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel with ProphetNet->XLMProphetNet
+@register(backends=("torch",))
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
     config_class = XLMProphetNetConfig
     base_model_prefix = "prophetnet"
@@ -1241,6 +1243,7 @@ class XLMProphetNetDecoderLayer(nn.Module):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetEncoder with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
+@register(backends=("torch",))
 class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1376,6 +1379,7 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoder with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET,
+@register(backends=("torch",))
 class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
     r"""
     word_embeddings  (`torch.nn.Embeddings` of shape `(config.vocab_size, config.hidden_size)`, *optional*):
@@ -1745,6 +1749,7 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetModel with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
+@register(backends=("torch",))
 class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight"]
 
@@ -1880,6 +1885,7 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForConditionalGeneration with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
+@register(backends=("torch",))
 class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = ["encoder.word_embeddings.weight", "decoder.word_embeddings.weight", "lm_head.weight"]
 
@@ -2098,6 +2104,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     XLM_PROPHETNET_START_DOCSTRING,
 )
 # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForCausalLM with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
+@register(backends=("torch",))
 class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     _tied_weights_keys = [
         "prophetnet.word_embeddings.weight",
@@ -2361,3 +2368,12 @@ class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+__all__ = [
+    "XLMProphetNetPreTrainedModel",
+    "XLMProphetNetEncoder",
+    "XLMProphetNetDecoder",
+    "XLMProphetNetModel",
+    "XLMProphetNetForConditionalGeneration",
+    "XLMProphetNetForCausalLM"
+]

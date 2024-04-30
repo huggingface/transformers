@@ -22,6 +22,7 @@ import sentencepiece as sp
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
 
 
+@register(backends=("sentencepiece",))
 class DebertaV2Tokenizer(PreTrainedTokenizer):
     r"""
     Constructs a DeBERTa-v2 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -519,3 +521,7 @@ def convert_to_unicode(text):
         return text.decode("utf-8", "ignore")
     else:
         raise ValueError(f"Unsupported string type: {type(text)}")
+
+__all__ = [
+    "DebertaV2Tokenizer"
+]

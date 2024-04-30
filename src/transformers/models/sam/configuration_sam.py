@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SamPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamPromptEncoder`]. The [`SamPromptEncoder`]
@@ -69,6 +71,7 @@ class SamPromptEncoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
+@register()
 class SamMaskDecoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamMaskDecoder`]. It is used to instantiate a SAM
@@ -130,6 +133,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
+@register()
 class SamVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
@@ -228,6 +232,7 @@ class SamVisionConfig(PretrainedConfig):
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
 
+@register()
 class SamConfig(PretrainedConfig):
     r"""
     [`SamConfig`] is the configuration class to store the configuration of a [`SamModel`]. It is used to instantiate a
@@ -304,3 +309,10 @@ class SamConfig(PretrainedConfig):
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+
+__all__ = [
+    "SamPromptEncoderConfig",
+    "SamMaskDecoderConfig",
+    "SamVisionConfig",
+    "SamConfig"
+]

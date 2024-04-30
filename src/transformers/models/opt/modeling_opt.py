@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_opt import OPTConfig
 
 
@@ -588,6 +589,7 @@ OPT_START_DOCSTRING = r"""
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OPTPreTrainedModel(PreTrainedModel):
     config_class = OPTConfig
     base_model_prefix = "model"
@@ -922,6 +924,7 @@ class OPTDecoder(OPTPreTrainedModel):
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
@@ -988,6 +991,7 @@ class OPTModel(OPTPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class OPTForCausalLM(OPTPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1206,6 +1210,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
     """,
     OPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OPTForSequenceClassification(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
@@ -1329,6 +1334,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     """,
     OPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OPTForQuestionAnswering(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
         super().__init__(config)
@@ -1451,3 +1457,11 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
+
+__all__ = [
+    "OPTPreTrainedModel",
+    "OPTModel",
+    "OPTForCausalLM",
+    "OPTForSequenceClassification",
+    "OPTForQuestionAnswering"
+]

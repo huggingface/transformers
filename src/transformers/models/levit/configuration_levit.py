@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LevitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LevitModel`]. It is used to instantiate a LeViT
@@ -125,6 +127,7 @@ class LevitConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+@register()
 class LevitOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -139,3 +142,8 @@ class LevitOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "LevitConfig",
+    "LevitOnnxConfig"
+]

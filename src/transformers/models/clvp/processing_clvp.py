@@ -19,8 +19,10 @@ Processor class for CLVP
 
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class ClvpProcessor(ProcessorMixin):
     r"""
     Constructs a CLVP processor which wraps a CLVP Feature Extractor and a CLVP Tokenizer into a single processor.
@@ -89,3 +91,7 @@ class ClvpProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = [
+    "ClvpProcessor"
+]

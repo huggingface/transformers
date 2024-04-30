@@ -37,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_convbert import ConvBertConfig
 
 
@@ -46,6 +47,7 @@ _CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
 
 
+@register()
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -230,6 +232,7 @@ class ConvBertEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class ConvBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -747,6 +750,7 @@ CONVBERT_INPUTS_DOCSTRING = r"""
     "The bare ConvBERT Model transformer outputting raw hidden-states without any specific head on top.",
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvBertModel(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -862,6 +866,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
+@register(backends=("torch",))
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     _tied_weights_keys = ["generator.lm_head.weight"]
 
@@ -973,6 +978,7 @@ class ConvBertClassificationHead(nn.Module):
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1068,6 +1074,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1161,6 +1168,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1242,6 +1250,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     """,
     CONVBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1332,3 +1341,14 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_convbert",
+    "ConvBertPreTrainedModel",
+    "ConvBertModel",
+    "ConvBertForMaskedLM",
+    "ConvBertForSequenceClassification",
+    "ConvBertForMultipleChoice",
+    "ConvBertForTokenClassification",
+    "ConvBertForQuestionAnswering"
+]

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DebertaV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
@@ -152,6 +154,7 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_act = pooler_hidden_act
 
 
+@register()
 class DebertaV2OnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -187,3 +190,8 @@ class DebertaV2OnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+__all__ = [
+    "DebertaV2Config",
+    "DebertaV2OnnxConfig"
+]

@@ -42,6 +42,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -114,6 +115,7 @@ def _get_patch_output_size(image, target_resolution, input_data_format):
     return new_height, new_width
 
 
+@register(backends=("vision",))
 class LlavaNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-NeXT image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
@@ -606,3 +608,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         data = {"pixel_values": new_images, "image_sizes": image_sizes}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "LlavaNextImageProcessor"
+]

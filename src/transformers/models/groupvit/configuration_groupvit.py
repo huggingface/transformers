@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GroupViTTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate an
@@ -140,6 +142,7 @@ class GroupViTTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class GroupViTVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
@@ -265,6 +268,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class GroupViTConfig(PretrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
@@ -403,6 +407,7 @@ class GroupViTConfig(PretrainedConfig):
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
+@register()
 class GroupViTOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -447,3 +452,10 @@ class GroupViTOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+__all__ = [
+    "GroupViTTextConfig",
+    "GroupViTVisionConfig",
+    "GroupViTConfig",
+    "GroupViTOnnxConfig"
+]

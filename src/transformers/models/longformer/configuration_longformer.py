@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LongformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
@@ -137,6 +139,7 @@ class LongformerConfig(PretrainedConfig):
         self.onnx_export = onnx_export
 
 
+@register()
 class LongformerOnnxConfig(OnnxConfig):
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: "List[PatchingSpec]" = None):
         super().__init__(config, task, patching_specs)
@@ -198,3 +201,8 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs["global_attention_mask"][:, ::2] = 1
 
         return inputs
+
+__all__ = [
+    "LongformerConfig",
+    "LongformerOnnxConfig"
+]

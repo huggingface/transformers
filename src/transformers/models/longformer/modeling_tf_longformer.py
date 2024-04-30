@@ -46,6 +46,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_longformer import LongformerConfig
 
 
@@ -1976,6 +1977,7 @@ class TFLongformerMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFLongformerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2106,6 +2108,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
     "The bare Longformer Model outputting raw hidden-states without any specific head on top.",
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerModel(TFLongformerPreTrainedModel):
     """
 
@@ -2173,6 +2176,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     """Longformer Model with a `language modeling` head on top.""",
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -2271,6 +2275,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -2450,6 +2455,7 @@ class TFLongformerClassificationHead(keras.layers.Layer):
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -2564,6 +2570,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_missing = [r"dropout"]
@@ -2690,6 +2697,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -2773,3 +2781,13 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFLongformerPreTrainedModel",
+    "TFLongformerModel",
+    "TFLongformerForMaskedLM",
+    "TFLongformerForQuestionAnswering",
+    "TFLongformerForSequenceClassification",
+    "TFLongformerForMultipleChoice",
+    "TFLongformerForTokenClassification"
+]

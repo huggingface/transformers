@@ -24,6 +24,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -134,6 +135,7 @@ def romanian_preprocessing(text):
     return text
 
 
+@register()
 class XLMTokenizer(PreTrainedTokenizer):
     """
     Construct an XLM tokenizer. Based on Byte-Pair Encoding. The tokenization process is the following:
@@ -602,3 +604,7 @@ class XLMTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+__all__ = [
+    "XLMTokenizer"
+]

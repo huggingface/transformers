@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, Model
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_splinter import SplinterConfig
 
 
@@ -511,6 +512,7 @@ class SplinterEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SplinterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -604,6 +606,7 @@ SPLINTER_INPUTS_DOCSTRING = r"""
     "The bare Splinter Model transformer outputting raw hidden-states without any specific head on top.",
     SPLINTER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SplinterModel(SplinterPreTrainedModel):
     """
     The model is an encoder (with only self-attention) following the architecture described in [Attention is all you
@@ -826,6 +829,7 @@ class QuestionAwareSpanSelectionHead(nn.Module):
     """,
     SPLINTER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SplinterForQuestionAnswering(SplinterPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -980,6 +984,7 @@ class SplinterForPreTrainingOutput(ModelOutput):
     """,
     SPLINTER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SplinterForPreTraining(SplinterPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1106,3 +1111,10 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         cols = torch.cat([torch.arange(n) for n in num_questions])
         positions[rows, cols] = flat_positions
         return positions
+
+__all__ = [
+    "SplinterPreTrainedModel",
+    "SplinterModel",
+    "SplinterForQuestionAnswering",
+    "SplinterForPreTraining"
+]

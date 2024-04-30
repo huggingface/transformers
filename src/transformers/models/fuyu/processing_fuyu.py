@@ -23,6 +23,7 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ...utils import TensorType, is_torch_available, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -306,6 +307,7 @@ def scale_bbox_to_transformed_image(
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
+@register(backends=("vision",))
 class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
@@ -692,3 +694,7 @@ class FuyuProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = [
+    "FuyuProcessor"
+]

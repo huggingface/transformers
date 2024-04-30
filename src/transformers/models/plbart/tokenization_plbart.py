@@ -21,6 +21,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ FAIRSEQ_LANGUAGE_CODES_MAP = {
 }
 
 
+@register(backends=("sentencepiece",))
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
@@ -423,3 +425,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         """Convert Language Codes to format tokenizer uses if required"""
         lang = FAIRSEQ_LANGUAGE_CODES_MAP[lang] if lang in FAIRSEQ_LANGUAGE_CODES_MAP.keys() else lang
         return lang
+
+__all__ = [
+    "PLBartTokenizer"
+]

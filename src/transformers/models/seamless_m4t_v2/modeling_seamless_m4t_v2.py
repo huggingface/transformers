@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
@@ -1422,6 +1423,7 @@ class SeamlessM4Tv2TextToUnitDecoderLayer(nn.Module):
 ############ SUB-MODELS related code ################
 
 
+@register(backends=("torch",))
 class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2913,6 +2915,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForTextToText with SeamlessM4T->SeamlessM4Tv2,SeamlessM4Tv2Tokenizer->SeamlessM4TTokenizer, SeamlessM4Tv2Processor->SeamlessM4TProcessor
+@register(backends=("torch",))
 class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
@@ -3200,6 +3203,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel):
     "The speech-to-text SeamlessM4Tv2 Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
@@ -3502,6 +3506,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     "The text-to-speech SeamlessM4Tv2 Model transformer which can be used for T2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
@@ -3896,6 +3901,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
     "The speech-to-speech SeamlessM4Tv2 Model transformer which can be used for S2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
@@ -4304,6 +4310,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
             This will be updated automatically according to the modality passed to the forward and generate passes (`input_ids` for text and `input_features` for audio).
     """,
 )
+@register(backends=("torch",))
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
     _tied_weights_keys = [
         "lm_head.weight",
@@ -4805,3 +4812,12 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
+__all__ = [
+    "SeamlessM4Tv2PreTrainedModel",
+    "SeamlessM4Tv2ForTextToText",
+    "SeamlessM4Tv2ForSpeechToText",
+    "SeamlessM4Tv2ForTextToSpeech",
+    "SeamlessM4Tv2ForSpeechToSpeech",
+    "SeamlessM4Tv2Model"
+]

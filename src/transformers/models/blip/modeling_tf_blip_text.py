@@ -38,6 +38,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, invert_attention_mask, stable_softmax
 from ...utils import add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_blip import BlipTextConfig
 
 
@@ -726,6 +727,7 @@ class TFBlipTextPreTrainedModel(TFPreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
+@register(backends=("tf",))
 class TFBlipTextModel(TFBlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1120,3 +1122,7 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         if getattr(self, "cls", None) is not None:
             with tf.name_scope(self.cls.name):
                 self.cls.build(None)
+
+__all__ = [
+    "TFBlipTextModel"
+]

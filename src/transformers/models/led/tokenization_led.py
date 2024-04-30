@@ -24,6 +24,7 @@ import regex as re
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding, EncodedInput
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -75,6 +76,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class LEDTokenizer(PreTrainedTokenizer):
     """
     Constructs a LED tokenizer, which is smilar to the ROBERTa tokenizer, using byte-level Byte-Pair-Encoding.
@@ -447,3 +449,7 @@ class LEDTokenizer(PreTrainedTokenizer):
                     raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "LEDTokenizer"
+]

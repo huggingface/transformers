@@ -20,12 +20,14 @@ from typing import Union
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class InstructBlipVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InstructBlipVisionModel`]. It is used to
@@ -127,6 +129,7 @@ class InstructBlipVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class InstructBlipQFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InstructBlipQFormerModel`]. It is used to
@@ -246,6 +249,7 @@ class InstructBlipQFormerConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class InstructBlipConfig(PretrainedConfig):
     r"""
     [`InstructBlipConfig`] is the configuration class to store the configuration of a
@@ -353,3 +357,9 @@ class InstructBlipConfig(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "InstructBlipVisionConfig",
+    "InstructBlipQFormerConfig",
+    "InstructBlipConfig"
+]

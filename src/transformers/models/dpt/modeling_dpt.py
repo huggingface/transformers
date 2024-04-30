@@ -42,6 +42,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_dpt import DPTConfig
 
 
@@ -799,6 +800,7 @@ class DPTFeatureFusionLayer(nn.Module):
         return hidden_state
 
 
+@register(backends=("torch",))
 class DPTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -861,6 +863,7 @@ DPT_INPUTS_DOCSTRING = r"""
     "The bare DPT Model transformer outputting raw hidden-states without any specific head on top.",
     DPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPTModel(DPTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1067,6 +1070,7 @@ class DPTDepthEstimationHead(nn.Module):
     """,
     DPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPTForDepthEstimation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1253,6 +1257,7 @@ class DPTAuxiliaryHead(nn.Module):
     """,
     DPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DPTForSemanticSegmentation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1373,3 +1378,10 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DPTPreTrainedModel",
+    "DPTModel",
+    "DPTForDepthEstimation",
+    "DPTForSemanticSegmentation"
+]

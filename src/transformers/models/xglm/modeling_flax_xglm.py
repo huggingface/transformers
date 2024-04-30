@@ -37,6 +37,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_xglm import XGLMConfig
 
 
@@ -537,6 +538,7 @@ class FlaxXGLMModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
     config_class = XGLMConfig
     base_model_prefix: str = "model"
@@ -686,6 +688,7 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
     "The bare XGLM Model transformer outputting raw hidden-states without any specific head on top.",
     XGLM_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxXGLMModel(FlaxXGLMPreTrainedModel):
     module_class = FlaxXGLMModule
 
@@ -763,6 +766,7 @@ class FlaxXGLMForCausalLMModule(nn.Module):
     """,
     XGLM_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
     module_class = FlaxXGLMForCausalLMModule
 
@@ -799,3 +803,9 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxXGLMPreTrainedModel",
+    "FlaxXGLMModel",
+    "FlaxXGLMForCausalLM"
+]

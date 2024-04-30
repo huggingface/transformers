@@ -45,6 +45,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
@@ -873,6 +874,7 @@ class FlaxBlenderbotSmallModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
     config_class = BlenderbotSmallConfig
     base_model_prefix: str = "model"
@@ -1210,6 +1212,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
     "The bare BlenderbotSmall Model transformer outputting raw hidden-states without any specific head on top.",
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBlenderbotSmallModel(FlaxBlenderbotSmallPreTrainedModel):
     config: BlenderbotSmallConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1296,6 +1299,7 @@ class FlaxBlenderbotSmallForConditionalGenerationModule(nn.Module):
     "The BLENDERBOT_SMALL Model with a language modeling head. Can be used for summarization.",
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedModel):
     module_class = FlaxBlenderbotSmallForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1520,3 +1524,9 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxBlenderbotSmallForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxBlenderbotSmallPreTrainedModel",
+    "FlaxBlenderbotSmallModel",
+    "FlaxBlenderbotSmallForConditionalGeneration"
+]

@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -33,6 +34,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
+@register(backends=("sentencepiece",))
 class ReformerTokenizer(PreTrainedTokenizer):
     """
     Construct a Reformer tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece) .
@@ -170,3 +172,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "ReformerTokenizer"
+]

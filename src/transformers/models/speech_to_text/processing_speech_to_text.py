@@ -19,8 +19,10 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class Speech2TextProcessor(ProcessorMixin):
     r"""
     Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a Speech2Text tokenizer into a
@@ -114,3 +116,7 @@ class Speech2TextProcessor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+__all__ = [
+    "Speech2TextProcessor"
+]

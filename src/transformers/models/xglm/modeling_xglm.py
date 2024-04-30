@@ -28,6 +28,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_xglm import XGLMConfig
 
 
@@ -464,6 +465,7 @@ class XGLMDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class XGLMPreTrainedModel(PreTrainedModel):
     config_class = XGLMConfig
     base_model_prefix = "model"
@@ -486,6 +488,7 @@ class XGLMPreTrainedModel(PreTrainedModel):
     "The bare XGLM Model transformer outputting raw hidden-states without any specific head on top.",
     XGLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XGLMModel(XGLMPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`XGLMDecoderLayer`]
@@ -697,6 +700,7 @@ class XGLMModel(XGLMPreTrainedModel):
     """,
     XGLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XGLMForCausalLM(XGLMPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["lm_head.weight"]
@@ -843,3 +847,9 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "XGLMPreTrainedModel",
+    "XGLMModel",
+    "XGLMForCausalLM"
+]

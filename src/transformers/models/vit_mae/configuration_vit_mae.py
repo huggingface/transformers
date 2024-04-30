@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ViTMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTMAEModel`]. It is used to instantiate an ViT
@@ -135,3 +137,7 @@ class ViTMAEConfig(PretrainedConfig):
         self.decoder_intermediate_size = decoder_intermediate_size
         self.mask_ratio = mask_ratio
         self.norm_pix_loss = norm_pix_loss
+
+__all__ = [
+    "ViTMAEConfig"
+]

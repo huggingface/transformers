@@ -37,6 +37,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_1
 from ...utils import is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -2127,6 +2128,7 @@ MASK2FORMER_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class Mask2FormerPreTrainedModel(PreTrainedModel):
     config_class = Mask2FormerConfig
     base_model_prefix = "model"
@@ -2206,6 +2208,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
     "The bare Mask2Former Model outputting raw hidden-states without any specific head on top.",
     MASK2FORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Mask2FormerModel(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -2310,6 +2313,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
     "The Mask2Former Model with heads on top for instance/semantic/panoptic segmentation.",
     MASK2FORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -2558,3 +2562,9 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             if loss is not None:
                 output = (loss) + output
         return output
+
+__all__ = [
+    "Mask2FormerPreTrainedModel",
+    "Mask2FormerModel",
+    "Mask2FormerForUniversalSegmentation"
+]

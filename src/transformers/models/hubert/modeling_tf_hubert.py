@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_hubert import HubertConfig
 
 
@@ -1300,6 +1301,7 @@ class TFHubertMainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFHubertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1428,6 +1430,7 @@ HUBERT_INPUTS_DOCSTRING = r"""
     "The bare TFHubert Model transformer outputing raw hidden-states without any specific head on top.",
     HUBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFHubertModel(TFHubertPreTrainedModel):
     def __init__(self, config: HubertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1510,6 +1513,7 @@ class TFHubertModel(TFHubertPreTrainedModel):
     """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     HUBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFHubertForCTC(TFHubertPreTrainedModel):
     def __init__(self, config: HubertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1671,3 +1675,9 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build([None, None, self.output_hidden_size])
+
+__all__ = [
+    "TFHubertPreTrainedModel",
+    "TFHubertModel",
+    "TFHubertForCTC"
+]

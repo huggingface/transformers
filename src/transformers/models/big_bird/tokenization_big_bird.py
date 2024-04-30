@@ -24,6 +24,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
+@register(backends=("sentencepiece",))
 class BigBirdTokenizer(PreTrainedTokenizer):
     """
     Construct a BigBird tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -320,3 +322,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+__all__ = [
+    "BigBirdTokenizer"
+]

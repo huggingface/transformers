@@ -29,6 +29,7 @@ from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
 from ...utils.generic import _is_jax, _is_numpy
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -40,6 +41,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register()
 class JukeboxTokenizer(PreTrainedTokenizer):
     """
     Constructs a Jukebox tokenizer. Jukebox can be conditioned on 3 different inputs :
@@ -403,3 +405,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         genres = [self.genres_decoder.get(genre) for genre in genres_index]
         lyrics = [self.lyrics_decoder.get(character) for character in lyric_index]
         return artist, genres, lyrics
+
+__all__ = [
+    "JukeboxTokenizer"
+]

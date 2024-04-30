@@ -33,6 +33,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils.import_utils import register
 from .configuration_mistral import MistralConfig
 
 
@@ -393,6 +394,7 @@ class FlaxMistralDecoderLayer(nn.Module):
 
 
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Mistral, GPT_NEO->MISTRAL, transformer->model
+@register(backends=("flax",))
 class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -636,6 +638,7 @@ class FlaxMistralModule(nn.Module):
     "The bare Mistral Model transformer outputting raw hidden-states without any specific head on top.",
     MISTRAL_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxMistralModel(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralModule
 
@@ -702,6 +705,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
 )
 
 # Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Mistral
+@register(backends=("flax",))
 class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForCausalLMModule
 
@@ -739,3 +743,9 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxMistralPreTrainedModel",
+    "FlaxMistralModel",
+    "FlaxMistralForCausalLM"
+]

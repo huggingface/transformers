@@ -15,11 +15,13 @@
 """  GPTSAN-japanese model configuration"""
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GPTSanJapaneseConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTSanJapaneseModel`]. It is used to instantiate
@@ -151,3 +153,7 @@ class GPTSanJapaneseConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "GPTSanJapaneseConfig"
+]

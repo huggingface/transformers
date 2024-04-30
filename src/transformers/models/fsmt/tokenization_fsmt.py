@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -112,6 +113,7 @@ def remove_non_printing_char(text):
 # - langs,
 
 
+@register()
 class FSMTTokenizer(PreTrainedTokenizer):
     """
     Construct an FAIRSEQ Transformer tokenizer. Based on Byte-Pair Encoding. The tokenization process is the following:
@@ -517,3 +519,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+__all__ = [
+    "FSMTTokenizer"
+]

@@ -35,6 +35,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_blip import BlipTextConfig
 
 
@@ -568,6 +569,7 @@ class BlipTextPreTrainedModel(PreTrainedModel):
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571
+@register(backends=("torch",))
 class BlipTextModel(BlipTextPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -948,3 +950,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "BlipTextModel"
+]

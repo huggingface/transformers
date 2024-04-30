@@ -34,6 +34,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -411,6 +412,7 @@ class FlaxDistilBertLMDecoder(nn.Module):
         return y
 
 
+@register(backends=("flax",))
 class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -530,6 +532,7 @@ class FlaxDistilBertModule(nn.Module):
     "The bare DistilBert Model transformer outputting raw hidden-states without any specific head on top.",
     FLAX_DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxDistilBertModel(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertModule
 
@@ -603,6 +606,7 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""DistilBert Model with a `language modeling` head on top.""", FLAX_DISTILBERT_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 
@@ -670,6 +674,7 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
     """,
     FLAX_DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxDistilBertForSequenceClassification(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForSequenceClassificationModule
 
@@ -749,6 +754,7 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
     """,
     FLAX_DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxDistilBertForMultipleChoice(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMultipleChoiceModule
 
@@ -814,6 +820,7 @@ class FlaxDistilBertForTokenClassificationModule(nn.Module):
     """,
     FLAX_DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxDistilBertForTokenClassification(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForTokenClassificationModule
 
@@ -883,6 +890,7 @@ class FlaxDistilBertForQuestionAnsweringModule(nn.Module):
     """,
     FLAX_DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxDistilBertForQuestionAnswering(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForQuestionAnsweringModule
 
@@ -893,3 +901,13 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxDistilBertPreTrainedModel",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertForQuestionAnswering"
+]

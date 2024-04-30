@@ -36,6 +36,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_pvt import PvtConfig
 
 
@@ -450,6 +451,7 @@ class PvtEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class PvtPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -517,6 +519,7 @@ PVT_INPUTS_DOCSTRING = r"""
     "The bare Pvt encoder outputting raw hidden-states without any specific head on top.",
     PVT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PvtModel(PvtPreTrainedModel):
     def __init__(self, config: PvtConfig):
         super().__init__(config)
@@ -582,6 +585,7 @@ class PvtModel(PvtPreTrainedModel):
     """,
     PVT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PvtForImageClassification(PvtPreTrainedModel):
     def __init__(self, config: PvtConfig) -> None:
         super().__init__(config)
@@ -664,3 +668,9 @@ class PvtForImageClassification(PvtPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "PvtPreTrainedModel",
+    "PvtModel",
+    "PvtForImageClassification"
+]

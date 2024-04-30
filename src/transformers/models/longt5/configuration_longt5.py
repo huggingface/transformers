@@ -18,11 +18,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LongT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
@@ -146,6 +148,7 @@ class LongT5Config(PretrainedConfig):
         )
 
 
+@register()
 class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -169,3 +172,8 @@ class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "LongT5Config",
+    "LongT5OnnxConfig"
+]

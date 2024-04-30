@@ -22,6 +22,7 @@ from tokenizers import pre_tokenizers, processors
 from ...tokenization_utils_base import AddedToken, BatchEncoding, EncodedInput
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 from .tokenization_led import LEDTokenizer
 
 
@@ -31,6 +32,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class LEDTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LED tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,
@@ -323,3 +325,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
                     raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "LEDTokenizerFast"
+]

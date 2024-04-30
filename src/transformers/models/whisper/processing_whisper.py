@@ -18,8 +18,10 @@ Speech processor class for Whisper
 
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class WhisperProcessor(ProcessorMixin):
     r"""
     Constructs a Whisper processor which wraps a Whisper feature extractor and a Whisper tokenizer into a single
@@ -96,3 +98,7 @@ class WhisperProcessor(ProcessorMixin):
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
+
+__all__ = [
+    "WhisperProcessor"
+]

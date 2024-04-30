@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PegasusXConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate a
@@ -172,3 +174,7 @@ class PegasusXConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+__all__ = [
+    "PegasusXConfig"
+]

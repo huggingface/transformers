@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
@@ -406,6 +407,7 @@ class CLIPSegEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class CLIPSegPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -750,6 +752,7 @@ class CLIPSegTextTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class CLIPSegTextModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegTextConfig
 
@@ -865,6 +868,7 @@ class CLIPSegVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class CLIPSegVisionModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegVisionConfig
     main_input_name = "pixel_values"
@@ -918,6 +922,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
 
 
 @add_start_docstrings(CLIPSEG_START_DOCSTRING)
+@register(backends=("torch",))
 class CLIPSegModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
 
@@ -1306,6 +1311,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
     """,
     CLIPSEG_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
 
@@ -1473,3 +1479,11 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             vision_model_output=vision_outputs,
             decoder_output=decoder_outputs,
         )
+
+__all__ = [
+    "CLIPSegPreTrainedModel",
+    "CLIPSegTextModel",
+    "CLIPSegVisionModel",
+    "CLIPSegModel",
+    "CLIPSegForImageSegmentation"
+]

@@ -52,6 +52,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -1417,6 +1418,7 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1794,6 +1796,7 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -1942,6 +1945,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
 
 @add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@register(backends=("torch",))
 class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -2166,6 +2170,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
 
 @add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@register(backends=("torch",))
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2221,6 +2226,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             default.
     """,
 )
+@register(backends=("torch",))
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -2380,6 +2386,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2502,6 +2509,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2668,6 +2676,7 @@ class TDNNLayer(nn.Module):
     """,
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2812,3 +2821,14 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Wav2Vec2PreTrainedModel",
+    "Wav2Vec2Model",
+    "Wav2Vec2ForPreTraining",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2ForCTC",
+    "Wav2Vec2ForSequenceClassification",
+    "Wav2Vec2ForAudioFrameClassification",
+    "Wav2Vec2ForXVector"
+]

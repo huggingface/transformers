@@ -21,12 +21,14 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ConditionalDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConditionalDetrModel`]. It is used to instantiate
@@ -255,6 +257,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         return self.d_model
 
 
+@register()
 class ConditionalDetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -274,3 +277,8 @@ class ConditionalDetrOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "ConditionalDetrConfig",
+    "ConditionalDetrOnnxConfig"
+]

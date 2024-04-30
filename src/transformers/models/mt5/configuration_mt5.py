@@ -18,11 +18,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
@@ -142,6 +144,7 @@ class MT5Config(PretrainedConfig):
         )
 
 
+@register()
 class MT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.inputs
@@ -171,3 +174,8 @@ class MT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 5e-4
+
+__all__ = [
+    "MT5Config",
+    "MT5OnnxConfig"
+]

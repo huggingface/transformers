@@ -59,6 +59,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mobilebert import MobileBertConfig
 
 
@@ -1029,6 +1030,7 @@ class TFMobileBertMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFMobileBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1172,6 +1174,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
     "The bare MobileBert Model transformer outputting raw hidden-states without any specific head on top.",
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertModel(TFMobileBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1228,6 +1231,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTrainingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1332,6 +1336,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
 
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1451,6 +1456,7 @@ class TFMobileBertOnlyNSPHead(keras.layers.Layer):
     """MobileBert Model with a `next sentence prediction (classification)` head on top.""",
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextSentencePredictionLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"predictions___cls", r"cls.predictions"]
@@ -1547,6 +1553,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1649,6 +1656,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1760,6 +1768,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1873,6 +1882,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1965,3 +1975,15 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFMobileBertPreTrainedModel",
+    "TFMobileBertModel",
+    "TFMobileBertForPreTraining",
+    "TFMobileBertForMaskedLM",
+    "TFMobileBertForNextSentencePrediction",
+    "TFMobileBertForSequenceClassification",
+    "TFMobileBertForQuestionAnswering",
+    "TFMobileBertForMultipleChoice",
+    "TFMobileBertForTokenClassification"
+]

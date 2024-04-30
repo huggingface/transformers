@@ -24,6 +24,7 @@ from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, is_speech_available, logging
+from ...utils.import_utils import register
 
 
 if is_speech_available():
@@ -33,6 +34,7 @@ if is_speech_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("speech",))
 class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Speech2Text feature extractor.
@@ -295,3 +297,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+__all__ = [
+    "Speech2TextFeatureExtractor"
+]

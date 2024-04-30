@@ -31,6 +31,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -58,6 +59,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     return vocab, raw_vocab, ids_to_tokens, emoji
 
 
+@register()
 class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
@@ -518,3 +520,7 @@ class SubWordJapaneseTokenizer(object):
 
     def convert_id_to_token(self, index):
         return self.ids_to_tokens[index][0]
+
+__all__ = [
+    "GPTSanJapaneseTokenizer"
+]

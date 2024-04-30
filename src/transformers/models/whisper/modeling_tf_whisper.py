@@ -43,6 +43,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
@@ -544,6 +545,7 @@ class TFWhisperDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFWhisperPreTrainedModel(TFPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix = "model"
@@ -1227,6 +1229,7 @@ class TFWhisperMainLayer(keras.layers.Layer):
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFWhisperModel(TFWhisperPreTrainedModel):
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1343,6 +1346,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
     "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLanguageModelingLoss):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -1757,3 +1761,9 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
+
+__all__ = [
+    "TFWhisperPreTrainedModel",
+    "TFWhisperModel",
+    "TFWhisperForConditionalGeneration"
+]

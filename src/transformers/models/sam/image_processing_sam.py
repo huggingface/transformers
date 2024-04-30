@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -63,6 +64,7 @@ if is_tf_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class SamImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SAM image processor.
@@ -1494,3 +1496,7 @@ def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thre
     masks = [_rle_to_mask(rle) for rle in rle_masks]
 
     return masks, iou_scores, rle_masks, mask_boxes
+
+__all__ = [
+    "SamImageProcessor"
+]

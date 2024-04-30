@@ -50,7 +50,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_fx_available
+from ...utils.import_utils import is_torch_fx_available, register
 from .configuration_mixtral import MixtralConfig
 
 
@@ -981,6 +981,7 @@ MIXTRAL_START_DOCSTRING = r"""
     MIXTRAL_START_DOCSTRING,
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Mixtral
+@register(backends=("torch",))
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
@@ -1075,6 +1076,7 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
     MIXTRAL_START_DOCSTRING,
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
+@register(backends=("torch",))
 class MixtralModel(MixtralPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
@@ -1270,6 +1272,7 @@ class MixtralModel(MixtralPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class MixtralForCausalLM(MixtralPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1503,6 +1506,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
     MIXTRAL_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mixtral, LLAMA->MIXTRAL
+@register(backends=("torch",))
 class MixtralForSequenceClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1609,3 +1613,10 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "MixtralPreTrainedModel",
+    "MixtralModel",
+    "MixtralForCausalLM",
+    "MixtralForSequenceClassification"
+]

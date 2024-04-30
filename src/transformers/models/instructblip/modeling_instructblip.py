@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerConfig, InstructBlipVisionConfig
 
@@ -261,6 +262,7 @@ class InstructBlipEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class InstructBlipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -482,6 +484,7 @@ class InstructBlipEncoder(nn.Module):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
+@register(backends=("torch",))
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
     config_class = InstructBlipVisionConfig
@@ -1027,6 +1030,7 @@ class InstructBlipQFormerEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     """
     Querying Transformer (Q-Former), used in InstructBLIP. Slightly modified from BLIP-2 as it also takes the
@@ -1233,6 +1237,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     """,
     INSTRUCTBLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     config_class = InstructBlipConfig
     main_input_name = "pixel_values"
@@ -1566,3 +1571,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 outputs = torch.cat([bos_tokens, outputs], dim=-1)
 
         return outputs
+
+__all__ = [
+    "InstructBlipPreTrainedModel",
+    "InstructBlipVisionModel",
+    "InstructBlipQFormerModel",
+    "InstructBlipForConditionalGeneration"
+]

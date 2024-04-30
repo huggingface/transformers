@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_layoutlm import LayoutLMConfig
 
 
@@ -611,6 +612,7 @@ class LayoutLMOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class LayoutLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -704,6 +706,7 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
     "The bare LayoutLM Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMModel(LayoutLMPreTrainedModel):
     def __init__(self, config):
         super(LayoutLMModel, self).__init__(config)
@@ -853,6 +856,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
 
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top.""", LAYOUTLM_START_DOCSTRING)
+@register(backends=("torch",))
 class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -985,6 +989,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1122,6 +1127,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1240,6 +1246,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         super().__init__(config)
@@ -1374,3 +1381,12 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "LayoutLMPreTrainedModel",
+    "LayoutLMModel",
+    "LayoutLMForMaskedLM",
+    "LayoutLMForSequenceClassification",
+    "LayoutLMForTokenClassification",
+    "LayoutLMForQuestionAnswering"
+]

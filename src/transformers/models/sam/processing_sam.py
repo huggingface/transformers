@@ -23,6 +23,7 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_tf_available, is_torch_available
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -32,6 +33,7 @@ if is_tf_available():
     import tensorflow as tf
 
 
+@register()
 class SamProcessor(ProcessorMixin):
     r"""
     Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
@@ -264,3 +266,7 @@ class SamProcessor(ProcessorMixin):
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
+
+__all__ = [
+    "SamProcessor"
+]

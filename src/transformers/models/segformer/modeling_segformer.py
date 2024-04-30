@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_segformer import SegformerConfig
 
 
@@ -442,6 +443,7 @@ class SegformerEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SegformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -502,6 +504,7 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
     "The bare SegFormer encoder (Mix-Transformer) outputting raw hidden-states without any specific head on top.",
     SEGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SegformerModel(SegformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -567,6 +570,7 @@ class SegformerModel(SegformerPreTrainedModel):
     """,
     SEGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SegformerForImageClassification(SegformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -673,6 +677,7 @@ class SegformerMLP(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class SegformerDecodeHead(SegformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -735,6 +740,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
     """SegFormer Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes.""",
     SEGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -826,3 +832,11 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SegformerPreTrainedModel",
+    "SegformerModel",
+    "SegformerForImageClassification",
+    "SegformerDecodeHead",
+    "SegformerForSemanticSegmentation"
+]

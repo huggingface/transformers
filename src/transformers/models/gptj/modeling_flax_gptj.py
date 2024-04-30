@@ -29,6 +29,7 @@ from jax import lax
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_gptj import GPTJConfig
 
 
@@ -356,6 +357,7 @@ class FlaxGPTJBlock(nn.Module):
         return (hidden_states,) + attn_outputs[1:]
 
 
+@register(backends=("flax",))
 class FlaxGPTJPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -614,6 +616,7 @@ class FlaxGPTJModule(nn.Module):
     "The bare GPTJ Model transformer outputting raw hidden-states without any specific head on top.",
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPTJModel(FlaxGPTJPreTrainedModel):
     module_class = FlaxGPTJModule
 
@@ -680,6 +683,7 @@ class FlaxGPTJForCausalLMModule(nn.Module):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPTJForCausalLM(FlaxGPTJPreTrainedModel):
     module_class = FlaxGPTJForCausalLMModule
 
@@ -716,3 +720,9 @@ append_call_sample_docstring(
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxGPTJPreTrainedModel",
+    "FlaxGPTJModel",
+    "FlaxGPTJForCausalLM"
+]

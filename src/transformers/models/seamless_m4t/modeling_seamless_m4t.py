@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -1429,6 +1430,7 @@ class SeamlessM4TDecoderLayer(nn.Module):
 ############ SUB-MODELS related code ################
 
 
+@register(backends=("torch",))
 class SeamlessM4TPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2054,6 +2056,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """,
 )
+@register(backends=("torch",))
 class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
@@ -2143,6 +2146,7 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """,
 )
+@register(backends=("torch",))
 class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "vocoder",
@@ -2489,6 +2493,7 @@ class SeamlessM4THifiGan(nn.Module):
     """Code HiFi-GAN vocoder as described in this [repository](https://github.com/facebookresearch/speech-resynthesis).""",
     HIFIGAN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
     config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
@@ -2649,6 +2654,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
     "The text-to-text SeamlessM4T Model transformer which can be used for T2TT.",
     SEAMLESS_M4T_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
@@ -2936,6 +2942,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     "The speech-to-text SeamlessM4T Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
@@ -3226,6 +3233,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     "The text-to-speech SeamlessM4T Model transformer which can be used for T2ST.",
     SEAMLESS_M4T_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
@@ -3577,6 +3585,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
     "The speech-to-speech SeamlessM4T Model transformer which can be used for S2ST.",
     SEAMLESS_M4T_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
@@ -3942,6 +3951,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
             Default modality. Used to initialize the model.
     """,
 )
+@register(backends=("torch",))
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     _tied_weights_keys = [
         "lm_head.weight",
@@ -4396,3 +4406,15 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
+__all__ = [
+    "SeamlessM4TPreTrainedModel",
+    "SeamlessM4TTextToUnitModel",
+    "SeamlessM4TTextToUnitForConditionalGeneration",
+    "SeamlessM4TCodeHifiGan",
+    "SeamlessM4TForTextToText",
+    "SeamlessM4TForSpeechToText",
+    "SeamlessM4TForTextToSpeech",
+    "SeamlessM4TForSpeechToSpeech",
+    "SeamlessM4TModel"
+]

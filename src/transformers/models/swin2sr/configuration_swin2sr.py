@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Swin2SRConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Swin2SRModel`]. It is used to instantiate a Swin
@@ -149,3 +151,7 @@ class Swin2SRConfig(PretrainedConfig):
         self.img_range = img_range
         self.resi_connection = resi_connection
         self.upsampler = upsampler
+
+__all__ = [
+    "Swin2SRConfig"
+]

@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -63,6 +64,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
+@register()
 class FunnelTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Funnel Transformer tokenizer. Based on WordPiece.
@@ -532,3 +534,7 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+__all__ = [
+    "FunnelTokenizer"
+]

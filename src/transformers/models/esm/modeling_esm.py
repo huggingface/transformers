@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_esm import EsmConfig
 
 
@@ -670,6 +671,7 @@ class EsmPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class EsmPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -761,6 +763,7 @@ ESM_INPUTS_DOCSTRING = r"""
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EsmModel(EsmPreTrainedModel):
     """
 
@@ -944,6 +947,7 @@ class EsmModel(EsmPreTrainedModel):
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
+@register(backends=("torch",))
 class EsmForMaskedLM(EsmPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
@@ -1063,6 +1067,7 @@ class EsmLMHead(nn.Module):
     """,
     ESM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EsmForSequenceClassification(EsmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1157,6 +1162,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
     """,
     ESM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EsmForTokenClassification(EsmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1260,3 +1266,11 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "EsmPreTrainedModel",
+    "EsmModel",
+    "EsmForMaskedLM",
+    "EsmForSequenceClassification",
+    "EsmForTokenClassification"
+]

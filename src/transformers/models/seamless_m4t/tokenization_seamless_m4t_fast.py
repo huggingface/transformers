@@ -26,6 +26,7 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -38,6 +39,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" SeamlessM4T tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -444,3 +446,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         )
 
         return output
+
+__all__ = [
+    "SeamlessM4TTokenizerFast"
+]

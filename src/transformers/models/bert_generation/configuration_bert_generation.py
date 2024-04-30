@@ -15,8 +15,10 @@
 """  BertGeneration model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.import_utils import register
 
 
+@register()
 class BertGenerationConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BertGenerationPreTrainedModel`]. It is used to
@@ -122,3 +124,7 @@ class BertGenerationConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+
+__all__ = [
+    "BertGenerationConfig"
+]

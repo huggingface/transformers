@@ -23,6 +23,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -121,6 +122,7 @@ def remove_non_printing_char(text):
     return "".join(output)
 
 
+@register()
 class FlaubertTokenizer(PreTrainedTokenizer):
     """
     Construct a Flaubert tokenizer. Based on Byte-Pair Encoding. The tokenization process is the following:
@@ -563,3 +565,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+__all__ = [
+    "FlaubertTokenizer"
+]

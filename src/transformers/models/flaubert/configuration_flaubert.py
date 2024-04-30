@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class FlaubertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
@@ -216,6 +218,7 @@ class FlaubertConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
 
 
+@register()
 class FlaubertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -229,3 +232,8 @@ class FlaubertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "FlaubertConfig",
+    "FlaubertOnnxConfig"
+]

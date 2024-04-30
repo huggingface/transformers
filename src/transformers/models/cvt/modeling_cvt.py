@@ -28,6 +28,7 @@ from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention, ModelOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_cvt import CvtConfig
 
 
@@ -522,6 +523,7 @@ class CvtEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class CvtPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -577,6 +579,7 @@ CVT_INPUTS_DOCSTRING = r"""
     "The bare Cvt Model transformer outputting raw hidden-states without any specific head on top.",
     CVT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CvtModel(CvtPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -638,6 +641,7 @@ class CvtModel(CvtPreTrainedModel):
     """,
     CVT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CvtForImageClassification(CvtPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -721,3 +725,9 @@ class CvtForImageClassification(CvtPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+__all__ = [
+    "CvtPreTrainedModel",
+    "CvtModel",
+    "CvtForImageClassification"
+]

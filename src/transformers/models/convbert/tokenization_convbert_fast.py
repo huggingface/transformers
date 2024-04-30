@@ -20,6 +20,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_convbert import ConvBertTokenizer
 
 
@@ -29,6 +30,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with bert-base-cased->YituTech/conv-bert-base, Bert->ConvBert, BERT->ConvBERT
+@register(backends=("tokenizers",))
 class ConvBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -170,3 +172,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "ConvBertTokenizerFast"
+]

@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_swin2sr import Swin2SRConfig
 
 
@@ -745,6 +746,7 @@ class Swin2SREncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class Swin2SRPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -804,6 +806,7 @@ SWIN2SR_INPUTS_DOCSTRING = r"""
     "The bare Swin2SR Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN2SR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Swin2SRModel(Swin2SRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1060,6 +1063,7 @@ class PixelShuffleAuxUpsampler(nn.Module):
     """,
     SWIN2SR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1174,3 +1178,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Swin2SRPreTrainedModel",
+    "Swin2SRModel",
+    "Swin2SRForImageSuperResolution"
+]

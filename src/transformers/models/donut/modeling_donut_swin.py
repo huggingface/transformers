@@ -36,6 +36,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_donut_swin import DonutSwinConfig
 
 
@@ -796,6 +797,7 @@ class DonutSwinEncoder(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
+@register(backends=("torch",))
 class DonutSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -858,6 +860,7 @@ SWIN_INPUTS_DOCSTRING = r"""
     "The bare Donut Swin Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DonutSwinModel(DonutSwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
@@ -951,3 +954,8 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
             attentions=encoder_outputs.attentions,
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
+
+__all__ = [
+    "DonutSwinPreTrainedModel",
+    "DonutSwinModel"
+]

@@ -22,8 +22,10 @@ from typing import List, Optional, Union
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class LayoutLMv2Processor(ProcessorMixin):
     r"""
     Constructs a LayoutLMv2 processor which combines a LayoutLMv2 image processor and a LayoutLMv2 tokenizer into a
@@ -199,3 +201,7 @@ class LayoutLMv2Processor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "LayoutLMv2Processor"
+]

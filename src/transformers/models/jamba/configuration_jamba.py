@@ -17,11 +17,13 @@ import math
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class JambaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
@@ -221,3 +223,7 @@ class JambaConfig(PretrainedConfig):
             self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
             for i in range(self.num_hidden_layers)
         ]
+
+__all__ = [
+    "JambaConfig"
+]

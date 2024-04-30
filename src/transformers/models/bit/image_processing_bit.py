@@ -40,6 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -49,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@register(backends=("vision",))
 class BitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BiT image processor.
@@ -343,3 +345,7 @@ class BitImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "BitImageProcessor"
+]

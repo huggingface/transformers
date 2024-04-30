@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -740,6 +741,7 @@ class GroupViTEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class GroupViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1132,6 +1134,7 @@ class GroupViTTextTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class GroupViTTextModel(GroupViTPreTrainedModel):
     config_class = GroupViTTextConfig
 
@@ -1243,6 +1246,7 @@ class GroupViTVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config_class = GroupViTVisionConfig
     main_input_name = "pixel_values"
@@ -1296,6 +1300,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
 
 
 @add_start_docstrings(GROUPVIT_START_DOCSTRING)
+@register(backends=("torch",))
 class GroupViTModel(GroupViTPreTrainedModel):
     config_class = GroupViTConfig
 
@@ -1580,3 +1585,10 @@ class GroupViTModel(GroupViTPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+__all__ = [
+    "GroupViTPreTrainedModel",
+    "GroupViTTextModel",
+    "GroupViTVisionModel",
+    "GroupViTModel"
+]

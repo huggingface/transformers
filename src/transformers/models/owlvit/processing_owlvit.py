@@ -24,8 +24,10 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import is_flax_available, is_tf_available, is_torch_available
+from ...utils.import_utils import register
 
 
+@register()
 class OwlViTProcessor(ProcessorMixin):
     r"""
     Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
@@ -222,3 +224,7 @@ class OwlViTProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "OwlViTProcessor"
+]

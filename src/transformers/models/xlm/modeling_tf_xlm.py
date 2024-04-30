@@ -58,6 +58,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_xlm import XLMConfig
 
 
@@ -554,6 +555,7 @@ class TFXLMMainLayer(keras.layers.Layer):
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
+@register(backends=("tf",))
 class TFXLMPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -725,6 +727,7 @@ XLM_INPUTS_DOCSTRING = r"""
     "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMModel(TFXLMPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -838,6 +841,7 @@ class TFXLMPredLayer(keras.layers.Layer):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -935,6 +939,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1024,6 +1029,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1158,6 +1164,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1250,6 +1257,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1344,3 +1352,13 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFXLMPreTrainedModel",
+    "TFXLMModel",
+    "TFXLMWithLMHeadModel",
+    "TFXLMForSequenceClassification",
+    "TFXLMForMultipleChoice",
+    "TFXLMForTokenClassification",
+    "TFXLMForQuestionAnsweringSimple"
+]

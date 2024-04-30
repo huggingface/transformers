@@ -21,11 +21,13 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MBartConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MBartModel`]. It is used to instantiate an MBART
@@ -163,6 +165,7 @@ class MBartConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->MBart
+@register()
 class MBartOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -384,3 +387,8 @@ class MBartOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+__all__ = [
+    "MBartConfig",
+    "MBartOnnxConfig"
+]

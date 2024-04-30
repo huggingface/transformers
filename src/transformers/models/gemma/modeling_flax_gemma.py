@@ -28,6 +28,7 @@ from jax import lax
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_gemma import GemmaConfig
 
 
@@ -417,6 +418,7 @@ class FlaxGemmaDecoderLayer(nn.Module):
 
 
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Gemma, GPT_NEO->GEMMA, transformer->model
+@register(backends=("flax",))
 class FlaxGemmaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -664,6 +666,7 @@ class FlaxGemmaModule(nn.Module):
     GEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModel with Llama->Gemma
+@register(backends=("flax",))
 class FlaxGemmaModel(FlaxGemmaPreTrainedModel):
     module_class = FlaxGemmaModule
 
@@ -734,6 +737,7 @@ class FlaxGemmaForCausalLMModule(nn.Module):
     GEMMA_START_DOCSTRING,
 )
 # Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Gemma
+@register(backends=("flax",))
 class FlaxGemmaForCausalLM(FlaxGemmaPreTrainedModel):
     module_class = FlaxGemmaForCausalLMModule
 
@@ -771,3 +775,9 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxGemmaPreTrainedModel",
+    "FlaxGemmaModel",
+    "FlaxGemmaForCausalLM"
+]

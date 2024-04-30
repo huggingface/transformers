@@ -20,12 +20,14 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
+@register()
 class RobertaPreLayerNormConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaPreLayerNormModel`] or a [`TFRobertaPreLayerNormModel`]. It is
@@ -138,6 +140,7 @@ class RobertaPreLayerNormConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->RobertaPreLayerNorm
+@register()
 class RobertaPreLayerNormOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -151,3 +154,8 @@ class RobertaPreLayerNormOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "RobertaPreLayerNormConfig",
+    "RobertaPreLayerNormOnnxConfig"
+]

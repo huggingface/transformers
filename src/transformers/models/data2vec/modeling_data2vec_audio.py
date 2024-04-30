@@ -45,6 +45,7 @@ from ...utils import (
     is_peft_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -1022,6 +1023,7 @@ class Data2VecAudioAdapterLayer(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class Data2VecAudioPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1166,6 +1168,7 @@ DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
     "The bare Data2VecAudio Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
@@ -1302,6 +1305,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     """Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1431,6 +1435,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     """,
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1552,6 +1557,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
     """,
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1721,6 +1727,7 @@ class TDNNLayer(nn.Module):
     """,
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1865,3 +1872,12 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Data2VecAudioPreTrainedModel",
+    "Data2VecAudioModel",
+    "Data2VecAudioForCTC",
+    "Data2VecAudioForSequenceClassification",
+    "Data2VecAudioForAudioFrameClassification",
+    "Data2VecAudioForXVector"
+]

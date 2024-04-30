@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_bert_generation import BertGenerationConfig
 
 
@@ -461,6 +462,7 @@ class BertEncoder(nn.Module):
         )
 
 
+@register()
 def load_tf_weights_in_bert_generation(
     model, tf_hub_path, model_class, is_encoder_named_decoder=False, is_encoder=False
 ):
@@ -583,6 +585,7 @@ class BertGenerationEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class BertGenerationPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -672,6 +675,7 @@ BERT_GENERATION_INPUTS_DOCSTRING = r"""
     "The bare BertGeneration model transformer outputting raw hidden-states without any specific head on top.",
     BERT_GENERATION_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertGenerationEncoder(BertGenerationPreTrainedModel):
     """
 
@@ -863,6 +867,7 @@ class BertGenerationOnlyLMHead(nn.Module):
     """BertGeneration Model with a `language modeling` head on top for CLM fine-tuning.""",
     BERT_GENERATION_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BertGenerationDecoder(BertGenerationPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1018,3 +1023,10 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "load_tf_weights_in_bert_generation",
+    "BertGenerationPreTrainedModel",
+    "BertGenerationEncoder",
+    "BertGenerationDecoder"
+]

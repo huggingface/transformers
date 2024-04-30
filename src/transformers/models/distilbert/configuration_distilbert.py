@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DistilBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DistilBertModel`] or a [`TFDistilBertModel`]. It
@@ -122,6 +124,7 @@ class DistilBertConfig(PretrainedConfig):
         super().__init__(**kwargs, pad_token_id=pad_token_id)
 
 
+@register()
 class DistilBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -135,3 +138,8 @@ class DistilBertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "DistilBertConfig",
+    "DistilBertOnnxConfig"
+]

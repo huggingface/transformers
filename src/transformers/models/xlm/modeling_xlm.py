@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_xlm import XLMConfig
 
 
@@ -204,6 +205,7 @@ class TransformerFFN(nn.Module):
         return x
 
 
+@register(backends=("torch",))
 class XLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -380,6 +382,7 @@ XLM_INPUTS_DOCSTRING = r"""
     "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMModel(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -657,6 +660,7 @@ class XLMPredLayer(nn.Module):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMWithLMHeadModel(XLMPreTrainedModel):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
@@ -754,6 +758,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMForSequenceClassification(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -856,6 +861,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -960,6 +966,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMForQuestionAnswering(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1081,6 +1088,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMForTokenClassification(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1165,6 +1173,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
     """,
     XLM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XLMForMultipleChoice(XLMPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1259,3 +1268,14 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "XLMPreTrainedModel",
+    "XLMModel",
+    "XLMWithLMHeadModel",
+    "XLMForSequenceClassification",
+    "XLMForQuestionAnsweringSimple",
+    "XLMForQuestionAnswering",
+    "XLMForTokenClassification",
+    "XLMForMultipleChoice"
+]

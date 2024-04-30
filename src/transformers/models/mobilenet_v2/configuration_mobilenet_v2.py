@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MobileNetV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileNetV2Model`]. It is used to instantiate a
@@ -132,6 +134,7 @@ class MobileNetV2Config(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
+@register()
 class MobileNetV2OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -149,3 +152,8 @@ class MobileNetV2OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "MobileNetV2Config",
+    "MobileNetV2OnnxConfig"
+]

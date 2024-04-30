@@ -64,6 +64,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -755,6 +756,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@register(backends=("vision",))
 class DeformableDetrImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Deformable DETR image processor.
@@ -1551,3 +1553,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+__all__ = [
+    "DeformableDetrImageProcessor"
+]

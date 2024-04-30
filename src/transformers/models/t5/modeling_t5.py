@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
 
@@ -65,6 +66,7 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
+@register()
 def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -783,6 +785,7 @@ class T5ClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class T5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1338,6 +1341,7 @@ num_heads)`.
     "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class T5Model(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
@@ -1543,6 +1547,7 @@ class T5Model(T5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
+@register(backends=("torch",))
 class T5ForConditionalGeneration(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
@@ -1867,6 +1872,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class T5EncoderModel(T5PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
@@ -1989,6 +1995,7 @@ class T5EncoderModel(T5PreTrainedModel):
     """,
     T5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class T5ForSequenceClassification(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -2122,6 +2129,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
     """,
     T5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class T5ForTokenClassification(T5PreTrainedModel):
     _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
 
@@ -2194,6 +2202,7 @@ class T5ForTokenClassification(T5PreTrainedModel):
     """,
     T5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class T5ForQuestionAnswering(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -2377,3 +2386,14 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_t5",
+    "T5PreTrainedModel",
+    "T5Model",
+    "T5ForConditionalGeneration",
+    "T5EncoderModel",
+    "T5ForSequenceClassification",
+    "T5ForTokenClassification",
+    "T5ForQuestionAnswering"
+]

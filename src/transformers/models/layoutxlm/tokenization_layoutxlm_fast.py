@@ -30,6 +30,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
     VOCAB_FILES_NAMES,
 )
@@ -147,6 +148,7 @@ LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
 """
 
 
+@register(backends=("tokenizers",))
 class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" LayoutXLM tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -798,3 +800,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "LayoutXLMTokenizerFast"
+]

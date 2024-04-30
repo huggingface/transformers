@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_unispeech import UniSpeechConfig
 
 
@@ -1303,6 +1304,7 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+@register(backends=("torch",))
 class UniSpeechPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1440,6 +1442,7 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UniSpeechModel(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
@@ -1564,6 +1567,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
 @add_start_docstrings(
     """UniSpeech Model with a vector-quantization module and ctc loss for pre-training.""", UNISPEECH_START_DOCSTRING
 )
+@register(backends=("torch",))
 class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
@@ -1718,6 +1722,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     """,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->UniSpeech, wav2vec2->unispeech, WAV_2_VEC_2->UNISPEECH
+@register(backends=("torch",))
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1877,6 +1882,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
     """,
     UNISPEECH_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1993,3 +1999,11 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "UniSpeechPreTrainedModel",
+    "UniSpeechModel",
+    "UniSpeechForPreTraining",
+    "UniSpeechForCTC",
+    "UniSpeechForSequenceClassification"
+]

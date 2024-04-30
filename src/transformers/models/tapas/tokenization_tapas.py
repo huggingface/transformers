@@ -38,6 +38,7 @@ from ...tokenization_utils_base import (
     TextInput,
 )
 from ...utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available, logging
+from ...utils.import_utils import register
 
 
 if is_pandas_available():
@@ -148,6 +149,7 @@ TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 """
 
 
+@register()
 class TapasTokenizer(PreTrainedTokenizer):
     r"""
     Construct a TAPAS tokenizer. Based on WordPiece. Flattens a table and one or more related sentences to be used by
@@ -2762,3 +2764,7 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
             table.iloc[row_index, col_index].numeric_value = numeric_value
 
     return table
+
+__all__ = [
+    "TapasTokenizer"
+]

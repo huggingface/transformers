@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_seggpt import SegGptConfig
 
 
@@ -613,6 +614,7 @@ class SegGptDecoder(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class SegGptPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -718,6 +720,7 @@ SEGGPT_INPUTS_DOCSTRING = r"""
     "The bare SegGpt Model transformer outputting raw hidden-states without any specific head on top.",
     SEGGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SegGptModel(SegGptPreTrainedModel):
     def __init__(self, config: SegGptConfig):
         super().__init__(config)
@@ -909,6 +912,7 @@ class SegGptLoss(nn.Module):
     "SegGpt model with a decoder on top for one-shot image segmentation.",
     SEGGPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SegGptForImageSegmentation(SegGptPreTrainedModel):
     def __init__(self, config: SegGptConfig):
         super().__init__(config)
@@ -1020,3 +1024,9 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SegGptPreTrainedModel",
+    "SegGptModel",
+    "SegGptForImageSegmentation"
+]

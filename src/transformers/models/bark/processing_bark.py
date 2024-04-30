@@ -25,12 +25,14 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...utils import logging
 from ...utils.hub import get_file_from_repo
+from ...utils.import_utils import register
 from ..auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BarkProcessor(ProcessorMixin):
     r"""
     Constructs a Bark processor which wraps a text tokenizer and optional Bark voice presets into a single processor.
@@ -284,3 +286,7 @@ class BarkProcessor(ProcessorMixin):
             encoded_text["history_prompt"] = voice_preset
 
         return encoded_text
+
+__all__ = [
+    "BarkProcessor"
+]

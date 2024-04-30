@@ -34,6 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_mpt import MptConfig
 
 
@@ -223,6 +224,7 @@ class MptBlock(nn.Module):
         return outputs  # hidden_states, present, attentions
 
 
+@register(backends=("torch",))
 class MptPreTrainedModel(PreTrainedModel):
     config_class = MptConfig
     base_model_prefix = "transformer"
@@ -339,6 +341,7 @@ MPT_INPUTS_DOCSTRING = r"""
     "The bare Mpt Model transformer outputting raw hidden-states without any specific head on top.",
     MPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MptModel(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -496,6 +499,7 @@ class MptModel(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MptForCausalLM(MptPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -655,6 +659,7 @@ class MptForCausalLM(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MptForSequenceClassification(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -771,6 +776,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MptForTokenClassification(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -860,6 +866,7 @@ class MptForTokenClassification(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MptForQuestionAnswering(MptPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -937,3 +944,12 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "MptPreTrainedModel",
+    "MptModel",
+    "MptForCausalLM",
+    "MptForSequenceClassification",
+    "MptForTokenClassification",
+    "MptForQuestionAnswering"
+]

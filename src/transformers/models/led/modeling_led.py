@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_led import LEDConfig
 
 
@@ -1119,6 +1120,7 @@ class LEDClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class LEDPreTrainedModel(PreTrainedModel):
     config_class = LEDConfig
     base_model_prefix = "led"
@@ -2175,6 +2177,7 @@ class LEDDecoder(LEDPreTrainedModel):
     "The bare LED Model outputting raw hidden-states without any specific head on top.",
     LED_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LEDModel(LEDPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
@@ -2299,6 +2302,7 @@ class LEDModel(LEDPreTrainedModel):
 @add_start_docstrings(
     "The LED Model with a language modeling head. Can be used for summarization.", LED_START_DOCSTRING
 )
+@register(backends=("torch",))
 class LEDForConditionalGeneration(LEDPreTrainedModel):
     base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -2489,6 +2493,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     """,
     LED_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LEDForSequenceClassification(LEDPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
@@ -2625,6 +2630,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     """,
     LED_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LEDForQuestionAnswering(LEDPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
@@ -2742,3 +2748,11 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
             encoder_global_attentions=outputs.encoder_global_attentions,
         )
+
+__all__ = [
+    "LEDPreTrainedModel",
+    "LEDModel",
+    "LEDForConditionalGeneration",
+    "LEDForSequenceClassification",
+    "LEDForQuestionAnswering"
+]

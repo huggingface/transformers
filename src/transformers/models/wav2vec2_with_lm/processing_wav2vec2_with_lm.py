@@ -26,6 +26,7 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...utils import ModelOutput, logging, requires_backends
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +65,7 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     word_offsets: Union[List[List[ListOfDict]], List[ListOfDict], ListOfDict] = None
 
 
+@register()
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a decoder
@@ -646,3 +648,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+__all__ = [
+    "Wav2Vec2ProcessorWithLM"
+]

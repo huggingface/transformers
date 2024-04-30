@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SeamlessM4Tv2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate
@@ -420,3 +422,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             max_position_embeddings=max_position_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "SeamlessM4Tv2Config"
+]

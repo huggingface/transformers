@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
 from packaging import version
 
+from ...utils.import_utils import register
+
 
 if TYPE_CHECKING:
     from ... import PreTrainedTokenizer, TensorType
@@ -30,6 +32,7 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BloomConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom
@@ -140,6 +143,7 @@ class BloomConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+@register()
 class BloomOnnxConfig(OnnxConfigWithPast):
     torch_onnx_minimum_version = version.parse("1.12")
 
@@ -231,3 +235,8 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "BloomConfig",
+    "BloomOnnxConfig"
+]

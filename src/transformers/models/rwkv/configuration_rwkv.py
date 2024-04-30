@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RwkvConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`RwkvModel`]. It is used to instantiate a RWKV
@@ -115,3 +117,7 @@ class RwkvConfig(PretrainedConfig):
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
         )
+
+__all__ = [
+    "RwkvConfig"
+]

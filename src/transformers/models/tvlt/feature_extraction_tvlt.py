@@ -22,11 +22,13 @@ import numpy as np
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class TvltFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a TVLT audio feature extractor. This feature extractor can be used to prepare audios for the model.
@@ -228,3 +230,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs
+
+__all__ = [
+    "TvltFeatureExtractor"
+]

@@ -21,6 +21,7 @@ from tokenizers import normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_layoutlm import LayoutLMTokenizer
 
 
@@ -30,6 +31,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->LayoutLM,BERT->LayoutLM
+@register(backends=("tokenizers",))
 class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LayoutLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -171,3 +173,7 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "LayoutLMTokenizerFast"
+]

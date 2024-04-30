@@ -23,6 +23,7 @@ import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +45,7 @@ MUSTC_LANGS = ["pt", "fr", "ru", "nl", "ro", "it", "es", "de"]
 LANGUAGES = {"mustc": MUSTC_LANGS}
 
 
+@register(backends=("sentencepiece",))
 class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2Text tokenizer.
@@ -287,3 +289,7 @@ def load_json(path: str) -> Union[Dict, List]:
 def save_json(data, path: str) -> None:
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
+__all__ = [
+    "Speech2TextTokenizer"
+]

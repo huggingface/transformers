@@ -20,8 +20,10 @@ from typing import Optional, Union
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...utils.import_utils import register
 
 
+@register()
 class MarkupLMProcessor(ProcessorMixin):
     r"""
     Constructs a MarkupLM processor which combines a MarkupLM feature extractor and a MarkupLM tokenizer into a single
@@ -144,3 +146,7 @@ class MarkupLMProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         return tokenizer_input_names
+
+__all__ = [
+    "MarkupLMProcessor"
+]

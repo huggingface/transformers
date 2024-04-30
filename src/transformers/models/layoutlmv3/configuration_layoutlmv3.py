@@ -23,6 +23,7 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LayoutLMv3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv3Model`]. It is used to instantiate an
@@ -187,6 +189,7 @@ class LayoutLMv3Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class LayoutLMv3OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.12")
 
@@ -288,3 +291,8 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         )
 
         return inputs
+
+__all__ = [
+    "LayoutLMv3Config",
+    "LayoutLMv3OnnxConfig"
+]

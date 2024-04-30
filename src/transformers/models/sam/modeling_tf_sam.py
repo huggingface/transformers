@@ -32,6 +32,7 @@ from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -1314,6 +1315,7 @@ class TFSamVisionEncoder(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFSamPreTrainedModel(TFPreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
@@ -1405,6 +1407,7 @@ SAM_INPUTS_DOCSTRING = r"""
     " optional 2D location and bounding boxes.",
     SAM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSamModel(TFSamPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1651,3 +1654,8 @@ class TFSamModel(TFSamPreTrainedModel):
         if getattr(self, "mask_decoder", None) is not None:
             with tf.name_scope(self.mask_decoder.name):
                 self.mask_decoder.build(None)
+
+__all__ = [
+    "TFSamPreTrainedModel",
+    "TFSamModel"
+]

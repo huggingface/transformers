@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_ctrl import CTRLConfig
 
 
@@ -204,6 +205,7 @@ class EncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class CTRLPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -311,6 +313,7 @@ CTRL_INPUTS_DOCSTRING = r"""
     "The bare CTRL Model transformer outputting raw hidden-states without any specific head on top.",
     CTRL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CTRLModel(CTRLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -503,6 +506,7 @@ class CTRLModel(CTRLPreTrainedModel):
     """,
     CTRL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CTRLLMHeadModel(CTRLPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -654,6 +658,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     """,
     CTRL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -836,3 +841,10 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "CTRLPreTrainedModel",
+    "CTRLModel",
+    "CTRLLMHeadModel",
+    "CTRLForSequenceClassification"
+]

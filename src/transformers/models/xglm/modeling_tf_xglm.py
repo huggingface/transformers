@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_xglm import XGLMConfig
 
 
@@ -664,6 +665,7 @@ class TFXGLMMainLayer(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFXGLMPreTrainedModel(TFPreTrainedModel):
     config_class = XGLMConfig
     base_model_prefix = "model"
@@ -787,6 +789,7 @@ XGLM_INPUTS_DOCSTRING = r"""
     "The bare XGLM Model transformer outputting raw hidden-states without any specific head on top.",
     XGLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXGLMModel(TFXGLMPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_layers* layers. Each layer is a [`TFXGLMDecoderLayer`]
@@ -862,6 +865,7 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
     """,
     XGLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -1004,3 +1008,9 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             return tf_weight, "model.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+__all__ = [
+    "TFXGLMPreTrainedModel",
+    "TFXGLMModel",
+    "TFXGLMForCausalLM"
+]

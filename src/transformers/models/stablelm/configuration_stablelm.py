@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class StableLmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~StableLmModel`].
@@ -184,3 +186,7 @@ class StableLmConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+__all__ = [
+    "StableLmConfig"
+]

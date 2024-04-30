@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SwiftFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwiftFormerModel`]. It is used to instantiate an
@@ -129,6 +131,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.batch_norm_eps = batch_norm_eps
 
 
+@register()
 class SwiftFormerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -143,3 +146,8 @@ class SwiftFormerOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "SwiftFormerConfig",
+    "SwiftFormerOnnxConfig"
+]

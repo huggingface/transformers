@@ -17,6 +17,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
@@ -24,6 +25,7 @@ from ..bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ViTHybridConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT
@@ -168,3 +170,7 @@ class ViTHybridConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+__all__ = [
+    "ViTHybridConfig"
+]

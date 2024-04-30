@@ -18,11 +18,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class T5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
@@ -137,6 +139,7 @@ class T5Config(PretrainedConfig):
         )
 
 
+@register()
 class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -160,3 +163,8 @@ class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "T5Config",
+    "T5OnnxConfig"
+]

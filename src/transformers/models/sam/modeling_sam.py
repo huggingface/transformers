@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -1067,6 +1068,7 @@ class SamVisionEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
@@ -1176,6 +1178,7 @@ SAM_INPUTS_DOCSTRING = r"""
     " optional 2D location and bounding boxes.",
     SAM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SamModel(SamPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1411,3 +1414,8 @@ class SamModel(SamPreTrainedModel):
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+__all__ = [
+    "SamPreTrainedModel",
+    "SamModel"
+]

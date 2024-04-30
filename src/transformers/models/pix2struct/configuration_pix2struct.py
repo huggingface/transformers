@@ -19,11 +19,13 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Pix2StructTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructTextModel`]. It is used to instantiate
@@ -164,6 +166,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Pix2StructVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructVisionModel`]. It is used to
@@ -283,6 +286,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Pix2StructConfig(PretrainedConfig):
     r"""
     [`Pix2StructConfig`] is the configuration class to store the configuration of a
@@ -382,3 +386,9 @@ class Pix2StructConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "Pix2StructTextConfig",
+    "Pix2StructVisionConfig",
+    "Pix2StructConfig"
+]

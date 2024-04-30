@@ -21,8 +21,10 @@ from typing import List, Optional, Union
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register(backends=("torch",))
 class BrosProcessor(ProcessorMixin):
     r"""
     Constructs a Bros processor which wraps a BERT tokenizer.
@@ -107,3 +109,7 @@ class BrosProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         return list(dict.fromkeys(tokenizer_input_names))
+
+__all__ = [
+    "BrosProcessor"
+]

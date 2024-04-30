@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class XLMConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`XLMModel`] or a [`TFXLMModel`]. It is used to
@@ -221,6 +223,7 @@ class XLMConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
+@register()
 class XLMOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -235,3 +238,8 @@ class XLMOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "XLMConfig",
+    "XLMOnnxConfig"
+]

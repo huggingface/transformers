@@ -32,6 +32,7 @@ from ...utils import (
     is_torch_fx_proxy,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
@@ -673,6 +674,7 @@ class GPTSanJapaneseBlock(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -852,6 +854,7 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
     "The bare GPTSAN-japanese Model transformer outputting raw hidden-states without any specific head on top.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
@@ -1101,6 +1104,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     "The bare GPTSAN-japanese Model with a language modeling head.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1343,3 +1347,9 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+
+__all__ = [
+    "GPTSanJapanesePreTrainedModel",
+    "GPTSanJapaneseModel",
+    "GPTSanJapaneseForConditionalGeneration"
+]

@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_vit_mae import ViTMAEConfig
 
 
@@ -795,6 +796,7 @@ class TFViTMAEMainLayer(keras.layers.Layer):
                 self.layernorm.build([None, None, self.config.hidden_size])
 
 
+@register(backends=("tf",))
 class TFViTMAEPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -882,6 +884,7 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
     "The bare ViTMAE Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_MAE_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFViTMAEModel(TFViTMAEPreTrainedModel):
     def __init__(self, config: ViTMAEConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1066,6 +1069,7 @@ class TFViTMAEDecoder(keras.layers.Layer):
     "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
     VIT_MAE_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1269,3 +1273,9 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         if getattr(self, "decoder", None) is not None:
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
+
+__all__ = [
+    "TFViTMAEPreTrainedModel",
+    "TFViTMAEModel",
+    "TFViTMAEForPreTraining"
+]

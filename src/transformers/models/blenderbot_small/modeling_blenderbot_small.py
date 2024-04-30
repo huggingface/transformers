@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
@@ -441,6 +442,7 @@ class BlenderbotSmallDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class BlenderbotSmallPreTrainedModel(PreTrainedModel):
     config_class = BlenderbotSmallConfig
     base_model_prefix = "model"
@@ -1036,6 +1038,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
     "The bare BlenderbotSmall Model outputting raw hidden-states without any specific head on top.",
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
@@ -1164,6 +1167,7 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
     "The BlenderbotSmall Model with a language modeling head. Can be used for summarization.",
     BLENDERBOT_SMALL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1350,6 +1354,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
+@register(backends=("torch",))
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1562,3 +1567,10 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "BlenderbotSmallPreTrainedModel",
+    "BlenderbotSmallModel",
+    "BlenderbotSmallForConditionalGeneration",
+    "BlenderbotSmallForCausalLM"
+]

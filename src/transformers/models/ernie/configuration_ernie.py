@@ -20,11 +20,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ErnieConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieModel`] or a [`TFErnieModel`]. It is used to
@@ -142,6 +144,7 @@ class ErnieConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class ErnieOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -157,3 +160,8 @@ class ErnieOnnxConfig(OnnxConfig):
                 ("task_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "ErnieConfig",
+    "ErnieOnnxConfig"
+]

@@ -20,6 +20,7 @@ from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 from ...utils.versions import require_version
 
 
@@ -34,6 +35,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
@@ -197,3 +199,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             output = output + bos_token_id + token_ids_1 + eos_token_id
 
         return output
+
+__all__ = [
+    "GemmaTokenizerFast"
+]

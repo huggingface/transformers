@@ -34,6 +34,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import add_end_docstrings, logging
+from ...utils.import_utils import register
 from .tokenization_layoutlmv3 import (
     LAYOUTLMV3_ENCODE_KWARGS_DOCSTRING,
     LAYOUTLMV3_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -46,6 +47,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LayoutLMv3 tokenizer (backed by HuggingFace's *tokenizers* library). Based on BPE.
@@ -835,3 +837,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+__all__ = [
+    "LayoutLMv3TokenizerFast"
+]

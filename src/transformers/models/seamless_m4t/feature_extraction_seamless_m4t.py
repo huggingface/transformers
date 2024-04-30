@@ -21,6 +21,7 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...utils import is_torch_available
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -35,6 +36,7 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a SeamlessM4T feature extractor.
@@ -304,3 +306,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+__all__ = [
+    "SeamlessM4TFeatureExtractor"
+]

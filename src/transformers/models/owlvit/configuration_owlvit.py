@@ -18,6 +18,8 @@ import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
 
+from ...utils.import_utils import register
+
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
@@ -31,6 +33,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class OwlViTTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
@@ -144,6 +147,7 @@ class OwlViTTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class OwlViTVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate
@@ -249,6 +253,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class OwlViTConfig(PretrainedConfig):
     r"""
     [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
@@ -334,6 +339,7 @@ class OwlViTConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class OwlViTOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -378,3 +384,10 @@ class OwlViTOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+__all__ = [
+    "OwlViTTextConfig",
+    "OwlViTVisionConfig",
+    "OwlViTConfig",
+    "OwlViTOnnxConfig"
+]

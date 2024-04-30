@@ -37,6 +37,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import add_end_docstrings, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +71,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
+@register()
 class RoCBertTokenizer(PreTrainedTokenizer):
     r"""
     Args:
@@ -1106,3 +1108,7 @@ class RoCBertWordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+__all__ = [
+    "RoCBertTokenizer"
+]

@@ -23,6 +23,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -105,6 +106,7 @@ def is_url(string):
     return all([result.scheme, result.netloc])
 
 
+@register(backends=("torch",))
 class IdeficsProcessor(ProcessorMixin):
     r"""
     Constructs a IDEFICS processor which wraps a LLama tokenizer and IDEFICS image processor into a single processor.
@@ -406,3 +408,7 @@ class IdeficsProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+__all__ = [
+    "IdeficsProcessor"
+]

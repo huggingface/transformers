@@ -46,6 +46,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_mbart import MBartConfig
 
 
@@ -939,6 +940,7 @@ class FlaxMBartModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
     config_class = MBartConfig
     base_model_prefix: str = "model"
@@ -1273,6 +1275,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
     "The bare MBart Model transformer outputting raw hidden-states without any specific head on top.",
     MBART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxMBartModel(FlaxMBartPreTrainedModel):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1358,6 +1361,7 @@ class FlaxMBartForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The MMBart Model with a language modeling head. Can be used for summarization.", MBART_START_DOCSTRING
 )
+@register(backends=("flax",))
 class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1671,6 +1675,7 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
     """,
     MBART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxMBartForSequenceClassification(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForSequenceClassificationModule
     dtype = jnp.float32
@@ -1758,6 +1763,7 @@ class FlaxMBartForQuestionAnsweringModule(nn.Module):
     """,
     MBART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxMBartForQuestionAnswering(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartForQuestionAnsweringModule
     dtype = jnp.float32
@@ -1769,3 +1775,11 @@ append_call_sample_docstring(
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxMBartPreTrainedModel",
+    "FlaxMBartModel",
+    "FlaxMBartForConditionalGeneration",
+    "FlaxMBartForSequenceClassification",
+    "FlaxMBartForQuestionAnswering"
+]

@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_roc_bert import RoCBertConfig
 
 
@@ -75,6 +76,7 @@ _QA_TARGET_END_INDEX = 15
 
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->roc_bert
+@register()
 def load_tf_weights_in_roc_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -767,6 +769,7 @@ class RoCBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class RoCBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -874,6 +877,7 @@ ROC_BERT_INPUTS_DOCSTRING = r"""
     "The bare RoCBert Model transformer outputting raw hidden-states without any specific head on top.",
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertModel(RoCBertPreTrainedModel):
     """
 
@@ -1076,6 +1080,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     """,
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertForPreTraining(RoCBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1262,6 +1267,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
 
 @add_start_docstrings("""RoCBert Model with a `language modeling` head on top.""", ROC_BERT_START_DOCSTRING)
+@register(backends=("torch",))
 class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1403,6 +1409,7 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
 @add_start_docstrings(
     """RoCBert Model with a `language modeling` head on top for CLM fine-tuning.""", ROC_BERT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class RoCBertForCausalLM(RoCBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1597,6 +1604,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1703,6 +1711,7 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1808,6 +1817,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertForTokenClassification(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1894,6 +1904,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     ROC_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1993,3 +2004,16 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_roc_bert",
+    "RoCBertPreTrainedModel",
+    "RoCBertModel",
+    "RoCBertForPreTraining",
+    "RoCBertForMaskedLM",
+    "RoCBertForCausalLM",
+    "RoCBertForSequenceClassification",
+    "RoCBertForMultipleChoice",
+    "RoCBertForTokenClassification",
+    "RoCBertForQuestionAnswering"
+]

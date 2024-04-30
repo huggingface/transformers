@@ -29,6 +29,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -146,6 +147,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 """
 
 
+@register(backends=("tokenizers",))
 class UdopTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" UDOP tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
@@ -1006,3 +1008,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "UdopTokenizerFast"
+]

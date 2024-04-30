@@ -32,6 +32,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -92,6 +93,7 @@ def apply_tesseract(
     return words, normalized_boxes
 
 
+@register(backends=("vision",))
 class LayoutLMv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv2 image processor.
@@ -304,3 +306,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             data["words"] = words_batch
             data["boxes"] = boxes_batch
         return data
+
+__all__ = [
+    "LayoutLMv2ImageProcessor"
+]

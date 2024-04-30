@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -674,6 +675,7 @@ class Pop2PianoBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
+@register(backends=("torch",))
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1002,6 +1004,7 @@ Pop2Piano_START_DOCSTRING = r"""
 
 
 @add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
+@register(backends=("torch",))
 class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1358,3 +1361,8 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
+
+__all__ = [
+    "Pop2PianoPreTrainedModel",
+    "Pop2PianoForConditionalGeneration"
+]

@@ -18,8 +18,10 @@ Image/Text processor class for GIT
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class GitProcessor(ProcessorMixin):
     r"""
     Constructs a GIT processor which wraps a CLIP image processor and a BERT tokenizer into a single processor.
@@ -111,3 +113,7 @@ class GitProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         return ["input_ids", "attention_mask", "pixel_values"]
+
+__all__ = [
+    "GitProcessor"
+]

@@ -36,6 +36,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -119,6 +120,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+@register(backends=("vision",))
 class ViltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
@@ -503,3 +505,7 @@ class ViltImageProcessor(BaseImageProcessor):
             encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
+
+__all__ = [
+    "ViltImageProcessor"
+]

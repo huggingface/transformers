@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -424,6 +425,7 @@ class DecisionTransformerGPT2Block(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
+@register(backends=("torch",))
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -467,6 +469,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
 
+@register(backends=("torch",))
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -719,6 +722,7 @@ class DecisionTransformerOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
 
 
+@register(backends=("torch",))
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -777,6 +781,7 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings("The Decision Transformer Model", DECISION_TRANSFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
@@ -932,3 +937,10 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+__all__ = [
+    "DecisionTransformerGPT2PreTrainedModel",
+    "DecisionTransformerGPT2Model",
+    "DecisionTransformerPreTrainedModel",
+    "DecisionTransformerModel"
+]

@@ -21,11 +21,13 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class M2M100Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`M2M100Model`]. It is used to instantiate an
@@ -156,6 +158,7 @@ class M2M100Config(PretrainedConfig):
         )
 
 
+@register()
 class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -277,3 +280,8 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     generate_dummy_inputs = _generate_dummy_inputs_for_default_and_seq2seq_lm
+
+__all__ = [
+    "M2M100Config",
+    "M2M100OnnxConfig"
+]

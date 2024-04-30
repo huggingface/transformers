@@ -22,6 +22,7 @@ import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +51,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
@@ -232,3 +234,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             "{% endfor %}"
             "{{ eos_token }}"
         )
+
+__all__ = [
+    "BlenderbotSmallTokenizer"
+]

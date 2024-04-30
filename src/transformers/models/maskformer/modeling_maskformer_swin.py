@@ -30,6 +30,7 @@ from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -725,6 +726,7 @@ class MaskFormerSwinEncoder(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin, swin->model
+@register()
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -750,6 +752,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@register()
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -831,6 +834,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
     """
     MaskFormerSwin backbone, designed especially for the MaskFormer framework.
@@ -911,3 +915,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "MaskFormerSwinPreTrainedModel",
+    "MaskFormerSwinModel",
+    "MaskFormerSwinBackbone"
+]

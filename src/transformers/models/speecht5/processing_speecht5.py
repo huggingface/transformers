@@ -15,8 +15,10 @@
 """Speech processor class for SpeechT5."""
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class SpeechT5Processor(ProcessorMixin):
     r"""
     Constructs a SpeechT5 processor which wraps a feature extractor and a tokenizer into a single processor.
@@ -181,3 +183,7 @@ class SpeechT5Processor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = [
+    "SpeechT5Processor"
+]

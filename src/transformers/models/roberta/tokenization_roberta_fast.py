@@ -21,6 +21,7 @@ from tokenizers import pre_tokenizers, processors
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_roberta import RobertaTokenizer
 
 
@@ -29,6 +30,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class RobertaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" RoBERTa tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -266,3 +268,7 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+__all__ = [
+    "RobertaTokenizerFast"
+]

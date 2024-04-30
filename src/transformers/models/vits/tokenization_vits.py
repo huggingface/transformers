@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import is_phonemizer_available, logging
+from ...utils.import_utils import register
 
 
 if is_phonemizer_available():
@@ -43,6 +44,7 @@ def has_non_roman_characters(input_string):
     return has_non_roman
 
 
+@register()
 class VitsTokenizer(PreTrainedTokenizer):
     """
     Construct a VITS tokenizer. Also supports MMS-TTS.
@@ -235,3 +237,7 @@ class VitsTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+__all__ = [
+    "VitsTokenizer"
+]

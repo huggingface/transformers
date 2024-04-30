@@ -36,6 +36,7 @@ from ...tokenization_utils_base import (
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING, MarkupLMTokenizer
 
 
@@ -80,6 +81,7 @@ def get_pairs(word):
     return pairs
 
 
+@register(backends=("tokenizers",))
 class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE).
@@ -916,3 +918,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+__all__ = [
+    "MarkupLMTokenizerFast"
+]

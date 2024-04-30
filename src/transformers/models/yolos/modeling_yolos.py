@@ -40,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.import_utils import register
 from .configuration_yolos import YolosConfig
 
 
@@ -520,6 +521,7 @@ class YolosEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class YolosPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -583,6 +585,7 @@ YOLOS_INPUTS_DOCSTRING = r"""
     "The bare YOLOS Model transformer outputting raw hidden-states without any specific head on top.",
     YOLOS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class YolosModel(YolosPreTrainedModel):
     def __init__(self, config: YolosConfig, add_pooling_layer: bool = True):
         super().__init__(config)
@@ -691,6 +694,7 @@ class YolosPooler(nn.Module):
     """,
     YOLOS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class YolosForObjectDetection(YolosPreTrainedModel):
     def __init__(self, config: YolosConfig):
         super().__init__(config)
@@ -1317,3 +1321,9 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
+
+__all__ = [
+    "YolosPreTrainedModel",
+    "YolosModel",
+    "YolosForObjectDetection"
+]

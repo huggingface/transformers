@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RoCBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate a
@@ -158,3 +160,7 @@ class RoCBertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
         super().__init__(pad_token_id=pad_token_id, **kwargs)
+
+__all__ = [
+    "RoCBertConfig"
+]

@@ -33,6 +33,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_resnet import ResNetConfig
 
 
@@ -359,6 +360,7 @@ class TFResNetEncoder(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFResNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -474,6 +476,7 @@ class TFResNetMainLayer(keras.layers.Layer):
     "The bare ResNet model outputting raw features without any specific head on top.",
     RESNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFResNetModel(TFResNetPreTrainedModel):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
@@ -524,6 +527,7 @@ class TFResNetModel(TFResNetPreTrainedModel):
     """,
     RESNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(config, **kwargs)
@@ -591,3 +595,9 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         if getattr(self, "classifier_layer", None) is not None:
             with tf.name_scope(self.classifier_layer.name):
                 self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])
+
+__all__ = [
+    "TFResNetPreTrainedModel",
+    "TFResNetModel",
+    "TFResNetForImageClassification"
+]

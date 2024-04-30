@@ -26,6 +26,7 @@ import regex
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -52,6 +53,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class BertweetTokenizer(PreTrainedTokenizer):
     """
     Constructs a BERTweet tokenizer, using Byte-Pair-Encoding.
@@ -765,3 +767,7 @@ def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=Fa
 
 
 ###############################################################################
+
+__all__ = [
+    "BertweetTokenizer"
+]

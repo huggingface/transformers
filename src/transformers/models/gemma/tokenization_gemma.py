@@ -22,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("sentencepiece",))
 class GemmaTokenizer(PreTrainedTokenizer):
     """
     Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
@@ -324,3 +326,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
+
+__all__ = [
+    "GemmaTokenizer"
+]

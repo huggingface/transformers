@@ -26,6 +26,7 @@ from tokenizers import AddedToken, pre_tokenizers, processors
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
@@ -40,6 +41,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class WhisperTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Whisper tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -592,3 +594,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 return []
 
         return token_ids
+
+__all__ = [
+    "WhisperTokenizerFast"
+]

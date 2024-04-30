@@ -19,11 +19,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RemBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RemBertModel`]. It is used to instantiate an
@@ -138,6 +140,7 @@ class RemBertConfig(PretrainedConfig):
         self.tie_word_embeddings = False
 
 
+@register()
 class RemBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -156,3 +159,8 @@ class RemBertOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "RemBertConfig",
+    "RemBertOnnxConfig"
+]

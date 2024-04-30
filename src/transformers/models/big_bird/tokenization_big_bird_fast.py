@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -36,6 +37,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("tokenizers",))
 class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" BigBird tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -228,3 +230,7 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "BigBirdTokenizerFast"
+]

@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 
 
@@ -512,6 +513,7 @@ class Owlv2EncoderLayer(nn.Module):
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTPreTrainedModel with OwlViT->Owlv2,owlvit->owlv2
+@register(backends=("torch",))
 class Owlv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -845,6 +847,7 @@ class Owlv2TextTransformer(nn.Module):
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
+@register(backends=("torch",))
 class Owlv2TextModel(Owlv2PreTrainedModel):
     config_class = Owlv2TextConfig
 
@@ -957,6 +960,7 @@ class Owlv2VisionTransformer(nn.Module):
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
+@register(backends=("torch",))
 class Owlv2VisionModel(Owlv2PreTrainedModel):
     config_class = Owlv2VisionConfig
     main_input_name = "pixel_values"
@@ -1009,6 +1013,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
 
 @add_start_docstrings(OWLV2_START_DOCSTRING)
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with google/owlvit-base-patch32->google/owlv2-base-patch16-ensemble, OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2
+@register(backends=("torch",))
 class Owlv2Model(Owlv2PreTrainedModel):
     config_class = Owlv2Config
 
@@ -1293,6 +1298,7 @@ class Owlv2ClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
+@register(backends=("torch",))
 class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     config_class = Owlv2Config
 
@@ -1774,3 +1780,11 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+__all__ = [
+    "Owlv2PreTrainedModel",
+    "Owlv2TextModel",
+    "Owlv2VisionModel",
+    "Owlv2Model",
+    "Owlv2ForObjectDetection"
+]

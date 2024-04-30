@@ -29,6 +29,7 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, is_torch_available
+from ...utils.import_utils import register
 
 
 IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
@@ -48,6 +49,7 @@ def convert_to_rgb(image):
     return alpha_composite
 
 
+@register(backends=("vision",))
 class IdeficsImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Idefics image processor.
@@ -166,3 +168,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
 
         return images
+
+__all__ = [
+    "IdeficsImageProcessor"
+]

@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_deberta import DebertaConfig
 
 
@@ -1133,6 +1134,7 @@ class TFDebertaMainLayer(keras.layers.Layer):
                 self.encoder.build(None)
 
 
+@register(backends=("tf",))
 class TFDebertaPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1233,6 +1235,7 @@ DEBERTA_INPUTS_DOCSTRING = r"""
     "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDebertaModel(TFDebertaPreTrainedModel):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1282,6 +1285,7 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
+@register(backends=("tf",))
 class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1369,6 +1373,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1468,6 +1473,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1551,6 +1557,7 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
     """,
     DEBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1639,3 +1646,12 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFDebertaPreTrainedModel",
+    "TFDebertaModel",
+    "TFDebertaForMaskedLM",
+    "TFDebertaForSequenceClassification",
+    "TFDebertaForTokenClassification",
+    "TFDebertaForQuestionAnswering"
+]

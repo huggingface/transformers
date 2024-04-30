@@ -35,6 +35,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -44,6 +45,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class BlipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BLIP image processor.
@@ -310,3 +312,7 @@ class BlipImageProcessor(BaseImageProcessor):
         encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
+
+__all__ = [
+    "BlipImageProcessor"
+]

@@ -21,6 +21,7 @@ from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" RoFormer tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -174,3 +176,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+
+__all__ = [
+    "RoFormerTokenizerFast"
+]

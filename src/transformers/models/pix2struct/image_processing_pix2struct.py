@@ -32,7 +32,7 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import register, requires_backends
 
 
 if is_vision_available():
@@ -185,6 +185,7 @@ def render_header(
     return new_image
 
 
+@register(backends=("vision",))
 class Pix2StructImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Pix2Struct image processor.
@@ -458,3 +459,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         )
 
         return encoded_outputs
+
+__all__ = [
+    "Pix2StructImageProcessor"
+]

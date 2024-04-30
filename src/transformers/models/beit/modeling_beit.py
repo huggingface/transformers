@@ -44,6 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_beit import BeitConfig
 
 
@@ -550,6 +551,7 @@ class BeitEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class BeitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -617,6 +619,7 @@ BEIT_INPUTS_DOCSTRING = r"""
     "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
     BEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BeitModel(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig, add_pooling_layer: bool = True) -> None:
         super().__init__(config)
@@ -732,6 +735,7 @@ class BeitPooler(nn.Module):
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
     BEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BeitForMaskedImageModeling(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
@@ -832,6 +836,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
     """,
     BEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BeitForImageClassification(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
@@ -1155,6 +1160,7 @@ class BeitFCNHead(nn.Module):
     """,
     BEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BeitForSemanticSegmentation(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
         super().__init__(config)
@@ -1306,6 +1312,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """,
     BEIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -1421,3 +1428,12 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "BeitPreTrainedModel",
+    "BeitModel",
+    "BeitForMaskedImageModeling",
+    "BeitForImageClassification",
+    "BeitForSemanticSegmentation",
+    "BeitBackbone"
+]

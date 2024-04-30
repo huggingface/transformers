@@ -32,6 +32,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_informer import InformerConfig
 
 
@@ -875,6 +876,7 @@ class InformerDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class InformerPreTrainedModel(PreTrainedModel):
     config_class = InformerConfig
     base_model_prefix = "model"
@@ -1438,6 +1440,7 @@ class InformerDecoder(InformerPreTrainedModel):
     INFORMER_START_DOCSTRING,
 )
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer,TimeSeries->Informer
+@register(backends=("torch",))
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -1700,6 +1703,7 @@ class InformerModel(InformerPreTrainedModel):
     INFORMER_START_DOCSTRING,
 )
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
+@register(backends=("torch",))
 class InformerForPrediction(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -2041,3 +2045,9 @@ class InformerForPrediction(InformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
+
+__all__ = [
+    "InformerPreTrainedModel",
+    "InformerModel",
+    "InformerForPrediction"
+]

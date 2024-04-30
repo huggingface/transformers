@@ -22,8 +22,10 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, T
 
 from ...processing_utils import ProcessorMixin
 from ...utils import PaddingStrategy, TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class NougatProcessor(ProcessorMixin):
     r"""
     Constructs a Nougat processor which wraps a Nougat image processor and a Nougat tokenizer into a single processor.
@@ -158,3 +160,7 @@ class NougatProcessor(ProcessorMixin):
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.post_process_generation(*args, **kwargs)
+
+__all__ = [
+    "NougatProcessor"
+]

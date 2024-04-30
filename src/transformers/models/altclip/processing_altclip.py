@@ -19,8 +19,10 @@ import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class AltCLIPProcessor(ProcessorMixin):
     r"""
     Constructs a AltCLIP processor which wraps a CLIP image processor and a XLM-Roberta tokenizer into a single
@@ -129,3 +131,7 @@ class AltCLIPProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+__all__ = [
+    "AltCLIPProcessor"
+]

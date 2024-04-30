@@ -47,6 +47,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_falcon import FalconConfig
 
 
@@ -919,6 +920,7 @@ FALCON_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class FalconPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -975,6 +977,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     "The bare Falcon Model transformer outputting raw hidden-states without any specific head on top.",
     FALCON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FalconModel(FalconPreTrainedModel):
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -1187,6 +1190,7 @@ class FalconModel(FalconPreTrainedModel):
     "The Falcon Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings).",
     FALCON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FalconForCausalLM(FalconPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1357,6 +1361,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
     """,
     FALCON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FalconForSequenceClassification(FalconPreTrainedModel):
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -1476,6 +1481,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
     """,
     FALCON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FalconForTokenClassification(FalconPreTrainedModel):
     def __init__(self, config: FalconConfig):
         super().__init__(config)
@@ -1565,6 +1571,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
     """,
     FALCON_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FalconForQuestionAnswering(FalconPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1644,3 +1651,12 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "FalconPreTrainedModel",
+    "FalconModel",
+    "FalconForCausalLM",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconForQuestionAnswering"
+]

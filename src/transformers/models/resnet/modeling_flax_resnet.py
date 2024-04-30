@@ -34,6 +34,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils.import_utils import register
 from .configuration_resnet import ResNetConfig
 
 
@@ -442,6 +443,7 @@ class FlaxResNetEncoder(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -577,6 +579,7 @@ class FlaxResNetModule(nn.Module):
     "The bare ResNet model outputting raw features without any specific head on top.",
     RESNET_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxResNetModel(FlaxResNetPreTrainedModel):
     module_class = FlaxResNetModule
 
@@ -664,6 +667,7 @@ class FlaxResNetForImageClassificationModule(nn.Module):
     """,
     RESNET_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxResNetForImageClassification(FlaxResNetPreTrainedModel):
     module_class = FlaxResNetForImageClassificationModule
 
@@ -699,3 +703,9 @@ overwrite_call_docstring(FlaxResNetForImageClassification, FLAX_VISION_CLASSIF_D
 append_replace_return_docstrings(
     FlaxResNetForImageClassification, output_type=FlaxImageClassifierOutputWithNoAttention, config_class=ResNetConfig
 )
+
+__all__ = [
+    "FlaxResNetPreTrainedModel",
+    "FlaxResNetModel",
+    "FlaxResNetForImageClassification"
+]

@@ -17,11 +17,13 @@ import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MvpConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MvpModel`]. It is used to instantiate a MVP model
@@ -177,3 +179,7 @@ class MvpConfig(PretrainedConfig):
                 f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
                 "The config can simply be saved and uploaded again to be fixed."
             )
+
+__all__ = [
+    "MvpConfig"
+]

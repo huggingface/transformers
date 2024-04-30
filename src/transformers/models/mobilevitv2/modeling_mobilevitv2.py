@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mobilevitv2 import MobileViTV2Config
 
 
@@ -593,6 +594,7 @@ class MobileViTV2Encoder(nn.Module):
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
+@register(backends=("torch",))
 class MobileViTV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -646,6 +648,7 @@ MOBILEVITV2_INPUTS_DOCSTRING = r"""
     "The bare MobileViTV2 model outputting raw hidden-states without any specific head on top.",
     MOBILEVITV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTV2Model(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config, expand_output: bool = True):
         super().__init__(config)
@@ -737,6 +740,7 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
@@ -937,6 +941,7 @@ class MobileViTV2DeepLabV3(nn.Module):
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
@@ -1026,3 +1031,10 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "MobileViTV2PreTrainedModel",
+    "MobileViTV2Model",
+    "MobileViTV2ForImageClassification",
+    "MobileViTV2ForSemanticSegmentation"
+]

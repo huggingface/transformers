@@ -27,6 +27,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Seq
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_audio_spectrogram_transformer import ASTConfig
 
 
@@ -356,6 +357,7 @@ class ASTEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ASTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -425,6 +427,7 @@ AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     "The bare AST Model transformer outputting raw hidden-states without any specific head on top.",
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ASTModel(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
@@ -525,6 +528,7 @@ class ASTMLPHead(nn.Module):
     """,
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ASTForAudioClassification(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
@@ -608,3 +612,9 @@ class ASTForAudioClassification(ASTPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ASTPreTrainedModel",
+    "ASTModel",
+    "ASTForAudioClassification"
+]

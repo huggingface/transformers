@@ -28,6 +28,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_trocr import TrOCRConfig
 
 
@@ -414,6 +415,7 @@ class TrOCRDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class TrOCRPreTrainedModel(PreTrainedModel):
     config_class = TrOCRConfig
     base_model_prefix = "model"
@@ -737,6 +739,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     " [`VisionEncoderDecoder`].",
     TROCR_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TrOCRForCausalLM(TrOCRPreTrainedModel):
     _tied_weights_keys = ["output_projection.weight"]
 
@@ -979,3 +982,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "TrOCRPreTrainedModel",
+    "TrOCRForCausalLM"
+]

@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_opt import OPTConfig
 
 
@@ -440,6 +441,7 @@ OPT_START_DOCSTRING = r"""
     "The bare OPT Model outputting raw hidden-states without any specific head on top.",
     OPT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFOPTPreTrainedModel(TFPreTrainedModel):
     """
     TFOPT Pretrained Model that inheritates from transformers.TFPreTrainedModel
@@ -834,6 +836,7 @@ class TFOPTMainLayer(keras.layers.Layer):
     OPT_START_DOCSTRING,
 )
 @keras_serializable
+@register(backends=("tf",))
 class TFOPTModel(TFOPTPreTrainedModel):
     config_class = OPTConfig
 
@@ -928,6 +931,7 @@ class TFOPTModel(TFOPTPreTrainedModel):
     OPT_START_DOCSTRING,
 )
 @keras_serializable
+@register(backends=("tf",))
 class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
     config_class = OPTConfig
 
@@ -1093,3 +1097,9 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
+
+__all__ = [
+    "TFOPTPreTrainedModel",
+    "TFOPTModel",
+    "TFOPTForCausalLM"
+]

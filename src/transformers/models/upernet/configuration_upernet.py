@@ -17,12 +17,14 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class UperNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`UperNetForSemanticSegmentation`]. It is used to
@@ -136,3 +138,7 @@ class UperNetConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
+
+__all__ = [
+    "UperNetConfig"
+]

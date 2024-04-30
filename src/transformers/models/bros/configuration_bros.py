@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BrosConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BrosModel`] or a [`TFBrosModel`]. It is used to
@@ -133,3 +135,7 @@ class BrosConfig(PretrainedConfig):
         self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
         self.dim_bbox_projection = self.hidden_size // self.num_attention_heads
         self.classifier_dropout_prob = classifier_dropout_prob
+
+__all__ = [
+    "BrosConfig"
+]

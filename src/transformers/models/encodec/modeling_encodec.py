@@ -30,6 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_encodec import EncodecConfig
 
 
@@ -438,6 +439,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
         return quantized_out
 
 
+@register(backends=("torch",))
 class EncodecPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -528,6 +530,7 @@ ENCODEC_INPUTS_DOCSTRING = r"""
     "The EnCodec neural audio codec model.",
     ENCODEC_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EncodecModel(EncodecPreTrainedModel):
     def __init__(self, config: EncodecConfig):
         super().__init__(config)
@@ -805,3 +808,8 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_codes, audio_values)
 
         return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
+
+__all__ = [
+    "EncodecPreTrainedModel",
+    "EncodecModel"
+]

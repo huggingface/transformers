@@ -23,6 +23,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -39,6 +40,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 # TODO(PVP) - this should be removed in Transformers v5
 
 
+@register(backends=("tokenizers",))
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" T5 tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -232,3 +234,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def get_sentinel_token_ids(self):
         return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+
+__all__ = [
+    "T5TokenizerFast"
+]

@@ -37,6 +37,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_sew import SEWConfig
 
 
@@ -1060,6 +1061,7 @@ class SEWEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SEWPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1183,6 +1185,7 @@ SEW_INPUTS_DOCSTRING = r"""
     "The bare SEW Model transformer outputting raw hidden-states without any specific head on top.",
     SEW_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SEWModel(SEWPreTrainedModel):
     def __init__(self, config: SEWConfig):
         super().__init__(config)
@@ -1312,6 +1315,7 @@ class SEWModel(SEWPreTrainedModel):
     SEW_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEW, wav2vec2->sew, WAV_2_VEC_2->SEW
+@register(backends=("torch",))
 class SEWForCTC(SEWPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1472,6 +1476,7 @@ class SEWForCTC(SEWPreTrainedModel):
     SEW_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEW, wav2vec2->sew, WAV_2_VEC_2->SEW
+@register(backends=("torch",))
 class SEWForSequenceClassification(SEWPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1586,3 +1591,10 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SEWPreTrainedModel",
+    "SEWModel",
+    "SEWForCTC",
+    "SEWForSequenceClassification"
+]

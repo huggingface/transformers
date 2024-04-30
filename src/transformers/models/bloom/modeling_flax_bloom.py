@@ -34,6 +34,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_bloom import BloomConfig
 
 
@@ -399,6 +400,7 @@ class FlaxBloomBlock(nn.Module):
         return outputs
 
 
+@register(backends=("flax",))
 class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -644,6 +646,7 @@ class FlaxBloomModule(nn.Module):
     BLOOM_START_DOCSTRING,
 )
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoModel with GPTNeo->Bloom
+@register(backends=("flax",))
 class FlaxBloomModel(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomModule
 
@@ -705,6 +708,7 @@ class FlaxBloomForCausalLMModule(nn.Module):
     """,
     BLOOM_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomForCausalLMModule
 
@@ -732,3 +736,9 @@ class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
 
 
 append_call_sample_docstring(FlaxBloomForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
+
+__all__ = [
+    "FlaxBloomPreTrainedModel",
+    "FlaxBloomModel",
+    "FlaxBloomForCausalLM"
+]

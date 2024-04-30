@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MixtralConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
@@ -167,3 +169,7 @@ class MixtralConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+__all__ = [
+    "MixtralConfig"
+]

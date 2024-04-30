@@ -20,8 +20,10 @@ from __future__ import annotations
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.import_utils import register
 
 
+@register()
 class ErnieMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieMModel`]. It is used to instantiate a
@@ -109,3 +111,7 @@ class ErnieMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.act_dropout = act_dropout
+
+__all__ = [
+    "ErnieMConfig"
+]

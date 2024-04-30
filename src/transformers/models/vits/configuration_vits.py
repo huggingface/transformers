@@ -17,11 +17,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VitsConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VitsModel`]. It is used to instantiate a VITS
@@ -249,3 +251,7 @@ class VitsConfig(PretrainedConfig):
             )
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "VitsConfig"
+]

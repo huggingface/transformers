@@ -18,11 +18,13 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class AltCLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPTextModel`]. It is used to instantiate a
@@ -141,6 +143,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.project_dim = project_dim
 
 
+@register()
 class AltCLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
@@ -251,6 +254,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class AltCLIPConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
@@ -397,3 +401,9 @@ class AltCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "AltCLIPTextConfig",
+    "AltCLIPVisionConfig",
+    "AltCLIPConfig"
+]

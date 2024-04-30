@@ -22,8 +22,10 @@ from typing import List, Optional, Union
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register(backends=("vision",))
 class ViltProcessor(ProcessorMixin):
     r"""
     Constructs a ViLT processor which wraps a BERT tokenizer and ViLT image processor into a single processor.
@@ -146,3 +148,7 @@ class ViltProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "ViltProcessor"
+]

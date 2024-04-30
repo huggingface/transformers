@@ -15,11 +15,13 @@
 """ NLLB-MoE model configuration"""
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class NllbMoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate an
@@ -213,3 +215,7 @@ class NllbMoeConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "NllbMoeConfig"
+]

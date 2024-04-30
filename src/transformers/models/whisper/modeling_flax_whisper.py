@@ -47,6 +47,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_whisper import WhisperConfig
 
 
@@ -858,6 +859,7 @@ class FlaxWhisperModule(nn.Module):
         return self.decoder
 
 
+@register(backends=("flax",))
 class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix: str = "model"
@@ -1186,6 +1188,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     "The bare Whisper Model transformer outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxWhisperModel(FlaxWhisperPreTrainedModel):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1265,6 +1268,7 @@ class FlaxWhisperForConditionalGenerationModule(nn.Module):
 
 
 @add_start_docstrings("The Whisper Model with a language modeling head.", WHISPER_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1595,6 +1599,7 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
 
 
 @add_start_docstrings("The Whisper Model with an audio classification head on top.", WHISPER_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForAudioClassificationModule
     dtype: jnp.dtype = jnp.float32
@@ -1694,3 +1699,10 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWhisperForAudioClassification, output_type=FlaxSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
 )
+
+__all__ = [
+    "FlaxWhisperPreTrainedModel",
+    "FlaxWhisperModel",
+    "FlaxWhisperForConditionalGeneration",
+    "FlaxWhisperForAudioClassification"
+]

@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pegasus import PegasusConfig
 
 
@@ -456,6 +457,7 @@ class PegasusDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class PegasusPreTrainedModel(PreTrainedModel):
     config_class = PegasusConfig
     base_model_prefix = "model"
@@ -1093,6 +1095,7 @@ class PegasusDecoder(PegasusPreTrainedModel):
     "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PegasusModel(PegasusPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1244,6 +1247,7 @@ class PegasusModel(PegasusPreTrainedModel):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
+@register(backends=("torch",))
 class PegasusForConditionalGeneration(PegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1456,6 +1460,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
+@register(backends=("torch",))
 class PegasusForCausalLM(PegasusPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1698,3 +1703,10 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "PegasusPreTrainedModel",
+    "PegasusModel",
+    "PegasusForConditionalGeneration",
+    "PegasusForCausalLM"
+]

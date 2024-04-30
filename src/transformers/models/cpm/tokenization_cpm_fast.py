@@ -19,6 +19,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import AddedToken, PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -26,6 +27,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class CpmTokenizerFast(PreTrainedTokenizerFast):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
@@ -235,3 +237,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
         text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
+
+__all__ = [
+    "CpmTokenizerFast"
+]

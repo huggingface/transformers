@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class NystromformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NystromformerModel`]. It is used to instantiate
@@ -127,3 +129,7 @@ class NystromformerConfig(PretrainedConfig):
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+__all__ = [
+    "NystromformerConfig"
+]

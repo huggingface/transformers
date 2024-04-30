@@ -22,6 +22,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -71,6 +72,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class MvpTokenizer(PreTrainedTokenizer):
     """
     Constructs a MVP tokenizer, which is smilar to the RoBERTa tokenizer, using byte-level Byte-Pair-Encoding.
@@ -389,3 +391,7 @@ class MvpTokenizer(PreTrainedTokenizer):
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
+
+__all__ = [
+    "MvpTokenizer"
+]

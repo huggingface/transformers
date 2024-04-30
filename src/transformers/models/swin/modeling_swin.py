@@ -39,6 +39,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_swin import SwinConfig
 
 
@@ -871,6 +872,7 @@ class SwinEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -939,6 +941,7 @@ SWIN_INPUTS_DOCSTRING = r"""
                 Whether or not to create and apply mask tokens in the embedding layer.
     """,
 )
+@register(backends=("torch",))
 class SwinModel(SwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
@@ -1048,6 +1051,7 @@ class SwinModel(SwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SwinForMaskedImageModeling(SwinPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1159,6 +1163,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SwinForImageClassification(SwinPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1252,6 +1257,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
     def __init__(self, config: SwinConfig):
         super().__init__(config)
@@ -1348,3 +1354,11 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SwinPreTrainedModel",
+    "SwinModel",
+    "SwinForMaskedImageModeling",
+    "SwinForImageClassification",
+    "SwinBackbone"
+]

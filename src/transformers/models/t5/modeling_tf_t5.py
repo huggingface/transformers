@@ -51,6 +51,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_t5 import T5Config
 
 
@@ -935,6 +936,7 @@ class TFT5MainLayer(keras.layers.Layer):
 # Here you just need to specify a few (self-explanatory)
 # pointers for your model.
 ####################################################
+@register(backends=("tf",))
 class TFT5PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1171,6 +1173,7 @@ num_heads))`.
     "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1320,6 +1323,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
+@register(backends=("tf",))
 class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1593,6 +1597,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     "The bare T5 Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1679,3 +1684,10 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
+
+__all__ = [
+    "TFT5PreTrainedModel",
+    "TFT5Model",
+    "TFT5ForConditionalGeneration",
+    "TFT5EncoderModel"
+]

@@ -17,8 +17,10 @@ Processor class for TVLT.
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class TvltProcessor(ProcessorMixin):
     r"""
     Constructs a TVLT processor which wraps a TVLT image processor and TVLT feature extractor into a single processor.
@@ -87,3 +89,7 @@ class TvltProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))
+
+__all__ = [
+    "TvltProcessor"
+]

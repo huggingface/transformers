@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_glpn import GLPNConfig
 
 
@@ -414,6 +415,7 @@ class GLPNEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class GLPNPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -476,6 +478,7 @@ GLPN_INPUTS_DOCSTRING = r"""
     "The bare GLPN encoder (Mix-Transformer) outputting raw hidden-states without any specific head on top.",
     GLPN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GLPNModel(GLPNPreTrainedModel):
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
     def __init__(self, config):
@@ -677,6 +680,7 @@ class GLPNDepthEstimationHead(nn.Module):
     """GLPN Model transformer with a lightweight depth estimation head on top e.g. for KITTI, NYUv2.""",
     GLPN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -774,3 +778,9 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "GLPNPreTrainedModel",
+    "GLPNModel",
+    "GLPNForDepthEstimation"
+]

@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
@@ -90,6 +91,7 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     return tf_to_pt_map
 
 
+@register()
 def load_tf_weights_in_mobilenet_v1(model, config, tf_checkpoint_path):
     """Load TensorFlow checkpoints in a PyTorch model."""
     try:
@@ -240,6 +242,7 @@ class MobileNetV1ConvLayer(nn.Module):
         return features
 
 
+@register(backends=("torch",))
 class MobileNetV1PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -292,6 +295,7 @@ MOBILENET_V1_INPUTS_DOCSTRING = r"""
     "The bare MobileNetV1 model outputting raw hidden-states without any specific head on top.",
     MOBILENET_V1_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileNetV1Model(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config, add_pooling_layer: bool = True):
         super().__init__(config)
@@ -402,6 +406,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     """,
     MOBILENET_V1_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
     def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__(config)
@@ -478,3 +483,10 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+__all__ = [
+    "load_tf_weights_in_mobilenet_v1",
+    "MobileNetV1PreTrainedModel",
+    "MobileNetV1Model",
+    "MobileNetV1ForImageClassification"
+]

@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_camembert import CamembertConfig
 
 
@@ -594,6 +595,7 @@ class CamembertPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class CamembertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -731,6 +733,7 @@ class CamembertLMHead(nn.Module):
     "The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     CAMEMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CamembertModel(CamembertPreTrainedModel):
     """
 
@@ -919,6 +922,7 @@ class CamembertModel(CamembertPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("torch",))
 class CamembertForMaskedLM(CamembertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1020,6 +1024,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("torch",))
 class CamembertForSequenceClassification(CamembertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1120,6 +1125,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("torch",))
 class CamembertForMultipleChoice(CamembertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1215,6 +1221,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("torch",))
 class CamembertForTokenClassification(CamembertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1301,6 +1308,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("torch",))
 class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1399,6 +1407,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, FacebookAI/roberta-base->almanach/camembert-base
+@register(backends=("torch",))
 class CamembertForCausalLM(CamembertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1573,3 +1582,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "CamembertPreTrainedModel",
+    "CamembertModel",
+    "CamembertForMaskedLM",
+    "CamembertForSequenceClassification",
+    "CamembertForMultipleChoice",
+    "CamembertForTokenClassification",
+    "CamembertForQuestionAnswering",
+    "CamembertForCausalLM"
+]

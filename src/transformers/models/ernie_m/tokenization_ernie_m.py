@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -38,6 +39,7 @@ RESOURCE_FILES_NAMES = {
 
 
 # Adapted from paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer
+@register(backends=("sentencepiece",))
 class ErnieMTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a Ernie-M tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
@@ -403,3 +405,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             fi.write(content_spiece_model)
 
         return (vocab_file,)
+
+__all__ = [
+    "ErnieMTokenizer"
+]

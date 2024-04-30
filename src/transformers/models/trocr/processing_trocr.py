@@ -19,8 +19,10 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class TrOCRProcessor(ProcessorMixin):
     r"""
     Constructs a TrOCR processor which wraps a vision image processor and a TrOCR tokenizer into a single processor.
@@ -138,3 +140,7 @@ class TrOCRProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "TrOCRProcessor"
+]

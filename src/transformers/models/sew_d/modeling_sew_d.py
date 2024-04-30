@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassif
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_sew_d import SEWDConfig
 
 
@@ -1218,6 +1219,7 @@ class SEWDEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class SEWDPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1344,6 +1346,7 @@ SEWD_INPUTS_DOCSTRING = r"""
     SEWD_START_DOCSTRING,
 )
 # Copied from transformers.models.sew.modeling_sew.SEWModel with SEW->SEWD, layer_norm_eps->feature_layer_norm_eps
+@register(backends=("torch",))
 class SEWDModel(SEWDPreTrainedModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
@@ -1473,6 +1476,7 @@ class SEWDModel(SEWDPreTrainedModel):
     SEWD_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
+@register(backends=("torch",))
 class SEWDForCTC(SEWDPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
@@ -1633,6 +1637,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
     SEWD_START_DOCSTRING,
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
+@register(backends=("torch",))
 class SEWDForSequenceClassification(SEWDPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1747,3 +1752,10 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SEWDPreTrainedModel",
+    "SEWDModel",
+    "SEWDForCTC",
+    "SEWDForSequenceClassification"
+]

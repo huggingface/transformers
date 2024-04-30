@@ -57,6 +57,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_roberta import RobertaConfig
 
 
@@ -872,6 +873,7 @@ class TFRobertaMainLayer(keras.layers.Layer):
                 self.embeddings.build(None)
 
 
+@register(backends=("tf",))
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -984,6 +986,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaModel(TFRobertaPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1122,6 +1125,7 @@ class TFRobertaLMHead(keras.layers.Layer):
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top.""", ROBERTA_START_DOCSTRING)
+@register(backends=("tf",))
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1210,6 +1214,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
                 self.lm_head.build(None)
 
 
+@register(backends=("tf",))
 class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1390,6 +1395,7 @@ class TFRobertaClassificationHead(keras.layers.Layer):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1477,6 +1483,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"lm_head"]
@@ -1579,6 +1586,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1674,6 +1682,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1769,3 +1778,14 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFRobertaPreTrainedModel",
+    "TFRobertaModel",
+    "TFRobertaForMaskedLM",
+    "TFRobertaForCausalLM",
+    "TFRobertaForSequenceClassification",
+    "TFRobertaForMultipleChoice",
+    "TFRobertaForTokenClassification",
+    "TFRobertaForQuestionAnswering"
+]

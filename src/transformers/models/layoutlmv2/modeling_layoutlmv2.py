@@ -40,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.import_utils import register
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
@@ -476,6 +477,7 @@ class LayoutLMv2Encoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class LayoutLMv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -685,6 +687,7 @@ class LayoutLMv2Pooler(nn.Module):
     "The bare LayoutLMv2 Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLMV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         requires_backends(self, "detectron2")
@@ -946,6 +949,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1128,6 +1132,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1259,6 +1264,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
     """,
     LAYOUTLMV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
         super().__init__(config)
@@ -1405,3 +1411,11 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "LayoutLMv2PreTrainedModel",
+    "LayoutLMv2Model",
+    "LayoutLMv2ForSequenceClassification",
+    "LayoutLMv2ForTokenClassification",
+    "LayoutLMv2ForQuestionAnswering"
+]

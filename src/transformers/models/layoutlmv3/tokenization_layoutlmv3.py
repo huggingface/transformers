@@ -31,6 +31,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -181,6 +182,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class LayoutLMv3Tokenizer(PreTrainedTokenizer):
     r"""
     Construct a LayoutLMv3 tokenizer. Based on [`RoBERTatokenizer`] (Byte Pair Encoding or BPE).
@@ -1459,3 +1461,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "LayoutLMv3Tokenizer"
+]

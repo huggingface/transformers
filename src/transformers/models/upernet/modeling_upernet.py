@@ -24,6 +24,7 @@ from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_upernet import UperNetConfig
 
 
@@ -285,6 +286,7 @@ class UperNetFCNHead(nn.Module):
         return output
 
 
+@register(backends=("torch",))
 class UperNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -340,6 +342,7 @@ UPERNET_INPUTS_DOCSTRING = r"""
     """UperNet framework leveraging any vision backbone e.g. for ADE20k, CityScapes.""",
     UPERNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -439,3 +442,8 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "UperNetPreTrainedModel",
+    "UperNetForSemanticSegmentation"
+]

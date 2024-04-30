@@ -60,6 +60,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import TensorType
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -464,6 +465,7 @@ def resize_annotation(
     return new_annotation
 
 
+@register(backends=("vision",))
 class DetaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Deformable DETR image processor.
@@ -1172,3 +1174,7 @@ class DetaImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+__all__ = [
+    "DetaImageProcessor"
+]

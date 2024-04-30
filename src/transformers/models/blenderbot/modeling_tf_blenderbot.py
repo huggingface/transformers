@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -524,6 +525,7 @@ class TFBlenderbotDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFBlenderbotPreTrainedModel(TFPreTrainedModel):
     config_class = BlenderbotConfig
     base_model_prefix = "model"
@@ -1218,6 +1220,7 @@ class TFBlenderbotMainLayer(keras.layers.Layer):
     "The bare BLENDERBOT Model outputting raw hidden-states without any specific head on top.",
     BLENDERBOT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     def __init__(self, config: BlenderbotConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1347,6 +1350,7 @@ class BiasLayer(keras.layers.Layer):
     "The BLENDERBOT Model with a language modeling head. Can be used for summarization.",
     BLENDERBOT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
@@ -1554,3 +1558,9 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+__all__ = [
+    "TFBlenderbotPreTrainedModel",
+    "TFBlenderbotModel",
+    "TFBlenderbotForConditionalGeneration"
+]

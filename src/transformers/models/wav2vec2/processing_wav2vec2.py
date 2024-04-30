@@ -19,10 +19,12 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
+@register()
 class Wav2Vec2Processor(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor and a Wav2Vec2 CTC tokenizer into a single
@@ -163,3 +165,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+__all__ = [
+    "Wav2Vec2Processor"
+]

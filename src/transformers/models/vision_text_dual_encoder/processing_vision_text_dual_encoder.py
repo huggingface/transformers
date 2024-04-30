@@ -20,8 +20,10 @@ import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class VisionTextDualEncoderProcessor(ProcessorMixin):
     r"""
     Constructs a VisionTextDualEncoder processor which wraps an image processor and a tokenizer into a single
@@ -148,3 +150,7 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "VisionTextDualEncoderProcessor"
+]

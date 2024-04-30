@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -1326,6 +1327,7 @@ class TFWav2Vec2MainLayer(keras.layers.Layer):
         )
 
 
+@register(backends=("tf",))
 class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1500,6 +1502,7 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1582,6 +1585,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1745,6 +1749,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
                 self.lm_head.build([None, None, self.output_hidden_size])
 
 
+@register(backends=("tf",))
 class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1855,3 +1860,10 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.classifier_proj_size])
+
+__all__ = [
+    "TFWav2Vec2PreTrainedModel",
+    "TFWav2Vec2Model",
+    "TFWav2Vec2ForCTC",
+    "TFWav2Vec2ForSequenceClassification"
+]

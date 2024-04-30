@@ -23,6 +23,7 @@ import numpy as np
 
 from ...tokenization_utils_fast import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +51,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     return vocab, raw_vocab, ids_to_tokens, emoji
 
 
+@register(backends=("tokenizers",))
 class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
     """
     This tokenizer inherits from [`PreTrainedTokenizer`] and is based on Japanese special Sub-Word-Encoding that is
@@ -360,3 +362,7 @@ class SubWordJapaneseTokenizer(object):
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
+
+__all__ = [
+    "GPTNeoXJapaneseTokenizer"
+]

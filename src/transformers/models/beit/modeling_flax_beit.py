@@ -38,6 +38,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils.import_utils import register
 from .configuration_beit import BeitConfig
 
 
@@ -584,6 +585,7 @@ class FlaxBeitEncoder(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -742,6 +744,7 @@ class FlaxBeitModule(nn.Module):
     "The bare Beit Model transformer outputting raw hidden-states without any specific head on top.",
     BEIT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBeitModel(FlaxBeitPreTrainedModel):
     module_class = FlaxBeitModule
 
@@ -826,6 +829,7 @@ class FlaxBeitForMaskedImageModelingModule(nn.Module):
     "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
     BEIT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBeitForMaskedImageModeling(FlaxBeitPreTrainedModel):
     module_class = FlaxBeitForMaskedImageModelingModule
 
@@ -913,6 +917,7 @@ class FlaxBeitForImageClassificationModule(nn.Module):
     """,
     BEIT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBeitForImageClassification(FlaxBeitPreTrainedModel):
     module_class = FlaxBeitForImageClassificationModule
 
@@ -946,3 +951,10 @@ overwrite_call_docstring(FlaxBeitForImageClassification, FLAX_BEIT_CLASSIF_DOCST
 append_replace_return_docstrings(
     FlaxBeitForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=BeitConfig
 )
+
+__all__ = [
+    "FlaxBeitPreTrainedModel",
+    "FlaxBeitModel",
+    "FlaxBeitForMaskedImageModeling",
+    "FlaxBeitForImageClassification"
+]

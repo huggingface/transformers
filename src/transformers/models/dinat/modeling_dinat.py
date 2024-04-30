@@ -40,6 +40,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_dinat import DinatConfig
 
 
@@ -633,6 +634,7 @@ class DinatEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class DinatPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -689,6 +691,7 @@ DINAT_INPUTS_DOCSTRING = r"""
     DINAT_START_DOCSTRING,
 )
 # Copied from transformers.models.nat.modeling_nat.NatModel with Nat->Dinat, NAT->DINAT
+@register(backends=("torch",))
 class DinatModel(DinatPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -781,6 +784,7 @@ class DinatModel(DinatPreTrainedModel):
     """,
     DINAT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DinatForImageClassification(DinatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -872,6 +876,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     "NAT backbone, to be used with frameworks like DETR and MaskFormer.",
     DINAT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -971,3 +976,10 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DinatPreTrainedModel",
+    "DinatModel",
+    "DinatForImageClassification",
+    "DinatBackbone"
+]

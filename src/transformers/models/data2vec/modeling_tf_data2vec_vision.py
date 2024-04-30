@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_data2vec_vision import Data2VecVisionConfig
 
 
@@ -884,6 +885,7 @@ class TFData2VecVisionPooler(keras.layers.Layer):
                     self.layernorm.build((None, self.config.hidden_size))
 
 
+@register(backends=("tf",))
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -970,6 +972,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1033,6 +1036,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1539,6 +1543,7 @@ class TFData2VecVisionFCNHead(keras.layers.Layer):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1715,3 +1720,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         if getattr(self, "fpn2", None) is not None:
             with tf.name_scope(self.fpn2[0].name):
                 self.fpn2[0].build([None, None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFData2VecVisionPreTrainedModel",
+    "TFData2VecVisionModel",
+    "TFData2VecVisionForImageClassification",
+    "TFData2VecVisionForSemanticSegmentation"
+]

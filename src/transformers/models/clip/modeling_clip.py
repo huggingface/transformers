@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 
 
@@ -393,6 +394,7 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class CLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -757,6 +759,7 @@ class CLIPTextTransformer(nn.Module):
     """The text model from CLIP without any head or projection on top.""",
     CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -876,6 +879,7 @@ class CLIPVisionTransformer(nn.Module):
     """The vision model from CLIP without any head or projection on top.""",
     CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -932,6 +936,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
 
 @add_start_docstrings(CLIP_START_DOCSTRING)
+@register(backends=("torch",))
 class CLIPModel(CLIPPreTrainedModel):
     config_class = CLIPConfig
     _no_split_modules = ["CLIPTextEmbeddings", "CLIPEncoderLayer"]
@@ -1164,6 +1169,7 @@ class CLIPModel(CLIPPreTrainedModel):
     """,
     CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -1245,6 +1251,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     """,
     CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1324,6 +1331,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     """,
     CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CLIPForImageClassification(CLIPPreTrainedModel):
     main_input_name = "pixel_values"
 
@@ -1417,3 +1425,13 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "CLIPPreTrainedModel",
+    "CLIPTextModel",
+    "CLIPVisionModel",
+    "CLIPModel",
+    "CLIPTextModelWithProjection",
+    "CLIPVisionModelWithProjection",
+    "CLIPForImageClassification"
+]

@@ -39,6 +39,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_gpt_bigcode import GPTBigCodeConfig
 
 
@@ -754,6 +755,7 @@ class GPTBigCodeBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
+@register(backends=("torch",))
 class GPTBigCodePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -888,6 +890,7 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
     "The bare GPT_BIGCODE Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_BIGCODE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1140,6 +1143,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1323,6 +1327,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1442,6 +1447,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
     """,
     GPT_BIGCODE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1517,3 +1523,11 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "GPTBigCodePreTrainedModel",
+    "GPTBigCodeModel",
+    "GPTBigCodeForCausalLM",
+    "GPTBigCodeForSequenceClassification",
+    "GPTBigCodeForTokenClassification"
+]
