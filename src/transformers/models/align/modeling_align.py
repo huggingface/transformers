@@ -1203,6 +1203,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
+    _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
         super().__init__(config)
