@@ -820,27 +820,76 @@ class GraniteModel(GranitePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple]:
-        (
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            input_shape,
-            hidden_states,
-            attention_mask,
-            position_ids,
-            rope_cos_sin,
-            past_key_values,
-        ) = self._prepare_a_bunch_of_stuff(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
+        use_cache = self.config.use_cache if use_cache is None else use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            # TODO special handling for padding free transformer needed here if we support inputs_embeds argument
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        batch_size = input_shape[0]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if self.position_embedding_type == PositionEmbeddingType.alibi:
+            if position_ids is not None:
+                warnings.warn("`position_ids` have no functionality with Alibi.", FutureWarning)
+
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        query_length = input_shape[-1]
+        key_length = past_length + query_length
+
+        if position_ids is None:
+            position_ids = self._get_position_ids(attention_mask, past_length, query_length, key_length, device)
+
+        hidden_states = self._get_initial_hidden_state(input_ids, inputs_embeds, position_ids, token_type_ids)
+
+        alibi_bias = self._get_alibi_bias(
+            attention_mask, batch_size, query_length, key_length, device, hidden_states.dtype
+        )
+
+        rope_cos_sin = self._get_rope_cos_sin(
+            key_length, position_ids, dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # prepare causal mask only if not using flash attention
+        if self._use_flash_attention_2:
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
+        elif self._use_sdpa:
+            # we use the causal/non-causal argument of SDPA for attention in this case
+            if attention_mask is not None:
+                attention_mask = self._prepare_causal_attention_mask(
+                    attention_mask, batch_size, query_length, key_length, device
+                )
+
+                attention_mask = torch.where(
+                    attention_mask,
+                    ~attention_mask if alibi_bias is None else alibi_bias,
+                    self._get_mask_value(attention_mask.device, hidden_states.dtype),
+                )
+        else:
+            attention_mask = self._prepare_causal_attention_mask(
+                attention_mask, batch_size, query_length, key_length, device
+            )
+
+            attention_mask = torch.where(
+                attention_mask,
+                ~attention_mask if alibi_bias is None else alibi_bias,
+                self._get_mask_value(attention_mask.device, hidden_states.dtype),
+            )
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -972,111 +1021,6 @@ class GraniteModel(GranitePreTrainedModel):
         inputs_embeds = self.drop(inputs_embeds)
 
         return inputs_embeds
-
-    def _prepare_a_bunch_of_stuff(
-        self,
-        input_ids: torch.Tensor,
-        past_key_values: DynamicCache,
-        attention_mask: torch.Tensor,
-        token_type_ids: torch.Tensor,
-        position_ids: torch.Tensor,
-        inputs_embeds: torch.Tensor,
-        use_cache: bool,
-        output_hidden_states: bool,
-        return_dict: bool,
-    ) -> Tuple[
-        bool,
-        bool,
-        bool,
-        torch.Size,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        Optional[Tuple[torch.Tensor, torch.Tensor]],
-        DynamicCache,
-    ]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        use_cache = self.config.use_cache if use_cache is None else use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            # TODO special handling for padding free transformer needed here if we support inputs_embeds argument
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size = input_shape[0]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if self.position_embedding_type == PositionEmbeddingType.alibi:
-            if position_ids is not None:
-                warnings.warn("`position_ids` have no functionality with Alibi.", FutureWarning)
-
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
-
-        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        query_length = input_shape[-1]
-        key_length = past_length + query_length
-
-        if position_ids is None:
-            position_ids = self._get_position_ids(attention_mask, past_length, query_length, key_length, device)
-
-        hidden_states = self._get_initial_hidden_state(input_ids, inputs_embeds, position_ids, token_type_ids)
-
-        alibi_bias = self._get_alibi_bias(
-            attention_mask, batch_size, query_length, key_length, device, hidden_states.dtype
-        )
-
-        rope_cos_sin = self._get_rope_cos_sin(
-            key_length, position_ids, dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # prepare causal mask only if not using flash attention
-        if self._use_flash_attention_2:
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-        elif self._use_sdpa:
-            # we use the causal/non-causal argument of SDPA for attention in this case
-            if attention_mask is not None:
-                attention_mask = self._prepare_causal_attention_mask(
-                    attention_mask, batch_size, query_length, key_length, device
-                )
-
-                attention_mask = torch.where(
-                    attention_mask,
-                    ~attention_mask if alibi_bias is None else alibi_bias,
-                    self._get_mask_value(attention_mask.device, hidden_states.dtype),
-                )
-        else:
-            attention_mask = self._prepare_causal_attention_mask(
-                attention_mask, batch_size, query_length, key_length, device
-            )
-
-            attention_mask = torch.where(
-                attention_mask,
-                ~attention_mask if alibi_bias is None else alibi_bias,
-                self._get_mask_value(attention_mask.device, hidden_states.dtype),
-            )
-
-        return (
-            output_hidden_states,
-            use_cache,
-            return_dict,
-            input_shape,
-            hidden_states,
-            attention_mask,
-            position_ids,
-            rope_cos_sin,
-            past_key_values,
-        )
 
     def _get_mask_value(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
