@@ -1445,12 +1445,12 @@ def symbolic_trace(
     if not disable_check:
         check_if_model_is_supported(model)
 
-    if "past_key_values" in input_names and not model.config.use_cache:
+    if "past_key_values" in input_names and not getattr(model.config, "use_cache", False):
         logger.warning(
             "`past_key_values` were specified as input names, but model.config.use_cache = False, this might lead to "
             "unexpected behavior."
         )
-    if "past_key_values" not in input_names and model.config.use_cache:
+    if "past_key_values" not in input_names and hasattr(model.config, "use_cache") and model.config.use_cache:
         logger.warning(
             "`past_key_values` were not specified as input names, but model.config.use_cache = True. Setting "
             "model.config.use_cache = False."
