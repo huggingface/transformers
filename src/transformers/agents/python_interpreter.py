@@ -70,19 +70,23 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
 
     return result
 
+
 class BreakException(Exception):
     pass
+
 
 class ContinueException(Exception):
     pass
 
+
 def get_iterable(obj):
     if isinstance(obj, list):
         return obj
-    elif hasattr(obj, '__iter__'):
+    elif hasattr(obj, "__iter__"):
         return list(obj)
     else:
         raise InterpretorError("Object is not iterable")
+
 
 def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
     """
@@ -241,13 +245,16 @@ def evaluate_unaryop(expression, state, tools):
     else:
         raise InterpretorError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
 
+
 def evaluate_lambda(lambda_expression, state, tools):
     args = [arg.arg for arg in lambda_expression.args.args]
+
     def lambda_func(*values):
         new_state = state.copy()
         for arg, value in zip(args, values):
             new_state[arg] = value
         return evaluate_ast(lambda_expression.body, new_state, tools)
+
     return lambda_func
 
 
@@ -261,7 +268,9 @@ def evaluate_function_def(function_def, state, tools):
             for node in func_def.body:
                 result = evaluate_ast(node, new_state, tools)
             return result
+
         return new_func
+
     tools[function_def.name] = create_function(function_def, state, tools)
     return None
 

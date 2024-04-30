@@ -23,7 +23,7 @@ import tempfile
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import create_repo, hf_hub_download, metadata_update, upload_folder
+from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 from packaging import version
 
@@ -809,3 +809,10 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
         if "title" in arg_details:
             arg_details.pop("title")
     return inputs
+
+
+class ToolCollection:
+    def __init__(self, collection_slug: str, token: Optional[str] = None):
+        self._collection = get_collection(collection_slug, token=token)
+        self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
+        self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}

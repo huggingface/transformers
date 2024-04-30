@@ -333,7 +333,9 @@ class Agent:
             memory.append(tool_response_message)
 
             if len(memory) % 3 == 0:
-                reminder_content = "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
+                reminder_content = (
+                    "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
+                )
                 reminder_content += "\nHere is a summary of your past tool calls and their results:"
                 for j in range(i + 1):
                     reminder_content += "\nStep " + str(j + 1)
@@ -344,10 +346,12 @@ class Agent:
                             reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
                     if "error" in self.logs[j]:
                         reminder_content += "\nError:" + str(self.logs[j]["error"])
-                memory.append({
-                    "role": MessageRole.USER,
-                    "content": reminder_content,
-                })
+                memory.append(
+                    {
+                        "role": MessageRole.USER,
+                        "content": reminder_content,
+                    }
+                )
         return memory
 
     def show_message_history(self) -> None:
@@ -787,9 +791,7 @@ class ReactCodeAgent(ReactAgent):
         except Exception as e:
             error_msg = f"Failed while trying to execute the code below:\n{code_action}\nThis failed due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
-                error_msg += (
-                    "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
-                )
+                error_msg += "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":

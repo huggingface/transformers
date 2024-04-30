@@ -67,6 +67,7 @@ _import_structure = {
         "ReactJsonAgent",
         "Tool",
         "Toolbox",
+        "ToolCollection",
         "launch_gradio_demo",
         "load_tool",
     ],
@@ -5053,6 +5054,7 @@ if TYPE_CHECKING:
         ReactCodeAgent,
         ReactJsonAgent,
         Tool,
+        ToolCollection,
         launch_gradio_demo,
         load_tool,
     )
