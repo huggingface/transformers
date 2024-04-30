@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import get_activation as get_base_activation
-from ...cache_utils import DynamicCache, StaticCache, Cache
+from ...cache_utils import DynamicCache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -21,7 +21,6 @@ from ...utils import (
     logging,
 )
 from .configuration_granite import GraniteConfig
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 
 
 if is_flash_attn_2_available():
@@ -757,10 +756,6 @@ class GranitePreTrainedModel(PreTrainedModel):
                 module.weight[module.padding_idx].zero_()
 
 
-@add_start_docstrings(
-    "The bare Granite Model outputting raw hidden-states without any specific head on top.",
-    GRANITE_START_DOCSTRING,
-)
 class GraniteModel(GranitePreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
     mask_value = None
@@ -824,62 +819,28 @@ class GraniteModel(GranitePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: torch.Tensor = None,
     ) -> Union[Tuple]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        (
+            output_hidden_states,
+            use_cache,
+            return_dict,
+            input_shape,
+            hidden_states,
+            attention_mask,
+            position_ids,
+            rope_cos_sin,
+            past_key_values,
+        ) = self._prepare_a_bunch_of_stuff(
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-
-        use_cache = self.config.use_cache if use_cache is None else use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            # TODO special handling for padding free transformer needed here if we support inputs_embeds argument
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size = input_shape[0]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if self.position_embedding_type == PositionEmbeddingType.alibi:
-            if position_ids is not None:
-                warnings.warn("`position_ids` have no functionality with Alibi.", FutureWarning)
-
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
-
-        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        query_length = input_shape[-1]
-        key_length = past_length + query_length
-
-        if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
-            cache_position = torch.arange(
-                past_length, past_length + input_ids.shape[1], device=input_ids.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        hidden_states = self._get_initial_hidden_state(input_ids, inputs_embeds, position_ids, token_type_ids)
-
-        alibi_bias = self._get_alibi_bias(
-            attention_mask, batch_size, query_length, key_length, device, hidden_states.dtype
-        )
-
-        rope_cos_sin = self._get_rope_cos_sin(
-            key_length, position_ids, dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        attention_mask = self._update_causal_mask(attention_mask, hidden_states, cache_position, past_length)
-        if alibi_bias is not None:
-            attention_mask = attention_mask + alibi_bias
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -956,79 +917,39 @@ class GraniteModel(GranitePreTrainedModel):
             sin = sin[position_ids].unsqueeze(1)
             return cos, sin
 
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_seen_tokens: int,
-    ):
-        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+    def _prepare_causal_attention_mask(
+        self, attention_mask: torch.Tensor, batch_size: int, query_length: int, key_length: int, device: torch.device
+    ) -> torch.Tensor:
+        past_length = key_length - query_length
 
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
-        if self.config._attn_implementation == "sdpa":
-            # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
-            # in order to dispatch on Flash Attention 2.
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        if hasattr(getattr(self.h[0], "attn", {}), "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
+        if query_length > 1:
+            # (query_length, key_length)
+            causal_mask = torch.empty((query_length, key_length), dtype=torch.bool, device=device)
+            causal_mask[:, past_length:] = torch.tril(
+                torch.ones(query_length, query_length, dtype=torch.bool, device=device)
             )
 
-        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            if attention_mask.dim() == 2:
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-            elif attention_mask.dim() == 4:
-                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
+            if past_length > 0:
+                causal_mask[:, :past_length] = True
 
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type == "cuda"
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            # (query_length, key_length) -> (1, query_length, key_length)
+            causal_mask = causal_mask.unsqueeze(0)
+
+            if attention_mask is None:
+                # (1, query_length, key_length) -> (batch_size, query_length, key_length)
+                causal_mask = causal_mask.expand(batch_size, -1, -1)
+            else:
+                # (1, query_length, key_length) & (batch_size, 1, key_length) -> (batch_size, query_length, key_length)
+                causal_mask = causal_mask & attention_mask.unsqueeze(1).to(torch.bool)
+        else:
+            if attention_mask is None:
+                # (batch_size, query_length, key_length)
+                causal_mask = torch.ones(batch_size, query_length, key_length, dtype=torch.bool, device=device)
+            else:
+                # (batch_size, query_length, key_length)
+                causal_mask = attention_mask.unsqueeze(1).to(dtype=torch.bool, device=device)
+
+        causal_mask = causal_mask.unsqueeze(1)
 
         return causal_mask
 
@@ -1051,6 +972,117 @@ class GraniteModel(GranitePreTrainedModel):
         inputs_embeds = self.drop(inputs_embeds)
 
         return inputs_embeds
+
+    def _prepare_a_bunch_of_stuff(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values: DynamicCache,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor,
+        position_ids: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        use_cache: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
+    ) -> Tuple[
+        bool,
+        bool,
+        bool,
+        torch.Size,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        Optional[Tuple[torch.Tensor, torch.Tensor]],
+        DynamicCache,
+    ]:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        use_cache = self.config.use_cache if use_cache is None else use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            # TODO special handling for padding free transformer needed here if we support inputs_embeds argument
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        batch_size = input_shape[0]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if self.position_embedding_type == PositionEmbeddingType.alibi:
+            if position_ids is not None:
+                warnings.warn("`position_ids` have no functionality with Alibi.", FutureWarning)
+
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+
+        past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        query_length = input_shape[-1]
+        key_length = past_length + query_length
+
+        if position_ids is None:
+            position_ids = self._get_position_ids(attention_mask, past_length, query_length, key_length, device)
+
+        hidden_states = self._get_initial_hidden_state(input_ids, inputs_embeds, position_ids, token_type_ids)
+
+        alibi_bias = self._get_alibi_bias(
+            attention_mask, batch_size, query_length, key_length, device, hidden_states.dtype
+        )
+
+        rope_cos_sin = self._get_rope_cos_sin(
+            key_length, position_ids, dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # prepare causal mask only if not using flash attention
+        if self._use_flash_attention_2:
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
+        elif self._use_sdpa:
+            # we use the causal/non-causal argument of SDPA for attention in this case
+            if attention_mask is not None:
+                attention_mask = self._prepare_causal_attention_mask(
+                    attention_mask, batch_size, query_length, key_length, device
+                )
+
+                attention_mask = torch.where(
+                    attention_mask,
+                    ~attention_mask if alibi_bias is None else alibi_bias,
+                    self._get_mask_value(attention_mask.device, hidden_states.dtype),
+                )
+        else:
+            attention_mask = self._prepare_causal_attention_mask(
+                attention_mask, batch_size, query_length, key_length, device
+            )
+
+            attention_mask = torch.where(
+                attention_mask,
+                ~attention_mask if alibi_bias is None else alibi_bias,
+                self._get_mask_value(attention_mask.device, hidden_states.dtype),
+            )
+
+        return (
+            output_hidden_states,
+            use_cache,
+            return_dict,
+            input_shape,
+            hidden_states,
+            attention_mask,
+            position_ids,
+            rope_cos_sin,
+            past_key_values,
+        )
+
+    def _get_mask_value(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        # torch.where expects a tensor. We use a cache to avoid recreating it every time.
+        if self.mask_value is None or self.mask_value.dtype != dtype or self.mask_value.device != device:
+            self.mask_value = torch.full([], torch.finfo(torch.float16).min, dtype=dtype, device=device)
+        return self.mask_value
 
 
 class GraniteForCausalLM(GranitePreTrainedModel):
@@ -1076,91 +1108,55 @@ class GraniteForCausalLM(GranitePreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
         self.lm_head = new_embeddings
 
+    # FIXME typing
     def prepare_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        use_cache=True,
+        input_ids: torch.Tensor,
+        past_key_values: Optional[DynamicCache] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
-    ):
-        # With static cache, the `past_key_values` is None
-        # TODO joao: standardize interface for the different Cache classes and remove of this if
-        has_static_cache = False
-        if past_key_values is None:
-            past_key_values = getattr(getattr(self.transformer.h[0], "attn", {}), "past_key_value", None)
-            has_static_cache = past_key_values is not None
+    ) -> dict:
+        token_type_ids = kwargs.get("token_type_ids", None)
+        # Omit tokens covered by past_key_values
+        if past_key_values:
+            past_length = past_key_values.get_seq_length()
 
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                    if past_key_values.get_max_length() is not None
-                    else None
-                )
-                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
-            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
             else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            input_ids = input_ids[:, remove_prefix_length:]
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
 
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
-
+        attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids.masked_fill_(attention_mask == 0, 0)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+        else:
+            position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
-            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-            # TODO: use `next_tokens` directly instead.
-            model_inputs = {"input_ids": input_ids.contiguous()}
-
-        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
-        elif use_cache:
-            cache_position = cache_position[-input_length:]
-
-        if has_static_cache:
-            past_key_values = None
+            model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
             {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "use_cache": use_cache,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
                 "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
             }
         )
         return model_inputs
@@ -1178,7 +1174,6 @@ class GraniteForCausalLM(GranitePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: torch.Tensor = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1192,7 +1187,6 @@ class GraniteForCausalLM(GranitePreTrainedModel):
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         hidden_states = transformer_outputs[0]
 
