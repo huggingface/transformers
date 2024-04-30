@@ -1042,8 +1042,8 @@ class WhisperGenerationMixin:
                 "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                 "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
             )
-
-        generation_config.return_timestamps = return_timestamps
+        if return_timestamps is not None:
+            generation_config.return_timestamps = return_timestamps
 
     @staticmethod
     def _set_language_and_task(language, task, is_multilingual, generation_config):
