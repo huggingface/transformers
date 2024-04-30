@@ -1215,6 +1215,7 @@ class DbrxModel(DbrxPreTrainedModel):
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
@@ -1227,7 +1228,10 @@ class DbrxModel(DbrxPreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
         if self.config._attn_implementation == "sdpa" and not using_static_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
             ):
                 return None
 
