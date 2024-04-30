@@ -18,6 +18,7 @@ import unittest
 import pytest
 
 from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
+from transformers.agents.default_tools import BASE_PYTHON_TOOLS
 
 
 # Fake function we will use as tool
@@ -220,6 +221,26 @@ for block in text_block:
         assert result == 5
 
     def test_dictcomp(self):
-        code = "x = {i: i for i in range(3)}"
+        code = "x = {i: i**2 for i in range(3)}"
         result = evaluate_python_code(code, {"range": range}, state={})
-        assert result == {0: 0, 1: 1, 2: 2}
+        assert result == {0: 0, 1: 1, 2: 4}
+
+    def test_tuple_assignment(self):
+        code = "a, b = 0, 1\nb"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == 1
+
+    def test_while(self):
+        code = "i = 0\nwhile i < 3:\n    i += 1\ni"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == 3
+
+        # test infinite loop
+        code = "i = 0\nwhile i < 3:\n    i -= 1\ni"
+        with pytest.raises(InterpretorError) as e:
+            evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+
+    def test_generator(self):
+        code = "a = [1, 2, 3, 4, 5]; b = (i**2 for i in a); list(b)"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == [1, 4, 9, 16, 25]

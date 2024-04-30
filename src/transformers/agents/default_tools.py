@@ -186,7 +186,7 @@ class CalculatorTool(Tool):
 
 class PythonEvaluatorTool(Tool):
     name = "python_evaluator"
-    description = "This is a tool that evaluates python code. It can be used to perform calculations. It does not have access to any imports or function definitions."
+    description = "This is a tool that evaluates python code. It can be used to perform calculations. It can only import base python libraries like math and random."
 
     inputs = {
         "code": {

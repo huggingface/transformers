@@ -45,9 +45,9 @@ class CustomFormatter(logging.Formatter):
 
     FORMATS = {
         logging.DEBUG: grey + format + reset,
-        logging.INFO: green + format + reset,
+        logging.INFO: format,
         logging.WARNING: bold_yellow + format + reset,
-        logging.ERROR: bold_red + format + reset,
+        logging.ERROR: red + format + reset,
         logging.CRITICAL: bold_red + format + reset,
     }
 
@@ -58,11 +58,9 @@ class CustomFormatter(logging.Formatter):
 
 
 logger = transformers_logging.get_logger(__name__)
+logger.propagate = False
 ch = logging.StreamHandler()
 ch.setFormatter(CustomFormatter())
-if len(logger.handlers) > 0:
-    for logger in logger.handlers:
-        logger.removeHandler(logger)
 logger.addHandler(ch)
 
 

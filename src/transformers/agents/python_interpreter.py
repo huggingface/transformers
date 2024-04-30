@@ -188,7 +188,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
             evaluate_ast(expression.upper, state, tools) if expression.upper is not None else None,
             evaluate_ast(expression.step, state, tools) if expression.step is not None else None,
         )
-    elif isinstance(expression, ast.ListComp):
+    elif isinstance(expression, ast.ListComp) or isinstance(expression, ast.GeneratorExp):
         result = []
         vars = {}
         for generator in expression.generators:
@@ -209,7 +209,6 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
                 value = evaluate_ast(expression.value, state, tools)
                 result[key] = value
         return result
-        return dict(zip(keys, values))
     elif isinstance(expression, ast.Import):
         for alias in expression.names:
             if alias.name in LIST_SAFE_MODULES:
@@ -218,7 +217,8 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
             else:
                 raise InterpretorError(f"Import of {alias.name} is not allowed.")
         return None
-
+    elif isinstance(expression, ast.While):
+        return evaluate_while(expression, state, tools)
     elif isinstance(expression, ast.ImportFrom):
         if expression.module in LIST_SAFE_MODULES:
             module = __import__(expression.module)
@@ -256,6 +256,18 @@ def evaluate_lambda(lambda_expression, state, tools):
         return evaluate_ast(lambda_expression.body, new_state, tools)
 
     return lambda_func
+
+
+def evaluate_while(while_loop, state, tools):
+    max_iterations = 1000
+    iterations = 0
+    while evaluate_ast(while_loop.test, state, tools):
+        for node in while_loop.body:
+            evaluate_ast(node, state, tools)
+        iterations += 1
+        if iterations > max_iterations:
+            raise InterpretorError(f"Maximum number of {max_iterations} iterations in While loop exceeded")
+    return None
 
 
 def evaluate_function_def(function_def, state, tools):
@@ -346,15 +358,19 @@ def evaluate_binop(binop, state, tools):
 def evaluate_assign(assign, state, tools):
     var_names = assign.targets
     result = evaluate_ast(assign.value, state, tools)
-
     if len(var_names) == 1:
-        state[var_names[0].id] = result
+        if isinstance(var_names[0], ast.Tuple):
+            for i, elem in enumerate(var_names[0].elts):
+                state[elem.id] = result[i]
+        else:
+            state[var_names[0].id] = result
     else:
-        if len(result) != len(var_names):
+        if len(result)!= len(var_names):
             raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
         for var_name, r in zip(var_names, result):
             state[var_name.id] = r
     return result
+
 
 
 def evaluate_call(call, state, tools):
