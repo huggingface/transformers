@@ -36,17 +36,18 @@ from .tools import (
 
 class CustomFormatter(logging.Formatter):
     grey = "\x1b[38;20m"
-    yellow = "\x1b[33;20m"
+    bold_yellow = "\x1b[33;1m"
     red = "\x1b[31;20m"
+    green = "\x1b[32;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+    format = "%(message)s" # "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
 
     FORMATS = {
         logging.DEBUG: grey + format + reset,
-        logging.INFO: bold_red + format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
+        logging.INFO: green + format + reset,
+        logging.WARNING: bold_yellow + format + reset,
+        logging.ERROR: bold_red + format + reset,
         logging.CRITICAL: bold_red + format + reset,
     }
 
@@ -59,6 +60,9 @@ class CustomFormatter(logging.Formatter):
 logger = transformers_logging.get_logger(__name__)
 ch = logging.StreamHandler()
 ch.setFormatter(CustomFormatter())
+if len(logger.handlers) > 0:
+    for logger in logger.handlers:
+        logger.removeHandler(logger)
 logger.addHandler(ch)
 
 
@@ -136,12 +140,6 @@ _tools_are_initialized = False
 
 class Toolbox:
     def __init__(self, tools: List[Tool], add_base_tools: bool = False):
-        logger.debug("debug message")
-        logger.info("info message")
-        logger.warning("warning message")
-        logger.error("error message")
-        logger.critical("critical message")
-
         global _tools_are_initialized
         global HUGGINGFACE_DEFAULT_TOOLS
 
@@ -276,7 +274,7 @@ class Agent:
         )
         self.additional_args = additional_args
         self.max_iterations = max_iterations
-        self.log = logger
+        self.logger = logger
         self.tool_parser = tool_parser
 
         self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
@@ -303,7 +301,7 @@ class Agent:
         return self._toolbox
 
     def show_logs(self):
-        self.log.info("\n".join(self.logs))
+        self.logger.info("\n".join(self.logs))
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
@@ -355,7 +353,7 @@ class Agent:
         return memory
 
     def show_message_history(self) -> None:
-        self.log.info("\n".join(self.messages))
+        self.logger.info("\n".join(self.messages))
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -372,7 +370,7 @@ class Agent:
                 split[-1],
             )  # NOTE: using indexes starting from the end solves for when you have more than one split_token in the output
         except Exception as e:
-            self.log.error(e, exc_info=1)
+            self.logger.error(e, exc_info=1)
             raise AgentParsingError(
                 f"Error: No '{split_token}' token provided in your output.\nYour output:\n{llm_output}\n. Be sure to include an action, prefaced with '{split_token}'!"
             )
@@ -388,7 +386,7 @@ class Agent:
         """
         if tool_name not in self.toolbox.tools:
             error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(self.toolbox.tools.keys())}."
-            self.log.error(error_msg, exc_info=1)
+            self.logger.error(error_msg, exc_info=1)
             raise AgentExecutionError(error_msg)
 
         try:
@@ -439,14 +437,13 @@ class CodeAgent(Agent):
     @property
     def default_tool_description_template(self) -> str:
         """
-        This template describs the tool, it should be adapted to the LLM you use.
+        This template is taking can describe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template."
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+    
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -488,8 +485,8 @@ class CodeAgent(Agent):
         self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
 
         # Run LLM
-        self.log.info("====Executing with this prompt====")
-        self.log.info(self.prompt)
+        self.logger.info("====Executing with this prompt====")
+        self.logger.info(self.prompt)
         llm_output = self.llm_engine(self.prompt, stop=["<end_code>"])
 
         if return_generated_code:
@@ -502,20 +499,20 @@ class CodeAgent(Agent):
             code_action = self.parse_code_blob(code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
-            self.log.error(error_msg)
+            self.logger.error(error_msg)
             return error_msg
 
         # Execute
         try:
-            self.log.info("\n\n====Executing the code below:====")
-            self.log.info(code_action)
+            self.logger.info("\n\n====Executing the code below:====")
+            self.logger.info(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
-            self.log.info(self.state["print_outputs"])
+            self.logger.info(self.state["print_outputs"])
             return output
         except Exception as e:
             error_msg = f"Error in execution: {e}. Be sure to provide correct code."
-            self.log.error(error_msg, exc_info=1)
+            self.logger.error(error_msg, exc_info=1)
             return error_msg
 
 
@@ -552,9 +549,7 @@ class ReactAgent(Agent):
         This template is taking can describe a tool as it is expected by the model
         """
         logger.warning_once(
-            "\nNo tool description template is defined for this tokenizer - using a default tool description template "
-            "that implements the ChatML format (without BOS/EOS tokens!). If the default is not appropriate for "
-            "your model, please set `tokenizer.tool_description_template` to an appropriate template. "
+            "\nNo tool description template is defined for this tokenizer - using a default tool description template."
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
@@ -585,10 +580,10 @@ class ReactAgent(Agent):
         self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
         self.task = task
-        self.log.warn("=====New task=====")
-        self.log.warn(self.task)
-        self.log.debug("System prompt is as follows:")
-        self.log.debug(self.system_prompt)
+        self.logger.warn("=====New task=====")
+        self.logger.warn(self.task)
+        self.logger.debug("System prompt is as follows:")
+        self.logger.debug(self.system_prompt)
         self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
 
         final_answer = None
@@ -597,7 +592,7 @@ class ReactAgent(Agent):
             try:
                 final_answer = self.step()
             except AgentError as e:
-                self.log.error(e)
+                self.logger.error(e)
                 self.logs[-1]["error"] = e
             finally:
                 iteration += 1
@@ -605,7 +600,7 @@ class ReactAgent(Agent):
         if not final_answer and iteration == self.max_iterations:
             error_message = "Reached max iterations."
             self.logs.append({"error": AgentMaxIterationsError(error_message)})
-            self.log.error(error_message)
+            self.logger.error(error_message)
 
             self.prompt = [
                 {
@@ -659,23 +654,23 @@ class ReactJsonAgent(ReactAgent):
 
         self.prompt = self.agent_memory.copy()
         # self.prompt = agent_memory + "\nThought: " # prepend the answer to steer the llm
-        self.log.debug("=====New step=====")
+        self.logger.debug("=====New step=====")
 
         # Add new step in logs
         self.logs.append({})
-        self.log.info("=====Calling LLM with this last message:=====")
-        self.log.info(self.prompt[-1])
+        self.logger.info("=====Calling LLM with this last message:=====")
+        self.logger.info(self.prompt[-1])
 
         try:
             llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
-        self.log.debug("=====Output message of the LLM:=====")
-        self.log.debug(llm_output)
+        self.logger.debug("=====Output message of the LLM:=====")
+        self.logger.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
 
         # Parse
-        self.log.debug("=====Extracting action=====")
+        self.logger.debug("=====Extracting action=====")
         rationale, action = self.extract_action(llm_output=llm_output, split_token="Action:")
 
         try:
@@ -687,7 +682,7 @@ class ReactJsonAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
-        self.log.warn(f"Calling tool: {tool_name} with arguments: {arguments}")
+        self.logger.warn(f"Calling tool: {tool_name} with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
                 answer = arguments["answer"]
@@ -713,7 +708,7 @@ class ReactJsonAgent(ReactAgent):
                 self.state[observation_name] = observation
                 updated_information = f"Stored '{observation_name}' in memory."
 
-            self.log.info(updated_information)
+            self.logger.info(updated_information)
             self.logs[-1]["observation"] = updated_information
             return None
 
@@ -750,25 +745,25 @@ class ReactCodeAgent(ReactAgent):
 
         self.prompt = self.agent_memory.copy()
 
-        self.log.debug("=====New step=====")
+        self.logger.debug("=====New step=====")
 
         # Add new step in logs
         self.logs.append({})
 
-        self.log.info("=====Calling LLM with these last messages:=====")
-        self.log.info(self.prompt[-2:])
+        self.logger.info("=====Calling LLM with these last messages:=====")
+        self.logger.info(self.prompt[-2:])
 
         try:
             llm_output = self.llm_engine(self.prompt, stop=["<end_code>", "Observation:"])
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
-        self.log.debug("=====Output message of the LLM:=====")
-        self.log.debug(llm_output)
+        self.logger.debug("=====Output message of the LLM:=====")
+        self.logger.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
 
         # Parse
-        self.log.debug("=====Extracting action=====")
+        self.logger.debug("=====Extracting action=====")
         rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
 
         try:
@@ -781,12 +776,12 @@ class ReactCodeAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
-        self.log.warn(f"====Agent is executing the code below:\n{code_action}\n====")
+        self.logger.warn(f"====Agent is executing the code below:\n{code_action}\n====")
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(code_action, available_tools, state=self.state)
             information = self.state["print_outputs"]
-            self.log.info(information)
+            self.logger.info(information)
             self.logs[-1]["observation"] = information
         except Exception as e:
             error_msg = f"Failed while trying to execute the code below:\n{code_action}\nThis failed due to the following error:\n{str(e)}"
@@ -795,6 +790,6 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
-                self.log.warning(result)
+                self.logger.warning(result)
                 return result
         return None
