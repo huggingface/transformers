@@ -37,8 +37,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -81,6 +79,7 @@ class VideoLlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
+            "model_type": "clip_vision_model",
             "batch_size": 12,
             "image_size": 30,
             "patch_size": 2,
@@ -242,11 +241,12 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
+            # replace video_token with dummy id which is not video token id
+            # error that video-tokens and num-of-video-inputs mismatch will be raised
             inputs["input_ids"][:, 1:2] = 2
             with self.assertRaises(ValueError):
                 _ = model(**inputs)
 
-            # set dummy id, which is not video token id
             inputs["pixel_values_images"] = None
             _ = model(**inputs)
 
@@ -254,7 +254,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
-            # set dummy id, which is not image token id
+            # set dummy id, which is not image token id, same as above
             inputs["input_ids"][:, :1] = 2
             with self.assertRaises(ValueError):
                 _ = model(**inputs)

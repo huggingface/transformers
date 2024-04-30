@@ -112,11 +112,10 @@ class VideoLlavaProcessor(ProcessorMixin):
             encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
             data.update(encoded_images)
 
-        if text is not None: 
-            text_inputs = self.tokenizer(
-                text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
-            )
-            data.update(text_inputs)
+        text_inputs = self.tokenizer(
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+        )
+        data.update(text_inputs)
 
         return BatchFeature(data=data)
 

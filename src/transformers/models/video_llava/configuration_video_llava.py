@@ -38,9 +38,10 @@ class VideoLlavaConfig(PretrainedConfig):
 
     Args:
         vision_config (`VideoLlavaVisionConfig`, *optional*):
-            Custom vision config or dict
+            Custom vision config or dict. Defaults ot `CLIPVisionConfig` if not indicated.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+            Defaults ot `LlamaConfig` if not indicated.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
@@ -101,7 +102,9 @@ class VideoLlavaConfig(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(self.vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
+            if "model_type" not in vision_config:
+                vision_config["model_type"] = "clip_vision_model"
+                logger.warning("Key=`model_type` not found in vision config, setting it to `clip_vision_model`")
             self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["clip_vision_model"](
@@ -115,12 +118,13 @@ class VideoLlavaConfig(PretrainedConfig):
                 projection_dim=768,
             )
 
-        self.text_config = text_config
-
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        if isinstance(text_config, dict):
+            if "model_type" not in text_config:
+                text_config["model_type"] = "llama"
+                logger.warning("Key=`model_type` not found in text config, setting it to `llama`")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+            text_config = CONFIG_MAPPING["llama"]()
 
+        self.text_config = text_config
         super().__init__(**kwargs)

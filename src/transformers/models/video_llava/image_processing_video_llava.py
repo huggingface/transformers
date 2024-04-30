@@ -139,6 +139,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         self.do_convert_rgb = do_convert_rgb
         self._valid_processor_keys = [
             "images",
+            "videos",
             "do_resize",
             "size",
             "resample",
@@ -206,8 +207,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: List[ImageInput],
-        videos: List[VideoInput],
+        images: List[ImageInput] = None,
+        videos: List[VideoInput] = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -228,9 +229,12 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            visual_inputs (`ImageInput`):
-                List of images and/or videos to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+            images (`ImageInput`, *optional*):
+                List of images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            videos (`VideoInput`, *optional*):
+                List of videos to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -326,7 +330,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 ]
                 for video in videos
             ]
-            data["pixel_values_video"] = pixel_values_video
+            data["pixel_values_videos"] = pixel_values_videos
 
         if images is not None:
             pixel_values_images = [

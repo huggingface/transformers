@@ -217,6 +217,11 @@ VIDEO_LLAVA_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
+        vision_feature_layer (`int`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -372,6 +377,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         # videos do not need to select features and it's always "full" (as it is done in the orig implementation)
         if pixel_values_videos is not None:
             batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
+            if num_frames != 8:
+                raise ValueError(f"Video pixel values should have exactly `8` frames but foung `{num_frames}`")
+
             pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
             video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
             video_outputs = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
