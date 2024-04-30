@@ -1,6 +1,8 @@
-from transformers import AutoProcessor
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("HuggingFaceM4/idefics2-8b", do_image_splitting=False)
 
@@ -14,12 +16,12 @@ messages = [
         "content": [
             {"type": "text", "text": "Extract JSON."},
             {"type": "image"},
-        ]
+        ],
     },
 ]
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
 inputs = processor(text=prompt, images=[test_image], return_tensors="pt")
-for k,v in inputs.items():
+for k, v in inputs.items():
     print(k, v.shape)
 
 print(processor.batch_decode(inputs.input_ids))

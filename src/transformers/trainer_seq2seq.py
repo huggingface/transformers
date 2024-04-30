@@ -309,9 +309,9 @@ class Seq2SeqTrainer(Trainer):
             }
 
         print("Generation inputs:")
-        for k,v in generation_inputs.items():
+        for k, v in generation_inputs.items():
             if isinstance(v, torch.Tensor):
-                print(k,v.shape)
+                print(k, v.shape)
 
         generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
