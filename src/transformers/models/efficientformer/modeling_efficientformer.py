@@ -321,8 +321,7 @@ class EfficientFormerMeta3D(nn.Module):
                 self.layer_scale_1.unsqueeze(0).unsqueeze(0) * attention_output
             )
             layer_output = layer_output + self.drop_path(
-                self.layer_scale_2.unsqueeze(0).unsqueeze(0)
-                * self.mlp(self.layernorm2(layer_output))
+                self.layer_scale_2.unsqueeze(0).unsqueeze(0) * self.mlp(self.layernorm2(layer_output))
             )
         else:
             layer_output = hidden_states + self.drop_path(attention_output)
