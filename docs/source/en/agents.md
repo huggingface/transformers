@@ -411,6 +411,27 @@ Just make sure the new tool follows the same API as the replaced tool or adapt t
 agent.toolbox.update_tool()
 ```
 
+### Use a collection of tools
+
+You can leverage tool collections by using the ToolCollection object, with the slug of the collection you want to use.
+Then pass them as a list to initialize you agent, and start using them!
+
+```py
+from transformers import ToolCollection, ReactCodeAgent
+
+image_tool_collection = ToolCollection(collection_slug="huggingface-tools/diffusion-tools-6630bb19a942c2306a2cdb6f")
+agent = ReactCodeAgent(tools=[*image_tool_collection.tools], add_base_tools=True)
+
+agent.run("Please draw me a picture of rivers and lakes.")
+```
+
+To speed up the start, tools are loaded only if called by the agent.
+
+This gets you this image:
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png">
+
+
 ### Use gradio-tools
 
 [gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
