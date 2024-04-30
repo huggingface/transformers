@@ -1170,7 +1170,6 @@ class AlignPreTrainedModel(PreTrainedModel):
     config_class = AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1197,6 +1196,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
+    _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
         super().__init__(config)
