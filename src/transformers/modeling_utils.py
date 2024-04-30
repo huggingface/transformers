@@ -4100,7 +4100,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
-            
+
             # For GGUF models `state_dict` is never set to None as the state dict is always small
             if gguf_path:
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
@@ -4121,6 +4121,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     unexpected_keys=unexpected_keys,
                 )
             else:
+                # Sharded checkpoint or whole but low_cpu_mem_usage==True
                 error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
         else:
