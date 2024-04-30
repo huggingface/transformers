@@ -1310,6 +1310,34 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
+    def _get_static_cache(self, max_batch_size: int, max_cache_len: int) -> StaticCache:
+        """
+        Sets a static cache for `generate`, that will persist across calls. A new cache will only be initialized a
+        new `generate` call requires a larger cache.
+
+        Returns the resulting static cache object.
+        """
+        needs_new_cache = (
+            not hasattr(self, "_static_cache")
+            or self._static_cache.max_batch_size < max_batch_size
+            or self._static_cache.max_cache_len < max_cache_len
+        )
+        if needs_new_cache:
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                cache_dtype = self.config._pre_quantization_dtype
+            else:
+                cache_dtype = self.dtype
+            self._static_cache = StaticCache(
+                config=self.config,
+                max_batch_size=max_batch_size,
+                max_cache_len=max_cache_len,
+                device=self.device,
+                dtype=cache_dtype,
+            )
+        else:
+            self._static_cache.reset()  # reset the cache for a new generation
+        return self._static_cache
+
     @torch.no_grad()
     def generate(
         self,
@@ -1514,19 +1542,19 @@ class GenerationMixin:
             input_ids_length=input_ids_length,
         )
 
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+        if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
+            raise ValueError(
+                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
+                "Cache object) is unsupported. Please use only one of the two."
+            )
+        elif generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if not self._supports_cache_class:
+                raise ValueError(
+                    "This model does not support the `cache_implementation` argument. Please check the following "
+                    "issue: https://github.com/huggingface/transformers/issues/28981."
+                )
             if generation_config.cache_implementation == "static":
-                if model_kwargs.get("past_key_values", False) is not False:
-                    raise ValueError(
-                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
-                    )
-                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                if not callable(getattr(self, "_setup_cache", None)):
-                    raise ValueError(
-                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                        " Make sure it has a `_setup_cache` function."
-                    )
-                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+                model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -1843,14 +1871,6 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
-
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if not callable(getattr(self, "_reset_cache", None)):
-                raise ValueError(
-                    "A `static_cache` was used to generate but there was a failure when trying to  release the cache. "
-                    " Make sure this model implements a `_reset_cache` function."
-                )
-            self._reset_cache()
 
         return result
 

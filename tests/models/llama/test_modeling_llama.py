@@ -18,11 +18,11 @@ import tempfile
 import unittest
 
 import pytest
+from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers import LlamaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -684,15 +684,28 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
         NUM_TOKENS_TO_GENERATE = 40
+        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
+        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
         EXPECTED_TEXT_COMPLETION = {
-            7: [
-                "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-            ],
             8: [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            7: [
+                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
+                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
+                "be.\nThe theory of relativity",
+                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
+                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
             ],
         }
 
@@ -706,38 +719,25 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        def decode_one_tokens(model, cur_token, input_pos, cache_position):
-            logits = model(
-                cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
-            )[0]
-            new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            return new_token
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
 
-        batch_size, seq_length = inputs["input_ids"].shape
-        with torch.no_grad():
-            model._setup_cache(StaticCache, 2, max_cache_len=4096)
-            cache_position = torch.arange(seq_length, device=torch_device)
-            generated_ids = torch.zeros(
-                batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
-            )
-            generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
 
-            logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            generated_ids[:, seq_length] = next_token[:, 0]
-
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-            cache_position = torch.tensor([seq_length + 1], device=torch_device)
-            for _ in range(1, NUM_TOKENS_TO_GENERATE):
-                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    with CaptureLogger(logging.get_logger(__name__)) as cl:
-                        next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-                        self.assertNotIn("skipping cudagraphs due to", cl.out)
-                    generated_ids[:, cache_position] = next_token.int()
-                cache_position += 1
-
-        text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
 
 
 @require_torch
