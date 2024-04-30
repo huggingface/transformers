@@ -49,13 +49,11 @@ GGML_TYPES = {
 GGML_BLOCK_SIZES = {
     "Q8_0": 2 + 32,  # Q8_0 uses a blocksize of 32 (int8 tensors) + 2 bytes allocated for the scales
     "Q4_K": 144,
-    "Q4_0": 2
-    + 16,  # Q4_0 uses a blocksize of 32 but the 4-bit tensors are packed into 8-bit tensors + 2 bytes for the scales
+    # Q4_0 uses a blocksize of 32 but the 4-bit tensors are packed into 8-bit tensors + 2 bytes for the scales
+    "Q4_0": 2 + 16,  
     "Q6_K": 210,
-    "Q2_K": 256 // 16
-    + 256 // 4
-    + 2
-    + 2,  # See: https://github.com/99991/pygguf/commit/a417edbfc029a1bc270f984a694f9128c5afa8b9
+    # See: https://github.com/99991/pygguf/commit/a417edbfc029a1bc270f984a694f9128c5afa8b9
+    "Q2_K": 256 // 16 + 256 // 4 + 2 + 2,
     "Q3_K": 256 // 8 + 256 // 4 + 12 + 2,
     "Q5_K": 2 + 2 + 12 + 256 // 8 + 256 // 2,
 }
@@ -175,7 +173,7 @@ def _gguf_parse_value(_value, data_type):
         array_data_type = None
     else:
         if data_type[0] != 9:
-            raise ValueError("Received multiple types, but therefore expect the first type to indicate an array.")
+            raise ValueError("Received multiple types, therefore expected the first type to indicate an array.")
         data_type, array_data_type = data_type
 
     if data_type in [0, 1, 2, 3, 4, 5, 10, 11]:
