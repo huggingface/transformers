@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# video_llava
+# Video-LLaVA
 
 ## Overview
 
