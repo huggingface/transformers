@@ -509,7 +509,6 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["EfficientFormerSelfAttention"]
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -556,6 +555,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
         self.config = config
+        _no_split_modules = ["EfficientFormerMeta4D"]
 
         self.patch_embed = EfficientFormerConvStem(config, config.hidden_sizes[0])
         self.encoder = EfficientFormerEncoder(config)
