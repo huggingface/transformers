@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
@@ -502,6 +503,7 @@ class OwlViTEncoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class OwlViTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -830,6 +832,7 @@ class OwlViTTextTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class OwlViTTextModel(OwlViTPreTrainedModel):
     config_class = OwlViTTextConfig
 
@@ -940,6 +943,7 @@ class OwlViTVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class OwlViTVisionModel(OwlViTPreTrainedModel):
     config_class = OwlViTVisionConfig
     main_input_name = "pixel_values"
@@ -991,6 +995,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
 
 
 @add_start_docstrings(OWLVIT_START_DOCSTRING)
+@register(backends=("torch",))
 class OwlViTModel(OwlViTPreTrainedModel):
     config_class = OwlViTConfig
 
@@ -1264,6 +1269,7 @@ class OwlViTClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
+@register(backends=("torch",))
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config_class = OwlViTConfig
 
@@ -1671,3 +1677,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+__all__ = [
+    "OwlViTPreTrainedModel",
+    "OwlViTTextModel",
+    "OwlViTVisionModel",
+    "OwlViTModel",
+    "OwlViTForObjectDetection"
+]

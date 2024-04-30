@@ -44,6 +44,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_ninja_available, is_torchvision_available, logging, requires_backends
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_deta import DetaConfig
 
 
@@ -1031,6 +1032,7 @@ class DetaDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
@@ -1441,6 +1443,7 @@ class DetaDecoder(DetaPreTrainedModel):
     """,
     DETA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DetaModel(DetaPreTrainedModel):
     def __init__(self, config: DetaConfig):
         super().__init__(config)
@@ -1863,6 +1866,7 @@ class DetaModel(DetaPreTrainedModel):
     """,
     DETA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = [r"bbox_embed\.\d+", r"class_embed\.\d+"]
@@ -2852,3 +2856,9 @@ class DetaStage1Assigner(nn.Module):
 
     def postprocess_indices(self, pr_inds, gt_inds, iou):
         return sample_topk_per_gt(pr_inds, gt_inds, iou, self.k)
+
+__all__ = [
+    "DetaPreTrainedModel",
+    "DetaModel",
+    "DetaForObjectDetection"
+]

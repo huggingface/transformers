@@ -30,6 +30,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils.import_utils import register
 from .configuration_vit import ViTConfig
 
 
@@ -425,6 +426,7 @@ class FlaxViTPooler(nn.Module):
         return nn.tanh(cls_hidden_state)
 
 
+@register(backends=("flax",))
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -553,6 +555,7 @@ class FlaxViTModule(nn.Module):
     "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxViTModel(FlaxViTPreTrainedModel):
     module_class = FlaxViTModule
 
@@ -636,6 +639,7 @@ class FlaxViTForImageClassificationModule(nn.Module):
     """,
     VIT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxViTForImageClassification(FlaxViTPreTrainedModel):
     module_class = FlaxViTForImageClassificationModule
 
@@ -671,3 +675,9 @@ overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCS
 append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
+
+__all__ = [
+    "FlaxViTPreTrainedModel",
+    "FlaxViTModel",
+    "FlaxViTForImageClassification"
+]

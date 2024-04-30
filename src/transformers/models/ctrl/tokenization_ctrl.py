@@ -22,6 +22,7 @@ import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -107,6 +108,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class CTRLTokenizer(PreTrainedTokenizer):
     """
     Construct a CTRL tokenizer. Based on Byte-Pair-Encoding.
@@ -246,3 +248,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
     #     tokens_generated_so_far = re.sub('(@@ )', '', string=filtered_tokens)
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)
     #     return ''.join(tokens_generated_so_far)
+
+__all__ = [
+    "CTRLTokenizer"
+]

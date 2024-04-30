@@ -18,8 +18,10 @@ Audio/Text processor class for CLAP
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class ClapProcessor(ProcessorMixin):
     r"""
     Constructs a CLAP processor which wraps a CLAP feature extractor and a RoBerta tokenizer into a single processor.
@@ -115,3 +117,7 @@ class ClapProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+
+__all__ = [
+    "ClapProcessor"
+]

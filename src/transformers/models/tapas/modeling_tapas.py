@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_tapas import TapasConfig
 
 
@@ -90,6 +91,7 @@ class TableQuestionAnsweringOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register()
 def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
     """
     Load tf checkpoints in a PyTorch model. This is an adaptation from load_tf_weights_in_bert
@@ -715,6 +717,7 @@ class TapasOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class TapasPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -805,6 +808,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
     "The bare Tapas Model transformer outputting raw hidden-states without any specific head on top.",
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TapasModel(TapasPreTrainedModel):
     """
     This class is a small change compared to [`BertModel`], taking into account the additional token type ids.
@@ -958,6 +962,7 @@ class TapasModel(TapasPreTrainedModel):
 
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
+@register(backends=("torch",))
 class TapasForMaskedLM(TapasPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     config_class = TapasConfig
@@ -1075,6 +1080,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
     """,
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TapasForQuestionAnswering(TapasPreTrainedModel):
     def __init__(self, config: TapasConfig):
         super().__init__(config)
@@ -1420,6 +1426,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
     """,
     TAPAS_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TapasForSequenceClassification(TapasPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2386,3 +2393,12 @@ def _calculate_regression_loss(
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
 
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+__all__ = [
+    "load_tf_weights_in_tapas",
+    "TapasPreTrainedModel",
+    "TapasModel",
+    "TapasForMaskedLM",
+    "TapasForQuestionAnswering",
+    "TapasForSequenceClassification"
+]

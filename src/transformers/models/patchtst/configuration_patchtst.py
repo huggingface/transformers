@@ -19,10 +19,13 @@ from typing import List, Optional, Union
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
+from ...utils.import_utils import register
+
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PatchTSTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
@@ -255,3 +258,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.output_range = output_range
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "PatchTSTConfig"
+]

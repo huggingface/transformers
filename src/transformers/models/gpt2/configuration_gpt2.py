@@ -22,11 +22,13 @@ from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GPT2Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
@@ -189,6 +191,7 @@ class GPT2Config(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+@register()
 class GPT2OnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -268,3 +271,8 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "GPT2Config",
+    "GPT2OnnxConfig"
+]

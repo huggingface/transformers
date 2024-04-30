@@ -27,6 +27,7 @@ from torch.nn import LayerNorm as FusedLayerNorm
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
+from ...utils.import_utils import register
 from ...utils.logging import tqdm
 from .configuration_jukebox import ATTENTION_PATTERNS, JukeboxConfig, JukeboxPriorConfig, JukeboxVQVAEConfig
 
@@ -593,6 +594,7 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
     """,
     JUKEBOX_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class JukeboxVQVAE(PreTrainedModel):
     config_class = JukeboxVQVAEConfig
     base_model_prefix = "vqvae"
@@ -1760,6 +1762,7 @@ class JukeboxLabelConditioner(nn.Module):
         return start_emb, pos_emb
 
 
+@register(backends=("torch",))
 class JukeboxPrior(PreTrainedModel):
     """
     The JukeboxPrior class, which is a wrapper around the various conditioning and the transformer. JukeboxPrior can be
@@ -2254,6 +2257,7 @@ class JukeboxPrior(PreTrainedModel):
         return dequantised_states, loss, metrics
 
 
+@register(backends=("torch",))
 class JukeboxPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2290,6 +2294,7 @@ JUKEBOX_SAMPLING_INPUT_DOCSTRING = r"""
     """,
     JUKEBOX_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class JukeboxModel(JukeboxPreTrainedModel):
     _no_split_modules = ["JukeboxBlock"]
 
@@ -2661,3 +2666,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+__all__ = [
+    "JukeboxVQVAE",
+    "JukeboxPrior",
+    "JukeboxPreTrainedModel",
+    "JukeboxModel"
+]

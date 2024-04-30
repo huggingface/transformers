@@ -20,12 +20,14 @@ from typing import Union
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Blip2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2VisionModel`]. It is used to instantiate a
@@ -125,6 +127,7 @@ class Blip2VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Blip2QFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
@@ -244,6 +247,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Blip2Config(PretrainedConfig):
     r"""
     [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2ForConditionalGeneration`]. It is
@@ -350,3 +354,9 @@ class Blip2Config(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "Blip2VisionConfig",
+    "Blip2QFormerConfig",
+    "Blip2Config"
+]

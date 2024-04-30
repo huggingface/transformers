@@ -24,6 +24,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -251,6 +252,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+@register()
 class CLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a CLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -514,3 +516,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+__all__ = [
+    "CLIPTokenizer"
+]

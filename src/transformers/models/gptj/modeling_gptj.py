@@ -41,6 +41,7 @@ from ...utils import (
     is_torch_fx_proxy,
     logging,
 )
+from ...utils.import_utils import register
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gptj import GPTJConfig
 
@@ -598,6 +599,7 @@ class GPTJBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions)
 
 
+@register(backends=("torch",))
 class GPTJPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -745,6 +747,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     "The bare GPT-J Model transformer outputting raw hidden-states without any specific head on top.",
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTJModel(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -994,6 +997,7 @@ class GPTJModel(GPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTJForCausalLM(GPTJPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1201,6 +1205,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1328,6 +1333,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     """,
     GPTJ_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GPTJForQuestionAnswering(GPTJPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1422,3 +1428,11 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "GPTJPreTrainedModel",
+    "GPTJModel",
+    "GPTJForCausalLM",
+    "GPTJForSequenceClassification",
+    "GPTJForQuestionAnswering"
+]

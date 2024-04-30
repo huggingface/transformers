@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_lilt import LiltConfig
 
 
@@ -568,6 +569,7 @@ class LiltPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class LiltPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -673,6 +675,7 @@ LILT_INPUTS_DOCSTRING = r"""
     "The bare LiLT Model transformer outputting raw hidden-states without any specific head on top.",
     LILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LiltModel(LiltPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -822,6 +825,7 @@ class LiltModel(LiltPreTrainedModel):
     """,
     LILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LiltForSequenceClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
@@ -940,6 +944,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     """,
     LILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LiltForTokenClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
@@ -1066,6 +1071,7 @@ class LiltClassificationHead(nn.Module):
     """,
     LILT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
@@ -1181,3 +1187,11 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "LiltPreTrainedModel",
+    "LiltModel",
+    "LiltForSequenceClassification",
+    "LiltForTokenClassification",
+    "LiltForQuestionAnswering"
+]

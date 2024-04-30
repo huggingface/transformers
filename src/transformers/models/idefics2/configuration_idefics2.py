@@ -18,6 +18,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -176,6 +177,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
+@register()
 class Idefics2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
@@ -260,3 +262,7 @@ class Idefics2Config(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+
+__all__ = [
+    "Idefics2Config"
+]

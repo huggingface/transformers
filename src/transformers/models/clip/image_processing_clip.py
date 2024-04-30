@@ -40,6 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -49,6 +50,7 @@ if is_vision_available():
     import PIL
 
 
+@register(backends=("vision",))
 class CLIPImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.
@@ -348,3 +350,7 @@ class CLIPImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "CLIPImageProcessor"
+]

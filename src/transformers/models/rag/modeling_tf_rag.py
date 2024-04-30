@@ -35,6 +35,7 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
@@ -215,6 +216,7 @@ class TFRetrievAugLMOutput(ModelOutput):
     generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
+@register(backends=("tf",))
 class TFRagPreTrainedModel(TFPreTrainedModel):
     r"""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
@@ -494,6 +496,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
+@register(backends=("tf",))
 class TFRagModel(TFRagPreTrainedModel):
     load_weight_prefix = "tf_rag_model_1"
 
@@ -736,6 +739,7 @@ class TFRagModel(TFRagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
     load_weight_prefix = "tf_rag_token_for_generation_1/rag"
 
@@ -1316,6 +1320,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     """,
     RAG_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
     load_weight_prefix = "tf_rag_sequence_for_generation_1/rag"
 
@@ -1768,3 +1773,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         if getattr(self, "rag", None) is not None:
             with tf.name_scope(self.rag.name):
                 self.rag.build(None)
+
+__all__ = [
+    "TFRagPreTrainedModel",
+    "TFRagModel",
+    "TFRagTokenForGeneration",
+    "TFRagSequenceForGeneration"
+]

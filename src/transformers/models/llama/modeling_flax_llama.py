@@ -35,6 +35,7 @@ from jax import lax
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_llama import LlamaConfig
 
 
@@ -406,6 +407,7 @@ class FlaxLlamaDecoderLayer(nn.Module):
 
 
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Llama, GPT_NEO->LLAMA, transformer->model
+@register(backends=("flax",))
 class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -647,6 +649,7 @@ class FlaxLlamaModule(nn.Module):
     "The bare Llama Model transformer outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaModule
 
@@ -711,6 +714,7 @@ class FlaxLlamaForCausalLMModule(nn.Module):
     LLAMA_START_DOCSTRING,
 )
 # Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Llama
+@register(backends=("flax",))
 class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaForCausalLMModule
 
@@ -748,3 +752,9 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxLlamaPreTrainedModel",
+    "FlaxLlamaModel",
+    "FlaxLlamaForCausalLM"
+]

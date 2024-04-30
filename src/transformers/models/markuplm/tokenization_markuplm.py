@@ -33,6 +33,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -125,6 +126,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class MarkupLMTokenizer(PreTrainedTokenizer):
     r"""
     Construct a MarkupLM tokenizer. Based on byte-level Byte-Pair-Encoding (BPE). [`MarkupLMTokenizer`] can be used to
@@ -1443,3 +1445,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "MarkupLMTokenizer"
+]

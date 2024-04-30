@@ -62,6 +62,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -703,6 +704,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@register(backends=("vision",))
 class YolosImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Detr image processor.
@@ -1513,3 +1515,7 @@ class YolosImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+__all__ = [
+    "YolosImageProcessor"
+]

@@ -24,6 +24,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -80,6 +81,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class Qwen2Tokenizer(PreTrainedTokenizer):
     """
     Construct a Qwen2 tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -337,3 +339,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def prepare_for_tokenization(self, text, **kwargs):
         text = unicodedata.normalize("NFC", text)
         return (text, kwargs)
+
+__all__ = [
+    "Qwen2Tokenizer"
+]

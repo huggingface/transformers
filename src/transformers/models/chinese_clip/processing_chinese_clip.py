@@ -20,8 +20,10 @@ import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class ChineseCLIPProcessor(ProcessorMixin):
     r"""
     Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP image processor and a Chinese-CLIP tokenizer into a
@@ -139,3 +141,7 @@ class ChineseCLIPProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor_class
+
+__all__ = [
+    "ChineseCLIPProcessor"
+]

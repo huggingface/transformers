@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DeiTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeiTModel`]. It is used to instantiate an DeiT
@@ -123,6 +125,7 @@ class DeiTConfig(PretrainedConfig):
         self.encoder_stride = encoder_stride
 
 
+@register()
 class DeiTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -137,3 +140,8 @@ class DeiTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "DeiTConfig",
+    "DeiTOnnxConfig"
+]

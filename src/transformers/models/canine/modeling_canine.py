@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_canine import CanineConfig
 
 
@@ -91,6 +92,7 @@ class CanineModelOutputWithPooling(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register()
 def load_tf_weights_in_canine(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -880,6 +882,7 @@ class CanineOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class CaninePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -973,6 +976,7 @@ CANINE_INPUTS_DOCSTRING = r"""
     "The bare CANINE Model transformer outputting raw hidden-states without any specific head on top.",
     CANINE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CanineModel(CaninePreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1253,6 +1257,7 @@ class CanineModel(CaninePreTrainedModel):
     """,
     CANINE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CanineForSequenceClassification(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1350,6 +1355,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     """,
     CANINE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CanineForMultipleChoice(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1441,6 +1447,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
     """,
     CANINE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CanineForTokenClassification(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1547,6 +1554,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
     """,
     CANINE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CanineForQuestionAnswering(CaninePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1639,3 +1647,13 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_canine",
+    "CaninePreTrainedModel",
+    "CanineModel",
+    "CanineForSequenceClassification",
+    "CanineForMultipleChoice",
+    "CanineForTokenClassification",
+    "CanineForQuestionAnswering"
+]

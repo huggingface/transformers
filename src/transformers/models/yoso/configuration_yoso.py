@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class YosoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YosoModel`]. It is used to instantiate an YOSO
@@ -139,3 +141,7 @@ class YosoConfig(PretrainedConfig):
         self.conv_window = conv_window
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
+
+__all__ = [
+    "YosoConfig"
+]

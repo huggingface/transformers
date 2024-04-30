@@ -30,6 +30,7 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -84,6 +85,7 @@ def convert_to_grayscale(
     return image
 
 
+@register(backends=("vision",))
 class SuperPointImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SuperPoint image processor.
@@ -270,3 +272,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "SuperPointImageProcessor"
+]

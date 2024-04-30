@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_whisper import WhisperConfig
 from .generation_whisper import WhisperGenerationMixin
 
@@ -919,6 +920,7 @@ class WhisperDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class WhisperPreTrainedModel(PreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix = "model"
@@ -1488,6 +1490,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class WhisperModel(WhisperPreTrainedModel):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -1658,6 +1661,7 @@ class WhisperModel(WhisperPreTrainedModel):
     "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["proj_out.weight"]
@@ -1867,6 +1871,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     """,
     WHISPER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class WhisperForCausalLM(WhisperPreTrainedModel):
     _tied_weights_keys = ["proj_out.weight"]
     main_input_name = "input_ids"
@@ -2088,6 +2093,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
     """,
     WHISPER_ENCODER_INPUTS_DOCSTRING,
 )
+@register(backends=("torch",))
 class WhisperForAudioClassification(WhisperPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2213,3 +2219,11 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+__all__ = [
+    "WhisperPreTrainedModel",
+    "WhisperModel",
+    "WhisperForConditionalGeneration",
+    "WhisperForCausalLM",
+    "WhisperForAudioClassification"
+]

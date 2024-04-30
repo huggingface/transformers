@@ -56,6 +56,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_camembert import CamembertConfig
 
 
@@ -971,6 +972,7 @@ class TFCamembertMainLayer(keras.layers.Layer):
                 self.embeddings.build(None)
 
 
+@register(backends=("tf",))
 class TFCamembertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -986,6 +988,7 @@ class TFCamembertPreTrainedModel(TFPreTrainedModel):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaModel with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertModel(TFCamembertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1129,6 +1132,7 @@ class TFCamembertLMHead(keras.layers.Layer):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForMaskedLM(TFCamembertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1266,6 +1270,7 @@ class TFCamembertClassificationHead(keras.layers.Layer):
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForSequenceClassification(TFCamembertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1354,6 +1359,7 @@ class TFCamembertForSequenceClassification(TFCamembertPreTrainedModel, TFSequenc
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForTokenClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForTokenClassification(TFCamembertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1450,6 +1456,7 @@ class TFCamembertForTokenClassification(TFCamembertPreTrainedModel, TFTokenClass
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMultipleChoice with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForMultipleChoice(TFCamembertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"lm_head"]
@@ -1555,6 +1562,7 @@ class TFCamembertForMultipleChoice(TFCamembertPreTrainedModel, TFMultipleChoiceL
     CAMEMBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForQuestionAnswering(TFCamembertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1656,6 +1664,7 @@ class TFCamembertForQuestionAnswering(TFCamembertPreTrainedModel, TFQuestionAnsw
     """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT
+@register(backends=("tf",))
 class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1787,3 +1796,14 @@ class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelin
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build(None)
+
+__all__ = [
+    "TFCamembertPreTrainedModel",
+    "TFCamembertModel",
+    "TFCamembertForMaskedLM",
+    "TFCamembertForSequenceClassification",
+    "TFCamembertForTokenClassification",
+    "TFCamembertForMultipleChoice",
+    "TFCamembertForQuestionAnswering",
+    "TFCamembertForCausalLM"
+]

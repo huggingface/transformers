@@ -22,8 +22,10 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...utils import to_numpy
+from ...utils.import_utils import register
 
 
+@register(backends=("torch",))
 class MusicgenProcessor(ProcessorMixin):
     r"""
     Constructs a MusicGen processor which wraps an EnCodec feature extractor and a T5 tokenizer into a single processor
@@ -139,3 +141,7 @@ class MusicgenProcessor(ProcessorMixin):
             audio_values[i] = sliced_audio.reshape(channels, -1)
 
         return audio_values
+
+__all__ = [
+    "MusicgenProcessor"
+]

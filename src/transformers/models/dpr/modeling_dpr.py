@@ -29,6 +29,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ..bert.modeling_bert import BertModel
 from .configuration_dpr import DPRConfig
 
@@ -133,6 +134,7 @@ class DPRReaderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+@register(backends=("torch",))
 class DPRPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
@@ -271,6 +273,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
 ##################
 
 
+@register(backends=("torch",))
 class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -282,6 +285,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     base_model_prefix = "ctx_encoder"
 
 
+@register(backends=("torch",))
 class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -293,6 +297,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     base_model_prefix = "question_encoder"
 
 
+@register(backends=("torch",))
 class DPRPretrainedReader(DPRPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -655,3 +660,10 @@ class DPRReader(DPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+__all__ = [
+    "DPRPreTrainedModel",
+    "DPRPretrainedContextEncoder",
+    "DPRPretrainedQuestionEncoder",
+    "DPRPretrainedReader"
+]

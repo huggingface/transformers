@@ -35,6 +35,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -178,6 +179,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
+@register(backends=("vision",))
 class Idefics2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Idefics image processor.
@@ -594,3 +596,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             data["pixel_attention_mask"] = np.array(pixel_attention_mask) if do_pad else pixel_attention_mask
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "Idefics2ImageProcessor"
+]

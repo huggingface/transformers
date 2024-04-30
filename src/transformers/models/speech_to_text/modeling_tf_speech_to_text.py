@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_speech_to_text import Speech2TextConfig
 
 
@@ -615,6 +616,7 @@ class TFSpeech2TextDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
@@ -1317,6 +1319,7 @@ class TFSpeech2TextMainLayer(keras.layers.Layer):
     "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
     def __init__(self, config: Speech2TextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1407,6 +1410,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
     "The Speech2Text Model with a language modeling head. Can be used for summarization.",
     SPEECH_TO_TEXT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
@@ -1601,3 +1605,9 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             return tf_weight, "model.decoder.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+__all__ = [
+    "TFSpeech2TextPreTrainedModel",
+    "TFSpeech2TextModel",
+    "TFSpeech2TextForConditionalGeneration"
+]

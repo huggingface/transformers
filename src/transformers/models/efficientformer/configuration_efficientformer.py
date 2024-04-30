@@ -18,11 +18,13 @@ from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class EfficientFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`EfficientFormerModel`]. It is used to
@@ -165,3 +167,7 @@ class EfficientFormerConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.image_size = image_size
         self.batch_norm_eps = batch_norm_eps
+
+__all__ = [
+    "EfficientFormerConfig"
+]

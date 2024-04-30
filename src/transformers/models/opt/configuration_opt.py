@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class OPTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OPTModel`]. It is used to instantiate a OPT model
@@ -141,3 +143,7 @@ class OPTConfig(PretrainedConfig):
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         self._remove_final_layer_norm = _remove_final_layer_norm
+
+__all__ = [
+    "OPTConfig"
+]

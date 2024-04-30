@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -43,6 +44,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class BioGptTokenizer(PreTrainedTokenizer):
     """
     Construct an FAIRSEQ Transformer tokenizer. Moses tokenization followed by Byte-Pair Encoding.
@@ -356,3 +358,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+__all__ = [
+    "BioGptTokenizer"
+]

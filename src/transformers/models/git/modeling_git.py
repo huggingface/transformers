@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_git import GitConfig, GitVisionConfig
 
 
@@ -485,6 +486,7 @@ class GitEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class GitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -964,6 +966,7 @@ class GitVisionTransformer(nn.Module):
     """The vision model from CLIP, used in GIT, without any head or projection on top.""",
     GIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GitVisionModel(GitPreTrainedModel):
     config_class = GitVisionConfig
     main_input_name = "pixel_values"
@@ -1036,6 +1039,7 @@ class GitProjection(nn.Module):
     " without any specific head on top.",
     GIT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class GitModel(GitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1298,6 +1302,7 @@ class GitModel(GitPreTrainedModel):
 @add_start_docstrings(
     """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class GitForCausalLM(GitPreTrainedModel):
     _tied_weights_keys = ["output.weight"]
 
@@ -1544,3 +1549,10 @@ class GitForCausalLM(GitPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "GitPreTrainedModel",
+    "GitVisionModel",
+    "GitModel",
+    "GitForCausalLM"
+]

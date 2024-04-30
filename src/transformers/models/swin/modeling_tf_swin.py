@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_swin import SwinConfig
 
 
@@ -1064,6 +1065,7 @@ class TFSwinEncoder(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFSwinPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1301,6 +1303,7 @@ class TFSwinMainLayer(keras.layers.Layer):
     "The bare Swin Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSwinModel(TFSwinPreTrainedModel):
     def __init__(
         self, config: SwinConfig, add_pooling_layer: bool = True, use_mask_token: bool = False, **kwargs
@@ -1424,6 +1427,7 @@ class TFSwinDecoder(keras.layers.Layer):
     " [SimMIM](https://arxiv.org/abs/2111.09886).",
     SWIN_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
     def __init__(self, config: SwinConfig):
         super().__init__(config)
@@ -1547,6 +1551,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
     """,
     SWIN_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: SwinConfig):
         super().__init__(config)
@@ -1625,3 +1630,10 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
                     self.classifier.build([None, None, self.swin.num_features])
+
+__all__ = [
+    "TFSwinPreTrainedModel",
+    "TFSwinModel",
+    "TFSwinForMaskedImageModeling",
+    "TFSwinForImageClassification"
+]

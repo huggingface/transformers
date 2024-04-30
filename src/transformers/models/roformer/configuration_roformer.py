@@ -20,11 +20,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RoFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoFormerModel`]. It is used to instantiate an
@@ -130,6 +132,7 @@ class RoFormerConfig(PretrainedConfig):
         self.use_cache = use_cache
 
 
+@register()
 class RoFormerOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -145,3 +148,8 @@ class RoFormerOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "RoFormerConfig",
+    "RoFormerOnnxConfig"
+]

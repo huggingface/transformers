@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_longformer import LongformerConfig
 
 
@@ -1398,6 +1399,7 @@ class LongformerLMHead(nn.Module):
             self.bias = self.decoder.bias
 
 
+@register(backends=("torch",))
 class LongformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1513,6 +1515,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
     "The bare Longformer Model outputting raw hidden-states without any specific head on top.",
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongformerModel(LongformerPreTrainedModel):
     """
     This class copied code from [`RobertaModel`] and overwrote standard self-attention with longformer self-attention
@@ -1751,6 +1754,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
+@register(backends=("torch",))
 class LongformerForMaskedLM(LongformerPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder"]
 
@@ -1865,6 +1869,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1992,6 +1997,7 @@ class LongformerClassificationHead(nn.Module):
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2129,6 +2135,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongformerForTokenClassification(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2217,6 +2224,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     """,
     LONGFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2322,3 +2330,13 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+
+__all__ = [
+    "LongformerPreTrainedModel",
+    "LongformerModel",
+    "LongformerForMaskedLM",
+    "LongformerForSequenceClassification",
+    "LongformerForQuestionAnswering",
+    "LongformerForTokenClassification",
+    "LongformerForMultipleChoice"
+]

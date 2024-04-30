@@ -40,6 +40,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -49,6 +50,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class ConvNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ConvNeXT image processor.
@@ -336,3 +338,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "ConvNextImageProcessor"
+]

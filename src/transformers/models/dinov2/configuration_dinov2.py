@@ -23,11 +23,13 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an
@@ -156,6 +158,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
 
 
+@register()
 class Dinov2OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -170,3 +173,8 @@ class Dinov2OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "Dinov2Config",
+    "Dinov2OnnxConfig"
+]

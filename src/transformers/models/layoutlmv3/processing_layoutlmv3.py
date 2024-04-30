@@ -22,8 +22,10 @@ from typing import List, Optional, Union
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class LayoutLMv3Processor(ProcessorMixin):
     r"""
     Constructs a LayoutLMv3 processor which combines a LayoutLMv3 image processor and a LayoutLMv3 tokenizer into a
@@ -197,3 +199,7 @@ class LayoutLMv3Processor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "LayoutLMv3Processor"
+]

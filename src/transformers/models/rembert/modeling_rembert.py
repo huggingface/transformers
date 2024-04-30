@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_rembert import RemBertConfig
 
 
@@ -52,6 +53,7 @@ _CONFIG_FOR_DOC = "RemBertConfig"
 _CHECKPOINT_FOR_DOC = "google/rembert"
 
 
+@register()
 def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -635,6 +637,7 @@ class RemBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class RemBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -728,6 +731,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
     "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RemBertModel(RemBertPreTrainedModel):
     """
 
@@ -898,6 +902,7 @@ class RemBertModel(RemBertPreTrainedModel):
 
 
 @add_start_docstrings("""RemBERT Model with a `language modeling` head on top.""", REMBERT_START_DOCSTRING)
+@register(backends=("torch",))
 class RemBertForMaskedLM(RemBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
@@ -1002,6 +1007,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 @add_start_docstrings(
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class RemBertForCausalLM(RemBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
@@ -1164,6 +1170,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RemBertForSequenceClassification(RemBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1260,6 +1267,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RemBertForMultipleChoice(RemBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1351,6 +1359,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RemBertForTokenClassification(RemBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1429,6 +1438,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
     """,
     REMBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RemBertForQuestionAnswering(RemBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1520,3 +1530,15 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_rembert",
+    "RemBertPreTrainedModel",
+    "RemBertModel",
+    "RemBertForMaskedLM",
+    "RemBertForCausalLM",
+    "RemBertForSequenceClassification",
+    "RemBertForMultipleChoice",
+    "RemBertForTokenClassification",
+    "RemBertForQuestionAnswering"
+]

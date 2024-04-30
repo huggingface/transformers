@@ -16,6 +16,8 @@
 
 from typing import TYPE_CHECKING, Optional, Union
 
+from ...utils.import_utils import register
+
 
 if TYPE_CHECKING:
     pass
@@ -115,6 +117,7 @@ class MptAttentionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class MptConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -242,3 +245,7 @@ class MptConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+__all__ = [
+    "MptConfig"
+]

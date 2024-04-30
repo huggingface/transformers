@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_ernie import ErnieConfig
 
 
@@ -643,6 +644,7 @@ class ErniePreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("torch",))
 class ErniePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -780,6 +782,7 @@ ERNIE_INPUTS_DOCSTRING = r"""
     "The bare Ernie Model transformer outputting raw hidden-states without any specific head on top.",
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieModel(ErniePreTrainedModel):
     """
 
@@ -969,6 +972,7 @@ class ErnieModel(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForPreTraining(ErniePreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1081,6 +1085,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 @add_start_docstrings(
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
+@register(backends=("torch",))
 class ErnieForCausalLM(ErniePreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1239,6 +1244,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
 
 
 @add_start_docstrings("""Ernie Model with a `language modeling` head on top.""", ERNIE_START_DOCSTRING)
+@register(backends=("torch",))
 class ErnieForMaskedLM(ErniePreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1356,6 +1362,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     """Ernie Model with a `next sentence prediction (classification)` head on top.""",
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
@@ -1464,6 +1471,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForSequenceClassification(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
@@ -1563,6 +1571,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForMultipleChoice(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
@@ -1660,6 +1669,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForTokenClassification(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
@@ -1739,6 +1749,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
@@ -1827,3 +1838,16 @@ class ErnieForQuestionAnswering(ErniePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ErniePreTrainedModel",
+    "ErnieModel",
+    "ErnieForPreTraining",
+    "ErnieForCausalLM",
+    "ErnieForMaskedLM",
+    "ErnieForNextSentencePrediction",
+    "ErnieForSequenceClassification",
+    "ErnieForMultipleChoice",
+    "ErnieForTokenClassification",
+    "ErnieForQuestionAnswering"
+]

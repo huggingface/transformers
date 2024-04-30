@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SegGptConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate a SegGPT
@@ -138,3 +140,7 @@ class SegGptConfig(PretrainedConfig):
         self.intermediate_hidden_state_indices = intermediate_hidden_state_indices
         self.beta = beta
         self.mlp_dim = int(hidden_size * 4) if mlp_dim is None else mlp_dim
+
+__all__ = [
+    "SegGptConfig"
+]

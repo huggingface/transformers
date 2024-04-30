@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class YolosConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YolosModel`]. It is used to instantiate a YOLOS
@@ -155,6 +157,7 @@ class YolosConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
 
 
+@register()
 class YolosOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -173,3 +176,8 @@ class YolosOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "YolosConfig",
+    "YolosOnnxConfig"
+]

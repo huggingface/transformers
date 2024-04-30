@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 
@@ -570,6 +571,7 @@ class RobertaPreLayerNormPooler(nn.Module):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("torch",))
 class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -670,6 +672,7 @@ ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa-PreLayerNorm Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     """
 
@@ -856,6 +859,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm, RobertaPreLayerNormTokenizer->RobertaTokenizer
+@register(backends=("torch",))
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1020,6 +1024,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
 )
+@register(backends=("torch",))
 class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1154,6 +1159,7 @@ class RobertaPreLayerNormLMHead(nn.Module):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1253,6 +1259,7 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
+@register(backends=("torch",))
 class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1347,6 +1354,7 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1454,6 +1462,7 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1561,3 +1570,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "RobertaPreLayerNormPreTrainedModel",
+    "RobertaPreLayerNormModel",
+    "RobertaPreLayerNormForCausalLM",
+    "RobertaPreLayerNormForMaskedLM",
+    "RobertaPreLayerNormForSequenceClassification",
+    "RobertaPreLayerNormForMultipleChoice",
+    "RobertaPreLayerNormForTokenClassification",
+    "RobertaPreLayerNormForQuestionAnswering"
+]

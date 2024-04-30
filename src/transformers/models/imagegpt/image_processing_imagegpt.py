@@ -33,6 +33,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_vision_available():
@@ -57,6 +58,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
+@register(backends=("vision",))
 class ImageGPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ImageGPT image processor. This image processor can be used to resize images to a smaller resolution
@@ -312,3 +314,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         data = {"input_ids": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+__all__ = [
+    "ImageGPTImageProcessor"
+]

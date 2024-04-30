@@ -21,8 +21,10 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
+@register()
 class DonutProcessor(ProcessorMixin):
     r"""
     Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
@@ -195,3 +197,7 @@ class DonutProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "DonutProcessor"
+]

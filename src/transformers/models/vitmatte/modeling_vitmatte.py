@@ -28,6 +28,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_vitmatte import VitMatteConfig
 
 
@@ -63,6 +64,7 @@ class ImageMattingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@register(backends=("torch",))
 class VitMattePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -249,6 +251,7 @@ VITMATTE_INPUTS_DOCSTRING = r"""
     """ViTMatte framework leveraging any vision backbone e.g. for ADE20k, CityScapes.""",
     VITMATTE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VitMatteForImageMatting(VitMattePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -331,3 +334,8 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "VitMattePreTrainedModel",
+    "VitMatteForImageMatting"
+]

@@ -20,6 +20,7 @@ from typing import Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -27,6 +28,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 
+@register()
 class MgpstrTokenizer(PreTrainedTokenizer):
     """
     Construct a MGP-STR char tokenizer.
@@ -99,3 +101,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+__all__ = [
+    "MgpstrTokenizer"
+]

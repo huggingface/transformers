@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_pegasus_x import PegasusXConfig
 
 
@@ -744,6 +745,7 @@ class PegasusXDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
@@ -1317,6 +1319,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
     "The bare PEGASUS-X Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_X_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PegasusXModel(PegasusXPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1464,6 +1467,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
 
 
 @add_start_docstrings("The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING)
+@register(backends=("torch",))
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
@@ -1646,3 +1650,9 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
+__all__ = [
+    "PegasusXPreTrainedModel",
+    "PegasusXModel",
+    "PegasusXForConditionalGeneration"
+]

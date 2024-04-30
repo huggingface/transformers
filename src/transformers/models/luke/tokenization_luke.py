@@ -38,6 +38,7 @@ from ...tokenization_utils_base import (
     to_py_obj,
 )
 from ...utils import add_end_docstrings, is_tf_tensor, is_torch_tensor, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -171,6 +172,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class LukeTokenizer(PreTrainedTokenizer):
     """
     Constructs a LUKE tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
@@ -1703,3 +1705,7 @@ class LukeTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.entity_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return vocab_file, merge_file, entity_vocab_file
+
+__all__ = [
+    "LukeTokenizer"
+]

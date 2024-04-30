@@ -21,6 +21,7 @@ from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -28,6 +29,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" GPT-NeoX-20B tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
@@ -236,3 +238,7 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+
+__all__ = [
+    "GPTNeoXTokenizerFast"
+]

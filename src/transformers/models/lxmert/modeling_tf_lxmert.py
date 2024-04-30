@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_lxmert import LxmertConfig
 
 
@@ -936,6 +937,7 @@ class TFLxmertMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFLxmertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1088,6 +1090,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
     "The bare Lxmert Model transformer outputting raw hidden-states without any specific head on top.",
     LXMERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLxmertModel(TFLxmertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1392,6 +1395,7 @@ class TFLxmertVisualObjHead(keras.layers.Layer):
 
 
 @add_start_docstrings("""Lxmert Model with a `language modeling` head on top.""", LXMERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1650,3 +1654,9 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         if getattr(self, "answer_head", None) is not None:
             with tf.name_scope(self.answer_head.name):
                 self.answer_head.build(None)
+
+__all__ = [
+    "TFLxmertPreTrainedModel",
+    "TFLxmertModel",
+    "TFLxmertForPreTraining"
+]

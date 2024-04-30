@@ -49,6 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -599,6 +600,7 @@ class Transformer(nn.Module):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
+@register(backends=("torch",))
 class DistilBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -689,6 +691,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertModel(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -821,6 +824,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """DistilBert Model with a `masked language modeling` head on top.""",
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     _tied_weights_keys = ["vocab_projector.weight"]
 
@@ -928,6 +932,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1045,6 +1050,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1163,6 +1169,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1257,6 +1264,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1378,3 +1386,13 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DistilBertPreTrainedModel",
+    "DistilBertModel",
+    "DistilBertForMaskedLM",
+    "DistilBertForSequenceClassification",
+    "DistilBertForQuestionAnswering",
+    "DistilBertForTokenClassification",
+    "DistilBertForMultipleChoice"
+]

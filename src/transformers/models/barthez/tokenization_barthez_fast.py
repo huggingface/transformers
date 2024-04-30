@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -36,6 +37,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 SPIECE_UNDERLINE = "▁"
 
 
+@register(backends=("tokenizers",))
 class BarthezTokenizerFast(PreTrainedTokenizerFast):
     """
     Adapted from [`CamembertTokenizer`] and [`BartTokenizer`]. Construct a "fast" BARThez tokenizer. Based on
@@ -192,3 +194,7 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "BarthezTokenizerFast"
+]

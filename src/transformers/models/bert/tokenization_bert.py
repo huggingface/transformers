@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +49,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
+@register()
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.
@@ -281,6 +283,7 @@ class BertTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
+@register()
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -442,6 +445,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+@register()
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
@@ -497,3 +501,9 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+__all__ = [
+    "BertTokenizer",
+    "BasicTokenizer",
+    "WordpieceTokenizer"
+]

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DebertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaModel`] or a [`TFDebertaModel`]. It is
@@ -154,6 +156,7 @@ class DebertaConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.deberta_v2.configuration_deberta_v2.DebertaV2OnnxConfig
+@register()
 class DebertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -189,3 +192,8 @@ class DebertaOnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+__all__ = [
+    "DebertaConfig",
+    "DebertaOnnxConfig"
+]

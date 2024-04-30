@@ -22,8 +22,10 @@ from typing import List, Optional, Union
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
+@register()
 class LayoutXLMProcessor(ProcessorMixin):
     r"""
     Constructs a LayoutXLM processor which combines a LayoutXLM image processor and a LayoutXLM tokenizer into a single
@@ -199,3 +201,7 @@ class LayoutXLMProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "LayoutXLMProcessor"
+]

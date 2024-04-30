@@ -18,11 +18,13 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GitVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
@@ -121,6 +123,7 @@ class GitVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class GitConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate a GIT model
@@ -235,3 +238,8 @@ class GitConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+
+__all__ = [
+    "GitVisionConfig",
+    "GitConfig"
+]

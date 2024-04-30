@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_qwen2 import Qwen2Config
 
 
@@ -803,6 +804,7 @@ QWEN2_START_DOCSTRING = r"""
     "The bare Qwen2 Model outputting raw hidden-states without any specific head on top.",
     QWEN2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Qwen2PreTrainedModel(PreTrainedModel):
     config_class = Qwen2Config
     base_model_prefix = "model"
@@ -899,6 +901,7 @@ QWEN2_INPUTS_DOCSTRING = r"""
     "The bare Qwen2 Model outputting raw hidden-states without any specific head on top.",
     QWEN2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Qwen2Model(Qwen2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Qwen2DecoderLayer`]
@@ -1078,6 +1081,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class Qwen2ForCausalLM(Qwen2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1279,6 +1283,7 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
     """,
     QWEN2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1470,3 +1475,11 @@ class Qwen2ForTokenClassification(Qwen2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Qwen2PreTrainedModel",
+    "Qwen2Model",
+    "Qwen2ForCausalLM",
+    "Qwen2ForSequenceClassification",
+    "Qwen2ForTokenClassification"
+]

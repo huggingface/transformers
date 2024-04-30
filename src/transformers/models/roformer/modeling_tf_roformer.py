@@ -55,6 +55,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_roformer import RoFormerConfig
 
 
@@ -807,6 +808,7 @@ class TFRoFormerMainLayer(keras.layers.Layer):
                 self.embeddings_project.build([None, None, self.config.embedding_size])
 
 
+@register(backends=("tf",))
 class TFRoFormerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -914,6 +916,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
     "The bare RoFormer Model transformer outputing raw hidden-states without any specific head on top.",
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRoFormerModel(TFRoFormerPreTrainedModel):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -963,6 +966,7 @@ class TFRoFormerModel(TFRoFormerPreTrainedModel):
 
 
 @add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
+@register(backends=("tf",))
 class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1046,6 +1050,7 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
 @add_start_docstrings(
     """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""", ROFORMER_START_DOCSTRING
 )
+@register(backends=("tf",))
 class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1175,6 +1180,7 @@ class TFRoFormerClassificationHead(keras.layers.Layer):
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1255,6 +1261,7 @@ class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceC
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1362,6 +1369,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1445,6 +1453,7 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
     """,
     ROFORMER_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config: RoFormerConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1532,3 +1541,14 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFRoFormerPreTrainedModel",
+    "TFRoFormerModel",
+    "TFRoFormerForMaskedLM",
+    "TFRoFormerForCausalLM",
+    "TFRoFormerForSequenceClassification",
+    "TFRoFormerForMultipleChoice",
+    "TFRoFormerForTokenClassification",
+    "TFRoFormerForQuestionAnswering"
+]

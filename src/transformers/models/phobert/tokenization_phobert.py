@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +49,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class PhobertTokenizer(PreTrainedTokenizer):
     """
     Construct a PhoBERT tokenizer. Based on Byte-Pair-Encoding.
@@ -346,3 +348,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
                 raise ValueError("Incorrect dictionary format, expected '<token> <cnt>'")
             word = line[:idx]
             self.encoder[word] = len(self.encoder)
+
+__all__ = [
+    "PhobertTokenizer"
+]

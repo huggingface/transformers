@@ -23,11 +23,13 @@ from ...file_utils import TensorType, is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BlenderbotSmallConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotSmallModel`]. It is used to instantiate
@@ -164,6 +166,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig
+@register()
 class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -385,3 +388,8 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+__all__ = [
+    "BlenderbotSmallConfig",
+    "BlenderbotSmallOnnxConfig"
+]

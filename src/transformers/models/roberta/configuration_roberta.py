@@ -21,11 +21,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
@@ -137,6 +139,7 @@ class RobertaConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class RobertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -150,3 +153,8 @@ class RobertaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "RobertaConfig",
+    "RobertaOnnxConfig"
+]

@@ -45,6 +45,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_marian import MarianConfig
 
 
@@ -870,6 +871,7 @@ class FlaxMarianModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
     config_class = MarianConfig
     base_model_prefix: str = "model"
@@ -1202,6 +1204,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
     "The bare Marian Model transformer outputting raw hidden-states without any specific head on top.",
     MARIAN_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxMarianModel(FlaxMarianPreTrainedModel):
     config: MarianConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1286,6 +1289,7 @@ class FlaxMarianMTModule(nn.Module):
 @add_start_docstrings(
     "The MARIAN Model with a language modeling head. Can be used for translation.", MARIAN_START_DOCSTRING
 )
+@register(backends=("flax",))
 class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
     module_class = FlaxMarianMTModule
     dtype: jnp.dtype = jnp.float32
@@ -1495,3 +1499,9 @@ overwrite_call_docstring(
     MARIAN_INPUTS_DOCSTRING + FLAX_MARIAN_MT_DOCSTRING,
 )
 append_replace_return_docstrings(FlaxMarianMTModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+
+__all__ = [
+    "FlaxMarianPreTrainedModel",
+    "FlaxMarianModel",
+    "FlaxMarianMTModel"
+]

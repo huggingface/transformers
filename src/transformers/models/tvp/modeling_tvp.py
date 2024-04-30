@@ -29,6 +29,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
 from ...utils.backbone_utils import load_backbone
+from ...utils.import_utils import register
 from .configuration_tvp import TvpConfig
 
 
@@ -505,6 +506,7 @@ class TvpPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class TvpPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
@@ -687,6 +689,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
     "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
     TVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -810,6 +813,7 @@ class TvpVideoGroundingHead(nn.Module):
     """,
     TVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TvpForVideoGrounding(TvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -887,3 +891,9 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "TvpPreTrainedModel",
+    "TvpModel",
+    "TvpForVideoGrounding"
+]

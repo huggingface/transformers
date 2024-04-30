@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
@@ -684,6 +685,7 @@ class ChineseCLIPTextPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1095,6 +1097,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
     "The text model from CHINESE_CLIP without any head or projection on top.",
     CHINESE_CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
@@ -1278,6 +1281,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """The vision model from CHINESE_CLIP without any head or projection on top.""",
     CHINESE_CLIP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1334,6 +1338,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
 
 
 @add_start_docstrings(CHINESE_CLIP_START_DOCSTRING)
+@register(backends=("torch",))
 class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPConfig
 
@@ -1565,3 +1570,10 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+__all__ = [
+    "ChineseCLIPPreTrainedModel",
+    "ChineseCLIPTextModel",
+    "ChineseCLIPVisionModel",
+    "ChineseCLIPModel"
+]

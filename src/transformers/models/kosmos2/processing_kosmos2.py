@@ -25,6 +25,7 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType
+from ...utils.import_utils import register
 
 
 BboxInput = Union[
@@ -35,6 +36,7 @@ BboxInput = Union[
 ]
 
 
+@register()
 class Kosmos2Processor(ProcessorMixin):
     r"""
     Constructs an KOSMOS-2 processor which wraps a KOSMOS-2 image processor and a KOSMOS-2 tokenizer into a single
@@ -664,3 +666,7 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
         entities.append(adjusted_entity + (bboxes_in_coords,))
 
     return _cleanup_spaces(processed_text, entities)
+
+__all__ = [
+    "Kosmos2Processor"
+]

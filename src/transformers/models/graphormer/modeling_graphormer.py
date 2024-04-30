@@ -28,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_graphormer import GraphormerConfig
 
 
@@ -697,6 +698,7 @@ class GraphormerDecoderHead(nn.Module):
         return input_nodes
 
 
+@register(backends=("torch",))
 class GraphormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -765,6 +767,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@register(backends=("torch",))
 class GraphormerModel(GraphormerPreTrainedModel):
     """The Graphormer model is a graph-encoder model.
 
@@ -836,6 +839,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         return self.max_nodes
 
 
+@register(backends=("torch",))
 class GraphormerForGraphClassification(GraphormerPreTrainedModel):
     """
     This model can be used for graph-level classification or regression tasks.
@@ -906,3 +910,9 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         if not return_dict:
             return tuple(x for x in [loss, logits, hidden_states] if x is not None)
         return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
+
+__all__ = [
+    "GraphormerPreTrainedModel",
+    "GraphormerModel",
+    "GraphormerForGraphClassification"
+]

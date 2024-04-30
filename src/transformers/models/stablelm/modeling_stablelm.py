@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_stablelm import StableLmConfig
 
 
@@ -823,6 +824,7 @@ STABLELM_START_DOCSTRING = r"""
     "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
     STABLELM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class StableLmPreTrainedModel(PreTrainedModel):
     config_class = StableLmConfig
     base_model_prefix = "model"
@@ -919,6 +921,7 @@ STABLELM_INPUTS_DOCSTRING = r"""
     "The bare StableLm Model outputting raw hidden-states without any specific head on top.",
     STABLELM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class StableLmModel(StableLmPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLmDecoderLayer`]
@@ -1080,6 +1083,7 @@ class StableLmModel(StableLmPreTrainedModel):
 
 
 # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM with PERSIMMON->STABLELM,Persimmon->StableLm
+@register(backends=("torch",))
 class StableLmForCausalLM(StableLmPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1287,6 +1291,7 @@ class StableLmForCausalLM(StableLmPreTrainedModel):
     STABLELM_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLm
+@register(backends=("torch",))
 class StableLmForSequenceClassification(StableLmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1478,3 +1483,11 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "StableLmPreTrainedModel",
+    "StableLmModel",
+    "StableLmForCausalLM",
+    "StableLmForSequenceClassification",
+    "StableLmForTokenClassification"
+]

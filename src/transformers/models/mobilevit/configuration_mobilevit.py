@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MobileViTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileViTModel`]. It is used to instantiate a
@@ -150,6 +152,7 @@ class MobileViTConfig(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
+@register()
 class MobileViTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -167,3 +170,8 @@ class MobileViTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "MobileViTConfig",
+    "MobileViTOnnxConfig"
+]

@@ -1421,7 +1421,6 @@ else:
             "BertForQuestionAnswering",
             "BertForSequenceClassification",
             "BertForTokenClassification",
-            "BertLayer",
             "BertLMHeadModel",
             "BertModel",
             "BertPreTrainedModel",
@@ -3588,7 +3587,6 @@ else:
             "TFAlbertForQuestionAnswering",
             "TFAlbertForSequenceClassification",
             "TFAlbertForTokenClassification",
-            "TFAlbertMainLayer",
             "TFAlbertModel",
             "TFAlbertPreTrainedModel",
         ]
@@ -3660,7 +3658,6 @@ else:
             "TFBertForSequenceClassification",
             "TFBertForTokenClassification",
             "TFBertLMHeadModel",
-            "TFBertMainLayer",
             "TFBertModel",
             "TFBertPreTrainedModel",
         ]
@@ -3794,7 +3791,6 @@ else:
             "TFAdaptiveEmbedding",
             "TFTransfoXLForSequenceClassification",
             "TFTransfoXLLMHeadModel",
-            "TFTransfoXLMainLayer",
             "TFTransfoXLModel",
             "TFTransfoXLPreTrainedModel",
         ]
@@ -3806,7 +3802,6 @@ else:
             "TFDistilBertForQuestionAnswering",
             "TFDistilBertForSequenceClassification",
             "TFDistilBertForTokenClassification",
-            "TFDistilBertMainLayer",
             "TFDistilBertModel",
             "TFDistilBertPreTrainedModel",
         ]
@@ -3880,7 +3875,6 @@ else:
             "TFGPT2DoubleHeadsModel",
             "TFGPT2ForSequenceClassification",
             "TFGPT2LMHeadModel",
-            "TFGPT2MainLayer",
             "TFGPT2Model",
             "TFGPT2PreTrainedModel",
         ]
@@ -3924,7 +3918,6 @@ else:
             "TFLayoutLMForQuestionAnswering",
             "TFLayoutLMForSequenceClassification",
             "TFLayoutLMForTokenClassification",
-            "TFLayoutLMMainLayer",
             "TFLayoutLMModel",
             "TFLayoutLMPreTrainedModel",
         ]
@@ -3954,7 +3947,6 @@ else:
     _import_structure["models.lxmert"].extend(
         [
             "TFLxmertForPreTraining",
-            "TFLxmertMainLayer",
             "TFLxmertModel",
             "TFLxmertPreTrainedModel",
             "TFLxmertVisualFeatureEncoder",
@@ -3973,7 +3965,6 @@ else:
             "TFMobileBertForQuestionAnswering",
             "TFMobileBertForSequenceClassification",
             "TFMobileBertForTokenClassification",
-            "TFMobileBertMainLayer",
             "TFMobileBertModel",
             "TFMobileBertPreTrainedModel",
         ]
@@ -3993,7 +3984,6 @@ else:
             "TFMPNetForQuestionAnswering",
             "TFMPNetForSequenceClassification",
             "TFMPNetForTokenClassification",
-            "TFMPNetMainLayer",
             "TFMPNetModel",
             "TFMPNetPreTrainedModel",
         ]
@@ -4004,7 +3994,6 @@ else:
             "TFOpenAIGPTDoubleHeadsModel",
             "TFOpenAIGPTForSequenceClassification",
             "TFOpenAIGPTLMHeadModel",
-            "TFOpenAIGPTMainLayer",
             "TFOpenAIGPTModel",
             "TFOpenAIGPTPreTrainedModel",
         ]
@@ -4066,7 +4055,6 @@ else:
             "TFRobertaForQuestionAnswering",
             "TFRobertaForSequenceClassification",
             "TFRobertaForTokenClassification",
-            "TFRobertaMainLayer",
             "TFRobertaModel",
             "TFRobertaPreTrainedModel",
         ]
@@ -4079,7 +4067,6 @@ else:
             "TFRobertaPreLayerNormForQuestionAnswering",
             "TFRobertaPreLayerNormForSequenceClassification",
             "TFRobertaPreLayerNormForTokenClassification",
-            "TFRobertaPreLayerNormMainLayer",
             "TFRobertaPreLayerNormModel",
             "TFRobertaPreLayerNormPreTrainedModel",
         ]
@@ -4195,7 +4182,6 @@ else:
             "TFXLMForQuestionAnsweringSimple",
             "TFXLMForSequenceClassification",
             "TFXLMForTokenClassification",
-            "TFXLMMainLayer",
             "TFXLMModel",
             "TFXLMPreTrainedModel",
             "TFXLMWithLMHeadModel",
@@ -4220,7 +4206,6 @@ else:
             "TFXLNetForSequenceClassification",
             "TFXLNetForTokenClassification",
             "TFXLNetLMHeadModel",
-            "TFXLNetMainLayer",
             "TFXLNetModel",
             "TFXLNetPreTrainedModel",
         ]
@@ -7732,7 +7717,6 @@ if TYPE_CHECKING:
             TFAlbertForQuestionAnswering,
             TFAlbertForSequenceClassification,
             TFAlbertForTokenClassification,
-            TFAlbertMainLayer,
             TFAlbertModel,
             TFAlbertPreTrainedModel,
         )
@@ -7798,7 +7782,6 @@ if TYPE_CHECKING:
             TFBertForSequenceClassification,
             TFBertForTokenClassification,
             TFBertLMHeadModel,
-            TFBertMainLayer,
             TFBertModel,
             TFBertPreTrainedModel,
         )
@@ -7902,7 +7885,6 @@ if TYPE_CHECKING:
             TFAdaptiveEmbedding,
             TFTransfoXLForSequenceClassification,
             TFTransfoXLLMHeadModel,
-            TFTransfoXLMainLayer,
             TFTransfoXLModel,
             TFTransfoXLPreTrainedModel,
         )
@@ -7912,7 +7894,6 @@ if TYPE_CHECKING:
             TFDistilBertForQuestionAnswering,
             TFDistilBertForSequenceClassification,
             TFDistilBertForTokenClassification,
-            TFDistilBertMainLayer,
             TFDistilBertModel,
             TFDistilBertPreTrainedModel,
         )
@@ -7972,7 +7953,6 @@ if TYPE_CHECKING:
             TFGPT2DoubleHeadsModel,
             TFGPT2ForSequenceClassification,
             TFGPT2LMHeadModel,
-            TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
@@ -8004,7 +7984,6 @@ if TYPE_CHECKING:
             TFLayoutLMForQuestionAnswering,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
-            TFLayoutLMMainLayer,
             TFLayoutLMModel,
             TFLayoutLMPreTrainedModel,
         )
@@ -8032,7 +8011,6 @@ if TYPE_CHECKING:
         )
         from .models.lxmert import (
             TFLxmertForPreTraining,
-            TFLxmertMainLayer,
             TFLxmertModel,
             TFLxmertPreTrainedModel,
             TFLxmertVisualFeatureEncoder,
@@ -8055,7 +8033,6 @@ if TYPE_CHECKING:
             TFMobileBertForQuestionAnswering,
             TFMobileBertForSequenceClassification,
             TFMobileBertForTokenClassification,
-            TFMobileBertMainLayer,
             TFMobileBertModel,
             TFMobileBertPreTrainedModel,
         )
@@ -8071,7 +8048,6 @@ if TYPE_CHECKING:
             TFMPNetForQuestionAnswering,
             TFMPNetForSequenceClassification,
             TFMPNetForTokenClassification,
-            TFMPNetMainLayer,
             TFMPNetModel,
             TFMPNetPreTrainedModel,
         )
@@ -8084,7 +8060,6 @@ if TYPE_CHECKING:
             TFOpenAIGPTDoubleHeadsModel,
             TFOpenAIGPTForSequenceClassification,
             TFOpenAIGPTLMHeadModel,
-            TFOpenAIGPTMainLayer,
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
@@ -8128,7 +8103,6 @@ if TYPE_CHECKING:
             TFRobertaForQuestionAnswering,
             TFRobertaForSequenceClassification,
             TFRobertaForTokenClassification,
-            TFRobertaMainLayer,
             TFRobertaModel,
             TFRobertaPreTrainedModel,
         )
@@ -8139,7 +8113,6 @@ if TYPE_CHECKING:
             TFRobertaPreLayerNormForQuestionAnswering,
             TFRobertaPreLayerNormForSequenceClassification,
             TFRobertaPreLayerNormForTokenClassification,
-            TFRobertaPreLayerNormMainLayer,
             TFRobertaPreLayerNormModel,
             TFRobertaPreLayerNormPreTrainedModel,
         )
@@ -8227,7 +8200,6 @@ if TYPE_CHECKING:
             TFXLMForQuestionAnsweringSimple,
             TFXLMForSequenceClassification,
             TFXLMForTokenClassification,
-            TFXLMMainLayer,
             TFXLMModel,
             TFXLMPreTrainedModel,
             TFXLMWithLMHeadModel,
@@ -8248,7 +8220,6 @@ if TYPE_CHECKING:
             TFXLNetForSequenceClassification,
             TFXLNetForTokenClassification,
             TFXLNetLMHeadModel,
-            TFXLNetMainLayer,
             TFXLNetModel,
             TFXLNetPreTrainedModel,
         )

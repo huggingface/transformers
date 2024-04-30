@@ -22,11 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Data2VecVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
@@ -175,6 +177,7 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+@register()
 class Data2VecVisionOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -189,3 +192,8 @@ class Data2VecVisionOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "Data2VecVisionConfig",
+    "Data2VecVisionOnnxConfig"
+]

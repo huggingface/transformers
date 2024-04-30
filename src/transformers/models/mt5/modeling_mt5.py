@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_mt5 import MT5Config
 
@@ -768,6 +769,7 @@ class MT5ClassificationHead(nn.Module):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->MT5, t5->mt5
+@register(backends=("torch",))
 class MT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -883,6 +885,7 @@ class MT5PreTrainedModel(PreTrainedModel):
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
+@register()
 class MT5Stack(MT5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -1324,6 +1327,7 @@ num_heads)`.
     "The bare MT5 Model transformer outputting raw hidden-states without any specific head on top.",
     MT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MT5Model(MT5PreTrainedModel):
     r"""
     Examples:
@@ -1550,6 +1554,7 @@ class MT5Model(MT5PreTrainedModel):
 
 
 @add_start_docstrings("""MT5 Model with a `language modeling` head on top.""", MT5_START_DOCSTRING)
+@register(backends=("torch",))
 class MT5ForConditionalGeneration(MT5PreTrainedModel):
     r"""
     Examples:
@@ -1898,6 +1903,7 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     "The bare MT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     MT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MT5EncoderModel(MT5PreTrainedModel):
     r"""
     Examples:
@@ -2039,6 +2045,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
     """,
     MT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MT5ForSequenceClassification(MT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -2174,6 +2181,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
     """,
     MT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MT5ForTokenClassification(MT5PreTrainedModel):
     _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
 
@@ -2248,6 +2256,7 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
     """,
     MT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MT5ForQuestionAnswering(MT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -2432,3 +2441,14 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+__all__ = [
+    "MT5PreTrainedModel",
+    "MT5Stack",
+    "MT5Model",
+    "MT5ForConditionalGeneration",
+    "MT5EncoderModel",
+    "MT5ForSequenceClassification",
+    "MT5ForTokenClassification",
+    "MT5ForQuestionAnswering"
+]

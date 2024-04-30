@@ -20,6 +20,7 @@ from tokenizers import ByteLevelBPETokenizer
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from ...utils.import_utils import register
 from .tokenization_blenderbot_small import BlenderbotSmallTokenizer
 
 
@@ -32,6 +33,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
+@register(backends=("tokenizers",))
 class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" BlenderbotSmall tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -113,3 +115,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
             "{% endfor %}"
             "{{ eos_token }}"
         )
+
+__all__ = [
+    "BlenderbotSmallTokenizerFast"
+]

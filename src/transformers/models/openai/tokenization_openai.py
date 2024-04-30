@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -232,6 +233,7 @@ def text_standardize(text):
     return text.strip()
 
 
+@register()
 class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
     Construct a GPT Tokenizer. Based on Byte-Pair-Encoding with the following peculiarities:
@@ -391,3 +393,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+__all__ = [
+    "OpenAIGPTTokenizer"
+]

@@ -30,6 +30,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -180,6 +181,7 @@ def subfinder(mylist, pattern):
         return None, 0
 
 
+@register()
 class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     r"""
     Construct a LayoutLMv2 tokenizer. Based on WordPiece. [`LayoutLMv2Tokenizer`] can be used to turn words, word-level
@@ -1540,3 +1542,7 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+__all__ = [
+    "LayoutLMv2Tokenizer"
+]

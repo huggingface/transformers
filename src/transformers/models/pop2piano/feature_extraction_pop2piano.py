@@ -31,6 +31,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import register
 
 
 if is_essentia_available():
@@ -47,6 +48,7 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("essentia", "librosa", "pretty_midi", "scipy", "torch",))
 class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Pop2Piano feature extractor.
@@ -448,3 +450,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         )
 
         return output
+
+__all__ = [
+    "Pop2PianoFeatureExtractor"
+]

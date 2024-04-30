@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class GPTNeoXJapaneseConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
@@ -115,3 +117,7 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
+
+__all__ = [
+    "GPTNeoXJapaneseConfig"
+]

@@ -36,6 +36,7 @@ from ...utils import (
     is_torch_cuda_available,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_rwkv import RwkvConfig
 
 
@@ -383,6 +384,7 @@ class RwkvBlock(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class RwkvPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -579,6 +581,7 @@ RWKV_INPUTS_DOCSTRING = r"""
     "The bare RWKV Model transformer outputting raw hidden-states without any specific head on top.",
     RWKV_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RwkvModel(RwkvPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -747,6 +750,7 @@ class RwkvModel(RwkvPreTrainedModel):
     """,
     RWKV_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RwkvForCausalLM(RwkvPreTrainedModel):
     _tied_weights_keys = ["head.weight"]
 
@@ -857,3 +861,9 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
             hidden_states=rwkv_outputs.hidden_states,
             attentions=rwkv_outputs.attentions,
         )
+
+__all__ = [
+    "RwkvPreTrainedModel",
+    "RwkvModel",
+    "RwkvForCausalLM"
+]

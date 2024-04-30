@@ -20,6 +20,7 @@ import html
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import is_bs4_available, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_bs4_available():
@@ -30,6 +31,7 @@ if is_bs4_available():
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MarkupLMFeatureExtractor(FeatureExtractionMixin):
     r"""
     Constructs a MarkupLM feature extractor. This can be used to get a list of nodes and corresponding xpaths from HTML
@@ -181,3 +183,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         encoded_inputs = BatchFeature(data=data, tensor_type=None)
 
         return encoded_inputs
+
+__all__ = [
+    "MarkupLMFeatureExtractor"
+]

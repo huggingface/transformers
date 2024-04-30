@@ -30,6 +30,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_gpt2 import GPT2Config
 
 
@@ -377,6 +378,7 @@ class FlaxGPT2Block(nn.Module):
         return outputs
 
 
+@register(backends=("flax",))
 class FlaxGPT2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -662,6 +664,7 @@ class FlaxGPT2Module(nn.Module):
     "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT2_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPT2Model(FlaxGPT2PreTrainedModel):
     module_class = FlaxGPT2Module
 
@@ -739,6 +742,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
     """,
     GPT2_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxGPT2LMHeadModel(FlaxGPT2PreTrainedModel):
     module_class = FlaxGPT2LMHeadModule
 
@@ -777,3 +781,9 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxGPT2PreTrainedModel",
+    "FlaxGPT2Model",
+    "FlaxGPT2LMHeadModel"
+]

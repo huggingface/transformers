@@ -24,6 +24,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -56,6 +57,7 @@ def get_phrases_from_posmap(posmaps, input_ids):
     return token_ids
 
 
+@register()
 class GroundingDinoProcessor(ProcessorMixin):
     r"""
     Constructs a Grounding DINO processor which wraps a Deformable DETR image processor and a BERT tokenizer into a
@@ -226,3 +228,7 @@ class GroundingDinoProcessor(ProcessorMixin):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+__all__ = [
+    "GroundingDinoProcessor"
+]

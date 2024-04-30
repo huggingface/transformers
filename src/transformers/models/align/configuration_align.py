@@ -17,6 +17,8 @@
 import os
 from typing import TYPE_CHECKING, List, Union
 
+from ...utils.import_utils import register
+
 
 if TYPE_CHECKING:
     pass
@@ -28,6 +30,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@register()
 class AlignTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignTextModel`]. It is used to instantiate a
@@ -152,6 +155,7 @@ class AlignTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class AlignVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignVisionModel`]. It is used to instantiate a
@@ -291,6 +295,7 @@ class AlignVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class AlignConfig(PretrainedConfig):
     r"""
     [`AlignConfig`] is the configuration class to store the configuration of a [`AlignModel`]. It is used to
@@ -378,3 +383,9 @@ class AlignConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "AlignTextConfig",
+    "AlignVisionConfig",
+    "AlignConfig"
+]

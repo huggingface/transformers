@@ -20,6 +20,7 @@ from tokenizers import normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 from ...utils.versions import require_version
 
 
@@ -49,6 +50,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@register(backends=("tokenizers",))
 class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -431,3 +433,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return self.bos_token_id + token_ids_0 + self.eos_token_id
         return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
+
+__all__ = [
+    "CodeLlamaTokenizerFast"
+]

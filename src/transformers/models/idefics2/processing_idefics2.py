@@ -23,6 +23,7 @@ from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import AddedToken, BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
+@register(backends=("torch",))
 class Idefics2Processor(ProcessorMixin):
     r"""
     Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
@@ -352,3 +354,7 @@ class Idefics2Processor(ProcessorMixin):
             "{% endif %}"
         )
         # fmt: on
+
+__all__ = [
+    "Idefics2Processor"
+]

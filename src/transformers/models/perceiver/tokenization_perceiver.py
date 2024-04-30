@@ -18,11 +18,13 @@ from typing import Dict, List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PerceiverTokenizer(PreTrainedTokenizer):
     """
     Construct a Perceiver tokenizer. The Perceiver simply uses raw bytes utf-8 encoding.
@@ -195,3 +197,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     # PerceiverTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
+
+__all__ = [
+    "PerceiverTokenizer"
+]

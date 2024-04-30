@@ -20,11 +20,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class XLMRobertaXLConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMRobertaXLModel`] or a [`TFXLMRobertaXLModel`].
@@ -135,6 +137,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->XLMRobertaXL
+@register()
 class XLMRobertaXLOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -148,3 +151,8 @@ class XLMRobertaXLOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "XLMRobertaXLConfig",
+    "XLMRobertaXLOnnxConfig"
+]

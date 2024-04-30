@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class DonutSwinConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DonutSwinModel`]. It is used to instantiate a
@@ -130,3 +132,7 @@ class DonutSwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+__all__ = [
+    "DonutSwinConfig"
+]

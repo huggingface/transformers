@@ -18,12 +18,14 @@ from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class OneFormerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
@@ -272,3 +274,7 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
+
+__all__ = [
+    "OneFormerConfig"
+]

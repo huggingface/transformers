@@ -23,6 +23,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -72,6 +73,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
     Construct a GPT-2 tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -336,3 +338,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+
+__all__ = [
+    "GPT2Tokenizer"
+]

@@ -19,6 +19,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -234,6 +235,7 @@ class Kosmos2VisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class Kosmos2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate a
@@ -290,3 +292,7 @@ class Kosmos2Config(PretrainedConfig):
         self.vision_config = Kosmos2VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
+
+__all__ = [
+    "Kosmos2Config"
+]

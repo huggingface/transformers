@@ -37,6 +37,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_convnext import ConvNextConfig
 
 
@@ -267,6 +268,7 @@ class ConvNextEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class ConvNextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -320,6 +322,7 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
     "The bare ConvNext model outputting raw features without any specific head on top.",
     CONVNEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvNextModel(ConvNextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -386,6 +389,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
     """,
     CONVNEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -468,6 +472,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     """,
     CONVNEXT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -546,3 +551,10 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
             hidden_states=hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+__all__ = [
+    "ConvNextPreTrainedModel",
+    "ConvNextModel",
+    "ConvNextForImageClassification",
+    "ConvNextBackbone"
+]

@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_efficientnet import EfficientNetConfig
 
 
@@ -471,6 +472,7 @@ class EfficientNetEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class EfficientNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -499,6 +501,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     "The bare EfficientNet model outputting raw features without any specific head on top.",
     EFFICIENTNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EfficientNetModel(EfficientNetPreTrainedModel):
     def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
@@ -569,6 +572,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
     """,
     EFFICIENTNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -642,3 +646,9 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+__all__ = [
+    "EfficientNetPreTrainedModel",
+    "EfficientNetModel",
+    "EfficientNetForImageClassification"
+]

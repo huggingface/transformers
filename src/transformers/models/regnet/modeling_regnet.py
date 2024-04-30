@@ -30,6 +30,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_regnet import RegNetConfig
 
 
@@ -269,6 +270,7 @@ class RegNetEncoder(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
 
+@register(backends=("torch",))
 class RegNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -319,6 +321,7 @@ REGNET_INPUTS_DOCSTRING = r"""
     REGNET_START_DOCSTRING,
 )
 # Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
+@register(backends=("torch",))
 class RegNetModel(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -373,6 +376,7 @@ class RegNetModel(RegNetPreTrainedModel):
     REGNET_START_DOCSTRING,
 )
 # Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->REGNET,ResNet->RegNet,resnet->regnet
+@register(backends=("torch",))
 class RegNetForImageClassification(RegNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -441,3 +445,9 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+__all__ = [
+    "RegNetPreTrainedModel",
+    "RegNetModel",
+    "RegNetForImageClassification"
+]

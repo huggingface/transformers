@@ -19,6 +19,7 @@ from typing import Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
@@ -152,6 +153,7 @@ class BarkSubModelConfig(PretrainedConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkSemanticConfig(BarkSubModelConfig):
     model_type = "semantic"
 
@@ -174,6 +176,7 @@ class BarkSemanticConfig(BarkSubModelConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkCoarseConfig(BarkSubModelConfig):
     model_type = "coarse_acoustics"
 
@@ -201,6 +204,7 @@ class BarkCoarseConfig(BarkSubModelConfig):
     >>> configuration = model.config
     ```""",
 )
+@register()
 class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
 
@@ -211,6 +215,7 @@ class BarkFineConfig(BarkSubModelConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
+@register()
 class BarkConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a Bark
@@ -323,3 +328,10 @@ class BarkConfig(PretrainedConfig):
             codec_config=codec_config.to_dict(),
             **kwargs,
         )
+
+__all__ = [
+    "BarkSemanticConfig",
+    "BarkCoarseConfig",
+    "BarkFineConfig",
+    "BarkConfig"
+]

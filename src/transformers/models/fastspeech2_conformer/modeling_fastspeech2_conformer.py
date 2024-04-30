@@ -24,6 +24,7 @@ from torch import nn
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, add_start_docstrings, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_fastspeech2_conformer import (
     FastSpeech2ConformerConfig,
     FastSpeech2ConformerHifiGanConfig,
@@ -1058,6 +1059,7 @@ class FastSpeech2ConformerLoss(nn.Module):
         return l1_loss + duration_loss + pitch_loss + energy_loss
 
 
+@register(backends=("torch",))
 class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1096,6 +1098,7 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     """FastSpeech2Conformer Model.""",
     FASTSPEECH2_CONFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
     """
     FastSpeech 2 module.
@@ -1443,6 +1446,7 @@ class HifiGanResidualBlock(nn.Module):
     HIFIGAN_START_DOCSTRING,
 )
 # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan with SpeechT5->FastSpeech2Conformer
+@register(backends=("torch",))
 class FastSpeech2ConformerHifiGan(PreTrainedModel):
     config_class = FastSpeech2ConformerHifiGanConfig
     main_input_name = "spectrogram"
@@ -1560,6 +1564,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
     "The FastSpeech2ConformerModel with a FastSpeech2ConformerHifiGan vocoder head that performs text-to-speech (waveform).",
     FASTSPEECH2_CONFORMER_WITH_HIFIGAN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
     config_class = FastSpeech2ConformerWithHifiGanConfig
 
@@ -1679,3 +1684,10 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
             return model_outputs + (waveform,)
 
         return FastSpeech2ConformerWithHifiGanOutput(waveform=waveform, **model_outputs)
+
+__all__ = [
+    "FastSpeech2ConformerPreTrainedModel",
+    "FastSpeech2ConformerModel",
+    "FastSpeech2ConformerHifiGan",
+    "FastSpeech2ConformerWithHifiGan"
+]

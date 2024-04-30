@@ -18,11 +18,13 @@ from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class AutoformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`AutoformerModel`]. It is used to instantiate an
@@ -240,3 +242,7 @@ class AutoformerConfig(PretrainedConfig):
             + self.num_static_real_features
             + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
+
+__all__ = [
+    "AutoformerConfig"
+]

@@ -42,6 +42,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_albert import AlbertConfig
 
 
@@ -505,6 +506,7 @@ class FlaxAlbertSOPHead(nn.Module):
         return logits
 
 
+@register(backends=("flax",))
 class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -674,6 +676,7 @@ class FlaxAlbertModule(nn.Module):
     "The bare Albert Model transformer outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertModel(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertModule
 
@@ -742,6 +745,7 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertForPreTraining(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForPreTrainingModule
 
@@ -825,6 +829,7 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxAlbertForMaskedLM(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMaskedLMModule
 
@@ -895,6 +900,7 @@ class FlaxAlbertForSequenceClassificationModule(nn.Module):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertForSequenceClassification(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForSequenceClassificationModule
 
@@ -968,6 +974,7 @@ class FlaxAlbertForMultipleChoiceModule(nn.Module):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertForMultipleChoice(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMultipleChoiceModule
 
@@ -1041,6 +1048,7 @@ class FlaxAlbertForTokenClassificationModule(nn.Module):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertForTokenClassification(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForTokenClassificationModule
 
@@ -1109,6 +1117,7 @@ class FlaxAlbertForQuestionAnsweringModule(nn.Module):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxAlbertForQuestionAnswering(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForQuestionAnsweringModule
 
@@ -1119,3 +1128,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxAlbertPreTrainedModel",
+    "FlaxAlbertModel",
+    "FlaxAlbertForPreTraining",
+    "FlaxAlbertForMaskedLM",
+    "FlaxAlbertForSequenceClassification",
+    "FlaxAlbertForMultipleChoice",
+    "FlaxAlbertForTokenClassification",
+    "FlaxAlbertForQuestionAnswering"
+]

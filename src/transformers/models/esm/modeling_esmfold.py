@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_esm import EsmConfig
 from .modeling_esm import ESM_START_DOCSTRING, EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
@@ -937,6 +938,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         return x
 
 
+@register(backends=("torch",))
 class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -2017,6 +2019,7 @@ class EsmFoldingTrunk(nn.Module):
     """,
     ESM_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
 
@@ -2320,3 +2323,8 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         """Returns the pdb (file) string from the model given an input sequence."""
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)
+
+__all__ = [
+    "EsmFoldPreTrainedModel",
+    "EsmForProteinFolding"
+]

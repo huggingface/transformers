@@ -63,6 +63,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -798,6 +799,7 @@ def compute_segments(
     return segmentation, segments
 
 
+@register(backends=("vision",))
 class GroundingDinoImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Grounding DINO image processor.
@@ -1578,3 +1580,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+__all__ = [
+    "GroundingDinoImageProcessor"
+]

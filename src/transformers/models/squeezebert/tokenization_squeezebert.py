@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -51,6 +52,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->SqueezeBert,BERT->SqueezeBERT
+@register()
 class SqueezeBertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a SqueezeBERT tokenizer. Based on WordPiece.
@@ -501,3 +503,7 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+__all__ = [
+    "SqueezeBertTokenizer"
+]

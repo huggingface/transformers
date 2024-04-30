@@ -17,12 +17,14 @@
 import warnings
 
 from ...utils import logging
+from ...utils.import_utils import register
 from .image_processing_videomae import VideoMAEImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
+@register(backends=("vision",))
 class VideoMAEFeatureExtractor(VideoMAEImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -31,3 +33,7 @@ class VideoMAEFeatureExtractor(VideoMAEImageProcessor):
             FutureWarning,
         )
         super().__init__(*args, **kwargs)
+
+__all__ = [
+    "VideoMAEFeatureExtractor"
+]

@@ -23,11 +23,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SegformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an
@@ -148,6 +150,7 @@ class SegformerConfig(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
+@register()
 class SegformerOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
@@ -166,3 +169,8 @@ class SegformerOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+__all__ = [
+    "SegformerConfig",
+    "SegformerOnnxConfig"
+]

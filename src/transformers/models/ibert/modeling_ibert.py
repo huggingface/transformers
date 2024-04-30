@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_ibert import IBertConfig
 from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmbedding, QuantLinear
 
@@ -627,6 +628,7 @@ class IBertPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class IBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -726,6 +728,7 @@ IBERT_INPUTS_DOCSTRING = r"""
     "The bare I-BERT Model transformer outputting raw hidden-states without any specific head on top.",
     IBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class IBertModel(IBertPreTrainedModel):
     """
 
@@ -848,6 +851,7 @@ class IBertModel(IBertPreTrainedModel):
 
 
 @add_start_docstrings("""I-BERT Model with a `language modeling` head on top.""", IBERT_START_DOCSTRING)
+@register(backends=("torch",))
 class IBertForMaskedLM(IBertPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.bias", "lm_head.decoder.weight"]
 
@@ -966,6 +970,7 @@ class IBertLMHead(nn.Module):
     """,
     IBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class IBertForSequenceClassification(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1059,6 +1064,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
     """,
     IBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class IBertForMultipleChoice(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1149,6 +1155,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
     """,
     IBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class IBertForTokenClassification(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1246,6 +1253,7 @@ class IBertClassificationHead(nn.Module):
     """,
     IBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class IBertForQuestionAnswering(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1353,3 +1361,13 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "IBertPreTrainedModel",
+    "IBertModel",
+    "IBertForMaskedLM",
+    "IBertForSequenceClassification",
+    "IBertForMultipleChoice",
+    "IBertForTokenClassification",
+    "IBertForQuestionAnswering"
+]

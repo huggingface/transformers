@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mvp import MvpConfig
 
 
@@ -497,6 +498,7 @@ class MvpPrompt(nn.Module):
         return prompt
 
 
+@register(backends=("torch",))
 class MvpPreTrainedModel(PreTrainedModel):
     config_class = MvpConfig
     base_model_prefix = "model"
@@ -1214,6 +1216,7 @@ class MvpDecoder(MvpPreTrainedModel):
     "The bare MVP Model outputting raw hidden-states without any specific head on top.",
     MVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MvpModel(MvpPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -1351,6 +1354,7 @@ class MvpModel(MvpPreTrainedModel):
 @add_start_docstrings(
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
+@register(backends=("torch",))
 class MvpForConditionalGeneration(MvpPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1533,6 +1537,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     """,
     MVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MvpForSequenceClassification(MvpPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1660,6 +1665,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
     """,
     MVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MvpForQuestionAnswering(MvpPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1791,6 +1797,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
+@register(backends=("torch",))
 class MvpForCausalLM(MvpPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -2005,3 +2012,12 @@ class MvpForCausalLM(MvpPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "MvpPreTrainedModel",
+    "MvpModel",
+    "MvpForConditionalGeneration",
+    "MvpForSequenceClassification",
+    "MvpForQuestionAnswering",
+    "MvpForCausalLM"
+]

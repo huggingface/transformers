@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class CpmAntConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CpmAntModel`]. It is used to instantiate an
@@ -117,3 +119,7 @@ class CpmAntConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.vocab_size = vocab_size
         self.init_std = init_std
+
+__all__ = [
+    "CpmAntConfig"
+]

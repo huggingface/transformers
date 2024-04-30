@@ -30,6 +30,7 @@ from jax.random import PRNGKey
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxMaskedLMOutput
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from ...utils import add_start_docstrings, logging
+from ...utils.import_utils import register
 from .configuration_opt import OPTConfig
 
 
@@ -514,6 +515,7 @@ class FlaxOPTDecoder(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
     config_class = OPTConfig
     base_model_prefix: str = "model"
@@ -687,6 +689,7 @@ class FlaxOPTModule(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartModel with Bart->OPT
+@register(backends=("flax",))
 class FlaxOPTModel(FlaxOPTPreTrainedModel):
     config: OPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -760,6 +763,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
     """,
     OPT_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTForCausalLMModule
 
@@ -797,3 +801,9 @@ append_call_sample_docstring(
     FlaxBaseModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxOPTPreTrainedModel",
+    "FlaxOPTModel",
+    "FlaxOPTForCausalLM"
+]

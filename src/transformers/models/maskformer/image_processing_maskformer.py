@@ -50,6 +50,7 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -346,6 +347,7 @@ def get_maskformer_resize_output_image_size(
     return output_size
 
 
+@register(backends=("vision",))
 class MaskFormerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a MaskFormer image processor. The image processor can be used to prepare image(s) and optional targets
@@ -1303,3 +1305,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+__all__ = [
+    "MaskFormerImageProcessor"
+]

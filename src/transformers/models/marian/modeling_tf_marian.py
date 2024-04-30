@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_marian import MarianConfig
 
 
@@ -560,6 +561,7 @@ class TFMarianDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFMarianPreTrainedModel(TFPreTrainedModel):
     config_class = MarianConfig
     base_model_prefix = "model"
@@ -1246,6 +1248,7 @@ class TFMarianMainLayer(keras.layers.Layer):
     "The bare MARIAN Model outputting raw hidden-states without any specific head on top.",
     MARIAN_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMarianModel(TFMarianPreTrainedModel):
     def __init__(self, config: MarianConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1359,6 +1362,7 @@ class BiasLayer(keras.layers.Layer):
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
     MARIAN_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
@@ -1554,3 +1558,9 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+__all__ = [
+    "TFMarianPreTrainedModel",
+    "TFMarianModel",
+    "TFMarianMTModel"
+]

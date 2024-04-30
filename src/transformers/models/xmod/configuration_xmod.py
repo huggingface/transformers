@@ -21,11 +21,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class XmodConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
@@ -167,6 +169,7 @@ class XmodConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->Xmod
+@register()
 class XmodOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -180,3 +183,8 @@ class XmodOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "XmodConfig",
+    "XmodOnnxConfig"
+]

@@ -38,6 +38,7 @@ from ...modeling_flax_outputs import (
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, overwrite_call_docstring
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_roberta import RobertaConfig
 
 
@@ -720,6 +721,7 @@ class FlaxRobertaClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("flax",))
 class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -988,6 +990,7 @@ class FlaxRobertaModule(nn.Module):
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaModule
 
@@ -1054,6 +1057,7 @@ class FlaxRobertaForMaskedLMModule(nn.Module):
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top.""", ROBERTA_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxRobertaForMaskedLM(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForMaskedLMModule
 
@@ -1126,6 +1130,7 @@ class FlaxRobertaForSequenceClassificationModule(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaForSequenceClassification(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForSequenceClassificationModule
 
@@ -1207,6 +1212,7 @@ class FlaxRobertaForMultipleChoiceModule(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaForMultipleChoice(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForMultipleChoiceModule
 
@@ -1289,6 +1295,7 @@ class FlaxRobertaForTokenClassificationModule(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaForTokenClassification(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForTokenClassificationModule
 
@@ -1366,6 +1373,7 @@ class FlaxRobertaForQuestionAnsweringModule(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaForQuestionAnswering(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForQuestionAnsweringModule
 
@@ -1450,6 +1458,7 @@ class FlaxRobertaForCausalLMModule(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxRobertaForCausalLM(FlaxRobertaPreTrainedModel):
     module_class = FlaxRobertaForCausalLMModule
 
@@ -1486,3 +1495,14 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxRobertaPreTrainedModel",
+    "FlaxRobertaModel",
+    "FlaxRobertaForMaskedLM",
+    "FlaxRobertaForSequenceClassification",
+    "FlaxRobertaForMultipleChoice",
+    "FlaxRobertaForTokenClassification",
+    "FlaxRobertaForQuestionAnswering",
+    "FlaxRobertaForCausalLM"
+]

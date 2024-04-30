@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MraConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MraModel`]. It is used to instantiate an MRA
@@ -132,3 +134,7 @@ class MraConfig(PretrainedConfig):
         self.approx_mode = approx_mode
         self.initial_prior_first_n_blocks = initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = initial_prior_diagonal_n_blocks
+
+__all__ = [
+    "MraConfig"
+]

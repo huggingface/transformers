@@ -22,11 +22,13 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import TensorType, is_torch_available, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class MarianConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarianModel`]. It is used to instantiate an
@@ -163,6 +165,7 @@ class MarianConfig(PretrainedConfig):
         )
 
 
+@register()
 class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig.inputs
@@ -389,3 +392,8 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+__all__ = [
+    "MarianConfig",
+    "MarianOnnxConfig"
+]

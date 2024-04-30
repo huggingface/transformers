@@ -44,6 +44,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -1611,6 +1612,7 @@ class FlaxBigBirdPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("flax",))
 class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1888,6 +1890,7 @@ class FlaxBigBirdModule(nn.Module):
     BIG_BIRD_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModel with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdModule
 
@@ -1965,6 +1968,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
     BIG_BIRD_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTraining with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdForPreTraining(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForPreTrainingModule
 
@@ -2058,6 +2062,7 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForMaskedLM with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdForMaskedLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMaskedLMModule
 
@@ -2148,6 +2153,7 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
     BIG_BIRD_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForSequenceClassification with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdForSequenceClassification(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForSequenceClassificationModule
 
@@ -2229,6 +2235,7 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMultipleChoiceModule
 
@@ -2327,6 +2334,7 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
     BIG_BIRD_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForTokenClassification with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdForTokenClassification(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForTokenClassificationModule
 
@@ -2430,6 +2438,7 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForQuestionAnsweringModule
 
@@ -2597,6 +2606,7 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
     BIG_BIRD_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForCausalLM with Bert->BigBird
+@register(backends=("flax",))
 class FlaxBigBirdForCausalLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForCausalLMModule
 
@@ -2633,3 +2643,15 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxBigBirdPreTrainedModel",
+    "FlaxBigBirdModel",
+    "FlaxBigBirdForPreTraining",
+    "FlaxBigBirdForMaskedLM",
+    "FlaxBigBirdForSequenceClassification",
+    "FlaxBigBirdForMultipleChoice",
+    "FlaxBigBirdForTokenClassification",
+    "FlaxBigBirdForQuestionAnswering",
+    "FlaxBigBirdForCausalLM"
+]

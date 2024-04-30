@@ -38,6 +38,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.import_utils import register
 from .configuration_swinv2 import Swinv2Config
 
 
@@ -960,6 +961,7 @@ class Swinv2Encoder(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->Swinv2,swin->swinv2
+@register(backends=("torch",))
 class Swinv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1025,6 +1027,7 @@ SWINV2_INPUTS_DOCSTRING = r"""
     SWINV2_START_DOCSTRING,
 )
 # Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
+@register(backends=("torch",))
 class Swinv2Model(Swinv2PreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         super().__init__(config)
@@ -1139,6 +1142,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
     SWINV2_START_DOCSTRING,
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
+@register(backends=("torch",))
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1261,6 +1265,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     SWINV2_START_DOCSTRING,
 )
 # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
+@register(backends=("torch",))
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1356,6 +1361,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     """,
     SWINV2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -1444,3 +1450,11 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Swinv2PreTrainedModel",
+    "Swinv2Model",
+    "Swinv2ForMaskedImageModeling",
+    "Swinv2ForImageClassification",
+    "Swinv2Backbone"
+]

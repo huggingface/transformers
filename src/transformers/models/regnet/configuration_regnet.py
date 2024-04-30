@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class RegNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RegNetModel`]. It is used to instantiate a RegNet
@@ -89,3 +91,7 @@ class RegNetConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         # always downsample in the first stage
         self.downsample_in_first_stage = True
+
+__all__ = [
+    "RegNetConfig"
+]

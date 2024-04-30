@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_olmo import OlmoConfig
 
 
@@ -736,6 +737,7 @@ OLMO_START_DOCSTRING = r"""
     OLMO_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Olmo
+@register(backends=("torch",))
 class OlmoPreTrainedModel(PreTrainedModel):
     config_class = OlmoConfig
     base_model_prefix = "model"
@@ -837,6 +839,7 @@ OLMO_INPUTS_DOCSTRING = r"""
     "The bare Olmo Model outputting raw hidden-states without any specific head on top.",
     OLMO_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class OlmoModel(OlmoPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`OlmoDecoderLayer`]
@@ -1063,6 +1066,7 @@ class OlmoModel(OlmoPreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->OLMO,Llama->Olmo
+@register(backends=("torch",))
 class OlmoForCausalLM(OlmoPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1271,3 +1275,9 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+__all__ = [
+    "OlmoPreTrainedModel",
+    "OlmoModel",
+    "OlmoForCausalLM"
+]

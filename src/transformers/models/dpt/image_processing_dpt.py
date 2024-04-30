@@ -39,6 +39,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -93,6 +94,7 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
+@register(backends=("vision",))
 class DPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DPT image processor.
@@ -482,3 +484,7 @@ class DPTImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+__all__ = [
+    "DPTImageProcessor"
+]

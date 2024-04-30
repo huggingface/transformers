@@ -33,6 +33,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -147,6 +148,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("sentencepiece",))
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
@@ -1463,3 +1465,7 @@ class UdopTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+__all__ = [
+    "UdopTokenizer"
+]

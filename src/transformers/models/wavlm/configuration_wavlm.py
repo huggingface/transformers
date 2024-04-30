@@ -19,11 +19,13 @@ import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class WavLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WavLMModel`]. It is used to instantiate an WavLM
@@ -332,3 +334,7 @@ class WavLMConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+__all__ = [
+    "WavLMConfig"
+]

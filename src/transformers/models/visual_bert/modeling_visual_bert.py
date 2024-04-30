@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_visual_bert import VisualBertConfig
 
 
@@ -507,6 +508,7 @@ class VisualBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("torch",))
 class VisualBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -654,6 +656,7 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
     "The bare VisualBert Model transformer outputting raw hidden-states without any specific head on top.",
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertModel(VisualBertPreTrainedModel):
     """
 
@@ -851,6 +854,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertForPreTraining(VisualBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -1003,6 +1007,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1156,6 +1161,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1282,6 +1288,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1442,6 +1449,7 @@ class VisualBertRegionToPhraseAttention(nn.Module):
     """,
     VISUAL_BERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias"]
 
@@ -1588,3 +1596,13 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "VisualBertPreTrainedModel",
+    "VisualBertModel",
+    "VisualBertForPreTraining",
+    "VisualBertForMultipleChoice",
+    "VisualBertForQuestionAnswering",
+    "VisualBertForVisualReasoning",
+    "VisualBertForRegionToPhraseAlignment"
+]

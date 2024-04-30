@@ -21,6 +21,7 @@ from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import register
 
 
 if is_torch_available():
@@ -36,6 +37,7 @@ class DecodeType(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
+@register()
 class MgpstrProcessor(ProcessorMixin):
     r"""
     Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
@@ -228,3 +230,7 @@ class MgpstrProcessor(ProcessorMixin):
         """
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs
+
+__all__ = [
+    "MgpstrProcessor"
+]

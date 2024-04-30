@@ -23,6 +23,7 @@ import numpy as np
 import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -81,6 +82,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class CodeGenTokenizer(PreTrainedTokenizer):
     """
     Construct a CodeGen tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -414,3 +416,7 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             return completion[: min(terminals_pos)]
         else:
             return completion
+
+__all__ = [
+    "CodeGenTokenizer"
+]

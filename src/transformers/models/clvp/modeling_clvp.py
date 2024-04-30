@@ -43,6 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_clvp import (
     ClvpConfig,
     ClvpDecoderConfig,
@@ -705,6 +706,7 @@ class ClvpConditioningEncoder(nn.Module):
         return torch.concat([mel_spec, text_embeds], dim=1)
 
 
+@register(backends=("torch",))
 class ClvpPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -865,6 +867,7 @@ CLVP_DECODER_INPUTS_DOCSTRING = r"""
 """
 
 
+@register(backends=("torch",))
 class ClvpEncoder(ClvpPreTrainedModel):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -1021,6 +1024,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class ClvpDecoder(ClvpPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ClvpDecoderLayer`]
@@ -1204,6 +1208,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
     "The bare Clvp decoder model outputting raw hidden-states without any specific head on top.",
     CLVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ClvpModel(ClvpPreTrainedModel):
     def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
@@ -1275,6 +1280,7 @@ class ClvpModel(ClvpPreTrainedModel):
     "The CLVP decoder model with a language modelling head on top.",
     CLVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ClvpForCausalLM(ClvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1506,6 +1512,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
     config_class = ClvpConfig
 
@@ -2016,3 +2023,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             text_encoder_hidden_states=text_outputs.hidden_states,
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
+
+__all__ = [
+    "ClvpPreTrainedModel",
+    "ClvpEncoder",
+    "ClvpDecoder",
+    "ClvpModel",
+    "ClvpForCausalLM",
+    "ClvpModelForConditionalGeneration"
+]

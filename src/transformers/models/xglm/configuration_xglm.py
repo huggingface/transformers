@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class XGLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XGLMModel`]. It is used to instantiate an XGLM
@@ -134,3 +136,7 @@ class XGLMConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "XGLMConfig"
+]

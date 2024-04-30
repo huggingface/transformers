@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_perceiver import PerceiverConfig
 
 
@@ -600,6 +601,7 @@ class PerceiverEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class PerceiverPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -708,6 +710,7 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
     """The Perceiver: a scalable, fully attentional architecture.""",
     PERCEIVER_MODEL_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
         self,
@@ -946,6 +949,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
 
 @add_start_docstrings("""Example use of Perceiver for masked language modeling.""", PERCEIVER_START_DOCSTRING)
+@register(backends=("torch",))
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     def __init__(self, config: PerceiverConfig):
         super().__init__(config)
@@ -1081,6 +1085,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
 
 @add_start_docstrings("""Example use of Perceiver for text classification.""", PERCEIVER_START_DOCSTRING)
+@register(backends=("torch",))
 class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1206,6 +1211,7 @@ the structure of images. As shown in the paper, this model can achieve a top-1 a
 """,
     PERCEIVER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1349,6 +1355,7 @@ This model uses fixed 2D Fourier position embeddings. As shown in the paper, thi
 """,
     PERCEIVER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1492,6 +1499,7 @@ of 82.1 on ImageNet.
 """,
     PERCEIVER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1636,6 +1644,7 @@ using the same encoding used for the input.
 """,
     PERCEIVER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1781,6 +1790,7 @@ Note that, by masking the classification label during evaluation (i.e. simply pr
 """,
     PERCEIVER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
     def __init__(self, config: PerceiverConfig):
         super().__init__(config)
@@ -3430,3 +3440,15 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         final_inputs = torch.cat(padded_ls, dim=1)
 
         return final_inputs, modality_sizes, inputs_without_pos
+
+__all__ = [
+    "PerceiverPreTrainedModel",
+    "PerceiverModel",
+    "PerceiverForMaskedLM",
+    "PerceiverForSequenceClassification",
+    "PerceiverForImageClassificationLearned",
+    "PerceiverForImageClassificationFourier",
+    "PerceiverForImageClassificationConvProcessing",
+    "PerceiverForOpticalFlow",
+    "PerceiverForMultimodalAutoencoding"
+]

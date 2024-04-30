@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -73,6 +74,7 @@ _TRIVIA_QA_MAPPING = {
 }
 
 
+@register()
 def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
     """Load tf checkpoints in a pytorch model."""
 
@@ -1742,6 +1744,7 @@ class BigBirdPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+@register(backends=("torch",))
 class BigBirdPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1904,6 +1907,7 @@ class BigBirdForQuestionAnsweringModelOutput(ModelOutput):
     "The bare BigBird Model transformer outputting raw hidden-states without any specific head on top.",
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BigBirdModel(BigBirdPreTrainedModel):
     """
 
@@ -2243,6 +2247,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
 
+@register(backends=("torch",))
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -2350,6 +2355,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
+@register(backends=("torch",))
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -2495,6 +2501,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 @add_start_docstrings(
     """BigBird Model with a `language modeling` head on top for CLM fine-tuning.""", BIG_BIRD_START_DOCSTRING
 )
+@register(backends=("torch",))
 class BigBirdForCausalLM(BigBirdPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -2668,6 +2675,7 @@ class BigBirdClassificationHead(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2796,6 +2804,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2889,6 +2898,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BigBirdForTokenClassification(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2988,6 +2998,7 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
     """,
     BIG_BIRD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     def __init__(self, config, add_pooling_layer=False):
         super().__init__(config)
@@ -3147,3 +3158,16 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         mask.unsqueeze_(0)  # -> (1, maxlen)
         mask = torch.where(mask < q_lengths, 1, 0)
         return mask
+
+__all__ = [
+    "load_tf_weights_in_big_bird",
+    "BigBirdPreTrainedModel",
+    "BigBirdModel",
+    "BigBirdForPreTraining",
+    "BigBirdForMaskedLM",
+    "BigBirdForCausalLM",
+    "BigBirdForSequenceClassification",
+    "BigBirdForMultipleChoice",
+    "BigBirdForTokenClassification",
+    "BigBirdForQuestionAnswering"
+]

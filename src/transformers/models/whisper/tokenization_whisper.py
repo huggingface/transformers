@@ -25,6 +25,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
@@ -207,6 +208,7 @@ TO_LANGUAGE_CODE = {
 TASK_IDS = ["translate", "transcribe"]
 
 
+@register()
 class WhisperTokenizer(PreTrainedTokenizer):
     """
     Construct a Whisper tokenizer.
@@ -1322,3 +1324,7 @@ def _merge_punctuations(words, tokens, indices, prepended, appended):
     words[:] = [word for word in words if word]
     tokens[:] = [token for token in tokens if token]
     indices[:] = [idx for idx in indices if idx]
+
+__all__ = [
+    "WhisperTokenizer"
+]

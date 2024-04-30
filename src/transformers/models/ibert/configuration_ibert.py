@@ -22,11 +22,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class IBertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IBertModel`]. It is used to instantiate a I-BERT
@@ -124,6 +126,7 @@ class IBertConfig(PretrainedConfig):
         self.force_dequant = force_dequant
 
 
+@register()
 class IBertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -137,3 +140,8 @@ class IBertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "IBertConfig",
+    "IBertOnnxConfig"
+]

@@ -32,7 +32,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, register
 from .configuration_mamba import MambaConfig
 
 
@@ -343,6 +343,7 @@ class MambaBlock(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class MambaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -504,6 +505,7 @@ MAMBA_INPUTS_DOCSTRING = r"""
     "The bare MAMBA Model transformer outputting raw hidden-states without any specific head on top.",
     MAMBA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MambaModel(MambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -603,6 +605,7 @@ class MambaModel(MambaPreTrainedModel):
     """,
     MAMBA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MambaForCausalLM(MambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -704,3 +707,9 @@ class MambaForCausalLM(MambaPreTrainedModel):
             cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
+
+__all__ = [
+    "MambaPreTrainedModel",
+    "MambaModel",
+    "MambaForCausalLM"
+]

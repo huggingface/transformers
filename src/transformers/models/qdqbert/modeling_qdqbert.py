@@ -48,6 +48,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.import_utils import register
 from .configuration_qdqbert import QDQBertConfig
 
 
@@ -69,6 +70,7 @@ _CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "QDQBertConfig"
 
 
+@register()
 def load_tf_weights_in_qdqbert(model, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -722,6 +724,7 @@ class QDQBertPreTrainingHeads(nn.Module):
 
 
 # Based on transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert -> QDQBert
+@register(backends=("torch",))
 class QDQBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -820,6 +823,7 @@ QDQBERT_INPUTS_DOCSTRING = r"""
     "The bare QDQBERT Model transformer outputting raw hidden-states without any specific head on top.",
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertModel(QDQBertPreTrainedModel):
     """
 
@@ -1001,6 +1005,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
 @add_start_docstrings(
     """QDQBERT Model with a `language modeling` head on top for CLM fine-tuning.""", QDQBERT_START_DOCSTRING
 )
+@register(backends=("torch",))
 class QDQBertLMHeadModel(QDQBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
 
@@ -1165,6 +1170,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 
 
 @add_start_docstrings("""QDQBERT Model with a `language modeling` head on top.""", QDQBERT_START_DOCSTRING)
+@register(backends=("torch",))
 class QDQBertForMaskedLM(QDQBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.weight", "predictions.decoder.bias"]
 
@@ -1276,6 +1282,7 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1380,6 +1387,7 @@ class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
     """,
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1477,6 +1485,7 @@ class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
     """,
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1568,6 +1577,7 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
     """,
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertForTokenClassification(QDQBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1646,6 +1656,7 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
     """,
     QDQBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1736,3 +1747,16 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "load_tf_weights_in_qdqbert",
+    "QDQBertPreTrainedModel",
+    "QDQBertModel",
+    "QDQBertLMHeadModel",
+    "QDQBertForMaskedLM",
+    "QDQBertForNextSentencePrediction",
+    "QDQBertForSequenceClassification",
+    "QDQBertForMultipleChoice",
+    "QDQBertForTokenClassification",
+    "QDQBertForQuestionAnswering"
+]

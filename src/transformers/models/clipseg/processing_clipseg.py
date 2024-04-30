@@ -20,8 +20,10 @@ import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils.import_utils import register
 
 
+@register()
 class CLIPSegProcessor(ProcessorMixin):
     r"""
     Constructs a CLIPSeg processor which wraps a CLIPSeg image processor and a CLIP tokenizer into a single processor.
@@ -159,3 +161,7 @@ class CLIPSegProcessor(ProcessorMixin):
             FutureWarning,
         )
         return self.image_processor
+
+__all__ = [
+    "CLIPSegProcessor"
+]

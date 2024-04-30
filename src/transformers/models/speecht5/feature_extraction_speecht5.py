@@ -23,11 +23,13 @@ from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, win
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a SpeechT5 feature extractor.
@@ -391,3 +393,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 del output[name]
 
         return output
+
+__all__ = [
+    "SpeechT5FeatureExtractor"
+]

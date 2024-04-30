@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -34,6 +35,7 @@ class DecoderConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
 
 
+@register()
 class FSMTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
@@ -213,3 +215,7 @@ class FSMTConfig(PretrainedConfig):
             early_stopping=early_stopping,
             **common_kwargs,
         )
+
+__all__ = [
+    "FSMTConfig"
+]

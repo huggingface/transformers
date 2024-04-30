@@ -17,12 +17,14 @@ import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VipLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an
@@ -139,3 +141,7 @@ class VipLlavaConfig(PretrainedConfig):
             output = super().to_dict()
             output.pop("_vocab_size", None)
             return output
+
+__all__ = [
+    "VipLlavaConfig"
+]

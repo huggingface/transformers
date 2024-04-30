@@ -23,6 +23,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 from .number_normalizer import EnglishNormalizer
 
 
@@ -75,6 +76,7 @@ def get_pairs(word):
     return pairs
 
 
+@register()
 class ClvpTokenizer(PreTrainedTokenizer):
     """
     Construct a CLVP tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -362,3 +364,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+__all__ = [
+    "ClvpTokenizer"
+]

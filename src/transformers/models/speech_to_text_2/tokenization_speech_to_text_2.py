@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -52,6 +53,7 @@ def get_pairs(word):
 # Speech2Text2 has no max input length
 
 
+@register()
 class Speech2Text2Tokenizer(PreTrainedTokenizer):
     """
     Constructs a Speech2Text2Tokenizer.
@@ -247,3 +249,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
                 index += 1
 
         return (vocab_file, merges_file)
+
+__all__ = [
+    "Speech2Text2Tokenizer"
+]

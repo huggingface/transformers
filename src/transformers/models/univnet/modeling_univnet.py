@@ -22,6 +22,7 @@ from torch import nn
 
 from ...modeling_utils import ModelOutput, PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_univnet import UnivNetConfig
 
 
@@ -460,6 +461,7 @@ UNIVNET_INPUTS_DOCSTRING = r"""
     """UnivNet GAN vocoder.""",
     UNIVNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UnivNetModel(PreTrainedModel):
     config_class = UnivNetConfig
     main_input_name = "input_features"
@@ -629,3 +631,7 @@ class UnivNetModel(PreTrainedModel):
         for layer in self.resblocks:
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
+
+__all__ = [
+    "UnivNetModel"
+]

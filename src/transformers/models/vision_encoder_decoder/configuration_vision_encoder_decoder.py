@@ -21,6 +21,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto.configuration_auto import AutoConfig
 
 
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class VisionEncoderDecoderConfig(PretrainedConfig):
     r"""
     [`VisionEncoderDecoderConfig`] is the configuration class to store the configuration of a
@@ -170,6 +172,7 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         return common_inputs
 
 
+@register()
 class VisionEncoderDecoderOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> None:
@@ -207,3 +210,8 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
+
+__all__ = [
+    "VisionEncoderDecoderConfig",
+    "VisionEncoderDecoderOnnxConfig"
+]

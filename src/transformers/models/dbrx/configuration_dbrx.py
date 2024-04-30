@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -146,6 +147,7 @@ class DbrxFFNConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class DbrxConfig(PretrainedConfig):
     r"""
 
@@ -255,3 +257,7 @@ class DbrxConfig(PretrainedConfig):
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+__all__ = [
+    "DbrxConfig"
+]

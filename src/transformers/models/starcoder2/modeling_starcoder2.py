@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_starcoder2 import Starcoder2Config
 
 
@@ -781,6 +782,7 @@ STARCODER2_START_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Starcoder2
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
@@ -878,6 +880,7 @@ STARCODER2_INPUTS_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class Starcoder2Model(Starcoder2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
@@ -1058,6 +1061,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2ForCausalLM with QWEN2->STARCODER2,Qwen2->Starcoder2
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
@@ -1262,6 +1266,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     STARCODER2_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Starcoder2, LLAMA->STARCODER2
+@register(backends=("torch",))
 class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1453,3 +1458,11 @@ class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "Starcoder2PreTrainedModel",
+    "Starcoder2Model",
+    "Starcoder2ForCausalLM",
+    "Starcoder2ForSequenceClassification",
+    "Starcoder2ForTokenClassification"
+]

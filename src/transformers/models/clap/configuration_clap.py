@@ -19,11 +19,13 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ClapTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a CLAP
@@ -156,6 +158,7 @@ class ClapTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ClapAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
@@ -326,6 +329,7 @@ class ClapAudioConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class ClapConfig(PretrainedConfig):
     r"""
     [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
@@ -425,3 +429,9 @@ class ClapConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
+
+__all__ = [
+    "ClapTextConfig",
+    "ClapAudioConfig",
+    "ClapConfig"
+]

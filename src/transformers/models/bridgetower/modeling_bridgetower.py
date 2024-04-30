@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -965,6 +966,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
+@register(backends=("torch",))
 class BridgeTowerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1200,6 +1202,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     " top.",
     BRIDGETOWER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1550,6 +1553,7 @@ class BridgeTowerITMHead(nn.Module):
     """,
     BRIDGETOWER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     _tied_weights_keys = ["mlm_score.decoder.weight"]
 
@@ -1659,6 +1663,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     """,
     BRIDGETOWER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1770,6 +1775,7 @@ class BridgeTowerContrastiveHead(nn.Module):
     """,
     BRIDGETOWER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1905,3 +1911,11 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "BridgeTowerPreTrainedModel",
+    "BridgeTowerModel",
+    "BridgeTowerForMaskedLM",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForContrastiveLearning"
+]

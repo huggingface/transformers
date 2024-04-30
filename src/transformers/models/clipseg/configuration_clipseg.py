@@ -19,11 +19,13 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class CLIPSegTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
@@ -136,6 +138,7 @@ class CLIPSegTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class CLIPSegVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
@@ -241,6 +244,7 @@ class CLIPSegVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
+@register()
 class CLIPSegConfig(PretrainedConfig):
     r"""
     [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
@@ -427,3 +431,9 @@ class CLIPSegConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+__all__ = [
+    "CLIPSegTextConfig",
+    "CLIPSegVisionConfig",
+    "CLIPSegConfig"
+]

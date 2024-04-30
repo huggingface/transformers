@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
+from ...utils.import_utils import register
 
 
 if is_sentencepiece_available():
@@ -36,6 +37,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@register(backends=("tokenizers",))
 class PegasusTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -214,3 +216,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+__all__ = [
+    "PegasusTokenizerFast"
+]

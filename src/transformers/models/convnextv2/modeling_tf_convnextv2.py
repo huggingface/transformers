@@ -44,6 +44,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -468,6 +469,7 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
                 self.layernorm.build([None, self.config.hidden_sizes[-1]])
 
 
+@register(backends=("tf",))
 class TFConvNextV2PreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -540,6 +542,7 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
     "The bare ConvNextV2 model outputting raw features without any specific head on top.",
     CONVNEXTV2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
     def __init__(self, config: ConvNextV2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -601,6 +604,7 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
     """,
     CONVNEXTV2_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: ConvNextV2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -678,3 +682,9 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+__all__ = [
+    "TFConvNextV2PreTrainedModel",
+    "TFConvNextV2Model",
+    "TFConvNextV2ForImageClassification"
+]

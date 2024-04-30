@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class Speech2TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Speech2TextModel`]. It is used to instantiate a
@@ -194,3 +196,7 @@ class Speech2TextConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+__all__ = [
+    "Speech2TextConfig"
+]

@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_mpnet import MPNetConfig
 
 
@@ -44,6 +45,7 @@ _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
 
 
+@register(backends=("torch",))
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
     base_model_prefix = "mpnet"
@@ -473,6 +475,7 @@ MPNET_INPUTS_DOCSTRING = r"""
     "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
     MPNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MPNetModel(MPNetPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -563,6 +566,7 @@ class MPNetModel(MPNetPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class MPNetForMaskedLM(MPNetPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder"]
 
@@ -674,6 +678,7 @@ class MPNetLMHead(nn.Module):
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -766,6 +771,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -854,6 +860,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MPNetForTokenClassification(MPNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -950,6 +957,7 @@ class MPNetClassificationHead(nn.Module):
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1050,3 +1058,13 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "MPNetPreTrainedModel",
+    "MPNetModel",
+    "MPNetForMaskedLM",
+    "MPNetForSequenceClassification",
+    "MPNetForMultipleChoice",
+    "MPNetForTokenClassification",
+    "MPNetForQuestionAnswering"
+]

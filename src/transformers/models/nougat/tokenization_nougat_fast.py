@@ -28,6 +28,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import add_end_docstrings
 
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
+from ...utils.import_utils import register
 
 
 if is_levenshtein_available():
@@ -368,6 +369,7 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
+@register(backends=("tokenizers",))
 class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
     Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
@@ -624,3 +626,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 return [self.post_process_single(s, fix_markdown=fix_markdown) for s in generation]
         else:
             return self.post_process_single(generation, fix_markdown=fix_markdown)
+
+__all__ = [
+    "NougatTokenizerFast"
+]

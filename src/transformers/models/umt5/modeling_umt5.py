@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_umt5 import UMT5Config
 
 
@@ -471,6 +472,7 @@ class UMT5ClassificationHead(nn.Module):
         return hidden_states
 
 
+@register(backends=("torch",))
 class UMT5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -928,6 +930,7 @@ UMT5_ENCODER_INPUTS_DOCSTRING = r"""
     "The bare UMT5 Model transformer outputting raw hidden-states without any specific head on top.",
     UMT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UMT5Model(UMT5PreTrainedModel):
     r"""
     Examples:
@@ -1101,6 +1104,7 @@ class UMT5Model(UMT5PreTrainedModel):
 
 
 @add_start_docstrings("""UMT5 Model with a `language modeling` head on top.""", UMT5_START_DOCSTRING)
+@register(backends=("torch",))
 class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
     r"""
     Examples:
@@ -1358,6 +1362,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
     "The bare UMT5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     UMT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UMT5EncoderModel(UMT5PreTrainedModel):
     r"""
     Examples:
@@ -1467,6 +1472,7 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     """,
     UMT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UMT5ForSequenceClassification(UMT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -1601,6 +1607,7 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
     """,
     UMT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UMT5ForTokenClassification(UMT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
     _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
@@ -1676,6 +1683,7 @@ class UMT5ForTokenClassification(UMT5PreTrainedModel):
     """,
     UMT5_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -1855,3 +1863,13 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+__all__ = [
+    "UMT5PreTrainedModel",
+    "UMT5Model",
+    "UMT5ForConditionalGeneration",
+    "UMT5EncoderModel",
+    "UMT5ForSequenceClassification",
+    "UMT5ForTokenClassification",
+    "UMT5ForQuestionAnswering"
+]

@@ -28,6 +28,7 @@ from ...file_utils import (
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.import_utils import register
 from ..auto import AutoBackbone
 from .configuration_depth_anything import DepthAnythingConfig
 
@@ -242,6 +243,7 @@ class DepthAnythingFeatureFusionStage(nn.Module):
 
 
 # Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->DepthAnything,dpt->depth_anything
+@register(backends=("torch",))
 class DepthAnythingPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -359,6 +361,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """,
     DEPTH_ANYTHING_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     _no_split_modules = ["DPTViTEmbeddings"]
 
@@ -461,3 +464,8 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "DepthAnythingPreTrainedModel",
+    "DepthAnythingForDepthEstimation"
+]

@@ -38,6 +38,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...utils.import_utils import register
 from .configuration_videomae import VideoMAEConfig
 
 
@@ -497,6 +498,7 @@ class VideoMAEEncoder(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class VideoMAEPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -560,6 +562,7 @@ VIDEOMAE_INPUTS_DOCSTRING = r"""
     "The bare VideoMAE Model transformer outputting raw hidden-states without any specific head on top.",
     VIDEOMAE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VideoMAEModel(VideoMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -787,6 +790,7 @@ class VideoMAEDecoder(nn.Module):
     "The VideoMAE Model transformer with the decoder on top for self-supervised pre-training.",
     VIDEOMAE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -972,6 +976,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     states of all tokens) e.g. for ImageNet.""",
     VIDEOMAE_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1133,3 +1138,10 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "VideoMAEPreTrainedModel",
+    "VideoMAEModel",
+    "VideoMAEForPreTraining",
+    "VideoMAEForVideoClassification"
+]

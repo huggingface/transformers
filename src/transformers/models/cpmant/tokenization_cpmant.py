@@ -20,6 +20,8 @@ from typing import List, Optional, Tuple
 
 from transformers.utils import is_jieba_available, requires_backends
 
+from ...utils.import_utils import register
+
 
 if is_jieba_available():
     import jieba
@@ -76,6 +78,7 @@ class WordpieceTokenizer(object):
         return sub_tokens
 
 
+@register()
 class CpmAntTokenizer(PreTrainedTokenizer):
     """
     Construct a CPMAnt tokenizer. Based on byte-level Byte-Pair-Encoding.
@@ -265,3 +268,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
         return [1] + ([0] * len(token_ids_0))
+
+__all__ = [
+    "CpmAntTokenizer"
+]

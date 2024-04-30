@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_squeezebert import SqueezeBertConfig
 
 
@@ -415,6 +416,7 @@ class SqueezeBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@register(backends=("torch",))
 class SqueezeBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -540,6 +542,7 @@ SQUEEZEBERT_INPUTS_DOCSTRING = r"""
     "The bare SqueezeBERT Model transformer outputting raw hidden-states without any specific head on top.",
     SQUEEZEBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SqueezeBertModel(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -640,6 +643,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 
 
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top.""", SQUEEZEBERT_START_DOCSTRING)
+@register(backends=("torch",))
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -725,6 +729,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     """,
     SQUEEZEBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -824,6 +829,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     """,
     SQUEEZEBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -917,6 +923,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     """,
     SQUEEZEBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -995,6 +1002,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
      """,
     SQUEEZEBERT_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1085,3 +1093,13 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "SqueezeBertPreTrainedModel",
+    "SqueezeBertModel",
+    "SqueezeBertForMaskedLM",
+    "SqueezeBertForSequenceClassification",
+    "SqueezeBertForMultipleChoice",
+    "SqueezeBertForTokenClassification",
+    "SqueezeBertForQuestionAnswering"
+]

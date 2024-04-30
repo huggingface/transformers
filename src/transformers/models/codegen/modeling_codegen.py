@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_codegen import CodeGenConfig
 
 
@@ -292,6 +293,7 @@ class CodeGenBlock(nn.Module):
         return outputs  # hidden_states, present, (attentions)
 
 
+@register(backends=("torch",))
 class CodeGenPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -389,6 +391,7 @@ CODEGEN_INPUTS_DOCSTRING = r"""
     "The bare CodeGen Model transformer outputting raw hidden-states without any specific head on top.",
     CODEGEN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CodeGenModel(CodeGenPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -574,6 +577,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
     """,
     CODEGEN_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class CodeGenForCausalLM(CodeGenPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -722,3 +726,9 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
+
+__all__ = [
+    "CodeGenPreTrainedModel",
+    "CodeGenModel",
+    "CodeGenForCausalLM"
+]

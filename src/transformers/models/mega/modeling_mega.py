@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_mega import MegaConfig
 
 
@@ -1325,6 +1326,7 @@ class MegaPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class MegaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1441,6 +1443,7 @@ MEGA_INPUTS_DOCSTRING = r"""
     "The bare MEGA Model transformer outputting raw hidden-states without any specific head on top.",
     MEGA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegaModel(MegaPreTrainedModel):
     """
 
@@ -1641,6 +1644,7 @@ class MegaModel(MegaPreTrainedModel):
 @add_start_docstrings(
     """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
+@register(backends=("torch",))
 class MegaForCausalLM(MegaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1802,6 +1806,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
 
 
 @add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
+@register(backends=("torch",))
 class MegaForMaskedLM(MegaPreTrainedModel):
     _tied_weights_keys = ["mlm_head.weight"]
 
@@ -1906,6 +1911,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     """,
     MEGA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegaForSequenceClassification(MegaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1997,6 +2003,7 @@ class MegaForSequenceClassification(MegaPreTrainedModel):
     """,
     MEGA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegaForMultipleChoice(MegaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2082,6 +2089,7 @@ class MegaForMultipleChoice(MegaPreTrainedModel):
     """,
     MEGA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegaForTokenClassification(MegaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2182,6 +2190,7 @@ class MegaClassificationHead(nn.Module):
     """,
     MEGA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class MegaForQuestionAnswering(MegaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2268,3 +2277,14 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "MegaPreTrainedModel",
+    "MegaModel",
+    "MegaForCausalLM",
+    "MegaForMaskedLM",
+    "MegaForSequenceClassification",
+    "MegaForMultipleChoice",
+    "MegaForTokenClassification",
+    "MegaForQuestionAnswering"
+]

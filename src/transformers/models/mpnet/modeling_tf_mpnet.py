@@ -54,6 +54,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_mpnet import MPNetConfig
 
 
@@ -63,6 +64,7 @@ _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
 
 
+@register(backends=("tf",))
 class TFMPNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -750,6 +752,7 @@ MPNET_INPUTS_DOCSTRING = r"""
     "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
     MPNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMPNetModel(TFMPNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -857,6 +860,7 @@ class TFMPNetLMHead(keras.layers.Layer):
 
 
 @add_start_docstrings("""MPNet Model with a `language modeling` head on top.""", MPNET_START_DOCSTRING)
+@register(backends=("tf",))
 class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
@@ -982,6 +986,7 @@ class TFMPNetClassificationHead(keras.layers.Layer):
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
@@ -1065,6 +1070,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1163,6 +1169,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
        """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
@@ -1249,6 +1256,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
     """,
     MPNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLoss):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
@@ -1339,3 +1347,13 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFMPNetPreTrainedModel",
+    "TFMPNetModel",
+    "TFMPNetForMaskedLM",
+    "TFMPNetForSequenceClassification",
+    "TFMPNetForMultipleChoice",
+    "TFMPNetForTokenClassification",
+    "TFMPNetForQuestionAnswering"
+]

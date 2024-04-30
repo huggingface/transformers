@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class BioGptConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BioGptModel`]. It is used to instantiate an
@@ -129,3 +131,7 @@ class BioGptConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+__all__ = [
+    "BioGptConfig"
+]

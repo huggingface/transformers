@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -40,6 +41,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
+@register(backends=("sentencepiece",))
 class XLMProphetNetTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
@@ -321,3 +323,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
+
+__all__ = [
+    "XLMProphetNetTokenizer"
+]

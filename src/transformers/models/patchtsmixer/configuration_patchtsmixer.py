@@ -18,11 +18,13 @@ from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PatchTSMixerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PatchTSMixerModel`]. It is used to instantiate a
@@ -230,3 +232,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.unmasked_channel_indices = unmasked_channel_indices
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
+
+__all__ = [
+    "PatchTSMixerConfig"
+]

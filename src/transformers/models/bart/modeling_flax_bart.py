@@ -46,6 +46,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_bart import BartConfig
 
 
@@ -902,6 +903,7 @@ class FlaxBartModule(nn.Module):
         )
 
 
+@register(backends=("flax",))
 class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "model"
@@ -1238,6 +1240,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
     "The bare Bart Model transformer outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBartModel(FlaxBartPreTrainedModel):
     config: BartConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1322,6 +1325,7 @@ class FlaxBartForConditionalGenerationModule(nn.Module):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
+@register(backends=("flax",))
 class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
     module_class = FlaxBartForConditionalGenerationModule
     dtype: jnp.dtype = jnp.float32
@@ -1635,6 +1639,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBartForSequenceClassification(FlaxBartPreTrainedModel):
     module_class = FlaxBartForSequenceClassificationModule
     dtype = jnp.float32
@@ -1721,6 +1726,7 @@ class FlaxBartForQuestionAnsweringModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBartForQuestionAnswering(FlaxBartPreTrainedModel):
     module_class = FlaxBartForQuestionAnsweringModule
     dtype = jnp.float32
@@ -1734,6 +1740,7 @@ append_call_sample_docstring(
 )
 
 
+@register(backends=("flax",))
 class FlaxBartDecoderPreTrainedModel(FlaxPreTrainedModel):
     config_class = BartConfig
     base_model_prefix: str = "model"
@@ -1957,6 +1964,7 @@ class FlaxBartForCausalLMModule(nn.Module):
     """,
     BART_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxBartForCausalLM(FlaxBartDecoderPreTrainedModel):
     module_class = FlaxBartForCausalLMModule
 
@@ -1993,3 +2001,13 @@ append_call_sample_docstring(
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+__all__ = [
+    "FlaxBartPreTrainedModel",
+    "FlaxBartModel",
+    "FlaxBartForConditionalGeneration",
+    "FlaxBartForSequenceClassification",
+    "FlaxBartForQuestionAnswering",
+    "FlaxBartDecoderPreTrainedModel",
+    "FlaxBartForCausalLM"
+]

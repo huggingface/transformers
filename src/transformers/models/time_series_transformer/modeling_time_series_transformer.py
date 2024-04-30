@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
@@ -628,6 +629,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         return outputs
 
 
+@register(backends=("torch",))
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config_class = TimeSeriesTransformerConfig
     base_model_prefix = "model"
@@ -1177,6 +1179,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     "The bare Time Series Transformer Model outputting raw hidden-states without any specific head on top.",
     TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
@@ -1438,6 +1441,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     "The Time Series Transformer Model with a distribution head on top for time-series forecasting.",
     TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
@@ -1779,3 +1783,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
+
+__all__ = [
+    "TimeSeriesTransformerPreTrainedModel",
+    "TimeSeriesTransformerModel",
+    "TimeSeriesTransformerForPrediction"
+]

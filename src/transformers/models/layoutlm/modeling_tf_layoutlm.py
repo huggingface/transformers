@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_layoutlm import LayoutLMConfig
 
 
@@ -930,6 +931,7 @@ class TFLayoutLMMainLayer(keras.layers.Layer):
                 self.pooler.build(None)
 
 
+@register(backends=("tf",))
 class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1048,6 +1050,7 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
     "The bare LayoutLM Model transformer outputting raw hidden-states without any specific head on top.",
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
     def __init__(self, config: LayoutLMConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1135,6 +1138,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top.""", LAYOUTLM_START_DOCSTRING)
+@register(backends=("tf",))
 class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1273,6 +1277,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
@@ -1403,6 +1408,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1538,6 +1544,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
     """,
     LAYOUTLM_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
@@ -1679,3 +1686,12 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+__all__ = [
+    "TFLayoutLMPreTrainedModel",
+    "TFLayoutLMModel",
+    "TFLayoutLMForMaskedLM",
+    "TFLayoutLMForSequenceClassification",
+    "TFLayoutLMForTokenClassification",
+    "TFLayoutLMForQuestionAnswering"
+]

@@ -21,11 +21,13 @@ from typing import Mapping
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ElectraConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ElectraModel`] or a [`TFElectraModel`]. It is
@@ -168,6 +170,7 @@ class ElectraConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
+@register()
 class ElectraOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -182,3 +185,8 @@ class ElectraOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+__all__ = [
+    "ElectraConfig",
+    "ElectraOnnxConfig"
+]

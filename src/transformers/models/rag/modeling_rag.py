@@ -26,6 +26,7 @@ from ...generation import BeamSearchScorer, GenerationConfig, LogitsProcessorLis
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
@@ -220,6 +221,7 @@ class RetrievAugLMOutput(ModelOutput):
     generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
+@register(backends=("torch",))
 class RagPreTrainedModel(PreTrainedModel):
     r"""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
@@ -483,6 +485,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
+@register(backends=("torch",))
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
@@ -733,6 +736,7 @@ class RagModel(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RagSequenceForGeneration(RagPreTrainedModel):
     def __init__(
         self,
@@ -1131,6 +1135,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     """,
     RAG_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RagTokenForGeneration(RagPreTrainedModel):
     def __init__(
         self,
@@ -1638,3 +1643,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         eps_i = epsilon / rag_logprobs.size(-1)
         loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
         return loss
+
+__all__ = [
+    "RagPreTrainedModel",
+    "RagModel",
+    "RagSequenceForGeneration",
+    "RagTokenForGeneration"
+]

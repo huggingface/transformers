@@ -53,6 +53,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -477,6 +478,7 @@ class TFDistilBertMainLayer(keras.layers.Layer):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
+@register(backends=("tf",))
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -576,6 +578,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertModel(TFDistilBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -664,6 +667,7 @@ class TFDistilBertLMHead(keras.layers.Layer):
     """DistilBert Model with a `masked language modeling` head on top.""",
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -763,6 +767,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -857,6 +862,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -937,6 +943,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1046,6 +1053,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     """,
     DISTILBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1133,3 +1141,13 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.dim])
+
+__all__ = [
+    "TFDistilBertPreTrainedModel",
+    "TFDistilBertModel",
+    "TFDistilBertForMaskedLM",
+    "TFDistilBertForSequenceClassification",
+    "TFDistilBertForTokenClassification",
+    "TFDistilBertForMultipleChoice",
+    "TFDistilBertForQuestionAnswering"
+]

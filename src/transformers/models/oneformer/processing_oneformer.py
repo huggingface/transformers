@@ -20,12 +20,14 @@ from typing import List
 
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available
+from ...utils.import_utils import register
 
 
 if is_torch_available():
     import torch
 
 
+@register()
 class OneFormerProcessor(ProcessorMixin):
     r"""
     Constructs an OneFormer processor which wraps [`OneFormerImageProcessor`] and
@@ -202,3 +204,7 @@ class OneFormerProcessor(ProcessorMixin):
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_panoptic_segmentation(*args, **kwargs)
+
+__all__ = [
+    "OneFormerProcessor"
+]

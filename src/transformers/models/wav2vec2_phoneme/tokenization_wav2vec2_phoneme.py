@@ -33,6 +33,7 @@ from ...utils import (
     requires_backends,
     to_py_obj,
 )
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -77,6 +78,7 @@ class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
     char_offsets: Union[List[ListOfDict], ListOfDict] = None
 
 
+@register()
 class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     """
     Constructs a Wav2Vec2PhonemeCTC tokenizer.
@@ -575,3 +577,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+__all__ = [
+    "Wav2Vec2PhonemeCTCTokenizer"
+]

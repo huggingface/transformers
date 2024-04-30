@@ -36,6 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_xmod import XmodConfig
 
 
@@ -634,6 +635,7 @@ class XmodPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class XmodPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -764,6 +766,7 @@ XMOD_INPUTS_DOCSTRING = r"""
     "The bare X-MOD Model transformer outputting raw hidden-states without any specific head on top.",
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodModel(XmodPreTrainedModel):
     """
 
@@ -956,6 +959,7 @@ class XmodModel(XmodPreTrainedModel):
     "X-MOD Model with a `language modeling` head on top for CLM fine-tuning.",
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForCausalLM(XmodPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1124,6 +1128,7 @@ class XmodForCausalLM(XmodPreTrainedModel):
     """X-MOD Model with a `language modeling` head on top.""",
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForMaskedLM(XmodPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
@@ -1251,6 +1256,7 @@ class XmodLMHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForSequenceClassification(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
@@ -1344,6 +1350,7 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForMultipleChoice(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->Xmod
     def __init__(self, config):
@@ -1433,6 +1440,7 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
     """,
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForTokenClassification(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
@@ -1535,6 +1543,7 @@ class XmodClassificationHead(nn.Module):
     """,
     XMOD_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class XmodForQuestionAnswering(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Xmod
     def __init__(self, config):
@@ -1640,3 +1649,14 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+__all__ = [
+    "XmodPreTrainedModel",
+    "XmodModel",
+    "XmodForCausalLM",
+    "XmodForMaskedLM",
+    "XmodForSequenceClassification",
+    "XmodForMultipleChoice",
+    "XmodForTokenClassification",
+    "XmodForQuestionAnswering"
+]

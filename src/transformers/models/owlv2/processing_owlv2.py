@@ -23,8 +23,10 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import is_flax_available, is_tf_available, is_torch_available
+from ...utils.import_utils import register
 
 
+@register()
 class Owlv2Processor(ProcessorMixin):
     r"""
     Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
@@ -188,3 +190,7 @@ class Owlv2Processor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = [
+    "Owlv2Processor"
+]

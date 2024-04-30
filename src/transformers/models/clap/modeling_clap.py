@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -1659,6 +1660,7 @@ class ClapTextPooler(nn.Module):
         return pooled_output
 
 
+@register(backends=("torch",))
 class ClapPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1692,6 +1694,7 @@ class ClapPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
 
+@register(backends=("torch",))
 class ClapAudioModel(ClapPreTrainedModel):
     config_class = ClapAudioConfig
     main_input_name = "input_features"
@@ -1750,6 +1753,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class ClapTextModel(ClapPreTrainedModel):
     """
 
@@ -1918,6 +1922,7 @@ class ClapTextModel(ClapPreTrainedModel):
 
 
 @add_start_docstrings(CLAP_START_DOCSTRING)
+@register(backends=("torch",))
 class ClapModel(ClapPreTrainedModel):
     config_class = ClapConfig
 
@@ -2151,6 +2156,7 @@ class ClapModel(ClapPreTrainedModel):
     """,
     CLAP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config_class = ClapTextConfig
 
@@ -2227,6 +2233,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
     """,
     CLAP_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config_class = ClapAudioConfig
     main_input_name = "input_features"
@@ -2298,3 +2305,12 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
             attentions=audio_outputs.attentions,
             hidden_states=audio_outputs.hidden_states,
         )
+
+__all__ = [
+    "ClapPreTrainedModel",
+    "ClapAudioModel",
+    "ClapTextModel",
+    "ClapModel",
+    "ClapTextModelWithProjection",
+    "ClapAudioModelWithProjection"
+]

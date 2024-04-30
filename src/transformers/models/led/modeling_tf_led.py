@@ -44,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_led import LEDConfig
 
 
@@ -1421,6 +1422,7 @@ class TFLEDDecoderLayer(keras.layers.Layer):
                 self.final_layer_norm.build([None, None, self.embed_dim])
 
 
+@register(backends=("tf",))
 class TFLEDPreTrainedModel(TFPreTrainedModel):
     config_class = LEDConfig
     base_model_prefix = "led"
@@ -2343,6 +2345,7 @@ class TFLEDMainLayer(keras.layers.Layer):
     "The bare LED Model outputting raw hidden-states without any specific head on top.",
     LED_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLEDModel(TFLEDPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2455,6 +2458,7 @@ class BiasLayer(keras.layers.Layer):
     "The LED Model with a language modeling head. Can be used for summarization.",
     LED_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"led.encoder.embed_tokens.weight",
@@ -2661,3 +2665,9 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         if getattr(self, "bias_layer", None) is not None:
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
+
+__all__ = [
+    "TFLEDPreTrainedModel",
+    "TFLEDModel",
+    "TFLEDForConditionalGeneration"
+]

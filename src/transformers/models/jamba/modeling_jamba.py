@@ -51,6 +51,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
     is_mamba_ssm_available,
+    register,
 )
 from .configuration_jamba import JambaConfig
 
@@ -1254,6 +1255,7 @@ JAMBA_START_DOCSTRING = r"""
     "The bare Jamba Model outputting raw hidden-states without any specific head on top.",
     JAMBA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class JambaPreTrainedModel(PreTrainedModel):
     config_class = JambaConfig
     base_model_prefix = "model"
@@ -1355,6 +1357,7 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
     JAMBA_START_DOCSTRING,
 )
 # Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->JAMBA, Mistral->Jamba
+@register(backends=("torch",))
 class JambaModel(JambaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
@@ -1548,6 +1551,7 @@ class JambaModel(JambaPreTrainedModel):
 
 
 # Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->JAMBA, Mixtral->Jamba
+@register(backends=("torch",))
 class JambaForCausalLM(JambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1786,6 +1790,7 @@ class JambaForCausalLM(JambaPreTrainedModel):
     JAMBA_START_DOCSTRING,
 )
 # Copied from transformers.models.mixtral.modeling_mixtral.MixtralForSequenceClassification with Mixtral->Jamba, MIXTRAL->JAMBA
+@register(backends=("torch",))
 class JambaForSequenceClassification(JambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1892,3 +1897,10 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+__all__ = [
+    "JambaPreTrainedModel",
+    "JambaModel",
+    "JambaForCausalLM",
+    "JambaForSequenceClassification"
+]

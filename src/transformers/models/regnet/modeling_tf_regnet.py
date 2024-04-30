@@ -34,6 +34,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list
 from ...utils import logging
+from ...utils.import_utils import register
 from .configuration_regnet import RegNetConfig
 
 
@@ -441,6 +442,7 @@ class TFRegNetMainLayer(keras.layers.Layer):
                 self.pooler.build((None, None, None, None))
 
 
+@register(backends=("tf",))
 class TFRegNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -485,6 +487,7 @@ REGNET_INPUTS_DOCSTRING = r"""
     "The bare RegNet model outputting raw features without any specific head on top.",
     REGNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRegNetModel(TFRegNetPreTrainedModel):
     def __init__(self, config: RegNetConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -542,6 +545,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
     """,
     REGNET_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: RegNetConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -606,3 +610,9 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier[1].name):
                 self.classifier[1].build([None, None, None, self.config.hidden_sizes[-1]])
+
+__all__ = [
+    "TFRegNetPreTrainedModel",
+    "TFRegNetModel",
+    "TFRegNetForImageClassification"
+]

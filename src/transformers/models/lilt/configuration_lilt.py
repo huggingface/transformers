@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class LiltConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LiltModel`]. It is used to instantiate a LiLT
@@ -126,3 +128,7 @@ class LiltConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+__all__ = [
+    "LiltConfig"
+]

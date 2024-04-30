@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ASTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ASTModel`]. It is used to instantiate an AST
@@ -118,3 +120,7 @@ class ASTConfig(PretrainedConfig):
         self.time_stride = time_stride
         self.max_length = max_length
         self.num_mel_bins = num_mel_bins
+
+__all__ = [
+    "ASTConfig"
+]

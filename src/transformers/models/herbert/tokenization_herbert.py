@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -274,6 +275,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+@register()
 class HerbertTokenizer(PreTrainedTokenizer):
     """
     Construct a BPE tokenizer for HerBERT.
@@ -642,3 +644,7 @@ class HerbertTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+__all__ = [
+    "HerbertTokenizer"
+]

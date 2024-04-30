@@ -21,11 +21,13 @@ from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class CodeGenConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CodeGenModel`]. It is used to instantiate a
@@ -146,6 +148,7 @@ class CodeGenConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
+@register()
 class CodeGenOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
@@ -225,3 +228,8 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+__all__ = [
+    "CodeGenConfig",
+    "CodeGenOnnxConfig"
+]

@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class FNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FNetModel`]. It is used to instantiate an FNet
@@ -114,3 +116,7 @@ class FNetConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_tpu_fourier_optimizations = use_tpu_fourier_optimizations
         self.tpu_short_seq_length = tpu_short_seq_length
+
+__all__ = [
+    "FNetConfig"
+]

@@ -16,11 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class UdopConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UdopForConditionalGeneration`]. It is used to
@@ -155,3 +157,7 @@ class UdopConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
+__all__ = [
+    "UdopConfig"
+]

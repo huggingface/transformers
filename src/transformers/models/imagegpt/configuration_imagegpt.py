@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Optional
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@register()
 class ImageGPTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
@@ -143,6 +145,7 @@ class ImageGPTConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
+@register()
 class ImageGPTOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -194,3 +197,8 @@ class ImageGPTOnnxConfig(OnnxConfig):
         inputs = dict(preprocessor(images=input_image, return_tensors=framework))
 
         return inputs
+
+__all__ = [
+    "ImageGPTConfig",
+    "ImageGPTOnnxConfig"
+]

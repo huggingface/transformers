@@ -20,6 +20,7 @@ from typing import Iterable, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
@@ -268,6 +269,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
+@register()
 class ProphetNetTokenizer(PreTrainedTokenizer):
     r"""
     Construct a ProphetNetTokenizer. Based on WordPiece.
@@ -497,3 +499,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
+
+__all__ = [
+    "ProphetNetTokenizer"
+]

@@ -14,61 +14,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {
-    "configuration_tvp": ["TvpConfig"],
-    "processing_tvp": ["TvpProcessor"],
-}
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_tvp"] = ["TvpImageProcessor"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tvp"] = [
-        "TvpModel",
-        "TvpPreTrainedModel",
-        "TvpForVideoGrounding",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_tvp import (
-        TvpConfig,
-    )
-    from .processing_tvp import TvpProcessor
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_tvp import TvpImageProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tvp import (
-            TvpForVideoGrounding,
-            TvpModel,
-            TvpPreTrainedModel,
-        )
-
+    from .configuration_tvp import *
+    from .image_processing_tvp import *
+    from .modeling_tvp import *
+    from .processing_tvp import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

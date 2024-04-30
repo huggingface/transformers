@@ -58,6 +58,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import register
 from .configuration_flaubert import FlaubertConfig
 
 
@@ -213,6 +214,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
+@register(backends=("tf",))
 class TFFlaubertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -241,6 +243,7 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
     "The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.",
     FLAUBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFlaubertModel(TFFlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -820,6 +823,7 @@ class TFFlaubertWithLMHeadModelOutput(ModelOutput):
     """,
     FLAUBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -917,6 +921,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("tf",))
 class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1007,6 +1012,7 @@ class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceC
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("tf",))
 class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1111,6 +1117,7 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("tf",))
 class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1204,6 +1211,7 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
+@register(backends=("tf",))
 class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1331,3 +1339,13 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
         if getattr(self, "logits_proj", None) is not None:
             with tf.name_scope(self.logits_proj.name):
                 self.logits_proj.build([None, None, self.config.num_labels])
+
+__all__ = [
+    "TFFlaubertPreTrainedModel",
+    "TFFlaubertModel",
+    "TFFlaubertWithLMHeadModel",
+    "TFFlaubertForSequenceClassification",
+    "TFFlaubertForQuestionAnsweringSimple",
+    "TFFlaubertForTokenClassification",
+    "TFFlaubertForMultipleChoice"
+]

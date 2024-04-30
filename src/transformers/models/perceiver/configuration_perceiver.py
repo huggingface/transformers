@@ -23,11 +23,13 @@ from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import TensorType, logging
+from ...utils.import_utils import register
 
 
 logger = logging.get_logger(__name__)
 
 
+@register()
 class PerceiverConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used to instantiate an
@@ -181,6 +183,7 @@ class PerceiverConfig(PretrainedConfig):
         self._label_trainable_num_channels = _label_trainable_num_channels
 
 
+@register()
 class PerceiverOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
@@ -239,3 +242,8 @@ class PerceiverOnnxConfig(OnnxConfig):
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+__all__ = [
+    "PerceiverConfig",
+    "PerceiverOnnxConfig"
+]

@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -531,6 +532,7 @@ RECURRENTGEMMA_START_DOCSTRING = r"""
     "The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.",
     RECURRENTGEMMA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
@@ -637,6 +639,7 @@ RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
     "The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.",
     RECURRENTGEMMA_START_DOCSTRING,
 )
+@register(backends=("torch",))
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`RecurrentGemmaDecoderLayer`]
@@ -778,6 +781,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
+@register(backends=("torch",))
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -937,3 +941,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
                 k_state = k_state.index_select(0, beam_idx.to(k_state.device))
                 v_state = v_state.index_select(0, beam_idx.to(v_state.device))
         return None
+
+__all__ = [
+    "RecurrentGemmaPreTrainedModel",
+    "RecurrentGemmaModel",
+    "RecurrentGemmaForCausalLM"
+]

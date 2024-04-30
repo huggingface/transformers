@@ -35,6 +35,7 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.import_utils import register
 from .configuration_wav2vec2 import Wav2Vec2Config
 
 
@@ -843,6 +844,7 @@ class FlaxWav2Vec2AdapterLayersCollection(nn.Module):
         return hidden_states
 
 
+@register(backends=("flax",))
 class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1052,6 +1054,7 @@ class FlaxWav2Vec2Module(nn.Module):
     "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxWav2Vec2Model(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2Module
 
@@ -1170,6 +1173,7 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
     "Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).",
     WAV_2_VEC_2_START_DOCSTRING,
 )
+@register(backends=("flax",))
 class FlaxWav2Vec2ForCTC(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForCTCModule
 
@@ -1316,6 +1320,7 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
 
 @add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@register(backends=("flax",))
 class FlaxWav2Vec2ForPreTraining(FlaxWav2Vec2PreTrainedModel):
     module_class = FlaxWav2Vec2ForPreTrainingModule
 
@@ -1423,3 +1428,10 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config
 )
+
+__all__ = [
+    "FlaxWav2Vec2PreTrainedModel",
+    "FlaxWav2Vec2Model",
+    "FlaxWav2Vec2ForCTC",
+    "FlaxWav2Vec2ForPreTraining"
+]
