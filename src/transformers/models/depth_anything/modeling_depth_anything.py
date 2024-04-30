@@ -256,7 +256,6 @@ class DepthAnythingPreTrainedModel(PreTrainedModel):
     base_model_prefix = "depth_anything"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DepthAnythingViTLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -365,6 +364,8 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     DEPTH_ANYTHING_START_DOCSTRING,
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
+    _no_split_modules = ["DPTViTEmbeddings"]
+
     def __init__(self, config):
         super().__init__(config)
 
