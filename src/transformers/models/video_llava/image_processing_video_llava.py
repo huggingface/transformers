@@ -302,6 +302,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        data = {}
         if videos is not None:
             pixel_values_videos = [
                 [
@@ -325,6 +326,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 ]
                 for video in videos
             ]
+            data["pixel_values_video"] = pixel_values_video
 
         if images is not None:
             pixel_values_images = [
@@ -346,25 +348,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
+            data["pixel_values_images"] = pixel_values_images
 
-        if images is not None and videos is not None:
-            encoded_outputs = BatchFeature(
-                data={
-                    "pixel_values_videos": pixel_values_videos,
-                    "pixel_values_images": pixel_values_images,
-                },
-                tensor_type=return_tensors,
-            )
-        elif images is not None:
-            encoded_outputs = BatchFeature(
-                data={"pixel_values_images": pixel_values_images},
-                tensor_type=return_tensors,
-            )
-        elif videos is not None:
-            encoded_outputs = BatchFeature(
-                data={"pixel_values_videos": pixel_values_videos},
-                tensor_type=return_tensors,
-            )
+        encoded_outputs = BatchFeature(data, tensor_type=return_tensors)
 
         return encoded_outputs
 
