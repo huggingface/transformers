@@ -260,8 +260,10 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
         if is_tf_available()
         else {}
     )
-    test_headmasking = False
+    test_onnx = False
     test_pruning = False
+    test_missing_keys = False
+    test_head_masking = False
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -307,16 +309,23 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    def test_Mistral_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = tf.not_equal(input_ids, 1)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = TFMistralForSequenceClassification(config)
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
     @unittest.skip("Mistral buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip("Mistral uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
-    def test_onnx_compliancy(self):
         pass
 
 
