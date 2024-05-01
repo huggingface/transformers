@@ -1347,11 +1347,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # TODO: maybe have a cleaner way to cast the input (from `Blip2Processor` side?)
-        expected_dtype = self.dtype
-        if encoder_hidden_states is not None and encoder_hidden_states.dtype != expected_dtype:
-            encoder_hidden_states = encoder_hidden_states.to(expected_dtype)
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -2354,21 +2349,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        if self.device != torch.device("cpu"):
-            with torch.cuda.amp.autocast(dtype=torch.float16):
-                vision_outputs = self.vision_model(
-                    pixel_values=pixel_values,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                    return_dict=return_dict,
-                )
-        else:
-            vision_outputs = self.vision_model(
-                pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         image_embeds = vision_outputs[0]
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
