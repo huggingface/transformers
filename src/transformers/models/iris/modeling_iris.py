@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Any
 
 import torch
 import torch.utils.checkpoint
@@ -56,7 +56,7 @@ class IrisOutput(ModelOutput):
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(3,)`, *optional*, returned when `labels` is provided):
+        losses (`Dict[torch.FloatTensor]` of shape `(1,)`):
             Agent's components' total loss (tokenizer, world model and actor critic).
         reconstructed_img (`torch.FloatTensor` of shape `(batch_size, time_steps, num_channels, height, width)`):
             Reconstructed image from input frame 
@@ -76,7 +76,7 @@ class IrisOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
+    losses: torch.FloatTensor = None
     reconstructed_img: torch.FloatTensor = None
     action_preds: torch.FloatTensor = None
     reward_preds: torch.FloatTensor = None
@@ -128,10 +128,18 @@ IRIS_START_DOCSTRING = r"""
 #world model:> tokens: torch.LongTensor((B, L(K+1)))(B: batch size, L: timesteps, K: number of tokens), past_keys_values: Optional[KeysValues] = None((n_layers,batch_size, num_heads, max_tokens, head_dim))
 #tokenizer:> x(B, T, C, H, W)(main): torch.Tensor, should_preprocess(main): bool = False, should_postprocess(main): bool = False
 IRIS_INPUTS_DOCSTRING = r"""
-    Args:
+    Args:#batch keys(): (['observations', 'actions', 'rewards', 'ends', 'mask_padding'])
         observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
-            The image observations in the first timestep (only one frame is used from the environment and 
+            The image observations from real environment in L timesteps (only one frame is used from the environment and 
             rest are imagined in the world model for training)
+        actions (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
+            The actions from real environment in L timesteps
+        rewards (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
+            The rewards from real environment in L timesteps
+        ends (`torch.IntTensor` of shape `(batch_size, timesteps)`):
+            The episode termination booleans from real environment in L timesteps
+        mask_padding (`torch.BoolTensor` of shape `(batch_size, 1)`):
+            The padding mask for input observations before putting them in encode and decoder
         should_preprocess (`bool`, *optional*):
             If set to `True`, `observations` are preprocessed before being passed to the model when encoding.
         should_postprocess(`bool`, *optional*):
@@ -1179,15 +1187,44 @@ class IrisModel(IrisPreTrainedModel):
     def forward_component(self, component: nn.Module, **kwargs):
         output1, output2, output3 = component.forward(**kwargs)
         return (output1, output2, output3)
+    
+    def component_losses(self, component: nn.Module, batch, grad_acc_steps: int, **kwargs_loss:Any):
+        losses = component.compute_loss(batch, **kwargs_loss) / grad_acc_steps
+        losses = losses.loss_total
+        return losses
         
-        
-                
-
+        # observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
+        #     The image observations from real environment in L timesteps (only one frame is used from the environment and 
+        #     rest are imagined in the world model for training)
+        # actions (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
+        #     The actions from real environment in L timesteps
+        # rewards (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
+        #     The rewards from real environment in L timesteps
+        # ends (`torch.IntTensor` of shape `(batch_size, timesteps)`):
+        #     The episode termination booleans from real environment in L timesteps
+        # mask_padding (`torch.BoolTensor` of shape `(batch_size, 1)`):
+        #     The padding mask for input observations before putting them in encode and decoder
+        # should_preprocess (`bool`, *optional*):
+        #     If set to `True`, `observations` are preprocessed before being passed to the model when encoding.
+        # should_postprocess(`bool`, *optional*):
+        #     If set to `True`, `reconstructions` are postprocessed after being passed to the model when decoding.
+        # output_attentions (`bool`, *optional*):
+        #     Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+        #     tensors for more detail.
+        # output_hidden_states (`bool`, *optional*):
+        #     Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+        #     more detail.
+        # return_dict (`bool`, *optional*):
+        #     Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
     @add_start_docstrings_to_model_forward(IRIS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=IrisOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         observations: Optional[torch.FloatTensor] = None,
+        actions: Optional[torch.FloatTensor] = None,
+        rewards: Optional[torch.FloatTensor] = None,
+        ends: Optional[torch.IntTensor] = None,
+        mask_padding: Optional[torch.BoolTensor] = None,
         should_preprocess: Optional[bool] = None,
         should_postprocess: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1231,7 +1268,18 @@ class IrisModel(IrisPreTrainedModel):
                     return_dict = True,
         ...     )
         ```"""
-        
+
+        cfg_tokenizer = self.cfg.training.tokenizer
+        cfg_world_model = self.cfg.training.world_model
+        cfg_actor_critic = self.cfg.training.actor_critic
+
+        batch = dict(observations = observations, actions = actions, rewards = rewards, ends = ends, mask_padding = mask_padding)
+        batch = batch.to(self.device)
+               
+        losses_tokenizer = self.component_losses(self.agent.tokenizer, batch, **cfg_tokenizer)
+        losses_world_model = self.component_losses(self.agent.world_model, batch, **cfg_world_model)
+        losses_actor_critic = self.component_losses(self.agent.actor_critic, batch, **cfg_actor_critic)
+        losses = dict(tokenizer_losses = losses_tokenizer, world_model_losses = losses_world_model, actor_critic_losses = losses_actor_critic)
 
         if should_preprocess == True:
             # preprocess observations
@@ -1243,14 +1291,16 @@ class IrisModel(IrisPreTrainedModel):
             obs_tokens = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
         act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
         tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+        #world_model_outputs = WorldModelOutput() instance
         world_model_outputs = self.forward_component(self.agent.world_model, tokens = tokens)[0]
 
         wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, self.cfg.common.device)
         obs = wm_env.reset_from_initial_observations(observations[:, -1])
+        #actor_critic_outputs = ActorCriticOutput() instance
         actor_critic_outputs = self.forward_component(self.agent.actor_critic, inputs = obs)[0]
 
         return IrisOutput(
-            loss = None,
+            losses = losses,
             reconstructed_img = tokenizer_outputs[2],
             action_preds = actor_critic_outputs.actions,
             reward_preds = actor_critic_outputs.rewards,
