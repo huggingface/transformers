@@ -341,7 +341,8 @@ exotic_models_job = CircleCIJob(
         "tests/models/udop",
         "tests/models/nougat",
     ],
-    pytest_num_workers=1,
+    pytest_num_workers=12,
+    parallelism=4,
     pytest_options={"durations": 100},
 )
 
