@@ -1581,7 +1581,7 @@ class GenerationMixin:
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
-            encoder_input_ids=inputs_tensor,
+            encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
             model_kwargs=model_kwargs,
