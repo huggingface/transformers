@@ -146,6 +146,8 @@ class CircleCIJob:
                     expanded_tests.append(test)
                 elif test == "tests/models":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                    for x in os.listdir(test):
+                        expanded_tests.extend([os.path.join(test, x,y) for y in os.listdir(os.path.join(test, x)) ])
                 elif test == "tests/pipelines":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
@@ -165,7 +167,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split $(find $(cat tests.txt) -type f) --split-by=timings) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt) --split-by=timings) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
