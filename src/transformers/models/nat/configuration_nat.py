@@ -16,17 +16,16 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
-NAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/nat-mini-in1k-224": "https://huggingface.co/shi-labs/nat-mini-in1k-224/resolve/main/config.json",
-    # See all Nat models at https://huggingface.co/models?filter=nat
-}
+
+from ..deprecated._archive_maps import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
-class NatConfig(PretrainedConfig):
+class NatConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NatModel`]. It is used to instantiate a Nat model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -43,9 +42,9 @@ class NatConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):
             Dimensionality of patch embedding.
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
+        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 5]`):
             Number of layers in each level of the encoder.
-        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
+        num_heads (`List[int]`, *optional*, defaults to `[2, 4, 8, 16]`):
             Number of attention heads in each layer of the Transformer encoder.
         kernel_size (`int`, *optional*, defaults to 7):
             Neighborhood Attention kernel size.
@@ -62,17 +61,22 @@ class NatConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        patch_norm (`bool`, *optional*, defaults to `True`):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         layer_scale_init_value (`float`, *optional*, defaults to 0.0):
             The initial value for the layer scale. Disabled if <=0.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
 
@@ -88,6 +92,7 @@ class NatConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "nat"
 
     attribute_map = {
@@ -109,12 +114,12 @@ class NatConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
         out_features=None,
-        **kwargs
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -131,7 +136,6 @@ class NatConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # we set the hidden_size attribute in order to make Nat work with VisionEncoderDecoderModel
@@ -139,12 +143,6 @@ class NatConfig(PretrainedConfig):
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.layer_scale_init_value = layer_scale_init_value
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        if out_features is not None:
-            if not isinstance(out_features, list):
-                raise ValueError("out_features should be a list")
-            for feature in out_features:
-                if feature not in self.stage_names:
-                    raise ValueError(
-                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
-                    )
-        self.out_features = out_features
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )

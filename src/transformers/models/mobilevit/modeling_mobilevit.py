@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileViTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
@@ -60,15 +59,7 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
+from ..deprecated._archive_maps import MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -627,15 +618,8 @@ class MobileViTEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                hidden_states = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                 )
             else:
@@ -660,6 +644,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -672,10 +657,6 @@ class MobileViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MobileViTEncoder):
-            module.gradient_checkpointing = value
 
 
 MOBILEVIT_START_DOCSTRING = r"""
@@ -692,7 +673,7 @@ MOBILEVIT_START_DOCSTRING = r"""
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileViTImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -745,7 +726,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -819,7 +799,6 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -1027,14 +1006,15 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileViTImageProcessor, MobileViTForSemanticSegmentation
-        >>> from PIL import Image
         >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoImageProcessor, MobileViTForSemanticSegmentation
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-small")
         >>> model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")

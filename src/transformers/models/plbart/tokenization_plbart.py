@@ -29,63 +29,6 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-c-cpp-defect-detection": (
-            "https://huggingface.co/uclanlp/plbart-c-cpp-defect-detection/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-cs-java": "https://huggingface.co/uclanlp/plbart-cs-java/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-en_XX-java": (
-            "https://huggingface.co/uclanlp/plbart-en_XX-java/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-go-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-go-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-java-clone-detection": (
-            "https://huggingface.co/uclanlp/plbart-java-clone-detection/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-java-cs": "https://huggingface.co/uclanlp/plbart-java-cs/resolve/main/sentencepiece.bpe.model",
-        "uclanlp/plbart-java-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-java-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-javascript-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-javascript-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-php-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-php-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-python-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-python-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-refine-java-medium": (
-            "https://huggingface.co/uclanlp/plbart-refine-java-medium/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-refine-java-small": (
-            "https://huggingface.co/uclanlp/plbart-refine-java-small/resolve/main/sentencepiece.bpe.model"
-        ),
-        "uclanlp/plbart-ruby-en_XX": (
-            "https://huggingface.co/uclanlp/plbart-ruby-en_XX/resolve/main/sentencepiece.bpe.model"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "uclanlp/plbart-base": 1024,
-    "uclanlp/plbart-c-cpp-defect-detection": 1024,
-    "uclanlp/plbart-cs-java": 1024,
-    "uclanlp/plbart-en_XX-java": 1024,
-    "uclanlp/plbart-go-en_XX": 1024,
-    "uclanlp/plbart-java-clone-detection": 1024,
-    "uclanlp/plbart-java-cs": 1024,
-    "uclanlp/plbart-java-en_XX": 1024,
-    "uclanlp/plbart-javascript-en_XX": 1024,
-    "uclanlp/plbart-php-en_XX": 1024,
-    "uclanlp/plbart-python-en_XX": 1024,
-    "uclanlp/plbart-refine-java-medium": 1024,
-    "uclanlp/plbart-refine-java-small": 1024,
-    "uclanlp/plbart-ruby-en_XX": 1024,
-}
 
 FAIRSEQ_LANGUAGE_CODES = {
     "base": ["__java__", "__python__", "__en_XX__"],
@@ -166,8 +109,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -189,29 +130,12 @@ class PLBartTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            language_codes=language_codes,
-            tokenizer_file=tokenizer_file,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
         src_lang = self._convert_lang_code_special_format(src_lang)
         tgt_lang = self._convert_lang_code_special_format(tgt_lang)
 
@@ -245,12 +169,12 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        _additional_special_tokens = list(self.lang_code_to_id.keys())
 
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
         if self.language_codes == "base":
@@ -261,6 +185,23 @@ class PLBartTokenizer(PreTrainedTokenizer):
         else:
             self._src_lang = src_lang if src_lang is not None else "__en_XX__"
             self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            language_codes=language_codes,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=_additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)

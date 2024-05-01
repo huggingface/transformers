@@ -12,14 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import unittest
+
+from huggingface_hub.utils import insecure_hashlib
 
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -36,19 +45,19 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = insecure_hashlib.md5(image.tobytes())
     return m.hexdigest()
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
+class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        depth_estimator = DepthEstimationPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor)
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -59,17 +68,19 @@ class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)}, outputs)
         import datasets
 
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
         outputs = depth_estimator(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                dataset[0]["file"],
+                dataset[0]["image"],
                 # LA
-                dataset[1]["file"],
+                dataset[1]["image"],
                 # L
-                dataset[2]["file"],
+                dataset[2]["image"],
             ]
         )
         self.assertEqual(

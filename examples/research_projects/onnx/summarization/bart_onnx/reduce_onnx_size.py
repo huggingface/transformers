@@ -5,7 +5,6 @@ Code to remove duplicate initializers to reduce ONNX model size.
 import os
 
 import numpy
-
 import onnx
 
 
@@ -43,8 +42,8 @@ def _graph_replace_input_with(graph_proto, name, new_name):
 
 
 def _remove_dup_initializers_from_model(model, model_without_ext, ind_to_replace):
-    inits_with_data = [i for i in model.graph.initializer]
-    inits = [i for i in model_without_ext.graph.initializer]
+    inits_with_data = list(model.graph.initializer)
+    inits = list(model_without_ext.graph.initializer)
     for i, ref_i in ind_to_replace:
         assert inits_with_data[i].name == inits[i].name
         assert inits_with_data[ref_i].name == inits[ref_i].name
@@ -70,7 +69,7 @@ def remove_dup_initializers(onnx_file_path):
 
     model = onnx.load(os.path.join(model_file_folder, model_file_name))
 
-    inits = [i for i in model.graph.initializer]
+    inits = list(model.graph.initializer)
 
     dup_set = set()
     dup_map = {}

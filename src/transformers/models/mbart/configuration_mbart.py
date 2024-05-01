@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/config.json",
-    # See all MBART models at https://huggingface.co/models?filter=mbart
-}
-
 
 class MBartConfig(PretrainedConfig):
     r"""
@@ -104,6 +99,7 @@ class MBartConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -134,7 +130,7 @@ class MBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

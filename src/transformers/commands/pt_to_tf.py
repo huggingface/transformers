@@ -17,10 +17,9 @@ import os
 from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
+import huggingface_hub
 import numpy as np
 from packaging import version
-
-import huggingface_hub
 
 from .. import (
     FEATURE_EXTRACTOR_MAPPING,
@@ -69,6 +68,7 @@ def convert_command_factory(args: Namespace):
         args.no_pr,
         args.push,
         args.extra_commit_description,
+        args.override_model_class,
     )
 
 
@@ -127,6 +127,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             default="",
             help="Optional additional commit description to use when opening a PR (e.g. to tag the owner).",
         )
+        train_parser.add_argument(
+            "--override-model-class",
+            type=str,
+            default=None,
+            help="If you think you know better than the auto-detector, you can specify the model class here. "
+            "Can be either an AutoModel class or a specific model class like BertForSequenceClassification.",
+        )
         train_parser.set_defaults(func=convert_command_factory)
 
     @staticmethod
@@ -145,7 +152,6 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # 2. For each output attribute, computes the difference
         def _find_pt_tf_differences(pt_out, tf_out, differences, attr_name=""):
-
             # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
             # recursivelly, keeping the name of the attribute.
             if isinstance(pt_out, torch.Tensor):
@@ -177,7 +183,8 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         no_pr: bool,
         push: bool,
         extra_commit_description: str,
-        *args
+        override_model_class: str,
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
@@ -187,8 +194,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self._no_pr = no_pr
         self._push = push
         self._extra_commit_description = extra_commit_description
+        self._override_model_class = override_model_class
 
-    def get_inputs(self, pt_model, config):
+    def get_inputs(self, pt_model, tf_dummy_inputs, config):
         """
         Returns the right inputs for the model, based on its signature.
         """
@@ -247,7 +255,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         tf_input = processor(**processor_inputs, return_tensors="tf")
 
         # Extra input requirements, in addition to the input modality
-        if config.is_encoder_decoder or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder")):
+        if (
+            config.is_encoder_decoder
+            or (hasattr(pt_model, "encoder") and hasattr(pt_model, "decoder"))
+            or "decoder_input_ids" in tf_dummy_inputs
+        ):
             decoder_input_ids = np.asarray([[1], [1]], dtype=int) * (pt_model.config.decoder_start_token_id or 0)
             pt_input.update({"decoder_input_ids": torch.tensor(decoder_input_ids)})
             tf_input.update({"decoder_input_ids": tf.convert_to_tensor(decoder_input_ids)})
@@ -271,7 +283,20 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         # Load config and get the appropriate architecture -- the latter is needed to convert the head's weights
         config = AutoConfig.from_pretrained(self._local_dir)
         architectures = config.architectures
-        if architectures is None:  # No architecture defined -- use auto classes
+        if self._override_model_class is not None:
+            if self._override_model_class.startswith("TF"):
+                architectures = [self._override_model_class[2:]]
+            else:
+                architectures = [self._override_model_class]
+            try:
+                pt_class = getattr(import_module("transformers"), architectures[0])
+            except AttributeError:
+                raise ValueError(f"Model class {self._override_model_class} not found in transformers.")
+            try:
+                tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
+            except AttributeError:
+                raise ValueError(f"TF model class TF{self._override_model_class} not found in transformers.")
+        elif architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
             self._logger.warning("No detected architecture, using AutoModel/TFAutoModel")
@@ -285,19 +310,24 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             except AttributeError:
                 raise AttributeError(f"The TensorFlow equivalent of {architectures[0]} doesn't exist in transformers.")
 
-        # Load models and acquire a basic input compatible with the model.
+        # Check the TF dummy inputs to see what keys we need in the forward pass
+        tf_from_pt_model = tf_class.from_config(config)
+        tf_dummy_inputs = tf_from_pt_model.dummy_inputs
+
+        del tf_from_pt_model  # Try to keep only one model in memory at a time
+
+        # Load the model and get some basic inputs
         pt_model = pt_class.from_pretrained(self._local_dir)
         pt_model.eval()
 
-        tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
-        pt_input, tf_input = self.get_inputs(pt_model, config)
+        pt_input, tf_input = self.get_inputs(pt_model, tf_dummy_inputs, config)
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_input, output_hidden_states=True)
         del pt_model  # will no longer be used, and may have a large memory footprint
 
         tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
-        tf_from_pt_outputs = tf_from_pt_model(**tf_input, output_hidden_states=True)
+        tf_from_pt_outputs = tf_from_pt_model(**tf_input, output_hidden_states=True, training=False)
 
         # Confirms that cross loading PT weights into TF worked.
         crossload_differences = self.find_pt_tf_differences(pt_outputs, tf_from_pt_outputs)

@@ -33,11 +33,8 @@ from .configuration_jukebox import ATTENTION_PATTERNS, JukeboxConfig, JukeboxPri
 
 logger = logging.get_logger(__name__)
 
-JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/jukebox-1b-lyrics",
-    "openai/jukebox-5b-lyrics",
-    # See all Jukebox models at https://huggingface.co/models?filter=jukebox
-]
+
+from ..deprecated._archive_maps import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
@@ -71,7 +68,7 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
         sorted_indices_to_remove[..., 0] = 0
 
         # indices_to_remove = sorted_indices[sorted_indices_to_remove]
-        indices_to_remove = torch.zeros_like(logits, dtype=torch.uint8).scatter_(
+        indices_to_remove = torch.zeros_like(logits, dtype=torch.bool).scatter_(
             dim=-1, index=sorted_indices, src=sorted_indices_to_remove
         )
         logits[indices_to_remove] = filter_value
@@ -138,7 +135,7 @@ def get_alignment(music_tokens, labels, prior, config):
 
     hop_length = int(config.hop_fraction[-level - 1] * prior.n_ctx)
     alignment_head, alignment_layer = config.prior_alignment_head[0], config.prior_alignment_layer[0]
-    attn_layers = set([alignment_layer])
+    attn_layers = {alignment_layer}
     alignment_hops = {}
     indices_hops = {}
     for start in tqdm(get_starts(total_length, n_ctx, hop_length), desc="Computing lyric to music alignment "):
@@ -436,7 +433,7 @@ class JukeboxBottleneckBlock(nn.Module):
             used_curr = (_codebook_elem >= self.threshold).sum()
             usage = torch.sum(usage)
             dk = torch.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
-        return dict(entropy=entropy, used_curr=used_curr, usage=usage, dk=dk)
+        return {"entropy": entropy, "used_curr": used_curr, "usage": usage, "dk": dk}
 
     def preprocess(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1).contiguous()
@@ -602,7 +599,6 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
 class JukeboxVQVAE(PreTrainedModel):
     config_class = JukeboxVQVAEConfig
     base_model_prefix = "vqvae"
-    _keys_to_ignore_on_load_unexpected = [r"priors"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):  # embed_tokens
@@ -1625,7 +1621,6 @@ class JukeboxMusicTokenConditioner(nn.Module):
     """
 
     def __init__(self, config, level):
-
         super().__init__()
         self.embed_tokens = nn.Embedding(config.music_vocab_size, config.hidden_size)
         config.embed_dim = config.music_vocab_size  # setting correct argument for the `JukeboxDecoder`
@@ -1793,7 +1788,6 @@ class JukeboxPrior(PreTrainedModel):
     """
 
     config_class = JukeboxPriorConfig
-    _keys_to_ignore_on_load_unexpected = ["vqvae"]
 
     def _init_weights(self, module):
         init_scale = self.config.init_scale
@@ -1833,7 +1827,6 @@ class JukeboxPrior(PreTrainedModel):
         self.level = level if level is not None else config.level
 
         self.base_model_prefix = f"priors.{self.level}"
-        self._keys_to_ignore_on_load_unexpected += [r"priors.[^%d]." % self.level]
 
         self.n_ctx = config.n_ctx
 
@@ -2214,11 +2207,11 @@ class JukeboxPrior(PreTrainedModel):
         loss = self.encoder_loss_fraction * encoder_loss * self.nb_relevant_lyric_tokens / self.total_loss_dims
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
-        metrics = dict(
-            bpd=next_token_prediction_loss.clone().detach(),
-            encoder_loss=encoder_loss.clone().detach(),
-            next_token_prediction_loss=next_token_prediction_loss.clone().detach(),
-        )
+        metrics = {
+            "bpd": next_token_prediction_loss.clone().detach(),
+            "encoder_loss": encoder_loss.clone().detach(),
+            "next_token_prediction_loss": next_token_prediction_loss.clone().detach(),
+        }
         if get_preds:
             metrics["preds"] = preds.clone().detach()
         if get_attn_weights:
@@ -2501,11 +2494,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
         >>> import torch
 
         >>> metas = dict(artist="Zac Brown Band", genres="Country", lyrics="I met a traveller from an antique land")
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
 
         >>> labels = tokenizer(**metas)["input_ids"]
@@ -2534,11 +2527,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # total length of the signal, might be bit different from the actual generated length
         self.total_length = total_length
         for level in sample_levels:
-            sampling_kwargs = dict(
-                temp=0.99 if level == len(self.priors) - 1 else sampling_temperature,
-                chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
-            )
+            sampling_kwargs = {
+                "temp": 0.99 if level == len(self.priors) - 1 else sampling_temperature,
+                "chunk_size": chunk_size,
+                "sample_tokens": sample_tokens,
+            }
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
 
             total_token_to_sample = total_length // self.priors[level].raw_to_tokens
@@ -2594,10 +2587,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
 
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
         >>> lyrics = "Hey, are you awake? Can you talk to me?"
         >>> artist = "Zac Brown Band"

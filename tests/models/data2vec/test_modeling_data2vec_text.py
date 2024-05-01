@@ -23,6 +23,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -38,7 +39,6 @@ if is_torch_available():
         Data2VecTextModel,
     )
     from transformers.models.data2vec.modeling_data2vec_text import (
-        DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
         Data2VecTextForTextEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -56,7 +56,7 @@ class Data2VecTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -359,7 +359,7 @@ class Data2VecTextModelTester:
 
 
 @require_torch
-class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecTextForCausalLM,
@@ -374,6 +374,20 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         else ()
     )
     all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Data2VecTextModel,
+            "fill-mask": Data2VecTextForMaskedLM,
+            "question-answering": Data2VecTextForQuestionAnswering,
+            "text-classification": Data2VecTextForSequenceClassification,
+            "text-generation": Data2VecTextForCausalLM,
+            "token-classification": Data2VecTextForTokenClassification,
+            "zero-shot": Data2VecTextForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)
@@ -455,9 +469,9 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-text-base"
+        model = Data2VecTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression

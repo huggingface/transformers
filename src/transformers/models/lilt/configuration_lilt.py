@@ -20,11 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "SCUT-DLVCLab/lilt-roberta-en-base": (
-        "https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LiltConfig(PretrainedConfig):
@@ -90,6 +87,7 @@ class LiltConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "lilt"
 
     def __init__(
@@ -111,7 +109,7 @@ class LiltConfig(PretrainedConfig):
         classifier_dropout=None,
         channel_shrink_ratio=4,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

@@ -41,6 +41,7 @@ class MarkupLMProcessor(ProcessorMixin):
         parse_html (`bool`, *optional*, defaults to `True`):
             Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
+
     feature_extractor_class = "MarkupLMFeatureExtractor"
     tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
     parse_html = True
@@ -66,7 +67,7 @@ class MarkupLMProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it

@@ -3,6 +3,6 @@ datasets >= 1.0.1
 psutil >= 5.7.0
 torch >= 1.4.0
 ray >= 1.10.0
-pytorch-lightning >= 1.5.10
+pytorch-lightning >= 1.5.10, <=1.6.0
 transformers
 GitPython

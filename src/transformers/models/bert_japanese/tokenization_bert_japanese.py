@@ -22,7 +22,7 @@ import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...utils import is_sentencepiece_available, logging
+from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
 
 
 if is_sentencepiece_available():
@@ -35,51 +35,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "spm_file": "spiece.model"}
 
 SPIECE_UNDERLINE = "▁"
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/vocab.txt",
-        "cl-tohoku/bert-base-japanese-whole-word-masking": (
-            "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/vocab.txt"
-        ),
-        "cl-tohoku/bert-base-japanese-char": (
-            "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/vocab.txt"
-        ),
-        "cl-tohoku/bert-base-japanese-char-whole-word-masking": (
-            "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "cl-tohoku/bert-base-japanese": 512,
-    "cl-tohoku/bert-base-japanese-whole-word-masking": 512,
-    "cl-tohoku/bert-base-japanese-char": 512,
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "cl-tohoku/bert-base-japanese": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "wordpiece",
-    },
-    "cl-tohoku/bert-base-japanese-whole-word-masking": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "wordpiece",
-    },
-    "cl-tohoku/bert-base-japanese-char": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "character",
-    },
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": {
-        "do_lower_case": False,
-        "word_tokenizer_type": "mecab",
-        "subword_tokenizer_type": "character",
-    },
-}
 
 
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
@@ -136,9 +91,6 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -158,27 +110,8 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         mecab_kwargs=None,
         sudachi_kwargs=None,
         jumanpp_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            spm_file=spm_file,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            do_lower_case=do_lower_case,
-            do_word_tokenize=do_word_tokenize,
-            do_subword_tokenize=do_subword_tokenize,
-            word_tokenizer_type=word_tokenizer_type,
-            subword_tokenizer_type=subword_tokenizer_type,
-            never_split=never_split,
-            mecab_kwargs=mecab_kwargs,
-            sudachi_kwargs=sudachi_kwargs,
-            jumanpp_kwargs=jumanpp_kwargs,
-            **kwargs,
-        )
-
         if subword_tokenizer_type == "sentencepiece":
             if not os.path.isfile(spm_file):
                 raise ValueError(
@@ -226,13 +159,31 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         self.subword_tokenizer_type = subword_tokenizer_type
         if do_subword_tokenize:
             if subword_tokenizer_type == "wordpiece":
-                self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+                self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
             elif subword_tokenizer_type == "character":
-                self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+                self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=str(unk_token))
             elif subword_tokenizer_type == "sentencepiece":
-                self.subword_tokenizer = SentencepieceTokenizer(vocab=self.spm_file, unk_token=self.unk_token)
+                self.subword_tokenizer = SentencepieceTokenizer(vocab=self.spm_file, unk_token=str(unk_token))
             else:
                 raise ValueError(f"Invalid subword_tokenizer_type '{subword_tokenizer_type}' is specified.")
+        super().__init__(
+            spm_file=spm_file,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            do_lower_case=do_lower_case,
+            do_word_tokenize=do_word_tokenize,
+            do_subword_tokenize=do_subword_tokenize,
+            word_tokenizer_type=word_tokenizer_type,
+            subword_tokenizer_type=subword_tokenizer_type,
+            never_split=never_split,
+            mecab_kwargs=mecab_kwargs,
+            sudachi_kwargs=sudachi_kwargs,
+            jumanpp_kwargs=jumanpp_kwargs,
+            **kwargs,
+        )
 
     @property
     def do_lower_case(self):
@@ -543,6 +494,7 @@ class SudachiTokenizer:
         sudachi_config_path=None,
         sudachi_resource_dir=None,
         sudachi_dict_type="core",
+        sudachi_projection=None,
     ):
         """
         Constructs a SudachiTokenizer.
@@ -558,11 +510,13 @@ class SudachiTokenizer:
             **trim_whitespace**: (*optional*) boolean (default False)
                 Whether to trim all whitespace, tab, newline from tokens.
             **sudachi_split_mode**: (*optional*) string
-                Split mode of sudachi, choose from "A", "B", "C".
+                Split mode of sudachi, choose from `["A", "B", "C"]`.
             **sudachi_config_path**: (*optional*) string
             **sudachi_resource_dir**: (*optional*) string
             **sudachi_dict_type**: (*optional*) string
-                dict type of sudachi, choose from "small", "core", "full".
+                dict type of sudachi, choose from `["small", "core", "full"]`.
+            **sudachi_projection**: (*optional*) string
+                Word projection mode of sudachi, choose from `["surface", "normalized", "reading", "dictionary", "dictionary_and_surface", "normalized_and_surface", "normalized_nouns"]`.
         """
 
         self.do_lower_case = do_lower_case
@@ -587,9 +541,17 @@ class SudachiTokenizer:
         else:
             raise ValueError("Invalid sudachi_split_mode is specified.")
 
-        self.sudachi = dictionary.Dictionary(
+        self.projection = sudachi_projection
+
+        sudachi_dictionary = dictionary.Dictionary(
             config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
-        ).create(self.split_mode)
+        )
+        if is_sudachi_projection_available():
+            self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
+        elif self.projection is not None:
+            raise ImportError("You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs.")
+        else:
+            self.sudachi = sudachi_dictionary.create(self.split_mode)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
@@ -748,20 +710,30 @@ class BasicTokenizer(object):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=True,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.do_split_on_punc = do_split_on_punc
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -780,7 +752,9 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -808,7 +782,7 @@ class BasicTokenizer(object):
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
         chars = list(text)
         i = 0

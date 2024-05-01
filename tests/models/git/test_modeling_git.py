@@ -17,6 +17,7 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -24,6 +25,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,7 +33,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, GitForCausalLM, GitModel, GitVisionModel
-    from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -49,7 +50,7 @@ class GitVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -172,6 +173,18 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="GitVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -182,9 +195,9 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GitVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/git-base"
+        model = GitVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class GitModelTester:
@@ -201,7 +214,7 @@ class GitModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -266,6 +279,10 @@ class GitModelTester:
                 "num_channels": self.num_channels,
                 "image_size": self.image_size,
                 "patch_size": self.patch_size,
+                "hidden_size": self.hidden_size,
+                "projection_dim": 32,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
             },
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -339,6 +356,24 @@ class GitModelTester:
 
         self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
 
+    def _test_batched_generate_captioning(self, config, input_ids, input_mask, pixel_values):
+        model = GitForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # generate
+        generated_ids = model.generate(
+            input_ids=None,  # captioning -> no input_ids
+            attention_mask=None,
+            pixel_values=pixel_values,
+            do_sample=False,
+            max_length=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+
+        self.parent.assertEqual(generated_ids.shape, (self.batch_size * 2, 20))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -359,10 +394,14 @@ class GitModelTester:
 
 
 @require_torch
-class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GitModel, "image-to-text": GitForCausalLM, "text-generation": GitForCausalLM}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_torchscript = False
 
@@ -398,6 +437,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_beam_search_generate(*config_and_inputs)
 
+    def test_batched_generate_captioning(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester._test_batched_generate_captioning(*config_and_inputs)
+
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
@@ -406,9 +449,9 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/git-base"
+        model = GitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_beam_search_generate_dict_outputs_use_cache(self):
@@ -467,7 +510,7 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, 9))
         self.assertEqual(outputs.sequences.shape, expected_shape)
-        self.assertEquals(generated_caption, "two cats laying on a pink blanket")
+        self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
         expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
@@ -494,4 +537,22 @@ class GitModelIntegrationTest(unittest.TestCase):
 
         expected_shape = torch.Size((1, 15))
         self.assertEqual(generated_ids.shape, expected_shape)
-        self.assertEquals(generated_caption, "what does the front of the bus say at the top? special")
+        self.assertEqual(generated_caption, "what does the front of the bus say at the top? special")
+
+    def test_batched_generation(self):
+        processor = GitProcessor.from_pretrained("microsoft/git-base-coco")
+        model = GitForCausalLM.from_pretrained("microsoft/git-base-coco")
+        model.to(torch_device)
+
+        # create batch of size 2
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=[image, image], return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # we have to prepare `input_ids` with the same batch size as `pixel_values`
+        start_token_id = model.config.bos_token_id
+        input_ids = torch.tensor([[start_token_id], [start_token_id]], device=torch_device)
+        generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
+        generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)

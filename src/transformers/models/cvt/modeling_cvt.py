@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "CvtConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
@@ -46,15 +45,7 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/cvt-13"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/cvt-13",
-    "microsoft/cvt-13-384",
-    "microsoft/cvt-13-384-22k",
-    "microsoft/cvt-21",
-    "microsoft/cvt-21-384",
-    "microsoft/cvt-21-384-22k",
-    # See all Cvt models at https://huggingface.co/models?filter=cvt
-]
+from ..deprecated._archive_maps import CVT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -75,11 +66,11 @@ class BaseModelOutputWithCLSToken(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     cls_token_value: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -213,7 +204,7 @@ class CvtSelfAttention(nn.Module):
         qkv_bias,
         attention_drop_rate,
         with_cls_token=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.scale = embed_dim**-0.5
@@ -451,11 +442,7 @@ class CvtStage(nn.Module):
         self.config = config
         self.stage = stage
         if self.config.cls_token[self.stage]:
-            self.cls_token = nn.Parameter(
-                nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=config.initializer_range
-                )
-            )
+            self.cls_token = nn.Parameter(torch.randn(1, 1, self.config.embed_dim[-1]))
 
         self.embedding = CvtEmbeddings(
             patch_size=config.patch_sizes[self.stage],
@@ -547,6 +534,7 @@ class CvtPreTrainedModel(PreTrainedModel):
     config_class = CvtConfig
     base_model_prefix = "cvt"
     main_input_name = "pixel_values"
+    _no_split_modules = ["CvtLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -557,6 +545,11 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, CvtStage):
+            if self.config.cls_token[module.stage]:
+                module.cls_token.data = nn.init.trunc_normal_(
+                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                )
 
 
 CVT_START_DOCSTRING = r"""
@@ -573,7 +566,7 @@ CVT_START_DOCSTRING = r"""
 CVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CvtImageProcessor`]. See [`CvtImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`CvtImageProcessor.__call__`]
             for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -604,7 +597,6 @@ class CvtModel(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCLSToken,
         config_class=_CONFIG_FOR_DOC,
@@ -617,7 +609,6 @@ class CvtModel(CvtPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCLSToken]:
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -667,7 +658,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/config.json",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
-}
+
+from ..deprecated._archive_maps import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PegasusConfig(PretrainedConfig):
@@ -97,6 +95,7 @@ class PegasusConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -126,7 +125,7 @@ class PegasusConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         forced_eos_token_id=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

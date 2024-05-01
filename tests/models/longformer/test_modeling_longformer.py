@@ -21,6 +21,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -49,7 +50,7 @@ class LongformerModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -296,7 +297,7 @@ class LongformerModelTester:
 
 
 @require_torch
-class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
+class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
     test_torchscript = False
 
@@ -312,6 +313,37 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongformerModel,
+            "fill-mask": LongformerForMaskedLM,
+            "question-answering": LongformerForQuestionAnswering,
+            "text-classification": LongformerForSequenceClassification,
+            "token-classification": LongformerForTokenClassification,
+            "zero-shot": LongformerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # Need to use `0.6` instead of `0.5` for `test_disk_offload`
+    model_split_percents = [0.6, 0.7, 0.9]
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if (
+            pipeline_test_casse_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
@@ -354,6 +386,10 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_retain_grad_hidden_states_attentions(self):
         # longformer cannot keep gradients in attentions or hidden states
+        return
+
+    @unittest.skip("LongFormer calculates global attn only when attn_mask has non-zero elements")
+    def test_batching_equivalence(self):
         return
 
 

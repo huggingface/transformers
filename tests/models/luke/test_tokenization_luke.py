@@ -28,6 +28,7 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "studio-ousia/luke-base"
     tokenizer_class = LukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -46,7 +47,6 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             task=task,
             **kwargs,
         )
-        tokenizer.sanitize_special_tokens()
         return tokenizer
 
     def get_input_output_texts(self, tokenizer):

@@ -1,8 +1,8 @@
-from datasets import load_from_disk
-
 import jax
 import jax.numpy as jnp
 from bigbird_flax import FlaxBigBirdForNaturalQuestions
+from datasets import load_from_disk
+
 from transformers import BigBirdTokenizerFast
 
 
@@ -144,9 +144,9 @@ def main():
         predictions = expand_to_aliases(example["output"])
 
         # some preprocessing to both prediction and answer
-        answers = set(["".join(a.split()) for a in answers])
-        predictions = set(["".join(p.split()) for p in predictions])
-        predictions = set([s for s in predictions if s not in ["``", "''", "`", "'"]])
+        answers = {"".join(a.split()) for a in answers}
+        predictions = {"".join(p.split()) for p in predictions}
+        predictions = {s for s in predictions if s not in ["``", "''", "`", "'"]}
 
         # if there is a common element, it's a exact match
         example["match"] = len(list(answers & predictions)) > 0

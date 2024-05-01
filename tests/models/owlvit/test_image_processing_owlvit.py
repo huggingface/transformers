@@ -16,24 +16,17 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import OwlViTFeatureExtractor
+    from transformers import OwlViTImageProcessor
 
 
-class OwlViTFeatureExtractionTester(unittest.TestCase):
+class OwlViTImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -66,7 +59,7 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
 
-    def prepare_feat_extract_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
@@ -78,133 +71,49 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = OwlViTFeatureExtractor if is_vision_available() else None
+class OwlViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = OwlViTImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = OwlViTFeatureExtractionTester(self)
+        self.image_processor_tester = OwlViTImageProcessingTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_convert_rgb"))
+    def test_image_processor_properties(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "do_resize"))
+        self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "do_center_crop"))
+        self.assertTrue(hasattr(image_processing, "center_crop"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        self.assertTrue(hasattr(image_processing, "image_mean"))
+        self.assertTrue(hasattr(image_processing, "image_std"))
+        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
-        self.assertEqual(feature_extractor.crop_size, {"height": 18, "width": 18})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42, crop_size=84)
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
-        self.assertEqual(feature_extractor.crop_size, {"height": 84, "width": 84})
-
-    def test_call_pil(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
-
-    def test_call_numpy(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
-
-    def test_call_pytorch(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size["height"],
-                self.feature_extract_tester.crop_size["width"],
-            ),
-        )
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})

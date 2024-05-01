@@ -34,50 +34,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model"
-        ),
-        "xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model"
-        ),
-        "xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model"
-        ),
-        "xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model"
-        ),
-    },
-    "tokenizer_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/tokenizer.json",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/tokenizer.json",
-        "xlm-roberta-large-finetuned-conll02-dutch": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/tokenizer.json"
-        ),
-        "xlm-roberta-large-finetuned-conll02-spanish": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/tokenizer.json"
-        ),
-        "xlm-roberta-large-finetuned-conll03-english": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/tokenizer.json"
-        ),
-        "xlm-roberta-large-finetuned-conll03-german": (
-            "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlm-roberta-base": 512,
-    "xlm-roberta-large": 512,
-    "xlm-roberta-large-finetuned-conll02-dutch": 512,
-    "xlm-roberta-large-finetuned-conll02-spanish": 512,
-    "xlm-roberta-large-finetuned-conll03-english": 512,
-    "xlm-roberta-large-finetuned-conll03-german": 512,
-}
-
 
 class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -131,8 +87,6 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = XLMRobertaTokenizer
 
@@ -147,7 +101,7 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -166,7 +120,10 @@ class XLMRobertaTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

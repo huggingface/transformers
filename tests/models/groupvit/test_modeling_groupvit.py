@@ -22,8 +22,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import is_pt_tf_cross_test, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -36,6 +36,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -43,7 +44,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import GroupViTModel, GroupViTTextModel, GroupViTVisionModel
-    from transformers.models.groupvit.modeling_groupvit import GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -269,6 +269,18 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="GroupViTVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -339,9 +351,9 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GroupViTVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = GroupViTVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class GroupViTTextModelTester:
@@ -355,7 +367,7 @@ class GroupViTTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -432,7 +444,6 @@ class GroupViTTextModelTester:
 
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -454,6 +465,18 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="GroupViTTextModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -468,14 +491,13 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GroupViTTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = GroupViTTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class GroupViTModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -484,6 +506,7 @@ class GroupViTModelTester:
         self.parent = parent
         self.text_model_tester = GroupViTTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = GroupViTVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -523,8 +546,9 @@ class GroupViTModelTester:
 
 
 @require_torch
-class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
+class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -552,6 +576,10 @@ class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    # overwritten from parent as this equivalent test needs a specific `seed` and hard to get a good one!
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=2e-5, name="outputs", attributes=None):
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
@@ -630,7 +658,27 @@ class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
 
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
@@ -657,9 +705,9 @@ class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GroupViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = GroupViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

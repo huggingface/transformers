@@ -21,7 +21,7 @@ import re
 
 # The following script is adapted from the script of TaPas.
 # Original: https://github.com/google-research/tapas/master/wikisql_utils.py
-from typing import Any, List, Text
+from typing import Any, List
 
 
 EMPTY_ANSWER = "none"
@@ -30,7 +30,7 @@ EMPTY_ANSWER_AGG = "none"
 
 def _split_thousands(delimiter, value):
     split = value.split(delimiter)
-    return len(split) > 1 and any(map(lambda x: len(x) == 3, split))
+    return len(split) > 1 and any((len(x) == 3 for x in split))
 
 
 def convert_to_float(value):
@@ -114,7 +114,7 @@ class _Operator(enum.Enum):
 class _Condition:
     """Represents an SQL where clauses (e.g A = "a" or B > 5)."""
 
-    column: Text
+    column: str
     operator: _Operator
     cmp_value: Any
 
@@ -123,7 +123,7 @@ _TOKENIZER = re.compile(r"\w+|[^\w\s]+", re.UNICODE | re.MULTILINE | re.DOTALL)
 
 
 def _normalize_for_match(x):
-    return [t for t in _TOKENIZER.findall(x.lower())]
+    return list(_TOKENIZER.findall(x.lower()))
 
 
 def _compare(operator, src, tgt):

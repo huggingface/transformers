@@ -14,8 +14,6 @@
 # limitations under the License.
 """ ViT Hybrid model configuration"""
 
-import copy
-from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,10 +23,8 @@ from ..bit import BitConfig
 
 logger = logging.get_logger(__name__)
 
-VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-hybrid-base-bit-384": "https://huggingface.co/vit-hybrid-base-bit-384/resolve/main/config.json",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit
-}
+
+from ..deprecated._archive_maps import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ViTHybridConfig(PretrainedConfig):
@@ -42,6 +38,20 @@ class ViTHybridConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+            The configuration of the backbone in a dictionary or the config object of the backbone.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -53,9 +63,9 @@ class ViTHybridConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -67,12 +77,10 @@ class ViTHybridConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `None`):
-            The configuration of the backbone in a dictionary or the config object of the backbone.
         backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
 
     Example:
 
@@ -88,11 +96,16 @@ class ViTHybridConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit-hybrid"
 
     def __init__(
         self,
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
+        use_timm_backbone=False,
+        backbone_kwargs=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -107,11 +120,16 @@ class ViTHybridConfig(PretrainedConfig):
         num_channels=3,
         backbone_featmap_shape=[1, 1024, 24, 24],
         qkv_bias=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
 
-        if backbone_config is None:
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with a `BiT` backbone.")
             backbone_config = {
                 "global_padding": "same",
@@ -120,6 +138,9 @@ class ViTHybridConfig(PretrainedConfig):
                 "out_features": ["stage3"],
                 "embedding_dynamic_padding": True,
             }
+
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         if isinstance(backbone_config, dict):
             if "model_type" in backbone_config:
@@ -133,6 +154,10 @@ class ViTHybridConfig(PretrainedConfig):
 
         self.backbone_featmap_shape = backbone_featmap_shape
         self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -146,13 +171,3 @@ class ViTHybridConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-
-    def to_dict(self) -> Dict[str, any]:
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["backbone_config"] = self.backbone_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

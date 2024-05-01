@@ -111,7 +111,7 @@ def eval_data_dir(
         if num_return_sequences > 1:
             preds = chunks(preds, num_return_sequences)  # batch size chunks, each of size num_return_seq
         for i, pred in enumerate(preds):
-            results.append(dict(pred=pred, id=ids[i].item()))
+            results.append({"pred": pred, "id": ids[i].item()})
     save_json(results, save_path)
     return results, sampler.num_replicas
 
@@ -124,7 +124,7 @@ def run_generate():
     parser.add_argument(
         "--model_name",
         type=str,
-        help="like facebook/bart-large-cnn,t5-base, etc.",
+        help="like facebook/bart-large-cnn,google-t5/t5-base, etc.",
         default="sshleifer/distilbart-xsum-12-3",
     )
     parser.add_argument("--save_dir", type=str, help="where to save", default="tmp_gen")
@@ -154,7 +154,7 @@ def run_generate():
     parser.add_argument("--src_lang", type=str, default=None, required=False)
     parser.add_argument("--tgt_lang", type=str, default=None, required=False)
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--debug", action="store_true")
@@ -232,7 +232,7 @@ def combine_partial_results(partial_results) -> List:
     records = []
     for partial_result in partial_results:
         records.extend(partial_result)
-    records = list(sorted(records, key=lambda x: x["id"]))
+    records = sorted(records, key=lambda x: x["id"])
     preds = [x["pred"] for x in records]
     return preds
 

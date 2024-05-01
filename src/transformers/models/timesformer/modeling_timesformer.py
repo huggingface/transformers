@@ -36,10 +36,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TimesformerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/timesformer"
 
-TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/timesformer-base-finetuned-k400",
-    # See all TimeSformer models at https://huggingface.co/models?filter=timesformer
-]
+
+from ..deprecated._archive_maps import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
@@ -235,7 +233,6 @@ class TimesformerSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -274,7 +271,6 @@ class TimesformerIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -307,7 +303,7 @@ class TimesformerLayer(nn.Module):
         ]  # stochastic depth decay rule
         drop_path_rate = drop_path_rates[layer_index]
 
-        self.drop_path = TimeSformerDropPath(config.drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = TimeSformerDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimesformerIntermediate(config)
         self.output = TimesformerOutput(config)
@@ -441,16 +437,10 @@ class TimesformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, output_attentions)
@@ -482,6 +472,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["TimesformerLayer"]
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -495,10 +486,6 @@ class TimesformerPreTrainedModel(PreTrainedModel):
             nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
             nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
             module.patch_embeddings.apply(self._init_weights)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TimesformerEncoder):
-            module.gradient_checkpointing = value
 
 
 TIMESFORMER_START_DOCSTRING = r"""
@@ -515,8 +502,8 @@ TIMESFORMER_START_DOCSTRING = r"""
 TIMESFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
-            [`VideoMAEFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`VideoMAEImageProcessor.preprocess`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -561,25 +548,57 @@ class TimesformerModel(TimesformerPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import numpy as np
 
-        >>> from transformers import TimeSformerFeatureExtractor, TimesformerModel
+        >>> from transformers import AutoImageProcessor, TimesformerModel
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+
+
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     '''
+        ...     Sample a given number of frame indices from the video.
+        ...     Args:
+        ...         clip_len (`int`): Total number of frames to sample.
+        ...         frame_sample_rate (`int`): Sample every n-th frame.
+        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
+        ...     Returns:
+        ...         indices (`List[int]`): List of sampled frame indices
+        ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
@@ -592,24 +611,23 @@ class TimesformerModel(TimesformerPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=container.streams.video[0].frames)
+        >>> video = read_video_pyav(container, indices)
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 1568, 768]
+        [1, 1569, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -678,17 +696,47 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEFeatureExtractor, TimesformerForVideoClassification
+        >>> from transformers import AutoImageProcessor, TimesformerForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
 
 
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     '''
+        ...     Sample a given number of frame indices from the video.
+        ...     Args:
+        ...         clip_len (`int`): Total number of frames to sample.
+        ...         frame_sample_rate (`int`): Sample every n-th frame.
+        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
+        ...     Returns:
+        ...         indices (`List[int]`): List of sampled frame indices
+        ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
@@ -701,17 +749,16 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
+        >>> video = read_video_pyav(container, indices)
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

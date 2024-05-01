@@ -16,11 +16,11 @@
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
-from transformers import ViTMAEConfig, ViTMAEFeatureExtractor, ViTMAEForPreTraining
+from transformers import ViTMAEConfig, ViTMAEForPreTraining, ViTMAEImageProcessor
 
 
 def rename_key(name):
@@ -120,7 +120,7 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
-    feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
+    image_processor = ViTMAEImageProcessor(size=config.image_size)
 
     new_state_dict = convert_state_dict(state_dict, config)
 
@@ -130,8 +130,8 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
     image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = ViTMAEFeatureExtractor(size=config.image_size)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    image_processor = ViTMAEImageProcessor(size=config.image_size)
+    inputs = image_processor(images=image, return_tensors="pt")
 
     # forward pass
     torch.manual_seed(2)
@@ -157,8 +157,8 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

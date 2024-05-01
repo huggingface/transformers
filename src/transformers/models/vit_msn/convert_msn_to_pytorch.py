@@ -17,12 +17,12 @@
 import argparse
 import json
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import ViTFeatureExtractor, ViTMSNConfig, ViTMSNModel
+from transformers import ViTImageProcessor, ViTMSNConfig, ViTMSNModel
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
@@ -180,7 +180,7 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["target_encoder"]
 
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    image_processor = ViTImageProcessor(size=config.image_size)
 
     remove_projection_head(state_dict)
     rename_keys = create_rename_keys(config, base_model=True)
@@ -195,10 +195,10 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image = Image.open(requests.get(url, stream=True).raw)
-    feature_extractor = ViTFeatureExtractor(
+    image_processor = ViTImageProcessor(
         size=config.image_size, image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD
     )
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     # forward pass
     torch.manual_seed(2)
@@ -224,8 +224,8 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

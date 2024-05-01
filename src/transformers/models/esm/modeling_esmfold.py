@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ...deepspeed import is_deepspeed_available
+from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
@@ -54,7 +54,6 @@ from .openfold_utils import (
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/esmfold_v1"
 _CONFIG_FOR_DOC = "EsmConfig"
-_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 
 @dataclass
@@ -143,7 +142,7 @@ ESMFOLD_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -202,9 +201,9 @@ def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torc
     """
     if len(samples) == 0:
         return torch.Tensor()
-    if len(set(x.dim() for x in samples)) != 1:
+    if len({x.dim() for x in samples}) != 1:
         raise RuntimeError(f"Samples has varying dimensions: {[x.dim() for x in samples]}")
-    (device,) = tuple(set(x.device for x in samples))  # assumes all on same device
+    (device,) = tuple({x.device for x in samples})  # assumes all on same device
     max_shape = [max(lst) for lst in zip(*[x.shape for x in samples])]
     result = torch.empty(len(samples), *max_shape, dtype=samples[0].dtype, device=device)
     result.fill_(pad_v)
@@ -230,7 +229,7 @@ def dict_multimap(fn, dicts):
     new_dict = {}
     for k, v in first.items():
         all_v = [d[k] for d in dicts]
-        if type(v) is dict:
+        if isinstance(v, dict):
             new_dict[k] = dict_multimap(fn, all_v)
         else:
             new_dict[k] = fn(all_v)
@@ -1061,7 +1060,7 @@ class EsmFoldDropout(nn.Module):
         super().__init__()
 
         self.r = r
-        if type(batch_dim) == int:
+        if isinstance(batch_dim, int):
             batch_dim = [batch_dim]
         self.batch_dim = batch_dim
         self.dropout = nn.Dropout(self.r)
@@ -1205,7 +1204,7 @@ class EsmFoldTriangularSelfAttentionBlock(nn.Module):
 
         if sequence_state_dim != self.config.sequence_state_dim:
             raise ValueError(
-                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got"
+                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got "
                 f"{sequence_state_dim} != {self.config.sequence_state_dim}."
             )
         if pairwise_state_dim != self.config.pairwise_state_dim:
@@ -1916,7 +1915,7 @@ class EsmFoldingTrunk(nn.Module):
         # This parameter means the axial attention will be computed
         # in a chunked manner. This should make the memory used more or less O(L) instead of O(L^2).
         # It's equivalent to running a for loop over chunks of the dimension we're iterative over,
-        # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-lengthed chunks.
+        # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-length chunks.
         self.chunk_size = chunk_size
 
     def forward(self, seq_feats, pair_feats, true_aa, residx, mask, no_recycles):
@@ -2019,6 +2018,8 @@ class EsmFoldingTrunk(nn.Module):
     ESM_START_DOCSTRING,
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
+    _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2085,11 +2086,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
-    ):
+    ) -> EsmForProteinFoldingOutput:
         r"""
         Returns:
 
@@ -2253,7 +2254,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         seqs: Union[str, List[str]],
         position_ids=None,
     ):
-        if type(seqs) is str:
+        if isinstance(seqs, str):
             lst = [seqs]
         else:
             lst = seqs
@@ -2311,7 +2312,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     def infer_pdb(self, seqs, *args, **kwargs) -> str:
         """Returns the pdb (file) string from the model given an input sequence."""
-        assert type(seqs) is str
+        assert isinstance(seqs, str)
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)[0]
 

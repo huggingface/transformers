@@ -28,7 +28,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-import random
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -36,7 +35,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -59,7 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
 _CONFIG_FOR_DOC = "FSMTConfig"
-_TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
 # See all FSMT models at https://huggingface.co/models?filter=fsmt
 
@@ -200,11 +198,11 @@ FSMT_GENERATION_EXAMPLE = r"""
     Translation example::
 
     ```python
-    >>> from transformers import FSMTTokenizer, FSMTForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FSMTForConditionalGeneration
 
     >>> mname = "facebook/wmt19-ru-en"
     >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
-    >>> tokenizer = FSMTTokenizer.from_pretrained(mname)
+    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
 
     >>> src_text = "Машинное обучение - это здорово, не так ли?"
     >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
@@ -234,7 +232,7 @@ FSMT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FSMTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -474,9 +472,7 @@ class FSMTEncoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList(
-            [EncoderLayer(config) for _ in range(config.encoder_layers)]
-        )  # type: List[EncoderLayer]
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])  # type: List[EncoderLayer]
 
     def forward(
         self,
@@ -551,7 +547,7 @@ class FSMTEncoder(nn.Module):
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
@@ -684,9 +680,7 @@ class FSMTDecoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList(
-            [DecoderLayer(config) for _ in range(config.decoder_layers)]
-        )  # type: List[DecoderLayer]
+        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])  # type: List[DecoderLayer]
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -772,7 +766,7 @@ class FSMTDecoder(nn.Module):
         x += positions
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
 
-        # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        # Convert to FSMT output format: (BS, seq_len, model_dim) -> (seq_len, BS, model_dim)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
@@ -795,9 +789,10 @@ class FSMTDecoder(nn.Module):
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
                 x = x.transpose(0, 1)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
@@ -1035,7 +1030,7 @@ def _get_shape(t):
     FSMT_START_DOCSTRING,
 )
 class FSMTModel(PretrainedFSMTModel):
-    _keys_to_ignore_on_load_missing = ["decoder.output_projection.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1056,9 +1051,13 @@ class FSMTModel(PretrainedFSMTModel):
     def get_decoder(self):
         return self.decoder
 
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
+            self._tie_or_clone_weights(self.decoder.output_projection, self.get_input_embeddings())
+
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1173,20 +1172,15 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-        "decoder.output_projection.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-    ]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
         base_model = FSMTModel(config)
         self.model = base_model
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1275,7 +1269,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1293,9 +1287,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         return shift_tokens_right(labels, self.config.pad_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
@@ -1352,8 +1346,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad

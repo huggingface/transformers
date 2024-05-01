@@ -18,10 +18,11 @@
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -29,7 +30,6 @@ if is_torch_available():
 
     from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
     from transformers.models.esm.modeling_esm import (
-        ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         EsmEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -48,7 +48,7 @@ class EsmModelTester:
         use_labels=True,
         vocab_size=33,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -150,6 +150,24 @@ class EsmModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_forward_and_backwards(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        gradient_checkpointing=False,
+    ):
+        model = EsmForMaskedLM(config)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+        model.to(torch_device)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result.loss.backward()
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -165,8 +183,7 @@ class EsmModelTester:
 
 
 @require_torch
-class EsmModelTest(ModelTesterMixin, unittest.TestCase):
-
+class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -180,7 +197,19 @@ class EsmModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": EsmModel,
+            "fill-mask": EsmForMaskedLM,
+            "text-classification": EsmForSequenceClassification,
+            "token-classification": EsmForTokenClassification,
+            "zero-shot": EsmForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_sequence_classification_problem_types = True
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = EsmModelTester(self)
@@ -207,11 +236,15 @@ class EsmModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_esm_gradient_checkpointing(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = EsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
@@ -269,9 +302,9 @@ class EsmModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
+@slow
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
-    @slow
     def test_inference_masked_lm(self):
         with torch.no_grad():
             model = EsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
@@ -289,7 +322,6 @@ class EsmModelIntegrationTest(TestCasePlus):
             )
             self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
-    @slow
     def test_inference_no_head(self):
         with torch.no_grad():
             model = EsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
@@ -302,3 +334,18 @@ class EsmModelIntegrationTest(TestCasePlus):
                 [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
             )
             self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @require_bitsandbytes
+    def test_inference_bitsandbytes(self):
+        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        # Just test if inference works
+        with torch.no_grad():
+            _ = model(input_ids)[0]
+
+        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+
+        input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+        # Just test if inference works
+        _ = model(input_ids)[0]

@@ -33,12 +33,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoXJapaneseTokenizer"
 
-GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
-    # See all GPTNeoXJapanese models at https://huggingface.co/models?filter=gpt_neox_japanese
-}
+
+from ..deprecated._archive_maps import GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
@@ -49,8 +46,8 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
     config_class = GPTNeoXJapaneseConfig
     base_model_prefix = "gpt_neox_japanese"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -65,10 +62,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXJapaneseModel):
-            module.gradient_checkpointing = value
 
 
 class GPTNeoXJapaneseAttention(nn.Module):
@@ -181,13 +174,13 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # -> [bs, seq_len, hidden_size]
         return tensor
 
-    def _create_casual_mask(self, key_length, query_length):
-        casual_mask = torch.tril(
-            torch.ones((self.max_positions, self.max_positions), dtype=torch.uint8).view(
+    def _create_causal_mask(self, key_length, query_length):
+        causal_mask = torch.tril(
+            torch.ones((self.max_positions, self.max_positions), dtype=torch.bool).view(
                 1, 1, self.max_positions, self.max_positions
             )
         )
-        return casual_mask[:, :, key_length - query_length : key_length, :key_length].bool()
+        return causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -195,7 +188,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        causal_mask = self._create_casual_mask(key_length, query_length)
+        causal_mask = self._create_causal_mask(key_length, query_length)
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
@@ -238,34 +231,42 @@ class GPTNeoXJapaneseAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
-class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None):
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoXRotaryEmbedding->RotaryEmbedding
+class RotaryEmbedding(nn.Module):
+    # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-        self.register_buffer("inv_freq", inv_freq)
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :]
-        self.sin_cached = emb.sin()[None, None, :, :]
+        self.register_buffer("cos_cached", emb.cos(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
         if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
-        return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+
+        return (
+            self.cos_cached[:seq_len],
+            self.sin_cached[:seq_len],
+        )
 
 
 def rotate_half(x):
@@ -392,7 +393,7 @@ GPT_NEOX_JAPANESE_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoXJapaneseTokenizer`].
+            Indices can be obtained using [`AutoTokenizer`].
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -485,10 +486,10 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseModel
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseModel
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> model = GPTNeoXJapaneseModel.from_pretrained("abeja/gpt-neox-japanese-2.7b")
 
         >>> inputs = tokenizer("日本語のGPT-neoxがHugging Faceで使えます😀", return_tensors="pt")
@@ -507,6 +508,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -591,8 +593,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", "embed_out.weight"]
+    _tied_weights_keys = ["embed_out.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -651,10 +652,10 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
+        >>> from transformers import AutoTokenizer, GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseConfig
         >>> import torch
 
-        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config = GPTNeoXJapaneseConfig.from_pretrained("abeja/gpt-neox-japanese-2.7b")
         >>> config.is_decoder = True
         >>> model = GPTNeoXJapaneseForCausalLM.from_pretrained("abeja/gpt-neox-japanese-2.7b", config=config)
@@ -684,6 +685,9 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
 
         lm_loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
+
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shift_logits = lm_logits[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
@@ -715,10 +719,11 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past

@@ -17,18 +17,18 @@ import gc
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
@@ -48,7 +48,7 @@ class CTRLModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -132,7 +132,7 @@ class CTRLModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
+            dff=self.intermediate_size,
             # hidden_act=self.hidden_act,
             # hidden_dropout_prob=self.hidden_dropout_prob,
             # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -192,13 +192,34 @@ class CTRLModelTester:
 
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CTRLModel,
+            "text-classification": CTRLForSequenceClassification,
+            "text-generation": CTRLLMHeadModel,
+            "zero-shot": CTRLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = True
     test_resize_embeddings = False
     test_head_masking = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
+            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
+            # config could not be created.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = CTRLModelTester(self)
@@ -208,7 +229,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -223,9 +244,9 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CTRLModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/ctrl"
+        model = CTRLModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -234,11 +255,11 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_lm_generate_ctrl(self):
-        model = CTRLLMHeadModel.from_pretrained("ctrl")
+        model = CTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         model.to(torch_device)
         input_ids = torch.tensor(
             [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device

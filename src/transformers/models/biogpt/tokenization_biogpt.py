@@ -28,17 +28,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/vocab.json",
-    },
-    "merges_file": {"microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/biogpt": 1024,
-}
-
 
 def get_pairs(word):
     """
@@ -97,8 +86,6 @@ class BioGptTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -110,17 +97,8 @@ class BioGptTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         sep_token="</s>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
         try:
             import sacremoses
         except ImportError:
@@ -132,8 +110,8 @@ class BioGptTokenizer(PreTrainedTokenizer):
         self.lang = "en"
         self.sm = sacremoses
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.cache_moses_detokenizer = dict()
+        self.cache_moses_tokenizer = {}
+        self.cache_moses_detokenizer = {}
 
         """ Initialisation"""
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -144,6 +122,15 @@ class BioGptTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
@@ -221,7 +208,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

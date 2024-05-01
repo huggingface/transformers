@@ -19,7 +19,7 @@ from pathlib import Path
 import torch
 from torch.serialization import default_restore_location
 
-from .transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
+from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
 
 
 CheckpointState = collections.namedtuple(
@@ -54,7 +54,7 @@ class DPRState:
 
 class DPRContextEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRContextEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
+        model = DPRContextEncoder(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
         print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.ctx_encoder, "ctx_model."
@@ -72,7 +72,7 @@ class DPRContextEncoderState(DPRState):
 
 class DPRQuestionEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRQuestionEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
+        model = DPRQuestionEncoder(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
         print(f"Loading DPR biencoder from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.question_encoder, "question_model."
@@ -90,7 +90,7 @@ class DPRQuestionEncoderState(DPRState):
 
 class DPRReaderState(DPRState):
     def load_dpr_model(self):
-        model = DPRReader(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
+        model = DPRReader(DPRConfig(**BertConfig.get_config_dict("google-bert/bert-base-uncased")[0]))
         print(f"Loading DPR reader from {self.src_file}")
         saved_state = load_states_from_checkpoint(self.src_file)
         # Fix changes from https://github.com/huggingface/transformers/commit/614fef1691edb806de976756d4948ecbcd0c0ca3

@@ -38,9 +38,7 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # fmt: off
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]
-        # fmt: on
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "want", "##want", "##ed", "wa", "un", "runn", "##ing", ",", "low", "lowest"]  # fmt: skip
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
@@ -170,10 +168,10 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_image_processor()
+        image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

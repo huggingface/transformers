@@ -26,6 +26,8 @@ from transformers.models.clip.tokenization_clip import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -34,13 +36,13 @@ if is_vision_available():
 
 
 @require_vision
-class CLIPProcessorTest(unittest.TestCase):
+class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = CLIPProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
-        # fmt: on
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}

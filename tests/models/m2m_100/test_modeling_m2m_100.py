@@ -19,13 +19,25 @@ import copy
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import M2M100Config, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_flash_attn,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -220,7 +232,7 @@ class M2M100ModelTester:
 
 
 @require_torch
-class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             M2M100Model,
@@ -230,10 +242,32 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": M2M100ForConditionalGeneration,
+            "feature-extraction": M2M100Model,
+            "summarization": M2M100ForConditionalGeneration,
+            "text2text-generation": M2M100ForConditionalGeneration,
+            "translation": M2M100ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TranslationPipelineTests":
+            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
+            # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = M2M100ModelTester(self)
@@ -289,13 +323,13 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = M2M100ForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -350,6 +384,51 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
         model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
+        tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
+
+        src_fr = [
+            "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
+            "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
+            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
+            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+        ]
+
+        # The below article tests that we don't add any hypotheses outside of the top n_beams
+        dct = tokenizer(src_fr, padding=True, return_tensors="pt")
+
+        hypotheses_batch = model.generate(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=5,
+            forced_bos_token_id=tokenizer.get_lang_id("en"),
+        )
+
+        expected_en = [
+            "The NSA case highlights the total absence of intelligence debate",
+            "I think there are two levels of response from the French government.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
+            " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
+            " communications in France.",
+        ]
+
+        generated = tokenizer.batch_decode(
+            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+        )
+        assert generated == expected_en
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_seq_to_seq_generation(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = M2M100ForConditionalGeneration.from_pretrained(
+            "facebook/m2m100_418M", attn_implementation="flash_attention_2"
+        ).to(torch_device)
+
         tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="fr", tgt_lang="en")
 
         src_fr = [

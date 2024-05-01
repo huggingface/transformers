@@ -21,13 +21,23 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
-from ...utils import logging
+from ...image_transforms import resize, to_channel_dimension_format
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
+)
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -38,8 +48,8 @@ logger = logging.get_logger(__name__)
 
 
 # These values are taken from CLIP
-FLAVA_IMAGE_MEAN = [0.48145466, 0.4578275, 0.40821073]
-FLAVA_IMAGE_STD = [0.26862954, 0.26130258, 0.27577711]
+FLAVA_IMAGE_MEAN = OPENAI_CLIP_MEAN
+FLAVA_IMAGE_STD = OPENAI_CLIP_STD
 FLAVA_CODEBOOK_MEAN = [0.0, 0.0, 0.0]
 FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 LOGIT_LAPLACE_EPS: float = 0.1
@@ -247,7 +257,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_do_normalize: bool = True,
         codebook_image_mean: Optional[Union[float, Iterable[float]]] = None,
         codebook_image_std: Optional[Union[float, Iterable[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
@@ -292,6 +302,41 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_mean = codebook_image_mean
         self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "return_image_mask",
+            "input_size_patches",
+            "total_mask_patches",
+            "mask_group_min_patches",
+            "mask_group_max_patches",
+            "mask_group_min_aspect_ratio",
+            "mask_group_max_aspect_ratio",
+            "return_codebook_pixels",
+            "codebook_do_resize",
+            "codebook_size",
+            "codebook_resample",
+            "codebook_do_center_crop",
+            "codebook_crop_size",
+            "codebook_do_rescale",
+            "codebook_rescale_factor",
+            "codebook_do_map_pixels",
+            "codebook_do_normalize",
+            "codebook_image_mean",
+            "codebook_image_std",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -325,13 +370,15 @@ class FlavaImageProcessor(BaseImageProcessor):
             mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
         )
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -340,85 +387,37 @@ class FlavaImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must contain 'height' and 'width' keys. Got {size.keys()}")
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+        output_size = (size["height"], size["width"])
         return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
-        any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must contain 'height' and 'width' keys. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def map_pixels(self, image: np.ndarray) -> np.ndarray:
         return (1 - 2 * LOGIT_LAPLACE_EPS) * image + LOGIT_LAPLACE_EPS
@@ -438,37 +437,53 @@ class FlavaImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_map_pixels: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample)
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size)
+            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std)
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
         if do_map_pixels:
             image = self.map_pixels(image)
 
         if data_format is not None:
-            image = to_channel_dimension_format(image, data_format)
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
     def preprocess(
@@ -507,6 +522,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_std: Optional[Iterable[float]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -514,7 +530,8 @@ class FlavaImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -588,6 +605,12 @@ class FlavaImageProcessor(BaseImageProcessor):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -647,8 +670,9 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else self.codebook_image_mean
         codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -671,6 +695,7 @@ class FlavaImageProcessor(BaseImageProcessor):
                 image_std=image_std,
                 do_map_pixels=False,
                 data_format=data_format,
+                input_data_format=input_data_format,
             )
             for img in images
         ]
@@ -692,6 +717,7 @@ class FlavaImageProcessor(BaseImageProcessor):
                     image_std=codebook_image_std,
                     do_map_pixels=codebook_do_map_pixels,
                     data_format=data_format,
+                    input_data_format=input_data_format,
                 )
                 for img in images
             ]

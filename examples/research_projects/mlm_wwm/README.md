@@ -32,7 +32,7 @@ to that word). This technique has been refined for Chinese in [this paper](https
 To fine-tune a model using whole word masking, use the following script:
 ```bash
 python run_mlm_wwm.py \
-    --model_name_or_path roberta-base \
+    --model_name_or_path FacebookAI/roberta-base \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --do_train \
@@ -83,7 +83,7 @@ export VALIDATION_REF_FILE=/path/to/validation/chinese_ref/file
 export OUTPUT_DIR=/tmp/test-mlm-wwm
 
 python run_mlm_wwm.py \
-    --model_name_or_path roberta-base \
+    --model_name_or_path FacebookAI/roberta-base \
     --train_file $TRAIN_FILE \
     --validation_file $VALIDATION_FILE \
     --train_ref_file $TRAIN_REF_FILE \
@@ -95,4 +95,4 @@ python run_mlm_wwm.py \
 
 **Note1:** On TPU, you should the flag `--pad_to_max_length` to make sure all your batches have the same length.
 
-**Note2:** And if you have any questions or something goes wrong when runing this code, don't hesitate to pin @wlhgtc.
+**Note2:** And if you have any questions or something goes wrong when running this code, don't hesitate to pin @wlhgtc.

@@ -15,15 +15,16 @@
 """ Testing suite for the PyTorch Bit model. """
 
 
-import inspect
 import unittest
 
 from transformers import BitConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import BitBackbone, BitForImageClassification, BitImageProcessor, BitModel
-    from transformers.models.bit.modeling_bit import BIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -54,6 +54,7 @@ class BitModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         num_groups=1,
     ):
         self.parent = parent
@@ -70,6 +71,7 @@ class BitModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.out_indices = out_indices
         self.num_groups = num_groups
 
     def prepare_config_and_inputs(self):
@@ -92,6 +94,7 @@ class BitModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            out_indices=self.out_indices,
             num_groups=self.num_groups,
         )
 
@@ -150,13 +153,18 @@ class BitModelTester:
 
 
 @require_torch
-class BitModelTest(ModelTesterMixin, unittest.TestCase):
+class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Bit does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (BitModel, BitForImageClassification, BitBackbone) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-feature-extraction": BitModel, "image-classification": BitForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = False
     test_pruning = False
@@ -191,18 +199,6 @@ class BitModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Bit does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -272,9 +268,9 @@ class BitModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/bit-50"
+        model = BitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -287,18 +283,16 @@ def prepare_img():
 @require_vision
 class BitModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return (
-            BitImageProcessor.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]) if is_vision_available() else None
-        )
+    def default_image_processor(self):
+        return BitImageProcessor.from_pretrained("google/bit-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = BitForImageClassification.from_pretrained(BIT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = BitForImageClassification.from_pretrained("google/bit-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -311,3 +305,14 @@ class BitModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[-0.6526, -0.5263, -1.4398]]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class BitBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (BitBackbone,) if is_torch_available() else ()
+    config_class = BitConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = BitModelTester(self)

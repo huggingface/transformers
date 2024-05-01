@@ -34,7 +34,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ASTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ASTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "MIT/ast-finetuned-audioset-10-10-0.4593"
@@ -46,10 +45,7 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
-AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MIT/ast-finetuned-audioset-10-10-0.4593",
-    # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=ast
-]
+from ..deprecated._archive_maps import AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ASTEmbeddings(nn.Module):
@@ -189,7 +185,6 @@ class ASTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -247,7 +242,6 @@ class ASTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -339,17 +333,11 @@ class ASTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -397,11 +385,6 @@ class ASTPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing with ViT->AST
-    def _set_gradient_checkpointing(self, module: ASTEncoder, value: bool = False) -> None:
-        if isinstance(module, ASTEncoder):
-            module.gradient_checkpointing = value
-
 
 AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -417,9 +400,12 @@ AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""
 
 AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ASTFeatureExtractor`]. See
-            [`ASTFeatureExtractor.__call__`] for details.
+        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+            Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -443,7 +429,7 @@ AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
 class ASTModel(ASTPreTrainedModel):
-    def __init__(self, config: ASTConfig):
+    def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
         self.config = config
 
@@ -468,7 +454,6 @@ class ASTModel(ASTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -482,7 +467,7 @@ class ASTModel(ASTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -558,7 +543,6 @@ class ASTForAudioClassification(ASTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

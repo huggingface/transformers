@@ -23,9 +23,10 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
-import transformers.models.auto as auto_module
-from transformers.models.auto.configuration_auto import model_type_to_module_name
+import yaml
 
+from ..models import auto as auto_module
+from ..models.auto.configuration_auto import model_type_to_module_name
 from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
@@ -128,7 +129,7 @@ def find_indent(line: str) -> int:
     """
     Returns the number of spaces that start a line indent.
     """
-    search = re.search("^(\s*)(?:\S|$)", line)
+    search = re.search(r"^(\s*)(?:\S|$)", line)
     if search is None:
         return 0
     return len(search.groups()[0])
@@ -172,6 +173,56 @@ def parse_module_content(content: str) -> List[str]:
         objects.append("\n".join(current_object))
 
     return objects
+
+
+def extract_block(content: str, indent_level: int = 0) -> str:
+    """Return the first block in `content` with the indent level `indent_level`.
+
+    The first line in `content` should be indented at `indent_level` level, otherwise an error will be thrown.
+
+    This method will immediately stop the search when a (non-empty) line with indent level less than `indent_level` is
+    encountered.
+
+    Args:
+        content (`str`): The content to parse
+        indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
+
+    Returns:
+        `str`: The first block in `content` with the indent level `indent_level`.
+    """
+    current_object = []
+    lines = content.split("\n")
+    # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
+    end_markers = [")", "]", "}", '"""']
+
+    for idx, line in enumerate(lines):
+        if idx == 0 and indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
+            raise ValueError(
+                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got "
+                f"{find_indent(line)} instead."
+            )
+
+        if find_indent(line) < indent_level and not is_empty_line(line):
+            break
+
+        # End of an object
+        is_valid_object = len(current_object) > 0
+        if (
+            not is_empty_line(line)
+            and not line.endswith(":")
+            and find_indent(line) == indent_level
+            and is_valid_object
+        ):
+            # Closing parts should be included in current object
+            if line.lstrip() in end_markers:
+                current_object.append(line)
+            return "\n".join(current_object)
+        else:
+            current_object.append(line)
+
+    # Add last object
+    if len(current_object) > 0:
+        return "\n".join(current_object)
 
 
 def add_content_to_text(
@@ -403,12 +454,53 @@ SPECIAL_PATTERNS = {
 _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
 
 
+def remove_attributes(obj, target_attr):
+    """Remove `target_attr` in `obj`."""
+    lines = obj.split(os.linesep)
+
+    target_idx = None
+    for idx, line in enumerate(lines):
+        # search for assignment
+        if line.lstrip().startswith(f"{target_attr} = "):
+            target_idx = idx
+            break
+        # search for function/method definition
+        elif line.lstrip().startswith(f"def {target_attr}("):
+            target_idx = idx
+            break
+
+    # target not found
+    if target_idx is None:
+        return obj
+
+    line = lines[target_idx]
+    indent_level = find_indent(line)
+    # forward pass to find the ending of the block (including empty lines)
+    parsed = extract_block("\n".join(lines[target_idx:]), indent_level)
+    num_lines = len(parsed.split("\n"))
+    for idx in range(num_lines):
+        lines[target_idx + idx] = None
+
+    # backward pass to find comments or decorator
+    for idx in range(target_idx - 1, -1, -1):
+        line = lines[idx]
+        if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
+            lines[idx] = None
+        else:
+            break
+
+    new_obj = os.linesep.join([x for x in lines if x is not None])
+
+    return new_obj
+
+
 def duplicate_module(
     module_file: Union[str, os.PathLike],
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
+    attrs_to_remove: List[str] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
@@ -429,41 +521,12 @@ def duplicate_module(
     with open(module_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub("# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
+    content = re.sub(r"# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
     objects = parse_module_content(content)
 
     # Loop and treat all objects
     new_objects = []
     for obj in objects:
-        # Special cases
-        if "PRETRAINED_CONFIG_ARCHIVE_MAP = {" in obj:
-            # docstyle-ignore
-            obj = (
-                f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP = "
-                + "{"
-                + f"""
-    "{new_model_patterns.checkpoint}": "https://huggingface.co/{new_model_patterns.checkpoint}/resolve/main/config.json",
-"""
-                + "}\n"
-            )
-            new_objects.append(obj)
-            continue
-        elif "PRETRAINED_MODEL_ARCHIVE_LIST = [" in obj:
-            if obj.startswith("TF_"):
-                prefix = "TF_"
-            elif obj.startswith("FLAX_"):
-                prefix = "FLAX_"
-            else:
-                prefix = ""
-            # docstyle-ignore
-            obj = f"""{prefix}{new_model_patterns.model_upper_cased}_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "{new_model_patterns.checkpoint}",
-    # See all {new_model_patterns.model_name} models at https://huggingface.co/models?filter={new_model_patterns.model_type}
-]
-"""
-            new_objects.append(obj)
-            continue
-
         special_pattern = False
         for pattern, attr in SPECIAL_PATTERNS.items():
             if pattern in obj:
@@ -478,7 +541,7 @@ def duplicate_module(
         # Regular classes functions
         old_obj = obj
         obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
-        has_copied_from = re.search("^#\s+Copied from", obj, flags=re.MULTILINE) is not None
+        has_copied_from = re.search(r"^#\s+Copied from", obj, flags=re.MULTILINE) is not None
         if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
@@ -492,8 +555,14 @@ def duplicate_module(
 
         new_objects.append(obj)
 
+    content = "\n".join(new_objects)
+    # Remove some attributes that we don't want to copy to the new file(s)
+    if attrs_to_remove is not None:
+        for attr in attrs_to_remove:
+            content = remove_attributes(content, target_attr=attr)
+
     with open(dest_file, "w", encoding="utf-8") as f:
-        content = f.write("\n".join(new_objects))
+        f.write(content)
 
 
 def filter_framework_files(
@@ -550,7 +619,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     model_files = list(model_module.glob("*.py"))
     model_files = filter_framework_files(model_files, frameworks=frameworks)
 
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{model_type}.md"
 
     # Basic pattern for test files
     test_files = [
@@ -571,7 +640,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
 
 
-_re_checkpoint_for_doc = re.compile("^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
+_re_checkpoint_for_doc = re.compile(r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
 
 
 def find_base_model_checkpoint(
@@ -687,7 +756,6 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
     model_name = auto_module.MODEL_NAMES_MAPPING[model_type]
     config_class = auto_module.configuration_auto.CONFIG_MAPPING_NAMES[model_type]
-    archive_map = auto_module.configuration_auto.CONFIG_ARCHIVE_MAP_MAPPING_NAMES.get(model_type, None)
     if model_type in auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES:
         tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
         tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
@@ -716,19 +784,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
     model_classes = retrieve_model_classes(model_type, frameworks=frameworks)
 
-    # Retrieve model upper-cased name from the constant name of the pretrained archive map.
-    if archive_map is None:
-        model_upper_cased = model_camel_cased.upper()
-    else:
-        parts = archive_map.split("_")
-        idx = 0
-        while idx < len(parts) and parts[idx] != "PRETRAINED":
-            idx += 1
-        if idx < len(parts):
-            model_upper_cased = "_".join(parts[:idx])
-        else:
-            model_upper_cased = model_camel_cased.upper()
-
+    model_upper_cased = model_camel_cased.upper()
     model_patterns = ModelPatterns(
         model_name,
         checkpoint=find_base_model_checkpoint(model_type, model_files=model_files),
@@ -817,8 +873,8 @@ def clean_frameworks_in_init(
             idx += 1
         # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
         elif keep_processing or (
-            re.search('^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
-            and re.search("^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
+            re.search(r'^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
+            and re.search(r"^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
             is None
         ):
             new_lines.append(lines[idx])
@@ -1037,14 +1093,6 @@ def add_model_to_auto_classes(
             for attr in ["model_type", "model_name"]:
                 old_model_line = old_model_line.replace("{" + attr + "}", getattr(old_model_patterns, attr))
                 new_model_line = new_model_line.replace("{" + attr + "}", getattr(new_model_patterns, attr))
-            if "pretrained_archive_map" in pattern:
-                old_model_line = old_model_line.replace(
-                    "{pretrained_archive_map}", f"{old_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP"
-                )
-                new_model_line = new_model_line.replace(
-                    "{pretrained_archive_map}", f"{new_model_patterns.model_upper_cased}_PRETRAINED_CONFIG_ARCHIVE_MAP"
-                )
-
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
@@ -1089,18 +1137,18 @@ def duplicate_doc_file(
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
-            Will default to the a file named `{new_model_patterns.model_type}.mdx` in the same folder as `module_file`.
+            Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
         frameworks (`List[str]`, *optional*):
             If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
     """
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub("<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
+    content = re.sub(r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
-        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.mdx"
+        dest_file = Path(doc_file).parent / f"{new_model_patterns.model_type}.md"
 
     # Parse the doc file in blocks. One block per section/header
     lines = content.split("\n")
@@ -1122,7 +1170,7 @@ def duplicate_doc_file(
         if not block.startswith("#"):
             new_blocks.append(block)
         # Main title
-        elif re.search("^#\s+\S+", block) is not None:
+        elif re.search(r"^#\s+\S+", block) is not None:
             new_blocks.append(f"# {new_model_patterns.model_name}\n")
         # The config starts the part of the doc with the classes.
         elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
@@ -1134,7 +1182,7 @@ def duplicate_doc_file(
         elif in_classes:
             in_classes = True
             block_title = block.split("\n")[0]
-            block_class = re.search("^#+\s+(\S.*)$", block_title).groups()[0]
+            block_class = re.search(r"^#+\s+(\S.*)$", block_title).groups()[0]
             new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
 
             if "Tokenizer" in block_class:
@@ -1170,6 +1218,56 @@ def duplicate_doc_file(
 
     with open(dest_file, "w", encoding="utf-8") as f:
         f.write("\n".join(new_blocks))
+
+
+def insert_model_in_doc_toc(old_model_patterns, new_model_patterns):
+    """
+    Insert the new model in the doc TOC, in the same section as the old model.
+
+    Args:
+        old_model_patterns (`ModelPatterns`): The patterns for the old model.
+        new_model_patterns (`ModelPatterns`): The patterns for the new model.
+    """
+    toc_file = REPO_PATH / "docs" / "source" / "en" / "_toctree.yml"
+    with open(toc_file, "r", encoding="utf8") as f:
+        content = yaml.safe_load(f)
+
+    # Get to the model API doc
+    api_idx = 0
+    while content[api_idx]["title"] != "API":
+        api_idx += 1
+    api_doc = content[api_idx]["sections"]
+
+    model_idx = 0
+    while api_doc[model_idx]["title"] != "Models":
+        model_idx += 1
+    model_doc = api_doc[model_idx]["sections"]
+
+    # Find the base model in the Toc
+    old_model_type = old_model_patterns.model_type
+    section_idx = 0
+    while section_idx < len(model_doc):
+        sections = [entry["local"] for entry in model_doc[section_idx]["sections"]]
+        if f"model_doc/{old_model_type}" in sections:
+            break
+
+        section_idx += 1
+
+    if section_idx == len(model_doc):
+        old_model = old_model_patterns.model_name
+        new_model = new_model_patterns.model_name
+        print(f"Did not find {old_model} in the table of content, so you will need to add {new_model} manually.")
+        return
+
+    # Add the new model in the same toc
+    toc_entry = {"local": f"model_doc/{new_model_patterns.model_type}", "title": new_model_patterns.model_name}
+    model_doc[section_idx]["sections"].append(toc_entry)
+    model_doc[section_idx]["sections"] = sorted(model_doc[section_idx]["sections"], key=lambda s: s["title"].lower())
+    api_doc[model_idx]["sections"] = model_doc
+    content[api_idx]["sections"] = api_doc
+
+    with open(toc_file, "w", encoding="utf-8") as f:
+        f.write(yaml.dump(content, allow_unicode=True))
 
 
 def create_new_model_like(
@@ -1295,6 +1393,7 @@ def create_new_model_like(
             new_model_patterns,
             dest_file=dest_file,
             add_copied_from=False,
+            attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
         )
         disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
 
@@ -1308,8 +1407,9 @@ def create_new_model_like(
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
     # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.mdx"
+    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.md"
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
+    insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
     # 6. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
@@ -1524,7 +1624,7 @@ def get_user_input():
         "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
     )
     checkpoint = get_user_field(
-        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/roberta-base): "
+        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/FacebookAI/roberta-base): "
     )
 
     old_processing_classes = [
@@ -1556,6 +1656,8 @@ def get_user_input():
                 "What will be the name of the image processor class for this model? ",
                 default_value=f"{model_camel_cased}ImageProcessor",
             )
+        else:
+            image_processor_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",

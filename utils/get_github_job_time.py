@@ -1,5 +1,6 @@
 import argparse
 import math
+import traceback
 
 import dateutil.parser as date_parser
 import requests
@@ -25,11 +26,15 @@ def extract_time_from_single_job(job):
     return job_info
 
 
-def get_job_time(workflow_run_id):
+def get_job_time(workflow_run_id, token=None):
     """Extract time info for all jobs in a GitHub Actions workflow run"""
 
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = requests.get(url).json()
+    result = requests.get(url, headers=headers).json()
     job_time = {}
 
     try:
@@ -37,12 +42,12 @@ def get_job_time(workflow_run_id):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}").json()
+            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             job_time.update({job["name"]: extract_time_from_single_job(job) for job in result["jobs"]})
 
         return job_time
-    except Exception as e:
-        print("Unknown error, could not fetch links.", e)
+    except Exception:
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
     return {}
 
@@ -56,9 +61,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument(
-        "--workflow_run_id", default=None, type=str, required=True, help="A GitHub Actions workflow run id."
-    )
+    parser.add_argument("--workflow_run_id", type=str, required=True, help="A GitHub Actions workflow run id.")
     args = parser.parse_args()
 
     job_time = get_job_time(args.workflow_run_id)

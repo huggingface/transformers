@@ -5,12 +5,25 @@ import time
 
 import tensorflow as tf
 from datasets import load_dataset
+from packaging.version import parse
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 
-if __name__ == "__main__":
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
 
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Hyperparameters sent by the client are passed as command-line arguments to the script.
@@ -76,9 +89,9 @@ if __name__ == "__main__":
     )
 
     # fine optimizer and loss
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
-    loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-    metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+    optimizer = keras.optimizers.Adam(learning_rate=args.learning_rate)
+    loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    metrics = [keras.metrics.SparseCategoricalAccuracy()]
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     start_train_time = time.time()

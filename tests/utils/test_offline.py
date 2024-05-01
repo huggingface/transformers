@@ -22,7 +22,6 @@ from transformers.testing_utils import TestCasePlus, require_torch
 class OfflineTests(TestCasePlus):
     @require_torch
     def test_offline_mode(self):
-
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
@@ -108,7 +107,6 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_sharded_checkpoint(self):
-
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
@@ -177,5 +175,32 @@ socket.socket = offline_socket
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn(
-            "You cannot infer task automatically within `pipeline` when using offline mode", result.stderr.decode()
+            "You cannot infer task automatically within `pipeline` when using offline mode",
+            result.stderr.decode().replace("\n", ""),
         )
+
+    @require_torch
+    def test_offline_model_dynamic_model(self):
+        load = """
+from transformers import AutoModel
+        """
+        run = """
+mname = "hf-internal-testing/test_dynamic_model"
+AutoModel.from_pretrained(mname, trust_remote_code=True)
+print("success")
+        """
+
+        # baseline - just load from_pretrained with normal network
+        cmd = [sys.executable, "-c", "\n".join([load, run])]
+
+        # should succeed
+        env = self.get_env()
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())

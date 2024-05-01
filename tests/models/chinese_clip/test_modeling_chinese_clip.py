@@ -20,8 +20,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -47,7 +48,6 @@ if is_torch_available():
         ChineseCLIPTextModel,
         ChineseCLIPVisionModel,
     )
-    from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -68,7 +68,7 @@ class ChineseCLIPTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -245,7 +245,7 @@ class ChineseCLIPVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -316,7 +316,6 @@ class ChineseCLIPVisionModelTester:
 
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
 
@@ -385,14 +384,26 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_training(self):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
@@ -461,6 +472,18 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @unittest.skip(reason="ChineseCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -471,14 +494,13 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class ChineseCLIPModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -487,6 +509,7 @@ class ChineseCLIPModelTester:
         self.parent = parent
         self.text_model_tester = ChineseCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = ChineseCLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -535,8 +558,9 @@ class ChineseCLIPModelTester:
 
 
 @require_torch
-class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": ChineseCLIPModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -647,6 +671,17 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
                 p2 = loaded_model_state_dict[layer_name]
@@ -657,9 +692,9 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
+        model = ChineseCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of Pikachu
@@ -679,9 +714,9 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         processor = ChineseCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = processor(
+            text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt"
+        ).to(torch_device)
 
         # forward pass
         with torch.no_grad():

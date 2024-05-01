@@ -21,6 +21,12 @@ from ..xlnet.test_modeling_xlnet import XLNetModelTest
 
 @custom_tokenizers
 class CpmTokenizationTest(XLNetModelTest):
+    # There is no `CpmModel`
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
     def test_pre_tokenization(self):
         tokenizer = CpmTokenizer.from_pretrained("TsinghuaAI/CPM-Generate")
         text = "Hugging Face大法好，谁用谁知道。"

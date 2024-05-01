@@ -208,12 +208,12 @@ class DisjunctiveTrie:
         """
         self.max_height = max([len(one) for one in nested_token_ids])
 
-        root = dict()
+        root = {}
         for token_ids in nested_token_ids:
             level = root
             for tidx, token_id in enumerate(token_ids):
                 if token_id not in level:
-                    level[token_id] = dict()
+                    level[token_id] = {}
 
                 level = level[token_id]
 
@@ -263,8 +263,9 @@ class DisjunctiveConstraint(Constraint):
     A special [`Constraint`] that is fulfilled by fulfilling just one of several constraints.
 
     Args:
-        nested_token_ids (`List[List[int]]`): a list of words, where each word is a list of ids. This constraint
-        is fulfilled by generating just one from the list of words.
+        nested_token_ids (`List[List[int]]`):
+            A list of words, where each word is a list of ids. This constraint is fulfilled by generating just one from
+            the list of words.
     """
 
     def __init__(self, nested_token_ids: List[List[int]]):

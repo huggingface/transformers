@@ -20,21 +20,21 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
-from PIL import Image
-from torch import Tensor, nn
-
-import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from torch import Tensor, nn
+
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
+    Mask2FormerImageProcessor,
     Mask2FormerModel,
-    MaskFormerImageProcessor,
     SwinConfig,
 )
 from transformers.models.mask2former.modeling_mask2former import (
@@ -76,7 +76,7 @@ class TrackedStateDict:
         Returns:
             List[str]: List of keys not yet updated
         """
-        return set(list(self.to_track.keys())) - self._seen
+        return set(self.to_track.keys()) - self._seen
 
     def copy(self) -> Dict:
         # proxy the call to the internal dictionary
@@ -192,12 +192,12 @@ class OriginalMask2FormerConfigToOursConverter:
         return config
 
 
-class OriginalMask2FormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object) -> MaskFormerImageProcessor:
+class OriginalMask2FormerConfigToImageProcessorConverter:
+    def __call__(self, original_config: object) -> Mask2FormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
 
-        return MaskFormerImageProcessor(
+        return Mask2FormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -624,7 +624,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         rename_keys = []
         for i in range(self.config.decoder_layers - 1):
-
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",
@@ -847,7 +846,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: Mask2FormerForUniversalSegmentation,
-    feature_extractor: MaskFormerImageProcessor,
+    image_processor: Mask2FormerImageProcessor,
     tolerance: float,
 ):
     with torch.no_grad():
@@ -855,7 +854,7 @@ def test(
         our_model = our_model.eval()
 
         im = prepare_img()
-        x = feature_extractor(images=im, return_tensors="pt")["pixel_values"]
+        x = image_processor(images=im, return_tensors="pt")["pixel_values"]
 
         original_model_backbone_features = original_model.backbone(x.clone())
         our_model_output: Mask2FormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
@@ -980,10 +979,10 @@ if __name__ == "__main__":
         checkpoints_dir, config_dir
     ):
         model_name = get_model_name(checkpoint_file)
-        feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
+        image_processor = OriginalMask2FormerConfigToImageProcessorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
-        feature_extractor.size = {"height": 384, "width": 384}
+        image_processor.size = {"height": 384, "width": 384}
 
         original_config = setup_cfg(Args(config_file=config_file))
         mask2former_kwargs = OriginalMask2Former.from_config(original_config)
@@ -1013,8 +1012,8 @@ if __name__ == "__main__":
             tolerance = 3e-1
 
         logger.info(f"🪄 Testing {model_name}...")
-        test(original_model, mask2former_for_segmentation, feature_extractor, tolerance)
+        test(original_model, mask2former_for_segmentation, image_processor, tolerance)
         logger.info(f"🪄 Pushing {model_name} to hub...")
 
-        feature_extractor.push_to_hub(model_name)
+        image_processor.push_to_hub(model_name)
         mask2former_for_segmentation.push_to_hub(model_name)

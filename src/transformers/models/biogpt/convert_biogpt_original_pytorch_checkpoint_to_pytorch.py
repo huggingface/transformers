@@ -157,7 +157,6 @@ def rewrite_dict_keys(d):
 
 
 def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_folder_path):
-
     # prep
     if not os.path.exists(biogpt_checkpoint_path):
         raise ValueError(f"path {biogpt_checkpoint_path} does not exist!")

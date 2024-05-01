@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,6 +59,7 @@ else:
         "TFWav2Vec2ForCTC",
         "TFWav2Vec2Model",
         "TFWav2Vec2PreTrainedModel",
+        "TFWav2Vec2ForSequenceClassification",
     ]
 
 try:
@@ -112,6 +109,7 @@ if TYPE_CHECKING:
         from .modeling_tf_wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
+            TFWav2Vec2ForSequenceClassification,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
         )

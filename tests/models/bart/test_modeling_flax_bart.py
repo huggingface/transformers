@@ -33,6 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers.models.bart.modeling_flax_bart import (
         FlaxBartForConditionalGeneration,
         FlaxBartForQuestionAnswering,
@@ -426,7 +427,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
         )
 
         input_ids = tokenizer(input_str, return_tensors="np").input_ids
-        sequences = model.generate(input_ids, num_beams=2, max_length=20).sequences
+        sequences = model.generate(input_ids, num_beams=2, min_length=None, max_length=20).sequences
 
         output_str = tokenizer.batch_decode(sequences)[0]
 

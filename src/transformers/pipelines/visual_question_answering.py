@@ -1,7 +1,7 @@
 from typing import Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -10,12 +10,12 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
 class VisualQuestionAnsweringPipeline(Pipeline):
     """
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
@@ -53,14 +53,16 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING)
+        self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
+    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}
         if padding is not None:
             preprocess_params["padding"] = padding
         if truncation is not None:
             preprocess_params["truncation"] = truncation
+        if timeout is not None:
+            preprocess_params["timeout"] = timeout
         if top_k is not None:
             postprocess_params["top_k"] = top_k
         return preprocess_params, {}, postprocess_params
@@ -90,6 +92,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
         Return:
             A dictionary or a list of dictionaries containing the result. The dictionaries contain the following keys:
 
@@ -109,29 +114,38 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         results = super().__call__(inputs, **kwargs)
         return results
 
-    def preprocess(self, inputs, padding=False, truncation=False):
-        image = load_image(inputs["image"])
+    def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
+        image = load_image(inputs["image"], timeout=timeout)
         model_inputs = self.tokenizer(
             inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
         )
-        image_features = self.feature_extractor(images=image, return_tensors=self.framework)
+        image_features = self.image_processor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
         return model_inputs
 
-    def _forward(self, model_inputs):
-        model_outputs = self.model(**model_inputs)
+    def _forward(self, model_inputs, **generate_kwargs):
+        if self.model.can_generate():
+            model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
+        else:
+            model_outputs = self.model(**model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5):
-        if top_k > self.model.config.num_labels:
-            top_k = self.model.config.num_labels
-
-        if self.framework == "pt":
-            probs = model_outputs.logits.sigmoid()[0]
-            scores, ids = probs.topk(top_k)
+        if self.model.can_generate():
+            return [
+                {"answer": self.tokenizer.decode(output_ids, skip_special_tokens=True).strip()}
+                for output_ids in model_outputs
+            ]
         else:
-            raise ValueError(f"Unsupported framework: {self.framework}")
+            if top_k > self.model.config.num_labels:
+                top_k = self.model.config.num_labels
 
-        scores = scores.tolist()
-        ids = ids.tolist()
-        return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+            if self.framework == "pt":
+                probs = model_outputs.logits.sigmoid()[0]
+                scores, ids = probs.topk(top_k)
+            else:
+                raise ValueError(f"Unsupported framework: {self.framework}")
+
+            scores = scores.tolist()
+            ids = ids.tolist()
+            return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]

@@ -34,18 +34,6 @@ VOCAB_FILES_NAMES = {
     "spm_file": "sentencepiece.bpe.model",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/s2t-small-librispeech-asr": (
-            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json"
-        ),
-    },
-    "spm_file": {
-        "facebook/s2t-small-librispeech-asr": (
-            "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
-        )
-    },
-}
 
 MAX_MODEL_INPUT_SIZES = {
     "facebook/s2t-small-librispeech-asr": 1024,
@@ -104,8 +92,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -122,23 +108,12 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         tgt_lang=None,
         lang_codes=None,
+        additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            do_upper_case=do_upper_case,
-            do_lower_case=do_lower_case,
-            tgt_lang=tgt_lang,
-            lang_codes=lang_codes,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
         self.do_upper_case = do_upper_case
         self.do_lower_case = do_lower_case
 
@@ -152,17 +127,38 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             self.langs = LANGUAGES[lang_codes]
             self.lang_tokens = [f"<lang:{lang}>" for lang in self.langs]
             self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
-
-            self._additional_special_tokens = self.lang_tokens
+            if additional_special_tokens is not None:
+                additional_special_tokens = self.lang_tokens + additional_special_tokens
+            else:
+                additional_special_tokens = self.lang_tokens
             self._tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
 
             self.set_tgt_lang_special_tokens(self._tgt_lang)
         else:
             self.lang_code_to_id = {}
 
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            do_upper_case=do_upper_case,
+            do_lower_case=do_lower_case,
+            tgt_lang=tgt_lang,
+            lang_codes=lang_codes,
+            sp_model_kwargs=self.sp_model_kwargs,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
+
+    def get_vocab(self) -> Dict:
+        vocab = self.encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     @property
     def tgt_lang(self) -> str:
@@ -240,11 +236,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
-
-    def get_vocab(self) -> Dict:
-        vocab = self.encoder.copy()
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()

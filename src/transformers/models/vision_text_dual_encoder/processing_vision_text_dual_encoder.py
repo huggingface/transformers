@@ -32,16 +32,18 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
     information.
 
     Args:
-        image_processor ([`AutoImageProcessor`]):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
+        tokenizer ([`PreTrainedTokenizer`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
@@ -63,7 +65,7 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to VisionTextDualEncoderTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not
-        `None` to encode the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        `None` to encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         AutoImageProcessor's [`~AutoImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -74,8 +76,7 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:

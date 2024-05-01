@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,6 +48,7 @@ else:
     _import_structure["modeling_gpt2"] = [
         "GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPT2DoubleHeadsModel",
+        "GPT2ForQuestionAnswering",
         "GPT2ForSequenceClassification",
         "GPT2ForTokenClassification",
         "GPT2LMHeadModel",
@@ -113,6 +110,7 @@ if TYPE_CHECKING:
         from .modeling_gpt2 import (
             GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPT2DoubleHeadsModel,
+            GPT2ForQuestionAnswering,
             GPT2ForSequenceClassification,
             GPT2ForTokenClassification,
             GPT2LMHeadModel,

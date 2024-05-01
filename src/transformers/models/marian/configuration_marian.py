@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/config.json",
-    # See all Marian models at https://huggingface.co/models?filter=marian
-}
-
 
 class MarianConfig(PretrainedConfig):
     r"""
@@ -102,6 +97,7 @@ class MarianConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "marian"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -133,7 +129,7 @@ class MarianConfig(PretrainedConfig):
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size

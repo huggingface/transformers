@@ -25,7 +25,7 @@ The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash
 python run_flax_ner.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --dataset_name conll2003 \
   --max_seq_length 128 \
   --learning_rate 2e-5 \

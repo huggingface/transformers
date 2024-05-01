@@ -23,7 +23,6 @@ from typing import Any, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -49,16 +48,11 @@ from .configuration_longt5 import LongT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongT5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
-LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/long-t5-local-base",
-    "google/long-t5-local-large",
-    "google/long-t5-tglobal-base",
-    "google/long-t5-tglobal-large",
-]
+
+from ..deprecated._archive_maps import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:
@@ -232,7 +226,6 @@ class LongT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # LongT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -277,6 +270,12 @@ class LongT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -447,9 +446,10 @@ class LongT5Attention(nn.Module):
         real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
@@ -770,7 +770,6 @@ class LongT5TransientGlobalAttention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
-        self.gradient_checkpointing = False
 
         # Relativen attention bias & Layer norm for global attention
         if self.has_relative_attention_bias:
@@ -1180,7 +1179,6 @@ class LongT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1299,6 +1297,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, LongT5DenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -1336,20 +1336,16 @@ class LongT5PreTrainedModel(PreTrainedModel):
                         mean=0.0, std=factor * ((d_model) ** -0.5)
                     )
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._set_gradient_checkpointing with T5->LongT5
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (LongT5Attention, LongT5Stack)):
-            module.gradient_checkpointing = value
-
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the"
-            " pad_token_id. See LongT5 docs for more information"
-        )
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id. "
+                "See LongT5 docs for more information."
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -1361,7 +1357,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -1386,10 +1383,10 @@ class LongT5Stack(LongT5PreTrainedModel):
         self.final_layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+        self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.gradient_checkpointing = False
 
     # Copied from transformers.models.t5.modeling_t5.T5Stack.get_input_embeddings
     def get_input_embeddings(self):
@@ -1477,6 +1474,13 @@ class LongT5Stack(LongT5PreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -1497,17 +1501,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return tuple(module(*inputs, use_cache, output_attentions))
-
-                    return custom_forward
-
-                layer_outputs = checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.forward,
                     hidden_states,
                     extended_attention_mask,
                     position_bias,
@@ -1517,6 +1512,8 @@ class LongT5Stack(LongT5PreTrainedModel):
                     layer_head_mask,
                     cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1611,7 +1608,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1628,7 +1625,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1706,7 +1703,7 @@ LONGT5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [LONGT5
@@ -1752,13 +1749,10 @@ num_heads)`.
     LONGT5_START_DOCSTRING,
 )
 class LongT5Model(LongT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1786,6 +1780,11 @@ class LongT5Model(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder
@@ -1827,9 +1826,9 @@ class LongT5Model(LongT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, LongT5Model
+        >>> from transformers import AutoTokenizer, LongT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/long-t5-local-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
         >>> model = LongT5Model.from_pretrained("google/long-t5-local-base")
 
         >>> # Let's try a very long encoder input.
@@ -1905,14 +1904,10 @@ class LongT5Model(LongT5PreTrainedModel):
 
 @add_start_docstrings("""LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING)
 class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-        r"lm_head.weight",
-    ]
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1944,6 +1939,11 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
@@ -2066,6 +2066,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
+
+            labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
@@ -2095,12 +2097,20 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
-        # cut decoder_input_ids if past is used
+        # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {
             "decoder_input_ids": input_ids,
@@ -2116,15 +2126,15 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -2146,7 +2156,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     LONGT5_START_DOCSTRING,
 )
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -2166,6 +2177,10 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

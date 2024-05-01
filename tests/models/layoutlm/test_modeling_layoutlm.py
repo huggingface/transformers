@@ -19,6 +19,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -47,7 +48,7 @@ class LayoutLMModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -219,8 +220,7 @@ class LayoutLMModelTester:
 
 
 @require_torch
-class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
-
+class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LayoutLMModel,
@@ -231,6 +231,18 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else None
+    )
+    pipeline_model_mapping = (
+        {
+            "document-question-answering": LayoutLMForQuestionAnswering,
+            "feature-extraction": LayoutLMModel,
+            "fill-mask": LayoutLMForMaskedLM,
+            "text-classification": LayoutLMForSequenceClassification,
+            "token-classification": LayoutLMForTokenClassification,
+            "zero-shot": LayoutLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -266,6 +278,24 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
 
 def prepare_layoutlm_batch_inputs():

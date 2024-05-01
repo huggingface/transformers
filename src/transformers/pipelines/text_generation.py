@@ -1,14 +1,19 @@
 import enum
 import warnings
+from typing import Dict
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available
+from .base import Pipeline, build_pipeline_init_args
 
-from ..utils import add_end_docstrings, is_tf_available
-from .base import PIPELINE_INIT_ARGS, Pipeline
 
+if is_torch_available():
+    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+    from .pt_utils import KeyDataset
 
 if is_tf_available():
     import tensorflow as tf
+
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
@@ -17,18 +22,32 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+class Chat:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: Dict):
+        for message in messages:
+            if not ("role" in message and "content" in message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages
+
+
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt.
+    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats,
+    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
+    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
 
-    Example:
+    Examples:
 
     ```python
     >>> from transformers import pipeline
 
-    >>> generator = pipeline(model="gpt2")
+    >>> generator = pipeline(model="openai-community/gpt2")
     >>> generator("I can't believe you did such a ", do_sample=False)
     [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
 
@@ -36,14 +55,27 @@ class TextGenerationPipeline(Pipeline):
     >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
     ```
 
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="HuggingFaceH4/zephyr-7b-beta")
+    >>> # Zephyr-beta is a conversational model, so let's pass it a chat instead of a single string
+    >>> generator([{"role": "user", "content": "What is the capital of France? Answer in one word."}], do_sample=False, max_new_tokens=2)
+    [{'generated_text': [{'role': 'user', 'content': 'What is the capital of France? Answer in one word.'}, {'role': 'assistant', 'content': 'Paris'}]}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
-    on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
+    objective. See the list of available [text completion models](https://huggingface.co/models?filter=text-generation)
+    and the list of [conversational models](https://huggingface.co/models?other=conversational)
+    on [huggingface.co/models].
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -63,7 +95,7 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -97,26 +129,29 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
-        **generate_kwargs
+        add_special_tokens=False,
+        truncation=None,
+        padding=False,
+        max_length=None,
+        **generate_kwargs,
     ):
-        preprocess_params = {}
+        preprocess_params = {
+            "add_special_tokens": add_special_tokens,
+            "truncation": truncation,
+            "padding": padding,
+            "max_length": max_length,
+        }
+        if max_length is not None:
+            generate_kwargs["max_length"] = max_length
+
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=False, return_tensors=self.framework
+                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
             )
-            prefix_length = prefix_inputs["input_ids"].shape[-1]
+            generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
-            if "max_new_tokens" in generate_kwargs:
-                pass
-            elif "max_length" in generate_kwargs:
-                generate_kwargs["max_length"] += prefix_length
-            else:
-                generate_kwargs["max_length"] = self.model.config.max_length + prefix_length
-
-            if "min_length" in generate_kwargs:
-                generate_kwargs["min_length"] += prefix_length
         if handle_long_generation is not None:
             if handle_long_generation not in {"hole"}:
                 raise ValueError(
@@ -171,8 +206,11 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            args (`str` or `List[str]`):
-                One or several prompts (or one list of prompts) to complete.
+            text_inputs (`str`, `List[str]`, List[Dict[str, str]], or `List[List[Dict[str, str]]]`):
+                One or several prompts (or one list of prompts) to complete. If strings or a list of string are
+                passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
+                of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
+                the model's chat template will be used to format them before passing them to the model.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -181,7 +219,7 @@ class TextGenerationPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Only meaningful if
                 *return_text* is set to True.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (`str`, *optional*):
                 Prefix added to prompt.
@@ -194,25 +232,60 @@ class TextGenerationPipeline(Pipeline):
                 - `None` : default strategy where nothing in particular happens
                 - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
-
-            generate_kwargs:
+            generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework [here](./model#generative-models)).
 
         Return:
-            A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination
+            A list or a list of lists of `dict`: Returns one of the following dictionaries (cannot return a combination
             of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        return super().__call__(text_inputs, **kwargs)
+        if isinstance(
+            text_inputs, (list, tuple, KeyDataset) if is_torch_available() else (list, tuple)
+        ) and isinstance(text_inputs[0], (list, tuple, dict)):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(text_inputs[0], dict):
+                return super().__call__(Chat(text_inputs), **kwargs)
+            else:
+                chats = [Chat(chat) for chat in text_inputs]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+        else:
+            return super().__call__(text_inputs, **kwargs)
 
-    def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
-        inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
-        )
+    def preprocess(
+        self,
+        prompt_text,
+        prefix="",
+        handle_long_generation=None,
+        add_special_tokens=False,
+        truncation=None,
+        padding=False,
+        max_length=None,
+        **generate_kwargs,
+    ):
+        if isinstance(prompt_text, Chat):
+            inputs = self.tokenizer.apply_chat_template(
+                prompt_text.messages,
+                truncation=truncation,
+                padding=padding,
+                max_length=max_length,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors=self.framework,
+            )
+        else:
+            inputs = self.tokenizer(
+                prefix + prompt_text,
+                truncation=truncation,
+                padding=padding,
+                max_length=max_length,
+                add_special_tokens=add_special_tokens,
+                return_tensors=self.framework,
+            )
         inputs["prompt_text"] = prompt_text
 
         if handle_long_generation == "hole":
@@ -248,6 +321,25 @@ class TextGenerationPipeline(Pipeline):
         else:
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
+
+        # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
+        # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
+        prefix_length = generate_kwargs.pop("prefix_length", 0)
+        if prefix_length > 0:
+            has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
+                "generation_config" in generate_kwargs
+                and generate_kwargs["generation_config"].max_new_tokens is not None
+            )
+            if not has_max_new_tokens:
+                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.model.config.max_length
+                generate_kwargs["max_length"] += prefix_length
+            has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
+                "generation_config" in generate_kwargs
+                and generate_kwargs["generation_config"].min_new_tokens is not None
+            )
+            if not has_min_new_tokens and "min_length" in generate_kwargs:
+                generate_kwargs["min_length"] += prefix_length
+
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
@@ -286,10 +378,13 @@ class TextGenerationPipeline(Pipeline):
                         )
                     )
 
+                all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    all_text = prompt_text + text[prompt_length:]
-                else:
-                    all_text = text[prompt_length:]
+                    if isinstance(prompt_text, str):
+                        all_text = prompt_text + all_text
+                    elif isinstance(prompt_text, Chat):
+                        # Explicit list parsing is necessary for parsing chat datasets
+                        all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
 
                 record = {"generated_text": all_text}
             records.append(record)

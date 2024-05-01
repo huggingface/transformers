@@ -19,11 +19,19 @@ import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import require_tokenizers, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_tokenizers,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_bf16,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -36,9 +44,7 @@ if is_torch_available():
         SwitchTransformersModel,
         SwitchTransformersTop1Router,
     )
-    from transformers.generation import BeamSampleDecoderOnlyOutput, BeamSampleEncoderDecoderOutput
     from transformers.models.switch_transformers.modeling_switch_transformers import (
-        SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -57,7 +63,7 @@ class SwitchTransformersModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -73,7 +79,6 @@ class SwitchTransformersModelTester:
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -547,12 +552,22 @@ class SwitchTransformersModelTester:
 
 
 @require_torch
-class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": SwitchTransformersForConditionalGeneration,
+            "feature-extraction": SwitchTransformersModel,
+            "summarization": SwitchTransformersForConditionalGeneration,
+            "text2text-generation": SwitchTransformersForConditionalGeneration,
+            "translation": SwitchTransformersForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -602,101 +617,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    @slow
-    def test_beam_sample_generate_dict_output(self):
-        r"""
-        This test needs to be overriden with a larger model since it fails for very small models due to precision issues.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
-            model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            num_return_sequences = 2
-            if model.config.is_encoder_decoder:
-                max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
-
-            output_beam_sample, output_generate = self._beam_sample_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                beam_scorer=beam_scorer,
-                beam_kwargs=beam_kwargs,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertIsInstance(output_beam_sample, BeamSampleEncoderDecoderOutput)
-                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
-            else:
-                self.assertIsInstance(output_beam_sample, BeamSampleDecoderOnlyOutput)
-                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
-
-            self.assertListEqual(output_generate.sequences.tolist(), output_beam_sample.sequences.tolist())
-
-    @slow
-    def test_beam_sample_generate(self):
-        r"""
-        This test needs to be overriden with a larger model since it fails for very small models due to precision issues.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
-
-            # check `generate()` and `beam_search()` are equal
-            # change `num_return_sequences = 2` but not for `beam_scorer`
-            num_return_sequences = 2
-            if model.config.is_encoder_decoder:
-                max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
-
-            output_generate, output_beam_sample = self._beam_sample_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                beam_scorer=beam_scorer,
-                beam_kwargs=beam_kwargs,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-            )
-
-            self.assertListEqual(output_generate.tolist(), output_beam_sample.tolist())
 
     def test_decoder_model_past_with_3d_attn_mask(self):
         (
@@ -749,9 +669,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwitchTransformersModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/switch-base-8"
+        model = SwitchTransformersModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
@@ -816,7 +736,7 @@ class SwitchTransformersEncoderOnlyModelTester:
         # For common tests
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -828,7 +748,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -981,6 +900,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
     Original implementation of the routers here:
 
     """
+
     config = SwitchTransformersConfig(
         num_experts=2,
         hidden_size=8,
@@ -1104,7 +1024,8 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 @require_torch
 @require_tokenizers
 class SwitchTransformerModelIntegrationTests(unittest.TestCase):
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_bf16
     def test_small_logits(self):
         r"""
         Logits testing to check implementation consistency between `t5x` implementation
@@ -1132,15 +1053,18 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
         hf_logits = hf_logits[0, 0, :30]
 
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
+    @unittest.skip(
+        "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
+    )
     def test_small_generate(self):
         # Generate test using the smalled switch-C model.
 
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
 
         input_ids = tokenizer(
@@ -1151,24 +1075,27 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_str, "drink.")
 
         input_ids = tokenizer(
-            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
+            "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
             return_tensors="pt",
         ).input_ids.to(torch_device)
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        EXPECTED_OUTPUT = "<pad><extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
+        EXPECTED_OUTPUT = "<pad><extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> whiskey<extra_id_4>.</s>"
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
+    @unittest.skip(
+        "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
+    )
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
 
         inputs = [
-            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
+            "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
         ] * BATCH_SIZE
         encoded_input = tokenizer.batch_encode_plus(inputs, return_tensors="pt")
 

@@ -26,13 +26,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilenet_v2_1.4_224": "https://huggingface.co/google/mobilenet_v2_1.4_224/resolve/main/config.json",
-    "google/mobilenet_v2_1.0_224": "https://huggingface.co/google/mobilenet_v2_1.0_224/resolve/main/config.json",
-    "google/mobilenet_v2_0.75_160": "https://huggingface.co/google/mobilenet_v2_0.75_160/resolve/main/config.json",
-    "google/mobilenet_v2_0.35_96": "https://huggingface.co/google/mobilenet_v2_0.35_96/resolve/main/config.json",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-}
+
+from ..deprecated._archive_maps import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MobileNetV2Config(PretrainedConfig):
@@ -64,16 +59,16 @@ class MobileNetV2Config(PretrainedConfig):
             the input dimensions by a factor of 32. If `output_stride` is 8 or 16, the model uses dilated convolutions
             on the depthwise layers instead of regular convolutions, so that the feature maps never become more than 8x
             or 16x smaller than the input image.
-        first_layer_is_expansion (`bool`, `optional`, defaults to `True`):
+        first_layer_is_expansion (`bool`, *optional*, defaults to `True`):
             True if the very first convolution layer is also the expansion layer for the first expansion block.
-        finegrained_output (`bool`, `optional`, defaults to `True`):
+        finegrained_output (`bool`, *optional*, defaults to `True`):
             If true, the number of output channels in the final convolution layer will stay large (1280) even if
             `depth_multiplier` is less than 1.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
-        tf_padding (`bool`, `optional`, defaults to `True`):
+        tf_padding (`bool`, *optional*, defaults to `True`):
             Whether to use TensorFlow padding rules on the convolution layers.
-        classifier_dropout_prob (`float`, *optional*, defaults to 0.999):
+        classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -96,6 +91,7 @@ class MobileNetV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilenet_v2"
 
     def __init__(
@@ -105,7 +101,7 @@ class MobileNetV2Config(PretrainedConfig):
         depth_multiplier=1.0,
         depth_divisible_by=8,
         min_depth=8,
-        expand_ratio=6,
+        expand_ratio=6.0,
         output_stride=32,
         first_layer_is_expansion=True,
         finegrained_output=True,
@@ -115,7 +111,7 @@ class MobileNetV2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=0.001,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -140,7 +136,6 @@ class MobileNetV2Config(PretrainedConfig):
 
 
 class MobileNetV2OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

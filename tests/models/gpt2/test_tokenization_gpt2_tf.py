@@ -10,12 +10,13 @@ from transformers.testing_utils import require_keras_nlp, require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
+
 if is_keras_nlp_available():
     from transformers.models.gpt2 import TFGPT2Tokenizer
 
 
-TOKENIZER_CHECKPOINTS = ["gpt2"]
-TINY_MODEL_CHECKPOINT = "gpt2"
+TOKENIZER_CHECKPOINTS = ["openai-community/gpt2"]
+TINY_MODEL_CHECKPOINT = "openai-community/gpt2"
 
 if is_tf_available():
 
@@ -28,7 +29,6 @@ if is_tf_available():
 
         @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
         def serving(self, text):
-
             tokenized = self.tokenizer(text)
             input_ids_dense = tokenized["input_ids"].to_tensor()
 

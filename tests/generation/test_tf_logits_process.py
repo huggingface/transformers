@@ -14,11 +14,13 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 import numpy as np
-
 from parameterized import parameterized
+
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 

@@ -14,13 +14,16 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import FunnelConfig, is_tf_available
-from transformers.testing_utils import require_tf, tooslow
+from transformers.testing_utils import require_tf
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -329,7 +332,7 @@ class TFFunnelModelTester:
 
 
 @require_tf
-class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFFunnelModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFFunnelModel,
@@ -340,6 +343,18 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": (TFFunnelBaseModel, TFFunnelModel),
+            "fill-mask": TFFunnelForMaskedLM,
+            "question-answering": TFFunnelForQuestionAnswering,
+            "text-classification": TFFunnelForSequenceClassification,
+            "token-classification": TFFunnelForTokenClassification,
+            "zero-shot": TFFunnelForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False
@@ -371,14 +386,6 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
-
-    def test_compile_tf_model(self):
-        # This test fails the CI. TODO Lysandre re-enable it
-        pass
-
 
 @require_tf
 class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -406,7 +413,3 @@ class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass

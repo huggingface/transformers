@@ -17,15 +17,23 @@ import tempfile
 import unittest
 
 import timeout_decorator  # noqa
-
 from parameterized import parameterized
+
 from transformers import FSMTConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -153,9 +161,20 @@ def prepare_fsmt_inputs_dict(
 
 
 @require_torch
-class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": FSMTForConditionalGeneration,
+            "feature-extraction": FSMTModel,
+            "summarization": FSMTForConditionalGeneration,
+            "text2text-generation": FSMTForConditionalGeneration,
+            "translation": FSMTForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
@@ -259,12 +278,51 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 input_names=["input_ids", "attention_mask"],
             )
 
+    def test_ensure_weights_are_shared(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.tie_word_embeddings = True
+        model = FSMTForConditionalGeneration(config)
+
+        # FSMT shares three weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.output_projection.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
+        config.tie_word_embeddings = False
+        model = FSMTForConditionalGeneration(config)
+
+        # FSMT shares three weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.output_projection.weight.data_ptr(),
+                }
+            ),
+            2,
+        )
+
     @unittest.skip("can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip("Passing inputs_embeds not implemented for FSMT.")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Input ids is required for FSMT.")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip("model weights aren't tied in FSMT.")
@@ -351,12 +409,12 @@ class FSMTHeadTests(unittest.TestCase):
         self.assertEqual(n_pad_after, n_pad_before - 1)
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
         model = FSMTForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -491,8 +549,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_pipeline(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        device = 0 if torch_device == "cuda" else -1
-        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=device)
+        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=torch_device)
         output = pipeline([src_text])
         self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 
@@ -528,7 +585,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     @unittest.skip("different from marian (needs more research)")
     def test_positional_emb_weights_against_marian(self):
-
         desired_weights = torch.tensor(
             [
                 [0, 0, 0, 0, 0],

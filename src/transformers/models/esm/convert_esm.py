@@ -20,11 +20,11 @@ import pathlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import torch
-
 import esm as esm_module
+import torch
 from esm.esmfold.v1.misc import batch_encode_sequences as esmfold_encode_sequences
 from esm.esmfold.v1.pretrained import esmfold_v1
+
 from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
@@ -378,8 +378,8 @@ def convert_esm_checkpoint_to_pytorch(
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_repo:
-        model.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
-        hf_tokenizer.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
+        model.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
+        hf_tokenizer.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
 
 
 if __name__ == "__main__":

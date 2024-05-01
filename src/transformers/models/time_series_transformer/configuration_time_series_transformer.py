@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Time Series Transformer model configuration"""
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,12 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": (
-        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
-    ),
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
-}
+
+from ..deprecated._archive_maps import TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TimeSeriesTransformerConfig(PretrainedConfig):
@@ -44,7 +40,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     Args:
         prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model.
+            The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
+            typically dictated by the dataset and we recommend to set it appropriately.
         context_length (`int`, *optional*, defaults to `prediction_length`):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
@@ -56,11 +53,12 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`bool`, *optional* defaults to `True`):
-            Whether to scale the input targets.
+        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
-            5, 6, 7]`.
+            The lags of the input time series as covariates often dictated by the frequency of the data. Default is
+            `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
@@ -77,6 +75,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
             `num_static_categorical_features` is > 0.
+        d_model (`int`, *optional*, defaults to 64):
+            Dimensionality of the transformer layers.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -114,8 +114,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 
-    >>> # Initializing a default Time Series Transformer configuration
-    >>> configuration = TimeSeriesTransformerConfig()
+    >>> # Initializing a Time Series Transformer configuration with 12 time steps for prediction
+    >>> configuration = TimeSeriesTransformerConfig(prediction_length=12)
 
     >>> # Randomly initializing a model (with random weights) from the configuration
     >>> model = TimeSeriesTransformerModel(configuration)
@@ -123,6 +123,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "time_series_transformer"
     attribute_map = {
         "hidden_size": "d_model",
@@ -132,13 +133,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_size: int = 1,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
+        input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: bool = True,
+        scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
@@ -153,6 +154,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         decoder_layers: int = 2,
         is_encoder_decoder: bool = True,
         activation_function: str = "gelu",
+        d_model: int = 64,
         dropout: float = 0.1,
         encoder_layerdrop: float = 0.1,
         decoder_layerdrop: float = 0.1,
@@ -161,7 +163,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length
@@ -182,7 +184,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
                 )
             self.cardinality = cardinality
         else:
-            self.cardinality = [1]
+            self.cardinality = [0]
         if embedding_dimension and num_static_categorical_features > 0:
             if len(embedding_dimension) != num_static_categorical_features:
                 raise ValueError(
@@ -194,7 +196,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.feature_size = input_size * len(lags_sequence) + self._number_of_features
+        self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -211,9 +214,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.init_std = init_std
 
-        self.output_attentions = False
-        self.output_hidden_states = False
-
         self.use_cache = use_cache
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -224,6 +224,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             sum(self.embedding_dimension)
             + self.num_dynamic_real_features
             + self.num_time_features
-            + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
-            + self.input_size  # the log(scale)
+            + self.num_static_real_features
+            + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )

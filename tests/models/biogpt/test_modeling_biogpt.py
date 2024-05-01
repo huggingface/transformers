@@ -17,19 +17,25 @@
 import math
 import unittest
 
-from transformers import BioGptConfig, is_torch_available
+from transformers import BioGptConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import BioGptForCausalLM, BioGptModel, BioGptTokenizer
-    from transformers.models.biogpt.modeling_biogpt import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import (
+        BioGptForCausalLM,
+        BioGptForSequenceClassification,
+        BioGptForTokenClassification,
+        BioGptModel,
+        BioGptTokenizer,
+    )
 
 
 class BioGptModelTester:
@@ -44,7 +50,7 @@ class BioGptModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -246,6 +252,16 @@ class BioGptModelTester:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
+    def create_and_check_biogpt_for_token_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        config.num_labels = self.num_labels
+        model = BioGptForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -262,10 +278,24 @@ class BioGptModelTester:
 
 
 @require_torch
-class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
-    all_model_classes = (BioGptModel, BioGptForCausalLM) if is_torch_available() else ()
+class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (BioGptModel, BioGptForCausalLM, BioGptForSequenceClassification, BioGptForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (BioGptForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BioGptModel,
+            "text-classification": BioGptForSequenceClassification,
+            "text-generation": BioGptForCausalLM,
+            "token-classification": BioGptForTokenClassification,
+            "zero-shot": BioGptForSequenceClassification,
+        }
+        if is_torch_available() and is_sacremoses_available()
+        else {}
+    )
     test_pruning = False
 
     def setUp(self):
@@ -300,6 +330,10 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_biogpt_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_biogpt_weight_initialization(*config_and_inputs)
+
+    def test_biogpt_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_biogpt_for_token_classification(*config_and_inputs)
 
     @slow
     def test_batch_generation(self):
@@ -347,9 +381,42 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BioGptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/biogpt"
+        model = BioGptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
+    def test_biogpt_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = BioGptForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model_for_multi_label with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
+    def test_biogpt_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = BioGptForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    @unittest.skip("The `input_embeds` when fed don't produce the same results.")
+    def test_beam_sample_generate(self):
+        pass
 
 
 @require_torch

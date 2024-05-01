@@ -19,9 +19,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/switch-base-8": "https://huggingface.co/google/switch-base-8/blob/main/config.json",
-}
+
+from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class SwitchTransformersConfig(PretrainedConfig):
@@ -38,7 +37,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the SwitchTransformers model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`SwitchTransformersModel`].
-        d_model (`int`, *optional*, defaults to 512):
+        d_model (`int`, *optional*, defaults to 768):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
             Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
@@ -50,21 +49,19 @@ class SwitchTransformersConfig(PretrainedConfig):
             Transformer.
         num_layers (`int`, *optional*, defaults to 12):
             Number of dense hidden layers in the Transformer encoder layer.
-        num_sparse_encoder_layers (`int`, *optional*, defaults to 6):
+        num_sparse_encoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
         num_decoder_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_sparse_decoder_layers (`int`, *optional*, defaults to 12):
+        num_sparse_decoder_layers (`int`, *optional*, defaults to 3):
             Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
-        num_heads (`int`, *optional*, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
             Number of experts for each SwitchTransformer layer.
-        router_type (`str`, *optional*, defaults to `"tokens_masked"`):
-            Router type - choose between `"tokens_masked", `"tokens_scatter"` and `"experts_masked"`.
-        router_bias (`bool`, *optional*, defaults to `True`):
+        router_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the router.
-        router_jitter_noise (`float`, *optional*, defaults to 0.1):
+        router_jitter_noise (`float`, *optional*, defaults to 0.01):
             Amount of noise to add to the router.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
@@ -83,10 +80,10 @@ class SwitchTransformersConfig(PretrainedConfig):
             The z loss factor for the total loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
+        dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. SwitchTransformersv1.1
             uses the `"gated-gelu"` feed forward projection. Original SwitchTransformers uses `"relu"`.
         add_router_probs (`bool`, *optional*, defaults to `False`):
@@ -94,6 +91,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "switch_transformers"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
@@ -111,7 +109,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_sparse_decoder_layers=3,
         num_heads=12,
         num_experts=8,
-        router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
@@ -123,13 +120,13 @@ class SwitchTransformersConfig(PretrainedConfig):
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
         initializer_factor=1.0,
-        feed_forward_proj="relu",
+        dense_act_fn="relu",
         is_encoder_decoder=True,
         add_router_probs=False,
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model
@@ -157,7 +154,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
 
         self.num_heads = num_heads
-        self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias
@@ -173,27 +169,12 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.add_router_probs = add_router_probs
 
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
-
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
+        self.dense_act_fn = dense_act_fn
 
         super().__init__(
             pad_token_id=pad_token_id,

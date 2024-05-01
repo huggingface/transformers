@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -39,6 +39,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_nat import NatConfig
 
 
@@ -57,7 +58,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "NatConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "shi-labs/nat-mini-in1k-224"
@@ -68,10 +68,8 @@ _IMAGE_CLASS_CHECKPOINT = "shi-labs/nat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-NAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shi-labs/nat-mini-in1k-224",
-    # See all Nat models at https://huggingface.co/models?filter=nat
-]
+from ..deprecated._archive_maps import NAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 # drop_path and NatDropPath are from the timm library.
 
@@ -104,9 +102,9 @@ class NatEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -140,9 +138,9 @@ class NatModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -176,9 +174,9 @@ class NatImageClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class NatEmbeddings(nn.Module):
@@ -263,7 +261,7 @@ class NatDownsampler(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -330,7 +328,6 @@ class NeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -341,7 +338,7 @@ class NeighborhoodAttention(nn.Module):
         query_layer = query_layer / math.sqrt(self.attention_head_size)
 
         # Compute NA between "query" and "key" to get the raw attention scores, and add relative positional biases.
-        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, 1)
+        attention_scores = natten2dqkrpb(query_layer, key_layer, self.rpb, self.kernel_size, 1)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -350,7 +347,7 @@ class NeighborhoodAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = natten2dav(attention_probs, value_layer, 1)
+        context_layer = natten2dav(attention_probs, value_layer, self.kernel_size, 1)
         context_layer = context_layer.permute(0, 2, 3, 1, 4).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
@@ -640,9 +637,6 @@ class NatPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: NatEncoder, value: bool = False) -> None:
-        pass
-
 
 NAT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -655,11 +649,12 @@ NAT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 NAT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -708,7 +703,6 @@ class NatModel(NatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=NatModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -788,7 +782,6 @@ class NatForImageClassification(NatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(NAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=NatImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -864,24 +857,16 @@ class NatForImageClassification(NatPreTrainedModel):
 class NatBackbone(NatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
         requires_backends(self, ["natten"])
 
-        self.stage_names = config.stage_names
-
         self.embeddings = NatEmbeddings(config)
         self.encoder = NatEncoder(config)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-
-        num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.out_feature_channels = {}
-        self.out_feature_channels["stem"] = config.embed_dim
-        for i, stage in enumerate(self.stage_names[1:]):
-            self.out_feature_channels[stage] = num_features[i]
+        self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
+        hidden_states_norms = {}
         for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
@@ -891,10 +876,6 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    @property
-    def channels(self):
-        return [self.out_feature_channels[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(NAT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)

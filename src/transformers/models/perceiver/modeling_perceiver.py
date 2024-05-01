@@ -50,12 +50,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
 _CONFIG_FOR_DOC = "PerceiverConfig"
-_TOKENIZER_FOR_DOC = "PerceiverTokenizer"
 
-PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "deepmind/language-perceiver",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-]
+
+from ..deprecated._archive_maps import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -878,7 +875,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+            attention_mask = torch.ones((batch_size, seq_length), device=device)
         # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
         extended_attention_mask = self.invert_attention_mask(attention_mask)
 
@@ -912,7 +909,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
                     "label": 1,
                 }
             else:
-                output_modality_sizes = None
+                output_modality_sizes = modality_sizes
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
@@ -953,14 +950,15 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
 @add_start_docstrings("""Example use of Perceiver for masked language modeling.""", PERCEIVER_START_DOCSTRING)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         text_preprocessor = PerceiverTextPreprocessor(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(
-            num_channels=text_preprocessor.num_channels, index_dims=config.max_position_embeddings
-        )
+        trainable_position_encoding_kwargs_decoder = {
+            "num_channels": text_preprocessor.num_channels,
+            "index_dims": config.max_position_embeddings,
+        }
 
         self.perceiver = PerceiverModel(
             config,
@@ -1007,10 +1005,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForMaskedLM
+        >>> from transformers import AutoTokenizer, PerceiverForMaskedLM
         >>> import torch
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
 
         >>> # training
@@ -1090,7 +1088,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1131,9 +1129,9 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverTokenizer, PerceiverForSequenceClassification
+        >>> from transformers import AutoTokenizer, PerceiverForSequenceClassification
 
-        >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForSequenceClassification.from_pretrained("deepmind/language-perceiver")
 
         >>> text = "hello world"
@@ -1215,8 +1213,8 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size**2)
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_preprocessor = {"num_channels": 256, "index_dims": config.image_size**2}
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1266,14 +1264,14 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationLearned
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
         >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1358,10 +1356,13 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (224, 224),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1407,14 +1408,14 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationFourier
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
         >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1498,10 +1499,13 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(56, 56), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (56, 56),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1548,14 +1552,14 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationConvProcessing
+        >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
+        >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
         >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
 
         >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
@@ -1639,15 +1643,18 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            num_bands=64,
-            max_resolution=config.train_size,
-            sine_only=False,
-            concat_pos=True,
-        )
-        fourier_position_encoding_kwargs_decoder = dict(
-            concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
-        )
+        fourier_position_encoding_kwargs_preprocessor = {
+            "num_bands": 64,
+            "max_resolution": config.train_size,
+            "sine_only": False,
+            "concat_pos": True,
+        }
+        fourier_position_encoding_kwargs_decoder = {
+            "concat_pos": True,
+            "max_resolution": config.train_size,
+            "num_bands": 64,
+            "sine_only": False,
+        }
 
         image_preprocessor = PerceiverImagePreprocessor(
             config,
@@ -1778,7 +1785,7 @@ Note that, by masking the classification label during evaluation (i.e. simply pr
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
@@ -1789,24 +1796,24 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                 "audio": PerceiverAudioPreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     samples_per_patch=config.samples_per_patch,
                 ),
                 "image": PerceiverImagePreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=32,
-                        max_resolution=(config.num_frames, config.image_size, config.image_size),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 32,
+                        "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     spatial_downsample=4,
                     temporal_downsample=1,
@@ -1821,16 +1828,16 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             # Autoencoding, don't pass inputs to the queries.
             concat_preprocessed_input=False,
             output_shape=config.output_shape,
-            output_num_channels=512,
+            output_num_channels=config.output_num_channels,
             use_query_residual=False,
             position_encoding_only=True,
             position_encoding_type="fourier",
-            fourier_position_encoding_kwargs=dict(
-                num_bands=32,
-                max_resolution=(config.num_frames, config.image_size, config.image_size),
-                sine_only=False,
-                concat_pos=True,
-            ),
+            fourier_position_encoding_kwargs={
+                "num_bands": 32,
+                "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                "sine_only": False,
+                "concat_pos": True,
+            },
         )
 
         decoder = PerceiverMultimodalDecoder(
@@ -1845,16 +1852,16 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     # Autoencoding, don't pass inputs to the queries.
                     concat_preprocessed_input=False,
                     output_index_dims=(n_audio_samples // config.samples_per_patch,),
-                    output_num_channels=512,
+                    output_num_channels=config.output_num_channels,
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                 ),
                 "image": image_decoder,
                 "label": PerceiverClassificationDecoder(
@@ -1864,22 +1871,22 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="trainable",
-                    trainable_position_encoding_kwargs=dict(
-                        num_channels=1024,
-                        index_dims=1,
-                    ),
+                    trainable_position_encoding_kwargs={
+                        "num_channels": config._label_trainable_num_channels,
+                        "index_dims": 1,
+                    },
                 ),
             },
             num_outputs=None,
-            output_num_channels=512,
+            output_num_channels=config.output_num_channels,
             use_query_residual=False,
         )
 
         output_postprocessor = PerceiverMultimodalPostprocessor(
             modalities={
-                "audio": PerceiverAudioPostprocessor(config, in_channels=512),
-                "image": PerceiverProjectionPostprocessor(in_channels=512, out_channels=3),
-                "label": PerceiverClassificationPostprocessor(config, in_channels=512),
+                "audio": PerceiverAudioPostprocessor(config, in_channels=config.output_num_channels),
+                "image": PerceiverProjectionPostprocessor(in_channels=config.output_num_channels, out_channels=3),
+                "label": PerceiverClassificationPostprocessor(config, in_channels=config.output_num_channels),
             }
         )
 
@@ -2124,7 +2131,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
         self.output_num_channels = output_num_channels
         # If `none`, the decoder will not construct any position encodings.
-        # You should construct your own when quering the decoder.
+        # You should construct your own when querying the decoder.
         self.output_position_encodings = None
         self.position_encoding_type = position_encoding_type
         self.position_encoding_kwargs = position_encoding_kwargs
@@ -2181,9 +2188,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            indices = list(
-                torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)
-            )
+            indices = [torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)]
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
@@ -2194,7 +2199,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
                 pos_emb = self.output_position_encodings(
-                    self.output_index_dims, batch_size=batch_size, device=inputs.device, pos=pos
+                    self.output_index_dims, batch_size=batch_size, device=inputs.device, dtype=inputs.dtype, pos=pos
                 )
 
             # Optionally project them to a target dimension.
@@ -2208,7 +2213,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if self.position_encoding_type == "trainable":
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
-                pos_emb = self.output_position_encodings(index_dims, batch_size, device=inputs.device)
+                pos_emb = self.output_position_encodings(
+                    index_dims, batch_size, device=inputs.device, dtype=inputs.dtype
+                )
 
             # Optionally project them to a target dimension.
             pos_emb = self.positions_projection(pos_emb)
@@ -2443,7 +2450,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         output_num_channels: int,
         min_padding_size: Optional[int] = 2,
         subsampled_index_dims: Optional[Dict[str, PerceiverAbstractDecoder]] = None,
-        **decoder_kwargs
+        **decoder_kwargs,
     ) -> None:
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)
@@ -2477,9 +2484,9 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         inputs = restructure(modality_sizes, inputs)
 
         # Obtain modality-specific decoders' queries
-        subsampled_points = subsampled_points or dict()
+        subsampled_points = subsampled_points or {}
 
-        decoder_queries = dict()
+        decoder_queries = {}
         for modality, decoder in self.modalities.items():
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
@@ -2809,7 +2816,12 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         return encoding_size
 
     def forward(
-        self, index_dims: List[int], batch_size: int, device, pos: torch.FloatTensor = None
+        self,
+        index_dims: List[int],
+        batch_size: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        pos: torch.FloatTensor = None,
     ) -> torch.FloatTensor:
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
         fourier_pos_enc = generate_fourier_features(
@@ -2818,7 +2830,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
             max_resolution=self.max_resolution,
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
-        ).to(device)
+        ).to(device=device, dtype=dtype)
         return fourier_pos_enc
 
 
@@ -2850,14 +2862,14 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.d_model
 
-    def forward(self, inputs: torch.LongTensor) -> torch.FloatTensor:
-        embeddings = self.embeddings(inputs)
+    def forward(self, inputs: torch.LongTensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+        embeddings_without_pos = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
         position_ids = torch.arange(0, seq_length, device=inputs.device)
-        embeddings = embeddings + self.position_embeddings(position_ids)
+        embeddings = embeddings_without_pos + self.position_embeddings(position_ids)
 
-        return embeddings, None, None
+        return embeddings, None, embeddings_without_pos
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
@@ -2890,7 +2902,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
     postprocessor.
 
     Args:
-          modalities (`Dict[str, PostprocessorType]`):
+          modalities (`Mapping[str, PostprocessorType]`):
             Dictionary mapping modality name to postprocessor class for that modality.
           input_is_dict (`bool`, *optional*, defaults to `False`):
             If True, input is assumed to be dictionary structured, and outputs keep the same dictionary shape. If
@@ -3149,7 +3161,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
@@ -3317,7 +3329,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
@@ -3346,7 +3358,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
     of channels.
 
     Args:
-        modalities (`Dict[str, PreprocessorType]`):
+        modalities (`Mapping[str, PreprocessorType]`):
             Dict mapping modality name to preprocessor.
         mask_probs (`Dict[str, float]`):
             Dict mapping modality name to masking probability of that modality.
@@ -3362,9 +3374,9 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         min_padding_size: int = 2,
     ):
         super().__init__()
-        self.modalities = modalities
+        self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
-        self.mask_probs = mask_probs if mask_probs is not None else dict()
+        self.mask_probs = mask_probs if mask_probs is not None else {}
         self.padding = nn.ParameterDict(
             {
                 modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))

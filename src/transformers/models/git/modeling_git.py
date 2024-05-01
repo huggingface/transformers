@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -43,12 +44,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
-GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/git-base",
-    # See all GIT models at https://huggingface.co/models?filter=git
-]
+
+from ..deprecated._archive_maps import GIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -77,23 +75,8 @@ class GitVisionModelOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class GitEmbeddings(nn.Module):
@@ -110,7 +93,9 @@ class GitEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -282,11 +267,18 @@ class GitSelfOutput(nn.Module):
         return hidden_states
 
 
+GIT_SELF_ATTENTION_CLASSES = {
+    "eager": GitSelfAttention,
+}
+
+
 class GitAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git,BERT->GIT
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = GitSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = GitSelfOutput(config)
         self.pruned_heads = set()
 
@@ -432,6 +424,13 @@ class GitEncoder(nn.Module):
         pixel_values_present: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -444,24 +443,13 @@ class GitEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -510,7 +498,6 @@ class GitPreTrainedModel(PreTrainedModel):
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -531,10 +518,6 @@ class GitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (GitEncoder, GitVisionEncoder)):
-            module.gradient_checkpointing = value
 
 
 GIT_START_DOCSTRING = r"""
@@ -558,7 +541,7 @@ GIT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -578,7 +561,7 @@ GIT_INPUTS_DOCSTRING = r"""
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`CLIPImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -623,11 +606,12 @@ class GitVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -763,9 +747,9 @@ class GitVisionEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GitVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = GitVisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -876,18 +860,12 @@ class GitVisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -916,7 +894,7 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -936,9 +914,9 @@ class GitVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = GitVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = GitVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
@@ -1049,7 +1027,8 @@ class GitProjection(nn.Module):
         super().__init__()
         self.config = config
         self.visual_projection = nn.Sequential(
-            nn.Linear(config.vision_config.hidden_size, config.hidden_size), nn.LayerNorm(config.hidden_size)
+            nn.Linear(config.vision_config.hidden_size, config.hidden_size),
+            nn.LayerNorm(config.hidden_size, eps=config.vision_config.layer_norm_eps),
         )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -1210,6 +1189,7 @@ class GitModel(GitPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1287,9 +1267,9 @@ class GitModel(GitPreTrainedModel):
         if attention_mask is not None:
             # if the user provides an attention mask, we add it to the default one
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, embedding_output.dtype, tgt_len=input_shape[-1]).to(
-                embedding_output.device
-            )
+            expanded_attn_mask = _prepare_4d_attention_mask(
+                attention_mask, embedding_output.dtype, tgt_len=input_shape[-1]
+            ).to(embedding_output.device)
             if past_key_values_length > 0:
                 expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
             else:
@@ -1323,6 +1303,8 @@ class GitModel(GitPreTrainedModel):
     """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
 )
 class GitForCausalLM(GitPreTrainedModel):
+    _tied_weights_keys = ["output.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1424,11 +1406,11 @@ class GitForCausalLM(GitPreTrainedModel):
         Video captioning example:
 
         ```python
-        >>> from transformers import AutoProcessor, AutoModelForCausalLM
-        >>> from PIL import Image
+        >>> import av
         >>> import numpy as np
+        >>> from PIL import Image
         >>> from huggingface_hub import hf_hub_download
-        >>> from decord import VideoReader, cpu
+        >>> from transformers import AutoProcessor, AutoModelForCausalLM
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-vatex")
         >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-vatex")
@@ -1437,7 +1419,37 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> np.random.seed(45)
 
 
+        >>> def read_video_pyav(container, indices):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index and i in indices:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     '''
+        ...     Sample a given number of frame indices from the video.
+        ...     Args:
+        ...         clip_len (`int`): Total number of frames to sample.
+        ...         frame_sample_rate (`int`): Sample every n-th frame.
+        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
+        ...     Returns:
+        ...         indices (`List[int]`): List of sampled frame indices
+        ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
@@ -1446,24 +1458,20 @@ class GitForCausalLM(GitPreTrainedModel):
         ...     return indices
 
 
-        >>> def sample_frames(file_path, num_frames):
-        ...     videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
-        ...     videoreader.seek(0)
-        ...     indices = sample_frame_indices(clip_len=num_frames, frame_sample_rate=4, seg_len=len(videoreader))
-        ...     frames = videoreader.get_batch(indices).asnumpy()
-        ...     return list(frames)
-
-
         >>> # load video
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
+        >>> container = av.open(file_path)
 
         >>> # sample frames
         >>> num_frames = model.config.num_image_with_embedding
-        >>> frames = sample_frames(file_path, num_frames)
+        >>> indices = sample_frame_indices(
+        ...     clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
+        ... )
+        >>> frames = read_video_pyav(container, indices)
 
-        >>> pixel_values = processor(images=frames, return_tensors="pt").pixel_values
+        >>> pixel_values = processor(images=list(frames), return_tensors="pt").pixel_values
 
         >>> generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
 
@@ -1513,9 +1521,11 @@ class GitForCausalLM(GitPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
-        # cut decoder_input_ids if past is used
-        if past is not None:
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1527,12 +1537,14 @@ class GitForCausalLM(GitPreTrainedModel):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": kwargs.get("pixel_values", None),
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past

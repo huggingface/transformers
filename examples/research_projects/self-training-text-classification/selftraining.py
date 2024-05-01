@@ -23,12 +23,12 @@ import shutil
 from typing import List, Optional
 
 import datasets
+from accelerate import Accelerator
 from datasets import load_dataset
+from finetuning import finetune
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from finetuning import finetune
 from transformers import AutoConfig, set_seed
 from transformers.trainer_utils import IntervalStrategy
 
@@ -79,7 +79,7 @@ class STTrainingArguments:
     eval_metric: Optional[str] = dataclasses.field(
         default="accuracy", metadata={"help": "The evaluation metric used for the task."}
     )
-    evaluation_strategy: Optional[str] = dataclasses.field(
+    eval_strategy: Optional[str] = dataclasses.field(
         default="no",
         metadata={
             "help": 'The evaluation strategy to adopt during training. Possible values are: ["no", "step", "epoch]'
@@ -208,7 +208,7 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
     data_files["train"] = args.train_file
     data_files["infer"] = args.infer_file
 
-    if args.evaluation_strategy != IntervalStrategy.NO.value:
+    if args.eval_strategy != IntervalStrategy.NO.value:
         assert args.eval_file is not None
         data_files["eval"] = args.eval_file
 
@@ -267,7 +267,7 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
             "label_list": args.label_list,
             "output_dir": current_output_dir,
             "eval_metric": args.eval_metric,
-            "evaluation_strategy": args.evaluation_strategy,
+            "eval_strategy": args.eval_strategy,
             "early_stopping_patience": args.early_stopping_patience,
             "early_stopping_threshold": args.early_stopping_threshold,
             "seed": args.seed,
@@ -341,7 +341,7 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
 
         data_files["train_pseudo"] = os.path.join(next_data_dir, f"train_pseudo.{args.data_file_extension}")
 
-        if args.evaluation_strategy != IntervalStrategy.NO.value:
+        if args.eval_strategy != IntervalStrategy.NO.value:
             new_eval_result = eval_result
 
             if best_iteration is None:

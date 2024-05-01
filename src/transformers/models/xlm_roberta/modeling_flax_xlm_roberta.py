@@ -17,11 +17,10 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -47,17 +46,13 @@ from .configuration_xlm_roberta import XLMRobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
-_TOKENIZER_FOR_DOC = "XLMRobertaTokenizer"
 
 remat = nn_partitioning.remat
 
-FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-roberta-base",
-    "xlm-roberta-large",
-    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
-]
+
+from ..deprecated._archive_maps import FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
@@ -90,9 +85,10 @@ XLM_ROBERTA_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -112,7 +108,7 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -268,7 +264,7 @@ class FlaxXLMRobertaSelfAttention(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        key_value_states: Optional[jnp.array] = None,
+        key_value_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic=True,
         output_attentions: bool = False,
@@ -329,7 +325,7 @@ class FlaxXLMRobertaSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -753,7 +749,7 @@ class FlaxXLMRobertaPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -1006,9 +1002,7 @@ class FlaxXLMRobertaModel(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaModule
 
 
-append_call_sample_docstring(
-    FlaxXLMRobertaModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxXLMRobertaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLMModule with Roberta->XLMRoberta
@@ -1077,7 +1071,6 @@ class FlaxXLMRobertaForMaskedLM(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForMaskedLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPooling,
     _CONFIG_FOR_DOC,
@@ -1151,7 +1144,6 @@ class FlaxXLMRobertaForSequenceClassification(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1236,7 +1228,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxXLMRobertaForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1316,7 +1307,6 @@ class FlaxXLMRobertaForTokenClassification(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1366,7 +1356,7 @@ class FlaxXLMRobertaForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -1394,7 +1384,6 @@ class FlaxXLMRobertaForQuestionAnswering(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1478,7 +1467,7 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
 class FlaxXLMRobertaForCausalLM(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -1507,7 +1496,6 @@ class FlaxXLMRobertaForCausalLM(FlaxXLMRobertaPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXLMRobertaForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

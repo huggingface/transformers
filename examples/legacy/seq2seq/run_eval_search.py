@@ -20,6 +20,7 @@ import sys
 from collections import OrderedDict
 
 from run_eval import datetime_now, run_generate
+
 from utils import ROUGE_KEYS
 
 
@@ -33,9 +34,9 @@ task_score_names = {
 
 def parse_search_arg(search):
     groups = search.split()
-    entries = {k: vs for k, vs in (g.split("=") for g in groups)}
+    entries = dict((g.split("=") for g in groups))
     entry_names = list(entries.keys())
-    sets = [list(f"--{k} {v}" for v in vs.split(":")) for k, vs in entries.items()]
+    sets = [[f"--{k} {v}" for v in vs.split(":")] for k, vs in entries.items()]
     matrix = [list(x) for x in itertools.product(*sets)]
     return matrix, entry_names
 
@@ -104,7 +105,7 @@ def run_search():
     col_widths = {col: len(str(col)) for col in col_names}
     results = []
     for r in matrix:
-        hparams = {k: v for k, v in (x.replace("--", "").split() for x in r)}
+        hparams = dict((x.replace("--", "").split() for x in r))
         args_exp = " ".join(r).split()
         args_exp.extend(["--bs", str(args.bs)])  # in case we need to reduce its size due to CUDA OOM
         sys.argv = args_normal + args_exp

@@ -25,11 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-vision-base-ft": (
-        "https://huggingface.co/facebook/data2vec-vision-base-ft/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Data2VecVisionConfig(PretrainedConfig):
@@ -111,6 +108,7 @@ class Data2VecVisionConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "data2vec-vision"
 
     def __init__(
@@ -142,7 +140,7 @@ class Data2VecVisionConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -180,7 +178,6 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class Data2VecVisionOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

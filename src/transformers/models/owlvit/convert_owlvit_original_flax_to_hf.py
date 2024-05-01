@@ -18,61 +18,61 @@ https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 import argparse
 import collections
 
-import torch
-import torch.nn as nn
-
 import jax
 import jax.numpy as jnp
+import torch
+import torch.nn as nn
 from clip.model import CLIP
 from flax.training import checkpoints
 from huggingface_hub import Repository
+
 from transformers import (
     CLIPTokenizer,
     OwlViTConfig,
-    OwlViTFeatureExtractor,
     OwlViTForObjectDetection,
+    OwlViTImageProcessor,
     OwlViTModel,
     OwlViTProcessor,
 )
 
 
 CONFIGS = {
-    "vit_b32": dict(
-        embed_dim=512,
-        image_resolution=768,
-        context_length=16,
-        vocab_size=49408,
-        vision_layers=12,
-        vision_width=768,
-        vision_patch_size=32,
-        transformer_width=512,
-        transformer_heads=8,
-        transformer_layers=12,
-    ),
-    "vit_b16": dict(
-        embed_dim=512,
-        image_resolution=768,
-        context_length=16,
-        vocab_size=49408,
-        vision_layers=12,
-        vision_width=768,
-        vision_patch_size=16,
-        transformer_width=512,
-        transformer_heads=8,
-        transformer_layers=12,
-    ),
-    "vit_l14": dict(
-        embed_dim=768,
-        image_resolution=840,
-        context_length=16,
-        vocab_size=49408,
-        vision_layers=24,
-        vision_width=1024,
-        vision_patch_size=14,
-        transformer_width=768,
-        transformer_heads=12,
-        transformer_layers=12,
-    ),
+    "vit_b32": {
+        "embed_dim": 512,
+        "image_resolution": 768,
+        "context_length": 16,
+        "vocab_size": 49408,
+        "vision_layers": 12,
+        "vision_width": 768,
+        "vision_patch_size": 32,
+        "transformer_width": 512,
+        "transformer_heads": 8,
+        "transformer_layers": 12,
+    },
+    "vit_b16": {
+        "embed_dim": 512,
+        "image_resolution": 768,
+        "context_length": 16,
+        "vocab_size": 49408,
+        "vision_layers": 12,
+        "vision_width": 768,
+        "vision_patch_size": 16,
+        "transformer_width": 512,
+        "transformer_heads": 8,
+        "transformer_layers": 12,
+    },
+    "vit_l14": {
+        "embed_dim": 768,
+        "image_resolution": 840,
+        "context_length": 16,
+        "vocab_size": 49408,
+        "vision_layers": 24,
+        "vision_width": 1024,
+        "vision_patch_size": 14,
+        "transformer_width": 768,
+        "transformer_heads": 12,
+        "transformer_layers": 12,
+    },
 }
 
 
@@ -314,7 +314,6 @@ def convert_clip_backbone(flax_params, torch_config):
     # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
         if name in torch_clip_params.keys():
-
             new_param = torch.from_numpy(new_torch_params[name])
             torch_clip_params[name].copy_(new_param)
         else:
@@ -351,16 +350,16 @@ def convert_owlvit_checkpoint(pt_backbone, flax_params, attn_params, pytorch_dum
     # Save HF model
     hf_model.save_pretrained(repo.local_dir)
 
-    # Initialize feature extractor
-    feature_extractor = OwlViTFeatureExtractor(
+    # Initialize image processor
+    image_processor = OwlViTImageProcessor(
         size=config.vision_config.image_size, crop_size=config.vision_config.image_size
     )
     # Initialize tokenizer
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 
     # Initialize processor
-    processor = OwlViTProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-    feature_extractor.save_pretrained(repo.local_dir)
+    processor = OwlViTProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    image_processor.save_pretrained(repo.local_dir)
     processor.save_pretrained(repo.local_dir)
 
     repo.git_add()

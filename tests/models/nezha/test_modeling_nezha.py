@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -39,7 +40,6 @@ if is_torch_available():
         NezhaForTokenClassification,
         NezhaModel,
     )
-    from transformers.models.nezha.modeling_nezha import NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NezhaModelTester:
@@ -54,7 +54,7 @@ class NezhaModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -315,8 +315,7 @@ class NezhaModelTester:
 
 
 @require_torch
-class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             NezhaModel,
@@ -330,6 +329,18 @@ class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": NezhaModel,
+            "fill-mask": NezhaForMaskedLM,
+            "question-answering": NezhaForQuestionAnswering,
+            "text-classification": NezhaForSequenceClassification,
+            "token-classification": NezhaForTokenClassification,
+            "zero-shot": NezhaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -420,16 +431,15 @@ class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NezhaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sijunhe/nezha-cn-base"
+        model = NezhaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     @require_torch_gpu
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # NezhaForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == NezhaForMultipleChoice:
                 return

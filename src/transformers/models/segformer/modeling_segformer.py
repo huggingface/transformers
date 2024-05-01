@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SegformerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "SegformerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
@@ -52,10 +51,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/segformer-b0-finetuned-ade-512-512",
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-]
+
+from ..deprecated._archive_maps import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class SegFormerImageClassifierOutput(ImageClassifierOutput):
@@ -85,8 +82,8 @@ class SegFormerImageClassifierOutput(ImageClassifierOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False, scale_by_keep=True):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -491,7 +488,7 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`SegformerImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -529,7 +526,6 @@ class SegformerModel(SegformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -589,7 +585,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=SegFormerImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -772,11 +767,11 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
-        >>> image_processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -24,15 +24,13 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import DecisionTransformerModel
-    from transformers.models.decision_transformer.modeling_decision_transformer import (
-        DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DecisionTransformerModelTester:
@@ -131,10 +129,10 @@ class DecisionTransformerModelTester:
 
 
 @require_torch
-class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
@@ -163,9 +161,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DecisionTransformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
+        model = DecisionTransformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

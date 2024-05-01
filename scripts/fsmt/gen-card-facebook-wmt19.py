@@ -19,6 +19,7 @@
 import os
 from pathlib import Path
 
+
 def write_model_card(model_card_dir, src_lang, tgt_lang):
 
     texts = {
@@ -39,7 +40,7 @@ def write_model_card(model_card_dir, src_lang, tgt_lang):
 
     readme = f"""
 ---
-language: 
+language:
 - {src_lang}
 - {tgt_lang}
 thumbnail:

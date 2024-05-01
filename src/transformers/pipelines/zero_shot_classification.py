@@ -1,10 +1,11 @@
+import inspect
 from typing import List, Union
 
 import numpy as np
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
+from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
@@ -42,7 +43,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs, sequences
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class ZeroShotClassificationPipeline(ChunkPipeline):
     """
     NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
@@ -221,6 +222,10 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         candidate_label = inputs["candidate_label"]
         sequence = inputs["sequence"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        if "use_cache" in inspect.signature(model_forward).parameters.keys():
+            model_inputs["use_cache"] = False
         outputs = self.model(**model_inputs)
 
         model_outputs = {

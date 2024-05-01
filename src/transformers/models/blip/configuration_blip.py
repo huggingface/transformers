@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Blip model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -24,24 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/blip-vqa-base": "https://huggingface.co/Salesforce/blip-vqa-base/resolve/main/config.json",
-    "Salesforce/blip-vqa-capfit-large": (
-        "https://huggingface.co/Salesforce/blip-vqa-base-capfit/resolve/main/config.json"
-    ),
-    "Salesforce/blip-image-captioning-base": (
-        "https://huggingface.co/Salesforce/blip-image-captioning-base/resolve/main/config.json"
-    ),
-    "Salesforce/blip-image-captioning-large": (
-        "https://huggingface.co/Salesforce/blip-image-captioning-large/resolve/main/config.json"
-    ),
-    "Salesforce/blip-itm-base-coco": "https://huggingface.co/Salesforce/blip-itm-base-coco/resolve/main/config.json",
-    "Salesforce/blip-itm-large-coco": "https://huggingface.co/Salesforce/blip-itm-large-coco/resolve/main/config.json",
-    "Salesforce/blip-itm-base-flikr": "https://huggingface.co/Salesforce/blip-itm-base-flikr/resolve/main/config.json",
-    "Salesforce/blip-itm-large-flikr": (
-        "https://huggingface.co/Salesforce/blip-itm-large-flikr/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BlipTextConfig(PretrainedConfig):
@@ -56,7 +39,7 @@ class BlipTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 30524):
             Vocabulary size of the `Blip` text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`BlipModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -69,22 +52,20 @@ class BlipTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
         bos_token_id (`int`, *optional*, defaults to 30522):
             The id of the `beginning-of-sequence` token.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -93,10 +74,14 @@ class BlipTextConfig(PretrainedConfig):
             The id of the `padding` token.
         sep_token_id (`int`, *optional*, defaults to 102):
             The id of the `separator` token.
-        is_decoder (`bool`, *optional*, defaults to `False`):
+        is_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as a decoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        label_smoothing (float, *optional*):
+            A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
+            become a mixture of the original ground truth and a uniform distribution as described in
+            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
 
     Example:
 
@@ -112,6 +97,7 @@ class BlipTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "blip_text_model"
 
     def __init__(
@@ -129,14 +115,14 @@ class BlipTextConfig(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
         bos_token_id=30522,
         eos_token_id=2,
         pad_token_id=0,
         sep_token_id=102,
         is_decoder=True,
         use_cache=True,
-        **kwargs
+        label_smoothing=0.0,
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -158,13 +144,14 @@ class BlipTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.is_decoder = is_decoder
         self.use_cache = use_cache
+        self.label_smoothing = label_smoothing
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
@@ -201,23 +188,19 @@ class BlipVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
 
     Example:
 
@@ -243,36 +226,31 @@ class BlipVisionConfig(PretrainedConfig):
         projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_channels=3,
         image_size=384,
         patch_size=16,
         hidden_act="gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        initializer_factor=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
@@ -308,8 +286,12 @@ class BlipConfig(PretrainedConfig):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original BLIP implementation.
-        image_text_hidden_size (`int`, *optional*, defaults to 768):
+        image_text_hidden_size (`int`, *optional*, defaults to 256):
             Dimentionality of the hidden state of the image-text fusion layer.
+        label_smoothing (float, optional, *optional*, defaults to 0.0):
+            A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
+            become a mixture of the original ground truth and a uniform distribution as described in
+            `Rethinking the Inception Architecture for Computer Vision <https://arxiv.org/abs/1512.00567>`__. Default: :math:`0.0`.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -337,7 +319,6 @@ class BlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip"
-    is_composition = True
 
     def __init__(
         self,
@@ -346,25 +327,18 @@ class BlipConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
-        **kwargs
+        label_smoothing=0.0,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
-
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the BlipTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the BlipVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
 
         self.text_config = BlipTextConfig(**text_config)
         self.vision_config = BlipVisionConfig(**vision_config)
@@ -376,6 +350,7 @@ class BlipConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
+        self.label_smoothing = label_smoothing
 
     @classmethod
     def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
@@ -388,16 +363,3 @@ class BlipConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

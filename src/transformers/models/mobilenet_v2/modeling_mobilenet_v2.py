@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileNetV2Config"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2ImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/mobilenet_v2_1.0_224"
@@ -54,13 +53,7 @@ _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v2_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilenet_v2_1.4_224",
-    "google/mobilenet_v2_1.0_224",
-    "google/mobilenet_v2_0.37_160",
-    "google/mobilenet_v2_0.35_96",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-]
+from ..deprecated._archive_maps import MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
@@ -460,6 +453,7 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""
@@ -486,7 +480,7 @@ MOBILENET_V2_START_DOCSTRING = r"""
 MOBILENET_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV2ImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`MobileNetV2ImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -566,7 +560,6 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -639,8 +632,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILENET_V2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
@@ -811,14 +803,14 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileNetV2ImageProcessor, MobileNetV2ForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, MobileNetV2ForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = MobileNetV2ImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")

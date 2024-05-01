@@ -15,28 +15,27 @@
 """ Testing suite for the PyTorch MobileNetV2 model. """
 
 
-import inspect
 import unittest
 
 from transformers import MobileNetV2Config
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation, MobileNetV2Model
-    from transformers.models.mobilenet_v2.modeling_mobilenet_v2 import MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileNetV2FeatureExtractor
+    from transformers import MobileNetV2ImageProcessor
 
 
 class MobileNetV2ConfigTester(ConfigTester):
@@ -182,7 +181,7 @@ class MobileNetV2ModelTester:
 
 
 @require_torch
-class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -192,6 +191,15 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
         (MobileNetV2Model, MobileNetV2ForImageClassification, MobileNetV2ForSemanticSegmentation)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "image-feature-extraction": MobileNetV2Model,
+            "image-classification": MobileNetV2ForImageClassification,
+            "image-segmentation": MobileNetV2ForSemanticSegmentation,
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -217,18 +225,6 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="MobileNetV2 does not output attentions")
     def test_attention_outputs(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -270,9 +266,13 @@ class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileNetV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/mobilenet_v2_1.4_224"
+        model = MobileNetV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats
@@ -285,20 +285,18 @@ def prepare_img():
 @require_vision
 class MobileNetV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            MobileNetV2FeatureExtractor.from_pretrained("google/mobilenet_v2_1.0_224")
-            if is_vision_available()
-            else None
+            MobileNetV2ImageProcessor.from_pretrained("google/mobilenet_v2_1.0_224") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
         model = MobileNetV2ForImageClassification.from_pretrained("google/mobilenet_v2_1.0_224").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -317,10 +315,10 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
         model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         model = model.to(torch_device)
 
-        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        image_processor = MobileNetV2ImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

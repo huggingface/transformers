@@ -1,42 +1,23 @@
+"""The tokenizer used by the GPT-SW3 models."""
+
 import os
 import re
 import unicodedata
-
-from ... import is_torch_available
-
-
-if is_torch_available():
-    import torch
-
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "AI-Sweden/gpt-sw3-126m": 2048,
-    "AI-Sweden/gpt-sw3-350m": 2048,
-    "AI-Sweden/gpt-sw3-1.6b": 2048,
-    "AI-Sweden/gpt-sw3-6.7b": 2048,
-    "AI-Sweden/gpt-sw3-20b": 2048,
-}
 
 
 class GPTSw3Tokenizer(PreTrainedTokenizer):
@@ -47,10 +28,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Example usage:
-    ```
+    ```python
     >>> from transformers import GPTSw3Tokenizer
-    >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-    >>> tokenizer("Svenska är kul!")['input_ids']
+
+    >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-126m")
+    >>> tokenizer("Svenska är kul!")["input_ids"]
     [1814, 377, 3617, 63504]
     ```
 
@@ -64,17 +46,17 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
-        bos_token (`str`, *optional*):
-            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
-            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
-        eos_token (`str`, *optional*):
-            The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
-        unk_token (`str`, *optional*):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead. If not provided, will default to '<unk>'.
         pad_token (`str`, *optional*):
             The token used for padding, for example when batching sequences of different lengths. If not provided, will
             default to '<pad>' or '<unk>' depending on model size.
+        unk_token (`str`, *optional*):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead. If not provided, will default to '<unk>'.
+        eos_token (`str`, *optional*):
+            The end of sequence token seen during pretraining. If not provided, will default to '<|endoftext|>'
+        bos_token (`str`, *optional*):
+            The beginning of sequence token that can be used for downstream task, was not seen during pretraining. If
+            not provided, will default to '<s>' or '<|endoftext|>', depending on model size.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -101,8 +83,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -115,9 +96,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         eos_token=None,
         bos_token=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         name_or_path = kwargs.get("name_or_path")
@@ -138,18 +118,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             pad_token = "<pad>" if pad_token is None else pad_token
             bos_token = "<s>" if bos_token is None else bos_token
 
-        super().__init__(
-            do_lower_case=do_lower_case,
-            remove_space=remove_space,
-            keep_accents=keep_accents,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -166,6 +134,18 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
             f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
+        )
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
         )
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
@@ -230,8 +210,10 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
+                # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "
+
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
                 current_sub_tokens = []
@@ -312,3 +294,19 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         """
 
         return self.sp_model.decode(token_ids)
+
+    @property
+    def default_chat_template(self):
+        """
+        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
+        preceding messages. BOS tokens are added between all messages.
+        """
+        return (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
+        )

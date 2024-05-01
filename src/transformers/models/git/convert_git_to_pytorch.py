@@ -21,12 +21,12 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     AutoTokenizer,
     CLIPImageProcessor,
@@ -200,6 +200,17 @@ def prepare_video():
     np.random.seed(0)
 
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        """
+        Sample a given number of frame indices from the video.
+
+        Args:
+            clip_len (`int`): Total number of frames to sample.
+            frame_sample_rate (`int`): Sample every n-th frame.
+            seg_len (`int`): Maximum allowed index of sample's last frame.
+
+        Returns:
+            indices (`List[int]`): List of sampled frame indices
+        """
         converted_len = int(clip_len * frame_sample_rate)
         end_idx = np.random.randint(converted_len, seg_len)
         start_idx = end_idx - converted_len
@@ -246,6 +257,11 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-large-msrvtt-qa": (
             "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_MSRVTT_QA/snapshot/model.pt"
         ),
+        "git-large-r": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_R/snapshot/model.pt",
+        "git-large-r-coco": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_R_COCO/snapshot/model.pt",
+        "git-large-r-textcaps": (
+            "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_R_TEXTCAPS/snapshot/model.pt"
+        ),
     }
 
     model_name_to_path = {
@@ -258,7 +274,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # define GIT configuration based on model name
     config, image_size, is_video = get_git_config(model_name)
-    if "large" in model_name and not is_video:
+    if "large" in model_name and not is_video and "large-r" not in model_name:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
         state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
@@ -295,7 +311,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
             size={"shortest_edge": image_size}, crop_size={"height": image_size, "width": image_size}
         )
     )
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", model_input_names=["input_ids", "attention_mask"])
+    tokenizer = AutoTokenizer.from_pretrained(
+        "google-bert/bert-base-uncased", model_input_names=["input_ids", "attention_mask"]
+    )
     processor = GitProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     if is_video:
@@ -349,6 +367,12 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         expected_slice_logits = torch.tensor([-1.0113, -1.0114, -1.0113])
     elif model_name == "git-large-msrvtt-qa":
         expected_slice_logits = torch.tensor([0.0130, 0.0134, 0.0131])
+    elif model_name == "git-large-r":
+        expected_slice_logits = torch.tensor([-1.1283, -1.1285, -1.1286])
+    elif model_name == "git-large-r-coco":
+        expected_slice_logits = torch.tensor([-0.9641, -0.9641, -0.9641])
+    elif model_name == "git-large-r-textcaps":
+        expected_slice_logits = torch.tensor([-1.1121, -1.1120, -1.1124])
 
     assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")

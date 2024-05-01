@@ -25,10 +25,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sail/poolformer_s12": "https://huggingface.co/sail/poolformer_s12/resolve/main/config.json",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-}
+
+from ..deprecated._archive_maps import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PoolFormerConfig(PretrainedConfig):
@@ -71,7 +69,7 @@ class PoolFormerConfig(PretrainedConfig):
             The activation function for the hidden layers.
         use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to use layer scale.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-5):
+        layer_scale_init_value (`float`, *optional*, defaults to 1e-05):
             The initial value for the layer scale.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The initializer range for the weights.
@@ -91,6 +89,7 @@ class PoolFormerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "poolformer"
 
     def __init__(
@@ -111,7 +110,7 @@ class PoolFormerConfig(PretrainedConfig):
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         self.num_channels = num_channels
         self.patch_size = patch_size
@@ -133,7 +132,6 @@ class PoolFormerConfig(PretrainedConfig):
 
 
 class PoolFormerOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

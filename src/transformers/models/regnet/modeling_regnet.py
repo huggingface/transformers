@@ -37,7 +37,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "RegNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/regnet-y-040"
@@ -47,10 +46,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/regnet-y-040",
-    # See all regnet models at https://huggingface.co/models?filter=regnet
-]
+
+from ..deprecated._archive_maps import REGNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class RegNetConvLayer(nn.Module):
@@ -284,7 +281,7 @@ class RegNetPreTrainedModel(PreTrainedModel):
     config_class = RegNetConfig
     base_model_prefix = "regnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    _no_split_modules = ["RegNetYLayer"]
 
     # Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -294,14 +291,10 @@ class RegNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.weight, 1)
             nn.init.constant_(module.bias, 0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RegNetModel):
-            module.gradient_checkpointing = value
-
 
 REGNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matters related to general usage and
     behavior.
 
     Parameters:
@@ -314,7 +307,7 @@ REGNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -341,7 +334,6 @@ class RegNetModel(RegNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -399,7 +391,6 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REGNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

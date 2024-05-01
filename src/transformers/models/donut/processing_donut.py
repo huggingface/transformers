@@ -32,16 +32,18 @@ class DonutProcessor(ProcessorMixin):
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`DonutImageProcessor`]):
+        image_processor ([`DonutImageProcessor`], *optional*):
             An instance of [`DonutImageProcessor`]. The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
+        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
@@ -130,14 +132,16 @@ class DonutProcessor(ProcessorMixin):
         if added_vocab is None:
             added_vocab = self.tokenizer.get_added_vocab()
 
-        output = dict()
+        output = {}
 
         while tokens:
             start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)
             if start_token is None:
                 break
             key = start_token.group(1)
-            end_token = re.search(rf"</s_{key}>", tokens, re.IGNORECASE)
+            key_escaped = re.escape(key)
+
+            end_token = re.search(rf"</s_{key_escaped}>", tokens, re.IGNORECASE)
             start_token = start_token.group()
             if end_token is None:
                 tokens = tokens.replace(start_token, "")
@@ -145,7 +149,9 @@ class DonutProcessor(ProcessorMixin):
                 end_token = end_token.group()
                 start_token_escaped = re.escape(start_token)
                 end_token_escaped = re.escape(end_token)
-                content = re.search(f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE)
+                content = re.search(
+                    f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE | re.DOTALL
+                )
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node

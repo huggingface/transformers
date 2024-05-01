@@ -26,7 +26,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    ImageClassifierOutput,
+    MaskedImageModelingOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -44,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DeiTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
@@ -55,10 +59,7 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/deit-base-distilled-patch16-224",
-    # See all DeiT models at https://huggingface.co/models?filter=deit
-]
+from ..deprecated._archive_maps import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class DeiTEmbeddings(nn.Module):
@@ -205,7 +206,6 @@ class DeiTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -263,7 +263,6 @@ class DeiTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -355,17 +354,11 @@ class DeiTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -397,7 +390,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["DeiTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -412,10 +405,6 @@ class DeiTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: DeiTEncoder, value: bool = False) -> None:
-        if isinstance(module, DeiTEncoder):
-            module.gradient_checkpointing = value
 
 
 DEIT_START_DOCSTRING = r"""
@@ -432,7 +421,7 @@ DEIT_START_DOCSTRING = r"""
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`DeiTImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`DeiTImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -483,7 +472,6 @@ class DeiTModel(DeiTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -499,6 +487,10 @@ class DeiTModel(DeiTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -592,7 +584,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -601,7 +593,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -610,7 +602,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DeiTImageProcessor, DeiTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, DeiTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -618,7 +610,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
@@ -627,7 +619,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 224, 224]
         ```"""
@@ -670,9 +662,9 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return MaskedLMOutput(
+        return MaskedImageModelingOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -720,7 +712,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeiTImageProcessor, DeiTForImageClassification
+        >>> from transformers import AutoImageProcessor, DeiTForImageClassification
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -731,7 +723,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -740,7 +732,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: magpie
+        Predicted class: Polaroid camera, Polaroid Land camera
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -759,6 +751,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -854,7 +847,6 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=DeiTForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,

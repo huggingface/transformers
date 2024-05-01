@@ -16,7 +16,6 @@
 
 import dataclasses
 import math
-import random
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -26,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -47,14 +47,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 
-PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-x-base",
-    "google/pegasus-x-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus-x
-]
+from ..deprecated._archive_maps import PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclasses.dataclass
@@ -92,35 +87,18 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->PegasusX
+class PegasusXScaledWordEmbedding(nn.Embedding):
     """
-    Make causal mask used for bi-directional self-attention.
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
 
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
 
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
 
 
 class PegasusXSinusoidalPositionalEmbedding(nn.Module):
@@ -141,7 +119,7 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
-            torch.arange(half_d_feature, device=input_embeds.device, dtype=input_embeds.dtype)
+            torch.arange(half_d_feature, device=input_embeds.device, dtype=torch.int64).type_as(input_embeds)
             * -(np.log(float(self.max_scale)) / (half_d_feature - 1))
         )
         pe[:, :half_d_feature] = torch.sin(positions * div_term)
@@ -160,12 +138,15 @@ class PegasusXAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[PegasusXConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -174,6 +155,7 @@ class PegasusXAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -241,8 +223,8 @@ class PegasusXAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -288,7 +270,7 @@ class PegasusXAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -296,7 +278,7 @@ class PegasusXAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -769,6 +751,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = [r"PegasusXEncoderLayer", r"PegasusXDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -778,10 +761,6 @@ class PegasusXPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (PegasusXDecoder, PegasusXEncoder)):
-            module.gradient_checkpointing = value
 
 
 PEGASUS_X_START_DOCSTRING = r"""
@@ -804,10 +783,10 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusTokenizer, PegasusXForConditionalGeneration
+    >>> from transformers import AutoTokenizer, PegasusXForConditionalGeneration
 
     >>> model = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-x-large")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -829,7 +808,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -845,7 +824,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -871,10 +850,11 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -914,13 +894,16 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
+        padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim)
+            self.embed_tokens = PegasusXScaledWordEmbedding(
+                config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
@@ -978,7 +961,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1013,6 +996,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1021,7 +1005,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         embed_pos = self.embed_positions(inputs_embeds)
 
@@ -1059,23 +1043,22 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         global_hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1120,12 +1103,15 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        padding_idx = config.pad_token_id
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+            self.embed_tokens = PegasusXScaledWordEmbedding(
+                config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -1140,52 +1126,6 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
-    def resize_position_embeddings(self, new_num_position_embeddings: int):
-        """
-        Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
-        config.max_position_embeddings`.
-
-        Arguments:
-            new_num_position_embeddings (`int`):
-                The number of new position embeddings. If position embeddings are learned, increasing the size will add
-                newly initialized vectors at the end, whereas reducing the size will remove vectors from the end. If
-                position embeddings are not learned (*e.g.* sinusoidal position embeddings), increasing the size will
-                add correct vectors at the end following the position encoding algorithm, whereas reducing the size
-                will remove vectors from the end.
-        """
-        logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
-        self.config.max_position_embeddings = new_num_position_embeddings
-
-        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(self.config.d_model)
-        self.embed_positions.to(self.device)
-
-    def get_position_embeddings(self) -> nn.Embedding:
-        """
-        Returns the position embeddings matrix
-        """
-        return self.embed_positions
 
     def forward(
         self,
@@ -1206,7 +1146,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1276,23 +1216,34 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # embed positions
         positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
+        positions = positions.to(inputs_embeds.device)
+
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1304,37 +1255,25 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1382,13 +1321,17 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
     PEGASUS_X_START_DOCSTRING,
 )
 class PegasusXModel(PegasusXPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
         vocab_size = config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model)
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        padding_idx = config.pad_token_id
+        self.shared = PegasusXScaledWordEmbedding(
+            vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+        )
 
         self.encoder = PegasusXEncoder(config, self.shared)
         self.decoder = PegasusXDecoder(config, self.shared)
@@ -1456,9 +1399,9 @@ class PegasusXModel(PegasusXPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PegasusTokenizer, PegasusModel
+        >>> from transformers import AutoTokenizer, PegasusModel
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-x-large")
         >>> model = PegasusModel.from_pretrained("google/pegasus-x-large")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
@@ -1526,14 +1469,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
 @add_start_docstrings("The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING)
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        r"embed_positions.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
@@ -1548,10 +1484,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1665,11 +1597,20 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         attention_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1684,12 +1625,13 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 

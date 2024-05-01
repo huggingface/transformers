@@ -22,11 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": (
-        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ProphetNetConfig(PretrainedConfig):
@@ -98,6 +95,7 @@ class ProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -132,7 +130,7 @@ class ProphetNetConfig(PretrainedConfig):
         pad_token_id: Optional[int] = 0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

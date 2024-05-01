@@ -18,22 +18,17 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import DPTFeatureExtractor
+    from transformers import DPTImageProcessor
 
 
-class DPTFeatureExtractionTester(unittest.TestCase):
+class DPTImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -61,7 +56,7 @@ class DPTFeatureExtractionTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
 
-    def prepare_feat_extract_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -70,127 +65,74 @@ class DPTFeatureExtractionTester(unittest.TestCase):
             "size": self.size,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class DPTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = DPTFeatureExtractor if is_vision_available() else None
+class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = DPTImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = DPTFeatureExtractionTester(self)
+        self.image_processor_tester = DPTImageProcessingTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
+    def test_image_processor_properties(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "image_mean"))
+        self.assertTrue(hasattr(image_processing, "image_std"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        self.assertTrue(hasattr(image_processing, "do_resize"))
+        self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "do_pad"))
+        self.assertTrue(hasattr(image_processing, "size_divisor"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    def test_call_pil(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+    def test_padding(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image = np.random.randn(3, 249, 491)
 
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
+        # test individual method
+        image = image_processing.pad_image(image, size_divisor=4)
+        self.assertTrue(image.shape[1] % 4 == 0)
+        self.assertTrue(image.shape[2] % 4 == 0)
 
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
+        # test by calling
+        pixel_values = image_processing.preprocess(
+            image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+        ).pixel_values
+        self.assertTrue(pixel_values.shape[2] % 4 == 0)
+        self.assertTrue(pixel_values.shape[3] % 4 == 0)
 
-    def test_call_numpy(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+    def test_keep_aspect_ratio(self):
+        size = {"height": 512, "width": 512}
+        image_processor = DPTImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
 
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
+        image = np.zeros((489, 640, 3))
 
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
+        pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-    def test_call_pytorch(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size["height"],
-                self.feature_extract_tester.size["width"],
-            ),
-        )
+        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])

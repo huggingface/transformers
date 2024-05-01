@@ -53,14 +53,10 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
-_TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
-BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/bigbird-roberta-base",
-    "google/bigbird-roberta-large",
-    "google/bigbird-base-trivia-itc",
-    # See all BigBird models at https://huggingface.co/models?filter=big_bird
-]
+
+from ..deprecated._archive_maps import BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 _TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",
@@ -228,7 +224,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                 raise ValueError(
                     f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}."
                 )
-        except AssertionError as e:
+        except ValueError as e:
             e.args += (pointer.shape, array.shape)
             raise
         pt_weight_name = ".".join(pt_name)
@@ -258,7 +254,9 @@ class BigBirdEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -535,7 +533,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
-
         # BigBird block-sparse attention as suggested in paper
 
         # ITC:
@@ -896,15 +893,11 @@ class BigBirdBlockSparseAttention(nn.Module):
             # global keys (corresponding to 1st key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
                 :, :, :, :, :to_block_size
-            ].view(
-                bsz, n_heads, -1, to_block_size
-            )  # first_band_product
+            ].view(bsz, n_heads, -1, to_block_size)  # first_band_product
             # global keys (corresponding to last key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
                 :, :, :, :, -to_block_size:
-            ].view(
-                bsz, n_heads, -1, to_block_size
-            )  # last_band_product
+            ].view(bsz, n_heads, -1, to_block_size)  # last_band_product
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
                 # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
@@ -973,11 +966,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
 
-        indices_shift = (
-            torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-            // num_indices_to_gather
-            * num_indices_to_pick_from
-        )
+        shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
+        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
@@ -1057,9 +1047,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         return plan_from_length, plan_num_rand_blocks
 
-    @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
     ):
         """
         Create adjacency list of random attention.
@@ -1082,6 +1071,9 @@ class BigBirdBlockSparseAttention(nn.Module):
             raise ValueError("Error the number of blocks needs to be same!")
 
         rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
+        # During inference (eval) no randomness
+        if not self.training:
+            return rand_attn
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
         last = to_seq_length // to_block_size - 1
         if last_idx > (2 * to_block_size):
@@ -1165,11 +1157,17 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_block_length = np.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
+
         # Random Attention adjacency list
         rand_attn = [
             np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
             for i in range(num_heads)
         ]
+        # During inference (eval) no randomness
+        if not self.training:
+            for nh in range(num_heads):
+                rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+            return rand_attn
 
         # We will go iteratively over the plan blocks and pick random number of
         # Attention blocks from the legally allowed blocks
@@ -1358,7 +1356,6 @@ class BigBirdAttention(nn.Module):
         attn_weights.key = self.self.key
         self.self = attn_weights
         self.attention_type = value
-
         if not self.training:
             self.self.eval()
 
@@ -1385,7 +1382,6 @@ class BigBirdAttention(nn.Module):
             from_mask = from_mask.to(hidden_states.dtype)
         if to_mask is not None:
             to_mask = to_mask.to(hidden_states.dtype)
-
         if self.attention_type == "original_full":
             self_outputs = self.self(
                 hidden_states,
@@ -1597,6 +1593,13 @@ class BigBirdEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
 
         for i, layer_module in enumerate(self.layer):
@@ -1607,21 +1610,8 @@ class BigBirdEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
@@ -1631,9 +1621,10 @@ class BigBirdEncoder(nn.Module):
                     from_mask,
                     to_mask,
                     blocked_encoder_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
-
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -1764,7 +1755,6 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_big_bird
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1781,10 +1771,6 @@ class BigBirdPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BigBirdEncoder):
-            module.gradient_checkpointing = value
 
 
 BIG_BIRD_START_DOCSTRING = r"""
@@ -1803,7 +1789,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BigBirdTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1980,7 +1966,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -2034,6 +2019,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -2180,7 +2166,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
@@ -2235,7 +2220,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.block_size`: {block_size}"
             )
@@ -2262,7 +2247,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
 
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2315,10 +2300,10 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BigBirdTokenizer, BigBirdForPreTraining
+        >>> from transformers import AutoTokenizer, BigBirdForPreTraining
         >>> import torch
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2368,7 +2353,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2420,10 +2405,10 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForMaskedLM
+        >>> from transformers import AutoTokenizer, BigBirdForMaskedLM
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
         >>> model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
@@ -2454,7 +2439,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
         >>> outputs = model(**inputs, labels=labels)
         >>> round(outputs.loss.item(), 2)
-        1.08
+        1.99
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2512,12 +2497,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     """BigBird Model with a `language modeling` head on top for CLM fine-tuning.""", BIG_BIRD_START_DOCSTRING
 )
 class BigBirdForCausalLM(BigBirdPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"position_ids",
-        r"predictions.decoder.bias",
-        "cls.predictions.decoder.weight",
-        "cls.predictions.decoder.bias",
-    ]
+    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2539,7 +2519,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -2633,9 +2612,18 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
+        # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
@@ -2643,7 +2631,8 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 
@@ -2717,10 +2706,10 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForSequenceClassification
+        >>> from transformers import AutoTokenizer, BigBirdForSequenceClassification
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
+        >>> tokenizer = AutoTokenizer.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> model = BigBirdForSequenceClassification.from_pretrained("l-yohai/bigbird-roberta-base-mnli")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
@@ -2822,7 +2811,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2918,15 +2906,9 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/token-classification-bigbird-roberta-base-random",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
-            "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']"
-        ),
-        expected_loss=0.54,
     )
     def forward(
         self,
@@ -3024,9 +3006,9 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @replace_return_docstrings(output_type=BigBirdForQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        question_lengths=None,
+        question_lengths: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -3053,11 +3035,11 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import BigBirdTokenizer, BigBirdForQuestionAnswering
+        >>> from transformers import AutoTokenizer, BigBirdForQuestionAnswering
         >>> from datasets import load_dataset
 
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
-        >>> model = BigBirdForQuestionAnswering.from_pretrained("abhinavkulkarni/bigbird-roberta-base-finetuned-squad")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
+        >>> model = BigBirdForQuestionAnswering.from_pretrained("google/bigbird-roberta-base")
         >>> squad_ds = load_dataset("squad_v2", split="train")  # doctest: +IGNORE_RESULT
 
         >>> # select random article and question
@@ -3076,17 +3058,14 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
-        '80 °C (176 °F) or more'
+        >>> predict_answer_token_ids = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> predict_answer_token = tokenizer.decode(predict_answer_token_ids)
         ```
 
         ```python
         >>> target_start_index, target_end_index = torch.tensor([130]), torch.tensor([132])
         >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
         >>> loss = outputs.loss
-        >>> round(outputs.loss.item(), 2)
-        7.63
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

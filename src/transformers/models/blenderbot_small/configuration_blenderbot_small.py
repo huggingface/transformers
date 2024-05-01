@@ -27,10 +27,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/config.json",
-    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
-}
+from ..deprecated._archive_maps import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BlenderbotSmallConfig(PretrainedConfig):
@@ -104,6 +101,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "blenderbot-small"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -134,7 +132,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

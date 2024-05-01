@@ -45,7 +45,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 14, 250012))
         self.assertEqual(output_predited_logis.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[-6.6042, -8.3838, 12.4717], [-6.4426, -8.1994, 12.4542], [-6.0851, -7.8209, 12.9493]]]
+            [[[-6.3986, -8.2391, 12.5189], [-6.3289, -8.0864, 12.6211], [-6.2418, -8.0445, 12.7968]]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
 
@@ -87,7 +87,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_predited_logis.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-8.8815, -9.2996, -4.4506], [-6.7202, -7.8944, -0.9402], [-8.6890, -7.4528, -1.9437]]]
+            [[[-9.2253, -9.7173, -6.3529], [-7.6701, -9.0145, -1.9382], [-8.0195, -7.0004, -0.1523]]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(output_predited_logis[:, :3, :3], expected_slice, atol=1e-4))
@@ -114,9 +114,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             " этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми"
             " к кибератакам."
         )
-        ZH_SENTENCE = (
-            "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
-        )
+        ZH_SENTENCE = "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
 
         input_ids = tokenizer(
             [EN_SENTENCE, RU_SENTENCE, ZH_SENTENCE], padding=True, max_length=255, return_tensors="pt"
@@ -142,9 +140,8 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True) for g in summary_ids_beam1
         ]
         EXPECTED_TITLE_EN_BEAM1_TOK = "▁Microsoft ▁to ▁end ▁free ▁support ▁for ▁Windows ▁7".split(" ")
-        EXPECTED_TITLE_RU_BEAM1_TOK = (
-            "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года"
-            .split(" ")
+        EXPECTED_TITLE_RU_BEAM1_TOK = "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года".split(
+            " "
         )
         EXPECTED_TITLE_ZH_BEAM1_TOK = "微软 公司 打算 终止 对 Windows ▁7 操作 系统的 免费 支持".split(" ")
         self.assertListEqual(

@@ -32,18 +32,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
-    },
-    "tokenizer_file": {
-        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/rembert": 256,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -96,8 +84,6 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = RemBertTokenizer
 
     def __init__(
@@ -114,7 +100,7 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -139,7 +125,10 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -191,7 +180,7 @@ class RemBertTokenizerFast(PreTrainedTokenizerFast):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formatted with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return [1 if x in [self.sep_token_id, self.cls_token_id] else 0 for x in token_ids_0]
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]

@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -43,7 +44,7 @@ class GPTNeoXJapaneseModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_multiple_size=4,
         hidden_act="gelu",
@@ -189,10 +190,14 @@ class GPTNeoXJapaneseModelTester:
 
 
 @require_torch
-class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
-
+class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXJapaneseForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
@@ -233,7 +238,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
     def test_generation(self):
         model_id = "abeja/gpt-neox-japanese-2.7b"
 
-        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]
+        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]  # fmt: skip
 
         EXPECTED_OUTPUTS = [
             "データサイエンティストとは、データを分析し、ビジネスに役立つ知見を導き出す専門家のことです。",

@@ -16,17 +16,17 @@
 import argparse
 import re
 
-import torch
-from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
-
 import requests
+import torch
 
 # git clone https://github.com/salesforce/BLIP.git
 from models.blip import blip_decoder
 from models.blip_itm import blip_itm
 from models.blip_vqa import blip_vqa
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms.functional import InterpolationMode
+
 from transformers import (
     BertTokenizer,
     BlipConfig,
@@ -105,7 +105,7 @@ def convert_blip_checkpoint(pytorch_dump_folder_path, config_path=None):
 
     image_size = 384
     image = load_demo_image(image_size=image_size, device="cpu")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
     input_ids = tokenizer(["a picture of"]).input_ids
 
     out = hf_model.generate(image, input_ids)

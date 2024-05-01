@@ -10,7 +10,7 @@ way which enables simple and efficient model parallelism.
 
 `run_wav2vec2_pretrain_flax.py` is a lightweight example of how to download and preprocess a dataset from the 🤗 Datasets library or use your own files (jsonlines or csv), then pretrain the wav2vec2 architectures above on it.
 
-For custom datasets in `jsonlines` format please see: [the Datasets documentation](https://huggingface.co/docs/datasets/loading_datasets.html#json-files) and you also will find examples of these below.
+For custom datasets in `jsonlines` format please see: [the Datasets documentation](https://huggingface.co/docs/datasets/loading_datasets#json-files) and you also will find examples of these below.
 
 Let's start by creating a model repository to save the trained model and logs.
 Here we call the model `"wav2vec2-base-robust"`, but you can change the model name as you like.
@@ -18,20 +18,20 @@ Here we call the model `"wav2vec2-base-robust"`, but you can change the model na
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-```
+```bash
 huggingface-cli repo create wav2vec2-base-robust
 ```
 
 Next we clone the model repository to add the tokenizer and model files.
 
-```
+```bash
 git clone https://huggingface.co/<your-username>/wav2vec2-base-robust
 ```
 
 To ensure that all tensorboard traces will be uploaded correctly, we need to 
 track them. You can run the following command inside your model repo to do so.
 
-```
+```bash
 cd wav2vec2-base-robust
 git lfs track "*tfevents*"
 ```

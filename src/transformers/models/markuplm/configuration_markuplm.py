@@ -14,17 +14,14 @@
 # limitations under the License.
 """ MarkupLM model configuration"""
 
-from transformers.utils import logging
-
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/config.json",
-    "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MarkupLMConfig(PretrainedConfig):
@@ -98,6 +95,7 @@ class MarkupLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "markuplm"
 
     def __init__(
@@ -126,7 +124,7 @@ class MarkupLMConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

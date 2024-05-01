@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MCG-NJU/videomae-base": "https://huggingface.co/MCG-NJU/videomae-base/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VideoMAEConfig(PretrainedConfig):
@@ -58,7 +57,7 @@ class VideoMAEConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -94,6 +93,7 @@ class VideoMAEConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "videomae"
 
     def __init__(
@@ -119,7 +119,7 @@ class VideoMAEConfig(PretrainedConfig):
         decoder_num_hidden_layers=4,
         decoder_intermediate_size=1536,
         norm_pix_loss=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

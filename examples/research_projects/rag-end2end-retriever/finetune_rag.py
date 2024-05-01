@@ -164,11 +164,11 @@ class GenerativeQAModule(BaseTransformer):
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            prefix=prefix or "",
-        )
+        self.dataset_kwargs: dict = {
+            "data_dir": self.hparams.data_dir,
+            "max_source_length": self.hparams.max_source_length,
+            "prefix": prefix or "",
+        }
         n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
@@ -252,14 +252,12 @@ class GenerativeQAModule(BaseTransformer):
         raise NotImplementedError("pad not implemented")
 
     def training_step(self, batch, batch_idx) -> Dict:
-
         global isEmUpdateBusy  # use to check whether the entire embedding update process is finished or not
         global isAddIndexBusy  # use to check whether the entire indexing process  is finished or not
         global processes  # use to keep threads embedding update processes
         global threadHandle_index  # use to keep thread in embedding indexing processes
 
         if (self.trainer.global_rank == 0) and (self.custom_config.end2end):
-
             if (not batch_idx == 0) and (batch_idx % self.custom_config.indexing_freq == 0):
                 free_gpu_list = []
                 nvmlInit()
@@ -282,7 +280,6 @@ class GenerativeQAModule(BaseTransformer):
                     has_free_gpus = False
 
                 if (not isEmUpdateBusy) and has_free_gpus:
-
                     model_copy = type(self.model.rag.ctx_encoder)(
                         self.config_dpr
                     )  # get a new instance  #this will be load in the CPU
@@ -336,10 +333,8 @@ class GenerativeQAModule(BaseTransformer):
 
             # check when index building has started
             if isAddIndexBusy:
-
                 # check still the index_building process is happening
                 if not threadHandle_index.is_alive():
-
                     logger.info("Merging the dataset shards")
                     saved_dataset_shards = []
 
@@ -365,7 +360,7 @@ class GenerativeQAModule(BaseTransformer):
 
         loss_tensors = self._step(batch)
 
-        logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        logs = dict(zip(self.loss_names, loss_tensors))
         # tokens per batch
         tgt_pad_token_id = (
             self.tokenizer.generator.pad_token_id
@@ -408,11 +403,11 @@ class GenerativeQAModule(BaseTransformer):
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
 
         log_dict = {
-            "val_avg_em": metrics["val_avg_em"],
+            f"{prefix}_avg_em": metrics[f"{prefix}_avg_em"],
             "step_count": metrics["step_count"],
-            "val_avg_loss": metrics["val_avg_loss"],
-            "val_loss": loss,
-            "val_em": metrics_tensor,
+            f"{prefix}_avg_loss": metrics[f"{prefix}_avg_loss"],
+            f"{prefix}_loss": loss,
+            f"{prefix}_em": metrics_tensor,
         }
         self.log_dict(log_dict)
 
@@ -439,7 +434,7 @@ class GenerativeQAModule(BaseTransformer):
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         # print(preds,target)
         loss_tensors = self._step(batch)
-        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        base_metrics = dict(zip(self.loss_names, loss_tensors))
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
@@ -494,7 +489,6 @@ class GenerativeQAModule(BaseTransformer):
         self.tokenizer.save_pretrained(save_path)
 
         if self.custom_config.end2end:
-
             modified_state_dict = self.model.state_dict()
             for key in self.model.state_dict().keys():
                 if key.split(".")[1] == "ctx_encoder":
@@ -686,7 +680,7 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             default=1,
             help=(
-                "The number of retrieval actors to use when Ray is selected"
+                "The number of retrieval actors to use when Ray is selected "
                 "for the distributed retriever. Has no effect when "
                 "distributed_retriever is set to pytorch."
             ),
@@ -725,7 +719,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
             ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
             logger.warning(
-                "Connection to Ray cluster failed. Make sure a Ray"
+                "Connection to Ray cluster failed. Make sure a Ray "
                 "cluster is running by either using Ray's cluster "
                 "launcher (`ray up`) or by manually starting Ray on "
                 "each node via `ray start --head` for the head node "
@@ -803,7 +797,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
 
 if __name__ == "__main__":
-
     multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)

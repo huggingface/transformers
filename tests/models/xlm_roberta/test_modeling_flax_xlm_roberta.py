@@ -22,6 +22,7 @@ from transformers.testing_utils import require_flax, require_sentencepiece, requ
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers import FlaxXLMRobertaModel
 
 
@@ -31,8 +32,8 @@ if is_flax_available():
 class FlaxXLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_flax_xlm_roberta_base(self):
-        model = FlaxXLMRobertaModel.from_pretrained("xlm-roberta-base")
-        tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+        model = FlaxXLMRobertaModel.from_pretrained("FacebookAI/xlm-roberta-base")
+        tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
         text = "The dog is cute and lives in the garden house"
         input_ids = jnp.array([tokenizer.encode(text)])
 

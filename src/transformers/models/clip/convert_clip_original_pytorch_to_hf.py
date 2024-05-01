@@ -16,8 +16,8 @@
 import argparse
 
 import torch
-
 from clip import load
+
 from transformers import CLIPConfig, CLIPModel
 
 
@@ -124,12 +124,20 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     copy_vison_model_and_projection(hf_model, pt_model)
     hf_model.logit_scale = pt_model.logit_scale
 
-    input_ids = torch.arange(0, 77).unsqueeze(0)
+    # Use `eos_token` so the example is more meaningful
+    input_ids = torch.tensor(
+        [
+            [config.text_config.bos_token_id]
+            + list(range(3, 77))
+            + [config.text_config.eos_token_id]
+            + [config.text_config.pad_token_id]
+        ]
+    )
     pixel_values = torch.randn(1, 3, 224, 224)
 
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
+    hf_outputs = hf_model(input_ids=input_ids, pixel_values=pixel_values, return_dict=True)
+    hf_logits_per_image = hf_outputs.logits_per_image
+    hf_logits_per_text = hf_outputs.logits_per_text
     pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
 
     assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)

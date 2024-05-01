@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -54,25 +53,6 @@ VOCAB_FILES_NAMES = {
     "entity_vocab_file": "entity_vocab.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/vocab.json",
-        "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/merges.txt",
-        "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/merges.txt",
-    },
-    "entity_vocab_file": {
-        "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/entity_vocab.json",
-        "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/entity_vocab.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "studio-ousia/luke-base": 512,
-    "studio-ousia/luke-large": 512,
-}
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_token_type_ids (`bool`, *optional*):
@@ -198,12 +178,14 @@ class LukeTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LukeTokenizer
+
     >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -286,8 +268,6 @@ class LukeTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -313,9 +293,8 @@ class LukeTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
-
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
@@ -325,28 +304,6 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            task=task,
-            max_entity_length=32,
-            max_mention_length=30,
-            entity_token_1="<ent>",
-            entity_token_2="<ent2>",
-            entity_unk_token=entity_unk_token,
-            entity_pad_token=entity_pad_token,
-            entity_mask_token=entity_mask_token,
-            entity_mask2_token=entity_mask2_token,
-            **kwargs,
-        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -407,6 +364,28 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         self.max_mention_length = max_mention_length
 
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            task=task,
+            max_entity_length=32,
+            max_mention_length=30,
+            entity_token_1="<ent>",
+            entity_token_2="<ent2>",
+            entity_unk_token=entity_unk_token,
+            entity_pad_token=entity_pad_token,
+            entity_mask_token=entity_mask_token,
+            entity_mask2_token=entity_mask2_token,
+            **kwargs,
+        )
+
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size with Roberta->Luke, RoBERTa->LUKE
     def vocab_size(self):
@@ -414,7 +393,9 @@ class LukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab with Roberta->Luke, RoBERTa->LUKE
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder).copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe with Roberta->Luke, RoBERTa->LUKE
     def bpe(self, token):
@@ -597,7 +578,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -742,9 +723,8 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -824,7 +804,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -916,7 +896,6 @@ class LukeTokenizer(PreTrainedTokenizer):
             )
 
         if entities is not None:
-
             if not isinstance(entities, list):
                 raise ValueError("If you specify entities, they should be given as a list")
 
@@ -934,7 +913,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         entities_pair: Optional[EntityInput] = None,
         entity_spans: Optional[EntitySpanInput] = None,
         entity_spans_pair: Optional[EntitySpanInput] = None,
-        **kwargs
+        **kwargs,
     ) -> Tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
             tokens = self.tokenize(text, **kwargs)
@@ -975,7 +954,6 @@ class LukeTokenizer(PreTrainedTokenizer):
         first_entity_token_spans, second_entity_token_spans = None, None
 
         if self.task is None:
-
             if entity_spans is None:
                 first_ids = get_input_ids(text)
             else:
@@ -1058,7 +1036,6 @@ class LukeTokenizer(PreTrainedTokenizer):
                 first_ids = first_ids[:entity_token_start] + [special_token_id] + first_ids[entity_token_start:]
 
         elif self.task == "entity_span_classification":
-
             if not (isinstance(entity_spans, list) and len(entity_spans) > 0 and isinstance(entity_spans[0], tuple)):
                 raise ValueError(
                     "Entity spans should be provided as a list of tuples, "
@@ -1187,7 +1164,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
@@ -1440,7 +1417,7 @@ class LukeTokenizer(PreTrainedTokenizer):
                 The maximum length of the entity sequence.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific tokenizer's default, defined by the `return_outputs` attribute. [What are attention
@@ -1535,7 +1512,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}
             outputs = self._pad(
                 inputs,
                 max_length=max_length,
@@ -1584,7 +1561,7 @@ class LukeTokenizer(PreTrainedTokenizer):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

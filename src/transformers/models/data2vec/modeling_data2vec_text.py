@@ -53,13 +53,9 @@ _HIDDEN_STATES_START_POSITION = 2
 # General docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-text-base"
 _CONFIG_FOR_DOC = "Data2VecTextConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
-DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-text-base",
-    # See all data2vec models at https://huggingface.co/models?filter=data2vec-text
-]
+from ..deprecated._archive_maps import DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
@@ -81,7 +77,9 @@ class Data2VecTextForTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -300,11 +298,18 @@ class Data2VecTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText
+DATA2VEC_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": Data2VecTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText,BERT->DATA2VEC_TEXT
 class Data2VecTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = Data2VecTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = DATA2VEC_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = Data2VecTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -493,6 +498,13 @@ class Data2VecTextEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -502,26 +514,15 @@ class Data2VecTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -591,7 +592,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     config_class = Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["Data2VecTextForTextEmbeddings", "Data2VecTextLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -610,19 +611,6 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
             if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Data2VecTextEncoder):
-            module.gradient_checkpointing = value
-
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
 
 
 DATA2VECTEXT_START_DOCSTRING = r"""
@@ -649,7 +637,7 @@ DATA2VECTEXT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RobertaTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -714,8 +702,6 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 
     """
 
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -744,12 +730,11 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -800,6 +785,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -884,9 +870,7 @@ class Data2VecTextModel(Data2VecTextPreTrainedModel):
     """Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VECTEXT_START_DOCSTRING
 )
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -896,9 +880,6 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
 
         self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecTextLMHead(config)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1000,6 +981,8 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(shifted_prediction_scores.device)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1021,24 +1004,33 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
+        # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
 
 
 @add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VECTEXT_START_DOCSTRING)
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1052,9 +1044,6 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecTextLMHead(config)
 
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1066,7 +1055,6 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1116,6 +1104,8 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1170,8 +1160,6 @@ class Data2VecTextLMHead(nn.Module):
     DATA2VECTEXT_START_DOCSTRING,
 )
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1185,7 +1173,6 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1227,6 +1214,8 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -1268,8 +1257,6 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     DATA2VECTEXT_START_DOCSTRING,
 )
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1284,7 +1271,6 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1341,6 +1327,8 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(reshaped_logits.device)
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
@@ -1363,9 +1351,6 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     DATA2VECTEXT_START_DOCSTRING,
 )
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1382,7 +1367,6 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1426,6 +1410,8 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
@@ -1471,9 +1457,6 @@ class Data2VecTextClassificationHead(nn.Module):
     DATA2VECTEXT_START_DOCSTRING,
 )
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1486,7 +1469,6 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

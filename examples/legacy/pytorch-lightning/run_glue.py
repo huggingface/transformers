@@ -7,25 +7,23 @@ from argparse import Namespace
 
 import numpy as np
 import torch
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from torch.utils.data import DataLoader, TensorDataset
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
-from transformers import glue_output_modes
+from transformers import glue_output_modes, glue_tasks_num_labels
 from transformers import glue_processors as processors
-from transformers import glue_tasks_num_labels
 
 
 logger = logging.getLogger(__name__)
 
 
 class GLUETransformer(BaseTransformer):
-
     mode = "sequence-classification"
 
     def __init__(self, hparams):
-        if type(hparams) == dict:
+        if isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         hparams.glue_output_mode = glue_output_modes[hparams.task]
         num_labels = glue_tasks_num_labels[hparams.task]
@@ -126,7 +124,7 @@ class GLUETransformer(BaseTransformer):
 
         results = {**{"val_loss": val_loss_mean}, **compute_metrics(self.hparams.task, preds, out_label_ids)}
 
-        ret = {k: v for k, v in results.items()}
+        ret = dict(results.items())
         ret["log"] = results
         return ret, preds_list, out_label_list
 
@@ -194,7 +192,7 @@ def main():
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True)))
+        checkpoints = sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True))
         model = model.load_from_checkpoint(checkpoints[-1])
         return trainer.test(model)
 

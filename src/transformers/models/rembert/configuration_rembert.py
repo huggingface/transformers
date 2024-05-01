@@ -23,10 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-}
+
+from ..deprecated._archive_maps import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RemBertConfig(PretrainedConfig):
@@ -62,7 +60,7 @@ class RemBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0):
             The dropout ratio for the attention probabilities.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -96,6 +94,7 @@ class RemBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "rembert"
 
     def __init__(
@@ -119,7 +118,7 @@ class RemBertConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=312,
         eos_token_id=313,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

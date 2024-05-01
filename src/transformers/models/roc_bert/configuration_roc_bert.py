@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RoCBertConfig(PretrainedConfig):
@@ -52,7 +51,7 @@ class RoCBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -109,6 +108,7 @@ class RoCBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "roc_bert"
 
     def __init__(
@@ -136,7 +136,7 @@ class RoCBertConfig(PretrainedConfig):
         shape_embed_dim=512,
         shape_vocab_size=24858,
         concat_input=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

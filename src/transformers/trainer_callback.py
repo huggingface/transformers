@@ -15,6 +15,7 @@
 """
 Callbacks to use with the Trainer class and customize the training loop.
 """
+import copy
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -53,6 +54,17 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
+        logging_steps (`int`, *optional*, defaults to 500):
+            Log every X updates steps
+        eval_steps (`int`, *optional*):
+            Run an evaluation every X steps.
+        save_steps (`int`, *optional*, defaults to 500):
+            Save checkpoint every X updates steps.
+        train_batch_size (`int`, *optional*):
+            The batch size for the training dataloader. Only needed when
+            `auto_find_batch_size` has been used.
+        num_input_tokens_seen (`int`, *optional*, defaults to 0):
+            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -72,12 +84,20 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
+        stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
+            Callbacks attached to the `Trainer` that should have their states be saved or restored.
+            Relevent callbacks should implement a `state` and `from_state` function.
     """
 
     epoch: Optional[float] = None
     global_step: int = 0
     max_steps: int = 0
+    logging_steps: int = 500
+    eval_steps: int = 500
+    save_steps: int = 500
+    train_batch_size: int = None
     num_train_epochs: int = 0
+    num_input_tokens_seen: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
@@ -87,10 +107,34 @@ class TrainerState:
     is_hyper_param_search: bool = False
     trial_name: str = None
     trial_params: Dict[str, Union[str, float, int, bool]] = None
+    stateful_callbacks: List["TrainerCallback"] = None
 
     def __post_init__(self):
         if self.log_history is None:
             self.log_history = []
+        if self.stateful_callbacks is None:
+            self.stateful_callbacks = {}
+        elif isinstance(self.stateful_callbacks, dict):
+            # We are loading the callbacks in from the state file, no need to process them
+            pass
+        else:
+            # Saveable callbacks get stored as dict of kwargs
+            stateful_callbacks = {}
+            for callback in self.stateful_callbacks:
+                if not isinstance(callback, (ExportableState)):
+                    raise TypeError(
+                        f"All callbacks passed to be saved must inherit `ExportableState`, but received {type(callback)}"
+                    )
+                name = callback.__class__.__name__
+                if name in stateful_callbacks:
+                    # We can have multiple versions of the same callback
+                    # if so, we store them as a list of states to restore
+                    if not isinstance(stateful_callbacks[name], list):
+                        stateful_callbacks[name] = [stateful_callbacks[name]]
+                    stateful_callbacks[name].append(callback.state())
+                else:
+                    stateful_callbacks[name] = callback.state()
+            self.stateful_callbacks = stateful_callbacks
 
     def save_to_json(self, json_path: str):
         """Save the content of this instance in JSON format inside `json_path`."""
@@ -106,8 +150,52 @@ class TrainerState:
         return cls(**json.loads(text))
 
 
+class ExportableState:
+    """
+    A class for objects that include the ability to have its state
+    be saved during `Trainer._save_checkpoint` and loaded back in during
+    `Trainer._load_from_checkpoint`.
+
+    These must implement a `state` function that gets called during the respective
+    Trainer function call. It should only include parameters and attributes needed to
+    recreate the state at a particular time, to avoid utilizing pickle/maintain standard
+    file IO writing.
+
+    Example:
+
+    ```python
+    class EarlyStoppingCallback(TrainerCallback, ExportableState):
+        def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
+            self.early_stopping_patience = early_stopping_patience
+            self.early_stopping_threshold = early_stopping_threshold
+            # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
+            self.early_stopping_patience_counter = 0
+
+        def state(self) -> dict:
+            return {
+                "args": {
+                    "early_stopping_patience": self.early_stopping_patience,
+                    "early_stopping_threshold": self.early_stopping_threshold,
+                },
+                "attributes": {
+                    "early_stopping_patience_counter": self.early_stopping_patience_counter,
+                }
+            }
+    ```"""
+
+    def state(self) -> dict:
+        raise NotImplementedError("You must implement a `state` function to utilize this class.")
+
+    @classmethod
+    def from_state(cls, state):
+        instance = cls(**state["args"])
+        for k, v in state["attributes"].items():
+            setattr(instance, k, v)
+        return instance
+
+
 @dataclass
-class TrainerControl:
+class TrainerControl(ExportableState):
     """
     A class that handles the [`Trainer`] control flow. This class is used by the [`TrainerCallback`] to activate some
     switches in the training loop.
@@ -155,8 +243,21 @@ class TrainerControl:
         self.should_evaluate = False
         self.should_log = False
 
+    def state(self) -> dict:
+        return {
+            "args": {
+                "should_training_stop": self.should_training_stop,
+                "should_epoch_stop": self.should_epoch_stop,
+                "should_save": self.should_save,
+                "should_evaluate": self.should_evaluate,
+                "should_log": self.should_log,
+            },
+            "attributes": {},
+        }
+
 
 class TrainerCallback:
+    # no-format
     """
     A class for objects that will inspect the state of the training loop at some events and take some decisions. At
     each of those events the following arguments are available:
@@ -179,7 +280,7 @@ class TrainerCallback:
         train_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
-            The current dataloader used for training.
+            The current dataloader used for evaluation.
         metrics (`Dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
@@ -194,7 +295,7 @@ class TrainerCallback:
 
     The argument `args`, `state` and `control` are positionals for all events, all the others are grouped in `kwargs`.
     You can unpack the ones you need in the signature of the event using them. As an example, see the code of the
-    simple [`~transformer.PrinterCallback`].
+    simple [`~transformers.PrinterCallback`].
 
     Example:
 
@@ -421,13 +522,13 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % args.logging_steps == 0:
+        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % state.logging_steps == 0:
             control.should_log = True
 
         # Evaluate
         if (
-            args.evaluation_strategy == IntervalStrategy.STEPS
-            and state.global_step % args.eval_steps == 0
+            args.eval_strategy == IntervalStrategy.STEPS
+            and state.global_step % state.eval_steps == 0
             and args.eval_delay <= state.global_step
         ):
             control.should_evaluate = True
@@ -435,8 +536,8 @@ class DefaultFlowCallback(TrainerCallback):
         # Save
         if (
             args.save_strategy == IntervalStrategy.STEPS
-            and args.save_steps > 0
-            and state.global_step % args.save_steps == 0
+            and state.save_steps > 0
+            and state.global_step % state.save_steps == 0
         ):
             control.should_save = True
 
@@ -452,7 +553,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == IntervalStrategy.EPOCH and args.eval_delay <= state.epoch:
+        if args.eval_strategy == IntervalStrategy.EPOCH and args.eval_delay <= state.epoch:
             control.should_evaluate = True
 
         # Save
@@ -472,40 +573,47 @@ class ProgressCallback(TrainerCallback):
         self.prediction_bar = None
 
     def on_train_begin(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
-            self.training_bar = tqdm(total=state.max_steps)
+        if state.is_world_process_zero:
+            self.training_bar = tqdm(total=state.max_steps, dynamic_ncols=True)
         self.current_step = 0
 
     def on_step_end(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             self.training_bar.update(state.global_step - self.current_step)
             self.current_step = state.global_step
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
-        if state.is_local_process_zero and has_length(eval_dataloader):
+        if state.is_world_process_zero and has_length(eval_dataloader):
             if self.prediction_bar is None:
-                self.prediction_bar = tqdm(total=len(eval_dataloader), leave=self.training_bar is None)
+                self.prediction_bar = tqdm(
+                    total=len(eval_dataloader), leave=self.training_bar is None, dynamic_ncols=True
+                )
             self.prediction_bar.update(1)
 
     def on_evaluate(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             if self.prediction_bar is not None:
                 self.prediction_bar.close()
             self.prediction_bar = None
 
     def on_predict(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             if self.prediction_bar is not None:
                 self.prediction_bar.close()
             self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_local_process_zero and self.training_bar is not None:
+        if state.is_world_process_zero and self.training_bar is not None:
+            # avoid modifying the logs object as it is shared between callbacks
+            logs = copy.deepcopy(logs)
             _ = logs.pop("total_flos", None)
+            # round numbers so that it looks better in console
+            if "epoch" in logs:
+                logs["epoch"] = round(logs["epoch"], 2)
             self.training_bar.write(str(logs))
 
     def on_train_end(self, args, state, control, **kwargs):
-        if state.is_local_process_zero:
+        if state.is_world_process_zero:
             self.training_bar.close()
             self.training_bar = None
 
@@ -521,20 +629,21 @@ class PrinterCallback(TrainerCallback):
             print(logs)
 
 
-class EarlyStoppingCallback(TrainerCallback):
+class EarlyStoppingCallback(TrainerCallback, ExportableState):
     """
     A [`TrainerCallback`] that handles early stopping.
 
     Args:
-       early_stopping_patience (`int`):
+        early_stopping_patience (`int`):
             Use with `metric_for_best_model` to stop training when the specified metric worsens for
             `early_stopping_patience` evaluation calls.
-       early_stopping_threshold(`float`, *optional*):
+        early_stopping_threshold(`float`, *optional*):
             Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how much the
             specified metric must improve to satisfy early stopping conditions. `
 
     This callback depends on [`TrainingArguments`] argument *load_best_model_at_end* functionality to set best_metric
-    in [`TrainerState`].
+    in [`TrainerState`]. Note that if the [`TrainingArguments`] argument *save_steps* differs from *eval_steps*, the
+    early stopping will not occur until the next save step.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
@@ -560,7 +669,7 @@ class EarlyStoppingCallback(TrainerCallback):
             args.metric_for_best_model is not None
         ), "EarlyStoppingCallback requires metric_for_best_model is defined"
         assert (
-            args.evaluation_strategy != IntervalStrategy.NO
+            args.eval_strategy != IntervalStrategy.NO
         ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
@@ -579,3 +688,14 @@ class EarlyStoppingCallback(TrainerCallback):
         self.check_metric_value(args, state, control, metric_value)
         if self.early_stopping_patience_counter >= self.early_stopping_patience:
             control.should_training_stop = True
+
+    def state(self) -> dict:
+        return {
+            "args": {
+                "early_stopping_patience": self.early_stopping_patience,
+                "early_stopping_threshold": self.early_stopping_threshold,
+            },
+            "attributes": {
+                "early_stopping_patience_counter": self.early_stopping_patience_counter,
+            },
+        }

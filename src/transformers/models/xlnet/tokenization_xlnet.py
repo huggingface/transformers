@@ -30,17 +30,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/spiece.model",
-        "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/spiece.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "xlnet-base-cased": None,
-    "xlnet-large-cased": None,
-}
 
 # Segments (not really needed)
 SEG_ID_A = 0
@@ -61,7 +50,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
             Whether to strip the text when tokenizing (removing excess spaces before and after the string).
@@ -102,7 +91,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<eop>', '<eod>']`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -126,8 +115,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     padding_side = "left"
 
     def __init__(
@@ -145,12 +132,20 @@ class XLNetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -169,14 +164,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
         )
 
         self._pad_token_type_id = 3
-
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
@@ -254,9 +241,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         spaces_between_special_tokens: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
@@ -284,6 +271,11 @@ class XLNetTokenizer(PreTrainedTokenizer):
         # By default, there are no spaces between special tokens
         text = "".join(sub_texts)
 
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text

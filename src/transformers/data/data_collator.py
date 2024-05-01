@@ -49,6 +49,28 @@ class DataCollatorMixin:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
 
+def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
+    """
+    Pads without triggering the warning about how using the pad function is sub-optimal when using a fast tokenizer.
+    """
+
+    # To avoid errors when using Feature extractors
+    if not hasattr(tokenizer, "deprecation_warnings"):
+        return tokenizer.pad(*pad_args, **pad_kwargs)
+
+    # Save the state of the warning, then disable it
+    warning_state = tokenizer.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False)
+    tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
+    try:
+        padded = tokenizer.pad(*pad_args, **pad_kwargs)
+    finally:
+        # Restore the state of the warning.
+        tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = warning_state
+
+    return padded
+
+
 def default_data_collator(features: List[InputDataClass], return_tensors="pt") -> Dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
@@ -90,7 +112,7 @@ class DefaultDataCollator(DataCollatorMixin):
     helpful if you need to set a return_tensors value at initialization.
 
     Args:
-        return_tensors (`str`):
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -121,7 +143,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -196,7 +218,7 @@ def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if type(first["label_ids"][0]) is int else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -235,7 +257,7 @@ class DataCollatorWithPadding:
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
-        return_tensors (`str`):
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -246,7 +268,8 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -274,12 +297,11 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              is provided).
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -289,7 +311,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             7.5 (Volta).
         label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignore by PyTorch loss functions).
-        return_tensors (`str`):
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -308,7 +330,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
 
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
@@ -344,7 +367,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -373,7 +397,8 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
-        batch = self.tokenizer.pad(
+        batch = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -522,7 +547,7 @@ class DataCollatorForSeq2Seq:
     Args:
         tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        model ([`PreTrainedModel`]):
+        model ([`PreTrainedModel`], *optional*):
             The model that is being trained. If set and has the *prepare_decoder_input_ids_from_labels*, use it to
             prepare the *decoder_input_ids*
 
@@ -531,12 +556,11 @@ class DataCollatorForSeq2Seq:
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              is provided).
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -546,7 +570,7 @@ class DataCollatorForSeq2Seq:
             7.5 (Volta).
         label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
-        return_tensors (`str`):
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -564,8 +588,10 @@ class DataCollatorForSeq2Seq:
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
-        if labels is not None:
-            max_label_length = max(len(l) for l in labels)
+        no_padding = self.padding is False or self.padding == PaddingStrategy.DO_NOT_PAD
+        if labels is not None and not no_padding:
+            max_padding = self.padding == PaddingStrategy.MAX_LENGTH and self.max_length is not None
+            max_label_length = max(len(l) for l in labels) if not max_padding else self.max_length
             if self.pad_to_multiple_of is not None:
                 max_label_length = (
                     (max_label_length + self.pad_to_multiple_of - 1)
@@ -585,7 +611,8 @@ class DataCollatorForSeq2Seq:
                 else:
                     feature["labels"] = np.concatenate([remainder, feature["labels"]]).astype(np.int64)
 
-        features = self.tokenizer.pad(
+        features = pad_without_fast_tokenizer_warning(
+            self.tokenizer,
             features,
             padding=self.padding,
             max_length=self.max_length,
@@ -666,6 +693,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         """
         import tensorflow as tf
 
+        mask_token_id = tf.cast(mask_token_id, inputs.dtype)
+
         input_shape = tf.shape(inputs)
         # 1 for a special token, 0 for a normal token in the special tokens mask
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
@@ -680,7 +709,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
-        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=tf.int64)
+        random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
+
         inputs = tf.where(indices_random, random_words, inputs)
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -691,7 +721,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _tf_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -728,7 +760,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -783,7 +817,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
         if isinstance(examples[0], Mapping):
-            batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
+            batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
+            )
         else:
             batch = {
                 "input_ids": _numpy_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
@@ -885,6 +921,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        import tensorflow as tf
+
         if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
@@ -909,7 +947,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
         batch_mask = _tf_collate_batch(mask_labels, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
-        inputs, labels = self.tf_mask_tokens(batch_input, batch_mask)
+        inputs, labels = self.tf_mask_tokens(tf.cast(batch_input, tf.int64), batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
@@ -1062,7 +1100,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs = tf.where(indices_replaced, self.tokenizer.mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
         inputs = tf.where(indices_random, random_words, inputs)
 

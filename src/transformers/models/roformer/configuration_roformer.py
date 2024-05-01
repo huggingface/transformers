@@ -24,23 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/config.json",
-    "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/config.json",
-    "junnyu/roformer_chinese_char_small": (
-        "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/config.json"
-    ),
-    "junnyu/roformer_chinese_char_base": (
-        "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/config.json"
-    ),
-    "junnyu/roformer_small_discriminator": (
-        "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/config.json"
-    ),
-    "junnyu/roformer_small_generator": (
-        "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/config.json"
-    ),
-    # See all RoFormer models at https://huggingface.co/models?filter=roformer
-}
+
+from ..deprecated._archive_maps import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RoFormerConfig(PretrainedConfig):
@@ -72,7 +57,7 @@ class RoFormerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 1536):
@@ -100,12 +85,13 @@ class RoFormerConfig(PretrainedConfig):
     >>> # Initializing a RoFormer junnyu/roformer_chinese_base style configuration
     >>> configuration = RoFormerConfig()
 
-    >>> # Initializing a model from the junnyu/roformer_chinese_base style configuration
+    >>> # Initializing a model (with random weights) from the junnyu/roformer_chinese_base style configuration
     >>> model = RoFormerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "roformer"
 
     def __init__(
@@ -126,7 +112,7 @@ class RoFormerConfig(PretrainedConfig):
         pad_token_id=0,
         rotary_value=False,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

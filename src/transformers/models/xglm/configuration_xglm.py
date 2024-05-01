@@ -20,10 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/config.json",
-    # See all XGLM models at https://huggingface.co/models?filter=xglm
-}
+
+from ..deprecated._archive_maps import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XGLMConfig(PretrainedConfig):
@@ -85,6 +83,7 @@ class XGLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "xglm"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -114,7 +113,7 @@ class XGLMConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

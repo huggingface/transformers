@@ -23,11 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xprophetnet-large-wiki100-cased": (
-        "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/config.json"
-    ),
-}
+
+from ..deprecated._archive_maps import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class XLMProphetNetConfig(PretrainedConfig):
@@ -100,6 +97,7 @@ class XLMProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "xlm-prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -134,7 +132,7 @@ class XLMProphetNetConfig(PretrainedConfig):
         pad_token_id: Optional[int] = 0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

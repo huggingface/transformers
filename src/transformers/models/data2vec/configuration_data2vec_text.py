@@ -23,9 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-text-base": "https://huggingface.co/data2vec/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class Data2VecTextConfig(PretrainedConfig):
@@ -95,6 +94,7 @@ class Data2VecTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "data2vec-text"
 
     def __init__(
@@ -117,7 +117,7 @@ class Data2VecTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

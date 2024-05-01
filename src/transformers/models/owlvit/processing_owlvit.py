@@ -21,10 +21,9 @@ from typing import List
 
 import numpy as np
 
-from transformers import is_flax_available, is_tf_available, is_torch_available
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 
 class OwlViTProcessor(ProcessorMixin):
@@ -34,16 +33,18 @@ class OwlViTProcessor(ProcessorMixin):
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`OwlViTImageProcessor`]):
+        image_processor ([`OwlViTImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
@@ -76,8 +77,7 @@ class OwlViTProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
             query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The query image to be prepared, one query image is expected per target image to be queried. Each image
                 can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image

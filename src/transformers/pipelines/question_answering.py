@@ -1,3 +1,4 @@
+import inspect
 import types
 import warnings
 from collections.abc import Iterable
@@ -16,7 +17,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
+from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
     Dataset = None
 
@@ -39,7 +40,7 @@ if is_torch_available():
     import torch
     from torch.utils.data import Dataset
 
-    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 def decode_spans(
@@ -210,7 +211,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             inputs = [inputs]
         elif isinstance(inputs, Iterable):
             # Copy to avoid overriding arguments
-            inputs = [i for i in inputs]
+            inputs = list(inputs)
         else:
             raise ValueError(f"Invalid arguments {kwargs}")
 
@@ -220,7 +221,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         return inputs
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class QuestionAnsweringPipeline(ChunkPipeline):
     """
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering
@@ -255,7 +256,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        device: int = -1,
         task: str = "",
         **kwargs,
     ):
@@ -264,14 +264,15 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            device=device,
             task=task,
             **kwargs,
         )
 
         self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
+            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+            if self.framework == "tf"
+            else MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
         )
 
     @staticmethod
@@ -307,7 +308,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         max_question_len=None,
         handle_impossible_answer=None,
         align_to_words=None,
-        **kwargs
+        **kwargs,
     ):
         # Set defaults values
         preprocess_params = {}
@@ -403,6 +404,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:
             doc_stride = min(max_seq_len // 2, 128)
+
+        if doc_stride > max_seq_len:
+            raise ValueError(f"`doc_stride` ({doc_stride}) is larger than `max_seq_len` ({max_seq_len})")
 
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
@@ -509,6 +513,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _forward(self, inputs):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        if "use_cache" in inspect.signature(model_forward).parameters.keys():
+            model_inputs["use_cache"] = False
         output = self.model(**model_inputs)
         if isinstance(output, dict):
             return {"start": output["start_logits"], "end": output["end_logits"], "example": example, **inputs}

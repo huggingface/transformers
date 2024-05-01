@@ -26,6 +26,7 @@ from tokenizers import pre_tokenizers, processors
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
+    AddedToken,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
@@ -41,23 +42,6 @@ from .tokenization_markuplm import MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTR
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/vocab.json",
-        "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/merges.txt",
-        "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/merges.txt",
-    },
-}
-
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/markuplm-base": 512,
-    "microsoft/markuplm-large": 512,
-}
 
 
 @lru_cache()
@@ -155,8 +139,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = MarkupLMTokenizer
 
     def __init__(
@@ -180,8 +162,18 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         pad_token_label=-100,
         only_label_first_subword=True,
         trim_offsets=False,
-        **kwargs
+        **kwargs,
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
@@ -275,7 +267,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             xpath_subs_list.append(min(self.max_width, sub))
 
         xpath_tags_list = xpath_tags_list[: self.max_depth]
-        xpath_subs_list = xpath_tags_list[: self.max_depth]
+        xpath_subs_list = xpath_subs_list[: self.max_depth]
         xpath_tags_list += [self.pad_tag_id] * (self.max_depth - len(xpath_tags_list))
         xpath_subs_list += [self.pad_width] * (self.max_depth - len(xpath_subs_list))
 
@@ -302,7 +294,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -321,6 +313,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             node_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Node-level integer labels (for token classification tasks).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -450,7 +443,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -513,7 +506,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
@@ -736,7 +729,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         # make it a batched input
         # 2 options:
@@ -806,7 +799,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

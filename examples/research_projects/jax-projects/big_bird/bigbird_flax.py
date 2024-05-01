@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Callable
 
-from tqdm.auto import tqdm
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -16,6 +14,8 @@ from flax import jax_utils, struct, traverse_util
 from flax.serialization import from_bytes, to_bytes
 from flax.training import train_state
 from flax.training.common_utils import shard
+from tqdm.auto import tqdm
+
 from transformers import BigBirdConfig, FlaxBigBirdForQuestionAnswering
 from transformers.models.big_bird.modeling_flax_big_bird import FlaxBigBirdForQuestionAnsweringModule
 
@@ -98,7 +98,6 @@ class Args:
 
 @dataclass
 class DataCollator:
-
     pad_id: int
     max_length: int = 4096  # no dynamic padding on TPUs
 
@@ -248,9 +247,12 @@ class Trainer:
                     lr = self.scheduler_fn(state_step - 1)
 
                     eval_loss = self.evaluate(state, val_dataset)
-                    logging_dict = dict(
-                        step=state_step.item(), eval_loss=eval_loss.item(), tr_loss=tr_loss, lr=lr.item()
-                    )
+                    logging_dict = {
+                        "step": state_step.item(),
+                        "eval_loss": eval_loss.item(),
+                        "tr_loss": tr_loss,
+                        "lr": lr.item(),
+                    }
                     tqdm.write(str(logging_dict))
                     self.logger.log(logging_dict, commit=True)
 

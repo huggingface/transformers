@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,6 +67,7 @@ else:
         "CLIPTextModelWithProjection",
         "CLIPVisionModel",
         "CLIPVisionModelWithProjection",
+        "CLIPForImageClassification",
     ]
 
 try:
@@ -98,6 +95,7 @@ else:
         "FlaxCLIPPreTrainedModel",
         "FlaxCLIPTextModel",
         "FlaxCLIPTextPreTrainedModel",
+        "FlaxCLIPTextModelWithProjection",
         "FlaxCLIPVisionModel",
         "FlaxCLIPVisionPreTrainedModel",
     ]
@@ -139,6 +137,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPForImageClassification,
             CLIPModel,
             CLIPPreTrainedModel,
             CLIPTextModel,
@@ -171,6 +170,7 @@ if TYPE_CHECKING:
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
             FlaxCLIPTextModel,
+            FlaxCLIPTextModelWithProjection,
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,

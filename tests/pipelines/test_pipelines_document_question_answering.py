@@ -18,6 +18,7 @@ from transformers import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING, AutoToke
 from transformers.pipelines import pipeline
 from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_detectron2,
     require_pytesseract,
@@ -27,7 +28,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -52,16 +53,17 @@ INVOICE_URL = (
 )
 
 
+@is_pipeline_test
 @require_torch
 @require_vision
-class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
         )
 
         image = INVOICE_URL
@@ -81,11 +83,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "question": question,
                 "word_boxes": word_boxes,
             },
-            {
-                "image": None,
-                "question": question,
-                "word_boxes": word_boxes,
-            },
         ]
         return dqa_pipeline, examples
 
@@ -99,14 +96,16 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                     {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
                 ]
             ]
-            * 4,
+            * 3,
         )
 
     @require_torch
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt(self):
-        dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2")
+        dqa_pipeline = pipeline(
+            "document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test"
+        )
         image = INVOICE_URL
         question = "How many cats are there?"
 
@@ -256,19 +255,19 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
 
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
             ],
         )
 
         outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
             ],
         )
 
@@ -276,11 +275,11 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
         )
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [
                 [
-                    {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                    {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
+                    {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
+                    {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
                 ]
             ]
             * 2,
@@ -291,10 +290,10 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         # This model should also work if `image` is set to None
         outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(outputs, decimals=3),
             [
-                {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
             ],
         )
 
@@ -358,7 +357,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             "document-question-answering",
             model="naver-clova-ix/donut-base-finetuned-docvqa",
             tokenizer=AutoTokenizer.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa"),
-            feature_extractor="naver-clova-ix/donut-base-finetuned-docvqa",
+            image_processor="naver-clova-ix/donut-base-finetuned-docvqa",
         )
 
         image = INVOICE_URL

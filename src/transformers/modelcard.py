@@ -43,6 +43,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
 )
 from .training_args import ParallelMode
 from .utils import (
@@ -70,6 +71,7 @@ TASK_MAPPING = {
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     "automatic-speech-recognition": {**MODEL_FOR_CTC_MAPPING_NAMES, **MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES},
+    "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)
@@ -129,8 +131,6 @@ class ModelCard:
             pretrained_model_name_or_path: either:
 
                 - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                  user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
                   method, e.g.: `./my_model_directory/`.
                 - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
@@ -161,11 +161,11 @@ class ModelCard:
 
         ```python
         # Download model card from huggingface.co and cache.
-        modelcard = ModelCard.from_pretrained("bert-base-uncased")
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased")
         # Model card was saved using *save_pretrained('./test/saved_model/')*
         modelcard = ModelCard.from_pretrained("./test/saved_model/")
         modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
-        modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        modelcard = ModelCard.from_pretrained("google-bert/bert-base-uncased", output_attentions=True, foo=False)
         ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)
@@ -277,6 +277,7 @@ TASK_TAG_TO_NAME_MAPPING = {
     "translation": "Translation",
     "zero-shot-classification": "Zero Shot Classification",
     "automatic-speech-recognition": "Automatic Speech Recognition",
+    "audio-classification": "Audio Classification",
 }
 
 
@@ -384,7 +385,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, HFValidationError):
+            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -397,9 +398,9 @@ class TrainingSummary:
         dataset_metadata = _listify(self.dataset_metadata)
         if len(dataset_args) < len(dataset_tags):
             dataset_args = dataset_args + [None] * (len(dataset_tags) - len(dataset_args))
-        dataset_mapping = {tag: name for tag, name in zip(dataset_tags, dataset_names)}
-        dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
-        dataset_metadata_mapping = {tag: metadata for tag, metadata in zip(dataset_tags, dataset_metadata)}
+        dataset_mapping = dict(zip(dataset_tags, dataset_names))
+        dataset_arg_mapping = dict(zip(dataset_tags, dataset_args))
+        dataset_metadata_mapping = dict(zip(dataset_tags, dataset_metadata))
 
         task_mapping = {
             task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
@@ -456,6 +457,8 @@ class TrainingSummary:
         metadata = {}
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
+        if self.finetuned_from is not None and isinstance(self.finetuned_from, str) and len(self.finetuned_from) > 0:
+            metadata = _insert_value(metadata, "base_model", self.finetuned_from)
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)
         metadata = _insert_values_as_list(metadata, "metrics", list(metric_mapping.keys()))
@@ -677,7 +680,7 @@ class TrainingSummary:
             _, eval_lines, eval_results = parse_keras_history(keras_history)
         else:
             eval_lines = []
-            eval_results = dict()
+            eval_results = {}
         hyperparameters = extract_hyperparameters_from_keras(model)
 
         return cls(
@@ -699,14 +702,14 @@ class TrainingSummary:
 
 def parse_keras_history(logs):
     """
-    Parse the `logs` of either a `tf.keras.History` object returned by `model.fit()` or an accumulated logs `dict`
+    Parse the `logs` of either a `keras.History` object returned by `model.fit()` or an accumulated logs `dict`
     passed to the `PushToHubCallback`. Returns lines and logs compatible with those returned by `parse_log_history`.
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
         if not hasattr(logs, "epoch"):
             # This history looks empty, return empty results
-            return None, [], dict()
+            return None, [], {}
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
@@ -716,7 +719,7 @@ def parse_keras_history(logs):
     lines = []
     for i in range(len(logs["epoch"])):
         epoch_dict = {log_key: log_value_list[i] for log_key, log_value_list in logs.items()}
-        values = dict()
+        values = {}
         for k, v in epoch_dict.items():
             if k.startswith("val_"):
                 k = "validation_" + k[4:]
@@ -795,14 +798,14 @@ def parse_log_history(log_history):
 
 
 def extract_hyperparameters_from_keras(model):
-    import tensorflow as tf
+    from .modeling_tf_utils import keras
 
-    hyperparameters = dict()
+    hyperparameters = {}
     if hasattr(model, "optimizer") and model.optimizer is not None:
         hyperparameters["optimizer"] = model.optimizer.get_config()
     else:
         hyperparameters["optimizer"] = None
-    hyperparameters["training_precision"] = tf.keras.mixed_precision.global_policy().name
+    hyperparameters["training_precision"] = keras.mixed_precision.global_policy().name
 
     return hyperparameters
 
@@ -890,10 +893,10 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_cuda_amp:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer.use_apex:
+        if trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
+        else:
+            hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

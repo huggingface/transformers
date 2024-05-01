@@ -41,7 +41,7 @@ from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_dpt import DPTConfig
 
 
@@ -49,18 +49,13 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DPTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DPTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Intel/dpt-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 
-DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Intel/dpt-large",
-    "Intel/dpt-hybrid-midas",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-]
+from ..deprecated._archive_maps import DPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -77,7 +72,7 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
     """
 
     last_hidden_states: torch.FloatTensor = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -111,9 +106,9 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -132,12 +127,10 @@ class DPTViTHybridEmbeddings(nn.Module):
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         feature_dim = self.backbone.channels[-1]
-        if len(config.backbone_config.out_features) != 3:
-            raise ValueError(
-                f"Expected backbone to have 3 output features, got {len(config.backbone_config.out_features)}"
-            )
+        if len(self.backbone.channels) != 3:
+            raise ValueError(f"Expected backbone to have 3 output features, got {len(self.backbone.channels)}")
         self.residual_feature_map_index = [0, 1]  # Always take the output of the first and second backbone stage
 
         if feature_size is None:
@@ -380,7 +373,6 @@ class DPTViTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -439,7 +431,6 @@ class DPTViTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -531,17 +522,11 @@ class DPTViTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -608,12 +593,13 @@ class DPTReassembleStage(nn.Module):
 
         # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
         self.readout_projects = nn.ModuleList()
+        hidden_size = _get_backbone_hidden_size(config)
         for i in range(len(config.neck_hidden_sizes)):
             if i <= 1:
                 self.readout_projects.append(nn.Sequential(nn.Identity()))
             elif i > 1:
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def _init_reassemble_dpt(self, config):
@@ -622,12 +608,13 @@ class DPTReassembleStage(nn.Module):
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
+            hidden_size = _get_backbone_hidden_size(config)
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -637,21 +624,24 @@ class DPTReassembleStage(nn.Module):
 
         for i, hidden_state in enumerate(hidden_states):
             if i not in self.neck_ignore_stages:
-                # reshape to (B, C, H, W)
-                hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
+                # reshape to (batch_size, num_channels, height, width)
+                cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
                 batch_size, sequence_length, num_channels = hidden_state.shape
-                size = int(math.sqrt(sequence_length))
-                hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
+                if patch_height is not None and patch_width is not None:
+                    hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+                else:
+                    size = int(math.sqrt(sequence_length))
+                    hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
                 feature_shape = hidden_state.shape
                 if self.config.readout_type == "project":
-                    # reshape to (B, H*W, C)
+                    # reshape to (batch_size, height*width, num_channels)
                     hidden_state = hidden_state.flatten(2).permute((0, 2, 1))
                     readout = cls_token.unsqueeze(1).expand_as(hidden_state)
                     # concatenate the readout token to the hidden states and project
                     hidden_state = self.readout_projects[i](torch.cat((hidden_state, readout), -1))
-                    # reshape back to (B, C, H, W)
+                    # reshape back to (batch_size, num_channels, height, width)
                     hidden_state = hidden_state.permute(0, 2, 1).reshape(feature_shape)
                 elif self.config.readout_type == "add":
                     hidden_state = hidden_state.flatten(2) + cls_token.unsqueeze(-1)
@@ -662,11 +652,19 @@ class DPTReassembleStage(nn.Module):
         return out
 
 
+def _get_backbone_hidden_size(config):
+    if config.backbone_config is not None and config.is_hybrid is False:
+        return config.backbone_config.hidden_size
+    else:
+        return config.hidden_size
+
+
 class DPTReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+        hidden_size = _get_backbone_hidden_size(config)
+        self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
         if factor > 1:
@@ -719,24 +717,30 @@ class DPTPreActResidualLayer(nn.Module):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
-        self.activation1 = ACT2FN["relu"]
+        use_bias_in_fusion_residual = (
+            config.use_bias_in_fusion_residual
+            if config.use_bias_in_fusion_residual is not None
+            else not self.use_batch_norm
+        )
+
+        self.activation1 = nn.ReLU()
         self.convolution1 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not self.use_batch_norm,
+            bias=use_bias_in_fusion_residual,
         )
 
-        self.activation2 = ACT2FN["relu"]
+        self.activation2 = nn.ReLU()
         self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not self.use_batch_norm,
+            bias=use_bias_in_fusion_residual,
         )
 
         if self.use_batch_norm:
@@ -821,10 +825,6 @@ class DPTPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, DPTViTEncoder):
-            module.gradient_checkpointing = value
-
 
 DPT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -840,7 +840,7 @@ DPT_START_DOCSTRING = r"""
 DPT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
             for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -898,7 +898,6 @@ class DPTModel(DPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndIntermediateActivations,
         config_class=_CONFIG_FOR_DOC,
@@ -987,8 +986,12 @@ class DPTNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        # postprocessing
-        self.reassemble_stage = DPTReassembleStage(config)
+        # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
+        if config.backbone_config is not None and config.backbone_config.model_type in ["swinv2"]:
+            self.reassemble_stage = None
+        else:
+            self.reassemble_stage = DPTReassembleStage(config)
+
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
@@ -996,17 +999,23 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
-        if not isinstance(hidden_states, list):
-            raise ValueError("hidden_states should be a list of tensors")
+    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
+        """
+        Args:
+            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+                List of hidden states from the backbone.
+        """
+        if not isinstance(hidden_states, (tuple, list)):
+            raise ValueError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        features = self.reassemble_stage(hidden_states)
+        if self.reassemble_stage is not None:
+            hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
 
-        features = [self.convs[i](feature) for i, feature in enumerate(features)]
+        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
         output = self.fusion_stage(features)
@@ -1026,19 +1035,27 @@ class DPTDepthEstimationHead(nn.Module):
 
         self.config = config
 
+        self.projection = None
+        if config.add_projection:
+            self.projection = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+
         features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            ACT2FN["relu"],
+            nn.ReLU(),
         )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
         hidden_states = hidden_states[self.config.head_in_index]
+
+        if self.projection is not None:
+            hidden_states = self.projection(hidden_states)
+            hidden_states = nn.ReLU()(hidden_states)
 
         predicted_depth = self.head(hidden_states)
 
@@ -1057,7 +1074,11 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.dpt = DPTModel(config, add_pooling_layer=False)
+        self.backbone = None
+        if config.is_hybrid or config.backbone_config is None:
+            self.dpt = DPTModel(config, add_pooling_layer=False)
+        else:
+            self.backbone = load_backbone(config)
 
         # Neck
         self.neck = DPTNeck(config)
@@ -1087,7 +1108,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DPTImageProcessor, DPTForDepthEstimation
+        >>> from transformers import AutoImageProcessor, DPTForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
@@ -1096,7 +1117,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
 
         >>> # prepare image for the model
@@ -1123,32 +1144,46 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        outputs = self.dpt(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        # only keep certain features based on config.backbone_out_indices
-        # note that the hidden_states also include the initial embeddings
-        if not self.config.is_hybrid:
-            hidden_states = [
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-            ]
-        else:
-            backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
-            backbone_hidden_states.extend(
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
+        if self.backbone is not None:
+            outputs = self.backbone.forward_with_filtered_kwargs(
+                pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
             )
+            hidden_states = outputs.feature_maps
+        else:
+            outputs = self.dpt(
+                pixel_values,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=True,  # we need the intermediate hidden states
+                return_dict=return_dict,
+            )
+            hidden_states = outputs.hidden_states if return_dict else outputs[1]
+            # only keep certain features based on config.backbone_out_indices
+            # note that the hidden_states also include the initial embeddings
+            if not self.config.is_hybrid:
+                hidden_states = [
+                    feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+                ]
+            else:
+                backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
+                backbone_hidden_states.extend(
+                    feature
+                    for idx, feature in enumerate(hidden_states[1:])
+                    if idx in self.config.backbone_out_indices[2:]
+                )
 
-            hidden_states = backbone_hidden_states
+                hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states)
+        patch_height, patch_width = None, None
+        if self.config.backbone_config is not None and self.config.is_hybrid is False:
+            _, _, height, width = pixel_values.shape
+            patch_size = self.config.backbone_config.patch_size
+            patch_height = height // patch_size
+            patch_width = width // patch_size
+
+        hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
         predicted_depth = self.head(hidden_states)
 
@@ -1181,7 +1216,7 @@ class DPTSemanticSegmentationHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Dropout(config.semantic_classifier_dropout),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
@@ -1204,7 +1239,7 @@ class DPTAuxiliaryHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Dropout(0.1, False),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
         )
@@ -1257,14 +1292,14 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DPTImageProcessor, DPTForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+        >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1301,7 +1336,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
             hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states)
+        hidden_states = self.neck(hidden_states=hidden_states)
 
         logits = self.head(hidden_states)
 

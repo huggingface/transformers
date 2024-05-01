@@ -16,12 +16,11 @@
 
 
 import copy
-import inspect
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -29,6 +28,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -41,11 +41,10 @@ if is_torch_available():
         VideoMAEForVideoClassification,
         VideoMAEModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    from transformers import VideoMAEFeatureExtractor
+    from transformers import VideoMAEImageProcessor
 
 
 class VideoMAEModelTester:
@@ -61,7 +60,7 @@ class VideoMAEModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -129,6 +128,10 @@ class VideoMAEModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            decoder_hidden_size=self.hidden_size,
+            decoder_intermediate_size=self.intermediate_size,
+            decoder_num_attention_heads=self.num_attention_heads,
+            decoder_num_hidden_layers=self.num_hidden_layers,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -162,7 +165,7 @@ class VideoMAEModelTester:
 
 
 @require_torch
-class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -170,6 +173,11 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": VideoMAEModel, "video-classification": VideoMAEForVideoClassification}
+        if is_torch_available()
+        else {}
     )
 
     test_pruning = False
@@ -218,18 +226,6 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -240,9 +236,9 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VideoMAEModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MCG-NJU/videomae-base"
+        model = VideoMAEModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -353,10 +349,10 @@ def prepare_video():
 @require_vision
 class VideoMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )
@@ -367,9 +363,9 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = image_processor(video, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -387,9 +383,9 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_for_pretraining(self):
         model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = image_processor(video, return_tensors="pt").to(torch_device)
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")

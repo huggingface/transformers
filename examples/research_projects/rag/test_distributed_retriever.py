@@ -7,10 +7,10 @@ import unittest
 from unittest import TestCase
 from unittest.mock import patch
 
+import faiss
 import numpy as np
 from datasets import Dataset
 
-import faiss
 from transformers import BartConfig, BartTokenizer, DPRConfig, DPRQuestionEncoderTokenizer, RagConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
 from transformers.integrations import is_ray_available

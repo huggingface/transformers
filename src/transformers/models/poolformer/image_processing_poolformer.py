@@ -18,15 +18,9 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers import is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    center_crop,
     get_resize_output_image_size,
-    normalize,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -36,11 +30,15 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
-from ...utils import logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -72,10 +70,10 @@ class PoolFormerImageProcessor(BaseImageProcessor):
               whilst maintaining the aspect ratio.
             - size is `{"shortest_edge": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
               whilst maintaining the aspect ratio.
-        crop_pct (`float`, *optional*, defaults to `0.9`):
+        crop_pct (`float`, *optional*, defaults to 0.9):
             Percentage of the image to crop from the center. Can be overridden by `crop_pct` in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
@@ -84,12 +82,12 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after applying center crop. Only has an effect if `do_center_crop` is set to `True`. Can
             be overridden by the `crop_size` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
@@ -116,7 +114,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
@@ -135,6 +133,23 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "crop_pct",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -143,7 +158,8 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         crop_pct: Optional[float] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image.
@@ -172,6 +188,8 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" not in size and ("height" not in size or "width" not in size):
@@ -187,83 +205,27 @@ class PoolFormerImageProcessor(BaseImageProcessor):
             else:
                 raise ValueError("Invalid size for resize: {}".format(size))
 
-            output_size = get_resize_output_image_size(image, size=scale_size, default_to_square=False)
+            output_size = get_resize_output_image_size(
+                image, size=scale_size, default_to_square=False, input_data_format=input_data_format
+            )
         else:
             if "shortest_edge" in size:
-                output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
+                output_size = get_resize_output_image_size(
+                    image, size=size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+                )
             elif "height" in size and "width" in size:
                 output_size = (size["height"], size["width"])
             else:
                 raise ValueError("Invalid size for resize: {}".format(size))
 
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `crop_size` along
-        any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"size must contain 'height' and 'width' as keys. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
@@ -281,6 +243,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -288,7 +251,8 @@ class PoolFormerImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -323,6 +287,12 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         crop_pct = crop_pct if crop_pct is not None else self.crop_pct
@@ -339,43 +309,69 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None or resample is None:
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_center_crop and crop_pct is None:
-            raise ValueError("Crop_pct must be specified if do_center_crop is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image=image, size=size, crop_pct=crop_pct, resample=resample) for image in images]
+            images = [
+                self.resize(
+                    image=image, size=size, crop_pct=crop_pct, resample=resample, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
         if do_center_crop:
-            images = [self.center_crop(image=image, size=crop_size) for image in images]
+            images = [
+                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

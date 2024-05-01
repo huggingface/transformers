@@ -69,7 +69,7 @@ class BaseTransformer(pl.LightningModule):
         config=None,
         tokenizer=None,
         model=None,
-        **config_kwargs
+        **config_kwargs,
     ):
         """Initialize a model, tokenizer and config."""
         super().__init__()
@@ -313,7 +313,7 @@ def add_generic_args(parser, root_dir) -> None:
         type=str,
         default="O2",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )
@@ -346,7 +346,7 @@ def generic_train(
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
-    **extra_train_kwargs
+    **extra_train_kwargs,
 ):
     pl.seed_everything(args.seed)
 

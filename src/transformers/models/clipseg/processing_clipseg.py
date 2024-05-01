@@ -30,16 +30,18 @@ class CLIPSegProcessor(ProcessorMixin):
     [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`ViTImageProcessor`]):
+        image_processor ([`ViTImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`]):
+        tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
@@ -71,8 +73,7 @@ class CLIPSegProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
             visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
                 NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape

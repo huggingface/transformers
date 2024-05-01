@@ -30,22 +30,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/led-base-16384": 16384,
-}
-
 
 class LEDTokenizerFast(PreTrainedTokenizerFast):
     r"""
@@ -55,12 +39,14 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LEDTokenizerFast
+
     >>> tokenizer = LEDTokenizerFast.from_pretrained("allenai/led-base-16384")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -127,8 +113,6 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = LEDTokenizer
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -148,8 +132,14 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
+        # we have to specify that this tokens is special otherwise adding it will reset the normalized flag to `False` in `add_special_tokens`
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, normalized=True, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
         super().__init__(
             vocab_file,
             merges_file,

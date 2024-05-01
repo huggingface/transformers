@@ -1,0 +1,3 @@
+# Optimizing inference
+
+perf_infer_gpu_many: perf_infer_gpu_one

@@ -25,7 +25,7 @@ from datasets import load_dataset
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -34,10 +34,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTFeatureExtractor
+    from transformers import ImageGPTImageProcessor
 
 
-class ImageGPTFeatureExtractionTester(unittest.TestCase):
+class ImageGPTImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -61,7 +61,7 @@ class ImageGPTFeatureExtractionTester(unittest.TestCase):
         self.size = size
         self.do_normalize = do_normalize
 
-    def prepare_feat_extract_dict(self):
+    def prepare_image_processor_dict(self):
         return {
             # here we create 2 clusters for the sake of simplicity
             "clusters": np.asarray(
@@ -75,82 +75,163 @@ class ImageGPTFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
         }
 
+    def expected_output_image_shape(self, images):
+        return (self.size["height"] * self.size["width"],)
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class ImageGPTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
-    feature_extraction_class = ImageGPTFeatureExtractor if is_vision_available() else None
+class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ImageGPTFeatureExtractionTester(self)
+        self.image_processor_tester = ImageGPTImageProcessingTester(self)
 
     @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
 
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "clusters"))
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+    def test_image_processor_properties(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "clusters"))
+        self.assertTrue(hasattr(image_processing, "do_resize"))
+        self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
 
-    def test_feat_extract_from_dict_with_kwargs(self):
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict)
-        self.assertEqual(feature_extractor.size, {"height": 18, "width": 18})
+    def test_image_processor_from_dict_with_kwargs(self):
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        feature_extractor = self.feature_extraction_class.from_dict(self.feat_extract_dict, size=42)
-        self.assertEqual(feature_extractor.size, {"height": 42, "width": 42})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    def test_feat_extract_to_json_string(self):
-        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-        obj = json.loads(feat_extract.to_json_string())
-        for key, value in self.feat_extract_dict.items():
+    def test_image_processor_to_json_string(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        obj = json.loads(image_processor.to_json_string())
+        for key, value in self.image_processor_dict.items():
             if key == "clusters":
                 self.assertTrue(np.array_equal(value, obj[key]))
             else:
                 self.assertEqual(obj[key], value)
 
-    def test_feat_extract_to_json_file(self):
-        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+    def test_image_processor_to_json_file(self):
+        image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
-            feat_extract_first.to_json_file(json_file_path)
-            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path).to_dict()
+            json_file_path = os.path.join(tmpdirname, "image_processor.json")
+            image_processor_first.to_json_file(json_file_path)
+            image_processor_second = self.image_processing_class.from_json_file(json_file_path).to_dict()
 
-        feat_extract_first = feat_extract_first.to_dict()
-        for key, value in feat_extract_first.items():
+        image_processor_first = image_processor_first.to_dict()
+        for key, value in image_processor_first.items():
             if key == "clusters":
-                self.assertTrue(np.array_equal(value, feat_extract_second[key]))
+                self.assertTrue(np.array_equal(value, image_processor_second[key]))
             else:
-                self.assertEqual(feat_extract_first[key], value)
+                self.assertEqual(image_processor_first[key], value)
 
-    def test_feat_extract_from_and_save_pretrained(self):
-        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+    def test_image_processor_from_and_save_pretrained(self):
+        image_processor_first = self.image_processing_class(**self.image_processor_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            feat_extract_first.save_pretrained(tmpdirname)
-            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname).to_dict()
+            image_processor_first.save_pretrained(tmpdirname)
+            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname).to_dict()
 
-        feat_extract_first = feat_extract_first.to_dict()
-        for key, value in feat_extract_first.items():
+        image_processor_first = image_processor_first.to_dict()
+        for key, value in image_processor_first.items():
             if key == "clusters":
-                self.assertTrue(np.array_equal(value, feat_extract_second[key]))
+                self.assertTrue(np.array_equal(value, image_processor_second[key]))
             else:
-                self.assertEqual(feat_extract_first[key], value)
+                self.assertEqual(image_processor_first[key], value)
 
     @unittest.skip("ImageGPT requires clusters at initialization")
     def test_init_without_params(self):
         pass
 
+    # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
+    def test_call_pil(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL images
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+        )
+
+    # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
+    def test_call_numpy(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+        )
+
+    @unittest.skip("ImageGPT assumes clusters for 3 channels")
+    def test_call_numpy_4_channels(self):
+        pass
+
+    # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
+    def test_call_pytorch(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PyTorch tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
+        self.assertEqual(
+            tuple(encoded_images.shape),
+            (self.image_processor_tester.batch_size, *expected_output_image_shape),
+        )
+
 
 def prepare_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test")
+    # we use revision="refs/pr/1" until the PR is merged
+    # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+    dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
-    image1 = Image.open(dataset[4]["file"])
-    image2 = Image.open(dataset[5]["file"])
+    image1 = dataset[4]["image"]
+    image2 = dataset[5]["image"]
 
     images = [image1, image2]
 
@@ -159,15 +240,15 @@ def prepare_images():
 
 @require_vision
 @require_torch
-class ImageGPTFeatureExtractorIntegrationTest(unittest.TestCase):
+class ImageGPTImageProcessorIntegrationTest(unittest.TestCase):
     @slow
     def test_image(self):
-        feature_extractor = ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small")
+        image_processing = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
 
         images = prepare_images()
 
         # test non-batched
-        encoding = feature_extractor(images[0], return_tensors="pt")
+        encoding = image_processing(images[0], return_tensors="pt")
 
         self.assertIsInstance(encoding.input_ids, torch.LongTensor)
         self.assertEqual(encoding.input_ids.shape, (1, 1024))
@@ -176,7 +257,7 @@ class ImageGPTFeatureExtractorIntegrationTest(unittest.TestCase):
         self.assertEqual(encoding.input_ids[0, :3].tolist(), expected_slice)
 
         # test batched
-        encoding = feature_extractor(images, return_tensors="pt")
+        encoding = image_processing(images, return_tensors="pt")
 
         self.assertIsInstance(encoding.input_ids, torch.LongTensor)
         self.assertEqual(encoding.input_ids.shape, (2, 1024))

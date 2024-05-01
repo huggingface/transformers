@@ -3,12 +3,12 @@ import argparse
 import json
 
 import torch
-from PIL import Image
-
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from timm.models import create_model
+
 from transformers import (
-    BeitFeatureExtractor,
+    BeitImageProcessor,
     Data2VecVisionConfig,
     Data2VecVisionForImageClassification,
     Data2VecVisionModel,
@@ -304,9 +304,9 @@ def main():
     orig_model.eval()
 
     # 3. Forward Beit model
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
+    image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
     image = Image.open("../../../../tests/fixtures/tests_samples/COCO/000000039769.png")
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     orig_args = (pixel_values,) if is_finetuned else (pixel_values, None)
@@ -354,7 +354,7 @@ def main():
     # 7. Save
     print(f"Saving to {args.hf_checkpoint_name}")
     hf_model.save_pretrained(args.hf_checkpoint_name)
-    feature_extractor.save_pretrained(args.hf_checkpoint_name)
+    image_processor.save_pretrained(args.hf_checkpoint_name)
 
 
 if __name__ == "__main__":

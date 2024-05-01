@@ -26,18 +26,8 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": (
-        "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-pubmed": (
-        "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-bigpatent": (
-        "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json"
-    ),
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-}
+
+from ..deprecated._archive_maps import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BigBirdPegasusConfig(PretrainedConfig):
@@ -120,6 +110,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -158,7 +149,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

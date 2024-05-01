@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,6 +56,9 @@ else:
         "T5Model",
         "T5PreTrainedModel",
         "load_tf_weights_in_t5",
+        "T5ForQuestionAnswering",
+        "T5ForSequenceClassification",
+        "T5ForTokenClassification",
     ]
 
 try:
@@ -119,6 +118,9 @@ if TYPE_CHECKING:
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             T5EncoderModel,
             T5ForConditionalGeneration,
+            T5ForQuestionAnswering,
+            T5ForSequenceClassification,
+            T5ForTokenClassification,
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,

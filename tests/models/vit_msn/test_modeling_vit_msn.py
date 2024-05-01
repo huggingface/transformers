@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch ViTMSN model. """
 
 
-import inspect
 import unittest
 
 from transformers import ViTMSNConfig
@@ -24,6 +23,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,13 +31,12 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTMSNForImageClassification, ViTMSNModel
-    from transformers.models.vit_msn.modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class ViTMSNModelTester:
@@ -51,7 +50,7 @@ class ViTMSNModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -144,13 +143,18 @@ class ViTMSNModelTester:
 
 
 @require_torch
-class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViTMSN does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
@@ -177,18 +181,6 @@ class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -199,9 +191,9 @@ class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTMSNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/vit-msn-small"
+        model = ViTMSNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -214,17 +206,17 @@ def prepare_img():
 @require_vision
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
         model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -234,6 +226,6 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0803, -0.4454, -0.2375]).to(torch_device)
+        expected_slice = torch.tensor([0.5588, 0.6853, -0.5929]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

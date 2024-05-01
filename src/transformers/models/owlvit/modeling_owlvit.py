@@ -14,17 +14,17 @@
 # limitations under the License.
 """ PyTorch OWL-ViT model."""
 
-
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -47,26 +47,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
 
 # See all OwlViT models at https://huggingface.co/models?filter=owlvit
-OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlvit-base-patch32",
-    "google/owlvit-base-patch16",
-    "google/owlvit-large-patch14",
-]
 
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+from ..deprecated._archive_maps import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
@@ -120,7 +102,7 @@ class OwlViTOutput(ModelOutput):
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast
-def _upcast(t: torch.Tensor) -> torch.Tensor:
+def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
         return t if t.dtype in (torch.float32, torch.float64) else t.float()
@@ -129,7 +111,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_area
-def box_area(boxes: torch.Tensor) -> torch.Tensor:
+def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
@@ -146,7 +128,7 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_iou
-def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
@@ -204,7 +186,7 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
@@ -248,12 +230,12 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual target image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
-            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
             Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
@@ -304,7 +286,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.num_patches = (config.image_size // config.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -325,7 +307,9 @@ class OwlViTTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -476,9 +460,9 @@ class OwlViTEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = OwlViTAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = OwlViTMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -530,7 +514,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     config_class = OwlViTConfig
     base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     def _init_weights(self, module):
@@ -554,9 +537,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, OwlViTMLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
@@ -575,17 +556,18 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, OwlViTEncoder):
-            module.gradient_checkpointing = value
-
 
 OWLVIT_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
     Parameters:
-    This model is a PyTorch [torch.nn.Module](https:
-        //pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
         config ([`OwlViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -594,7 +576,7 @@ OWLVIT_START_DOCSTRING = r"""
 OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -629,7 +611,7 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
 OWLVIT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -656,7 +638,7 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -747,18 +729,12 @@ class OwlViTEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -790,7 +766,7 @@ class OwlViTTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
@@ -816,14 +792,16 @@ class OwlViTTextTransformer(nn.Module):
         input_ids = input_ids.view(-1, input_shape[-1])
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        num_samples, seq_len = input_shape  # num_samples = batch_size * num_max_text_queries
+        # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
         # OWLVIT's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(num_samples, seq_len).to(hidden_states.device)
+        causal_attention_mask = _create_4d_causal_attention_mask(
+            input_shape, hidden_states.dtype, device=hidden_states.device
+        )
         # expand attention_mask
         if attention_mask is not None:
             # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -853,15 +831,6 @@ class OwlViTTextTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-    def _build_causal_attention_mask(self, bsz, seq_len):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len)
-        mask.fill_(torch.tensor(float("-inf")))
-        mask.triu_(1)  # zero out the lower diagonal
-        mask = mask.unsqueeze(1)  # expand mask
-        return mask
 
 
 class OwlViTTextModel(OwlViTPreTrainedModel):
@@ -894,10 +863,10 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTTextModel
+        >>> from transformers import AutoProcessor, OwlViTTextModel
 
         >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -922,9 +891,9 @@ class OwlViTVisionTransformer(nn.Module):
         self.config = config
 
         self.embeddings = OwlViTVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(config.hidden_size)
+        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
@@ -1003,10 +972,10 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTVisionModel
+        >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1055,7 +1024,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1076,10 +1045,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -1112,10 +1081,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1160,10 +1129,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import OwlViTProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1240,14 +1209,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
 
 class OwlViTBoxPredictionHead(nn.Module):
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: OwlViTConfig, out_dim: int = 4):
         super().__init__()
 
         width = config.vision_config.hidden_size
         self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.dense2 = nn.Linear(width, 4)
+        self.dense2 = nn.Linear(width, out_dim)
 
     def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
         output = self.dense0(image_features)
@@ -1276,7 +1245,6 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
-
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1285,8 +1253,8 @@ class OwlViTClassPredictionHead(nn.Module):
             return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
-        image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
-        query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
+        image_class_embeds = image_class_embeds / (torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6)
+        query_embeds = query_embeds / (torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6)
 
         # Get class predictions
         pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)
@@ -1318,40 +1286,41 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.class_head = OwlViTClassPredictionHead(config)
         self.box_head = OwlViTBoxPredictionHead(config)
 
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
-    def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
-        # Computes normalized xy corner coordinates from feature_map.
-        if not feature_map.ndim == 4:
-            raise ValueError("Expected input shape is [batch_size, num_patches, num_patches, hidden_dim]")
+        self.sqrt_num_patches = config.vision_config.image_size // config.vision_config.patch_size
+        self.box_bias = self.compute_box_bias(self.sqrt_num_patches)
 
-        device = feature_map.device
-        num_patches = feature_map.shape[1]
+    @staticmethod
+    def normalize_grid_corner_coordinates(num_patches: int) -> torch.Tensor:
+        # Create grid coordinates using torch
+        x_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
+        y_coordinates = torch.arange(1, num_patches + 1, dtype=torch.float32)
+        xx, yy = torch.meshgrid(x_coordinates, y_coordinates, indexing="xy")
 
-        box_coordinates = np.stack(
-            np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
-        ).astype(np.float32)
-        box_coordinates /= np.array([num_patches, num_patches], np.float32)
+        # Stack the coordinates and divide by num_patches
+        box_coordinates = torch.stack((xx, yy), dim=-1)
+        box_coordinates /= num_patches
 
         # Flatten (h, w, 2) -> (h*w, 2)
-        box_coordinates = box_coordinates.reshape(
-            box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
-        )
-        box_coordinates = torch.from_numpy(box_coordinates).to(device)
+        box_coordinates = box_coordinates.view(-1, 2)
 
         return box_coordinates
 
-    def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
+    @lru_cache(maxsize=2)
+    def compute_box_bias(self, num_patches: int, feature_map: Optional[torch.FloatTensor] = None) -> torch.Tensor:
+        if feature_map is not None:
+            raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
         # The box center is biased to its position on the feature grid
-        box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
+        box_coordinates = self.normalize_grid_corner_coordinates(num_patches)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
 
         # Unnormalize xy
         box_coord_bias = torch.log(box_coordinates + 1e-4) - torch.log1p(-box_coordinates + 1e-4)
 
         # The box size is biased to the patch size
-        box_size = torch.full_like(box_coord_bias, 1.0 / feature_map.shape[-2])
+        box_size = torch.full_like(box_coord_bias, 1.0 / num_patches)
         box_size_bias = torch.log(box_size + 1e-4) - torch.log1p(-box_size + 1e-4)
 
         # Compute box bias
@@ -1377,7 +1346,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_head(image_feats)
 
         # Compute the location of each token on the grid and use it to compute a bias for the bbox prediction
-        pred_boxes += self.compute_box_bias(feature_map)
+        box_bias = self.box_bias.to(feature_map.device)
+        pred_boxes += box_bias
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
@@ -1408,7 +1378,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1424,8 +1393,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1434,8 +1402,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1457,8 +1425,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
-        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
-        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], image_embeds[:, :-1].shape)
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
@@ -1467,8 +1434,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
             image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
+            self.sqrt_num_patches,
+            self.sqrt_num_patches,
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
@@ -1478,7 +1445,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def embed_image_query(
         self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
     ) -> torch.FloatTensor:
-
         _, class_embeds = self.class_predictor(query_image_features)
         pred_boxes = self.box_predictor(query_image_features, query_feature_map)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
@@ -1502,7 +1468,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
             selected_inds = (ious[0] >= iou_threshold).nonzero()
             if selected_inds.numel():
-                selected_embeddings = class_embeds[i][selected_inds[0]]
+                selected_embeddings = class_embeds[i][selected_inds.squeeze(1)]
                 mean_embeds = torch.mean(class_embeds[i], axis=0)
                 mean_sim = torch.einsum("d,id->i", mean_embeds, selected_embeddings)
                 best_box_ind = selected_inds[torch.argmin(mean_sim)]
@@ -1535,9 +1501,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1548,7 +1514,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     outputs = model.image_guided_detection(**inputs)
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
-        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )
@@ -1557,8 +1523,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.782 at location [-0.06, -1.52, 637.96, 271.16]
-        Detected similar object with confidence 1.0 at location [39.64, 71.61, 176.21, 117.15]
+        Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
+        Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1631,9 +1597,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
 
-        >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

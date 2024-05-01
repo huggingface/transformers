@@ -12,6 +12,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
+# limitations under the License.
 
 """ Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
 
@@ -26,11 +27,11 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 import datasets
+import evaluate
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -50,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -103,8 +104,8 @@ class ModelArguments:
         default=0.05,
         metadata={
             "help": (
-                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis."
             )
         },
@@ -130,6 +131,20 @@ class ModelArguments:
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
+    )
+    ctc_zero_infinity: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly"
+            " occur when the inputs are too short to be aligned to the targets."
+        },
+    )
+    add_adapter: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether a convolutional attention network should be stacked on top of the Wav2Vec2Bert Encoder. Can be very"
+            "useful to downsample the output length."
+        },
     )
 
 
@@ -228,12 +243,28 @@ class DataTrainingArguments:
             )
         },
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "If :obj:`True`, will use the token generated when running"
-                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -292,11 +323,14 @@ class DataCollatorCTCWithPadding:
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
+    feature_extractor_input_name: Optional[str] = "input_values"
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
+        input_features = [
+            {self.feature_extractor_input_name: feature[self.feature_extractor_input_name]} for feature in features
+        ]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.pad(
@@ -348,7 +382,7 @@ def create_vocabulary_from_data(
         lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:
@@ -377,6 +411,15 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if data_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if data_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        data_args.token = data_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -407,8 +450,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
@@ -426,7 +469,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.token,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -451,7 +494,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.token,
         )
 
         if data_args.max_eval_samples is not None:
@@ -489,7 +532,10 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -545,11 +591,15 @@ def main():
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # adapt config
@@ -566,9 +616,11 @@ def main():
             "gradient_checkpointing": training_args.gradient_checkpointing,
             "layerdrop": model_args.layerdrop,
             "ctc_loss_reduction": model_args.ctc_loss_reduction,
+            "ctc_zero_infinity": model_args.ctc_zero_infinity,
             "pad_token_id": tokenizer.pad_token_id,
             "vocab_size": len(tokenizer),
             "activation_dropout": model_args.activation_dropout,
+            "add_adapter": model_args.add_adapter,
         }
     )
 
@@ -577,7 +629,8 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # freeze encoder
@@ -601,6 +654,7 @@ def main():
     min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
+    feature_extractor_input_name = feature_extractor.model_input_names[0]
 
     # `phoneme_language` is only relevant if the model is fine-tuned on phoneme classification
     phoneme_language = data_args.phoneme_language
@@ -612,8 +666,9 @@ def main():
         sample = batch[audio_column_name]
 
         inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
-        batch["input_values"] = inputs.input_values[0]
-        batch["input_length"] = len(batch["input_values"])
+        batch[feature_extractor_input_name] = getattr(inputs, feature_extractor_input_name)[0]
+        # take length of raw audio waveform
+        batch["input_length"] = len(sample["array"].squeeze())
 
         # encode targets
         additional_kwargs = {}
@@ -646,7 +701,7 @@ def main():
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
-    eval_metrics = {metric: evaluate.load(metric) for metric in data_args.eval_metrics}
+    eval_metrics = {metric: evaluate.load(metric, cache_dir=model_args.cache_dir) for metric in data_args.eval_metrics}
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely
@@ -672,11 +727,14 @@ def main():
         return metrics
 
     # Now save everything to be able to create a single processor later
-    if is_main_process(training_args.local_rank):
-        # save feature extractor, tokenizer and config
-        feature_extractor.save_pretrained(training_args.output_dir)
-        tokenizer.save_pretrained(training_args.output_dir)
-        config.save_pretrained(training_args.output_dir)
+    # make sure all processes wait until data is saved
+    with training_args.main_process_first():
+        # only the main process saves them
+        if is_main_process(training_args.local_rank):
+            # save feature extractor, tokenizer and config
+            feature_extractor.save_pretrained(training_args.output_dir)
+            tokenizer.save_pretrained(training_args.output_dir)
+            config.save_pretrained(training_args.output_dir)
 
     try:
         processor = AutoProcessor.from_pretrained(training_args.output_dir)
@@ -691,7 +749,9 @@ def main():
         processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor)
+    data_collator = DataCollatorCTCWithPadding(
+        processor=processor, feature_extractor_input_name=feature_extractor_input_name
+    )
 
     # Initialize Trainer
     trainer = Trainer(
@@ -701,14 +761,13 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        tokenizer=processor,
     )
 
     # 8. Finally, we can start training
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

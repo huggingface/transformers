@@ -15,7 +15,6 @@
 import inspect
 import math
 import multiprocessing
-import os
 import traceback
 import unittest
 
@@ -45,6 +44,7 @@ if is_flax_available():
     import jax.numpy as jnp
     import optax
     from flax.traverse_util import flatten_dict
+
     from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
         FlaxWav2Vec2ForCTC,
@@ -58,6 +58,7 @@ if is_flax_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -67,7 +68,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -123,7 +123,7 @@ class FlaxWav2Vec2ModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
@@ -276,7 +276,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_freeze_feature_encoder(self):
@@ -465,7 +464,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         negative_indices = _sample_negative_indices(features.shape, num_negatives, attention_mask=attention_mask)
 
         # make sure that no padding tokens are sampled
-        self.assertTrue(all([idx not in negative_indices for idx in forbidden_indices]))
+        self.assertTrue(all(idx not in negative_indices for idx in forbidden_indices))
 
         features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
         # take negative vectors from sampled indices
@@ -637,7 +636,4 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm_invalid_pool(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)

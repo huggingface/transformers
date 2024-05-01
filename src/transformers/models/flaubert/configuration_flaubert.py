@@ -23,12 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/config.json",
-    "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/config.json",
-    "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/config.json",
-    "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class FlaubertConfig(PretrainedConfig):
@@ -180,7 +176,7 @@ class FlaubertConfig(PretrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         """Constructs FlaubertConfig."""
         self.pre_norm = pre_norm

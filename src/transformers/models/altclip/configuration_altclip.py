@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ AltCLIP model configuration"""
-import copy
 import os
 from typing import Union
 
@@ -23,10 +22,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/AltCLIP": "https://huggingface.co/BAAI/AltCLIP/resolve/main/config.json",
-    # See all AltCLIP models at https://huggingface.co/models?filter=altclip
-}
+
+from ..deprecated._archive_maps import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class AltCLIPTextConfig(PretrainedConfig):
@@ -62,12 +59,19 @@ class AltCLIPTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 514):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
+        type_vocab_size (`int`, *optional*, defaults to 1):
             The vocabulary size of the `token_type_ids` passed when calling [`AltCLIPTextModel`]
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        initializer_factor (`float`, *optional*, defaults to 0.02):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 1): The id of the *padding* token.
+        bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
@@ -77,12 +81,8 @@ class AltCLIPTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         project_dim (`int`, *optional*, defaults to 768):
             The dimentions of the teacher model before the mapping layer.
-        pooler_fn (`str`, *optional*, defaults to `"cls"`):
-            Type of pooler we use. We take the first token as pooled output.
 
     Examples:
 
@@ -98,6 +98,7 @@ class AltCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "altclip_text_model"
 
     def __init__(
@@ -120,10 +121,8 @@ class AltCLIPTextConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         project_dim=768,
-        pooler_fn="cls",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -142,9 +141,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.project_dim = project_dim
-        self.pooler_fn = pooler_fn
 
 
 class AltCLIPVisionConfig(PretrainedConfig):
@@ -163,25 +160,28 @@ class AltCLIPVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 512):
+            Dimentionality of text and vision projection layers.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
@@ -213,19 +213,17 @@ class AltCLIPVisionConfig(PretrainedConfig):
         image_size=224,
         patch_size=32,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.projection_dim = projection_dim
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
@@ -239,6 +237,7 @@ class AltCLIPVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
@@ -270,7 +269,7 @@ class AltCLIPConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AltCLIPTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`AltCLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 768):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
@@ -301,28 +300,87 @@ class AltCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "altclip"
-    is_composition = True
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
     ):
-        super().__init__(**kwargs)
-
         # If `_config_dict` exist, we use them for the backward compatibility.
+        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
+        # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
+
+        super().__init__(**kwargs)
+
+        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
+        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
+        # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
         if text_config_dict is not None:
-            text_config = text_config_dict
+            if text_config is None:
+                text_config = {}
+
+            # This is the complete result when using `text_config_dict`.
+            _text_config_dict = AltCLIPTextConfig(**text_config_dict).to_dict()
+
+            # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
+            for key, value in _text_config_dict.items():
+                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                    # If specified in `text_config_dict`
+                    if key in text_config_dict:
+                        message = (
+                            f"`{key}` is found in both `text_config_dict` and `text_config` but with different values. "
+                            f'The value `text_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`text_config_dict` is provided which will be used to initialize `AltCLIPTextConfig`. The "
+                            f'value `text_config["{key}"]` will be overriden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `text_config` with the ones in `_text_config_dict`.
+            text_config.update(_text_config_dict)
+
         if vision_config_dict is not None:
-            vision_config = vision_config_dict
+            if vision_config is None:
+                vision_config = {}
+
+            # This is the complete result when using `vision_config_dict`.
+            _vision_config_dict = AltCLIPVisionConfig(**vision_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
+            for key, value in _vision_config_dict.items():
+                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                    # If specified in `vision_config_dict`
+                    if key in vision_config_dict:
+                        message = (
+                            f"`{key}` is found in both `vision_config_dict` and `vision_config` but with different "
+                            f'values. The value `vision_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`vision_config_dict` is provided which will be used to initialize `AltCLIPVisionConfig`. "
+                            f'The value `vision_config["{key}"]` will be overriden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `vision_config` with the ones in `_vision_config_dict`.
+            vision_config.update(_vision_config_dict)
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the AltCLIPTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `AltCLIPTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the AltCLIPVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. initializing the `AltCLIPVisionConfig` with default values.")
 
         self.text_config = AltCLIPTextConfig(**text_config)
         self.vision_config = AltCLIPVisionConfig(**vision_config)
@@ -342,16 +400,3 @@ class AltCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

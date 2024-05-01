@@ -22,14 +22,15 @@ Fine-tuning the library models for sequence to sequence speech recognition.
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import datasets
+import evaluate
 import torch
 from datasets import DatasetDict, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -48,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -85,12 +86,28 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -102,16 +119,22 @@ class ModelArguments:
     )
     forced_decoder_ids: List[List[int]] = field(
         default=None,
+        metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
+    )
+    suppress_tokens: List[int] = field(
+        default=None,
         metadata={
             "help": (
-                "A list of pairs of integers which indicates a mapping from generation indices to token indices "
-                "that will be forced before sampling. For example, [[0, 123]] means the first generated token "
-                "will always be a token of index 123."
+                "Deprecated. The use of `suppress_tokens` should not be required for the majority of fine-tuning examples."
+                "Should you need to use `suppress_tokens`, please manually update them in the fine-tuning script directly."
             )
         },
     )
-    suppress_tokens: List[int] = field(
-        default=None, metadata={"help": "A list of tokens that will be suppressed at generation."}
+    apply_spec_augment: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for Wav2Vec2, HuBERT, WavLM and Whisper models."
+        },
     )
 
 
@@ -126,10 +149,6 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
-    text_column: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -227,10 +246,13 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             The processor used for processing the data.
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
+        forward_attention_mask (`bool`)
+            Whether to return attention_mask.
     """
 
     processor: Any
     decoder_start_token_id: int
+    forward_attention_mask: bool
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
@@ -240,6 +262,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+
+        if self.forward_attention_mask:
+            batch["attention_mask"] = torch.LongTensor([feature["attention_mask"] for feature in features])
 
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
@@ -270,6 +295,15 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_speech_recognition_seq2seq", model_args, data_args)
@@ -291,8 +325,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -328,7 +362,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
 
     if training_args.do_eval:
@@ -337,7 +371,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
@@ -362,30 +396,36 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
-    config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
+    # SpecAugment for whisper models
+    if getattr(config, "model_type", None) == "whisper":
+        config.update({"apply_spec_augment": model_args.apply_spec_augment})
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     if model.config.decoder_start_token_id is None:
@@ -398,9 +438,35 @@ def main():
         model.freeze_encoder()
         model.model.encoder.gradient_checkpointing = False
 
-    if data_args.language is not None:
-        # We only need to set the task id when the language is specified (i.e. in a multilingual setting)
+    if hasattr(model.generation_config, "is_multilingual") and model.generation_config.is_multilingual:
+        # We only need to set the language and task ids in a multilingual setting
         tokenizer.set_prefix_tokens(language=data_args.language, task=data_args.task)
+        model.generation_config.update(
+            **{
+                "language": data_args.language,
+                "task": data_args.task,
+            }
+        )
+    elif data_args.language is not None:
+        raise ValueError(
+            "Setting language token for an English-only checkpoint is not permitted. The language argument should "
+            "only be set for multilingual checkpoints."
+        )
+
+    # TODO (Sanchit): deprecate these arguments in v4.41
+    if model_args.forced_decoder_ids is not None:
+        logger.warning(
+            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
+            "Please use the `language` and `task` arguments instead"
+        )
+        model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
+
+    if model_args.suppress_tokens is not None:
+        logger.warning(
+            "The use of `suppress_tokens` is deprecated and will be removed in v4.41."
+            "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
+        )
+        model.generation_config.suppress_tokens = model_args.suppress_tokens
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
@@ -418,6 +484,12 @@ def main():
     text_column_name = data_args.text_column_name
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
+    # if SpecAugment is used for whisper models, return attention_mask to guide the mask along time axis
+    forward_attention_mask = (
+        getattr(config, "model_type", None) == "whisper"
+        and getattr(config, "apply_spec_augment", False)
+        and getattr(config, "mask_time_prob", 0) > 0
+    )
 
     if data_args.max_train_samples is not None:
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
@@ -428,10 +500,14 @@ def main():
     def prepare_dataset(batch):
         # process audio
         sample = batch[audio_column_name]
-        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
+        inputs = feature_extractor(
+            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=forward_attention_mask
+        )
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
         batch["input_length"] = len(sample["array"])
+        if forward_attention_mask:
+            batch["attention_mask"] = inputs.get("attention_mask")[0]
 
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
@@ -468,7 +544,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = evaluate.load("wer")
+    metric = evaluate.load("wer", cache_dir=model_args.cache_dir)
 
     def compute_metrics(pred):
         pred_ids = pred.predictions
@@ -484,11 +560,14 @@ def main():
         return {"wer": wer}
 
     # 9. Create a single speech processor
-    if is_main_process(training_args.local_rank):
-        # save feature extractor, tokenizer and config
-        feature_extractor.save_pretrained(training_args.output_dir)
-        tokenizer.save_pretrained(training_args.output_dir)
-        config.save_pretrained(training_args.output_dir)
+    # make sure all processes wait until data is saved
+    with training_args.main_process_first():
+        # only the main process saves them
+        if is_main_process(training_args.local_rank):
+            # save feature extractor, tokenizer and config
+            feature_extractor.save_pretrained(training_args.output_dir)
+            tokenizer.save_pretrained(training_args.output_dir)
+            config.save_pretrained(training_args.output_dir)
 
     processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
@@ -496,6 +575,7 @@ def main():
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
+        forward_attention_mask=forward_attention_mask,
     )
 
     # 11. Initialize Trainer

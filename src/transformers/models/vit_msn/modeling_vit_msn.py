@@ -37,10 +37,8 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViTMSNConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
-VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/vit-msn-small",
-    # See all ViTMSN models at https://huggingface.co/models?filter=vit_msn
-]
+
+from ..deprecated._archive_maps import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ViTMSNEmbeddings(nn.Module):
@@ -153,6 +151,7 @@ class ViTMSNPatchEmbeddings(nn.Module):
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
             )
         if not interpolate_pos_encoding:
             if height != self.image_size[0] or width != self.image_size[1]:
@@ -238,7 +237,6 @@ class ViTMSNSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -296,7 +294,6 @@ class ViTMSNIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -388,17 +385,11 @@ class ViTMSNEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -430,6 +421,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ViTMSNAttention"]
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
@@ -444,10 +436,6 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: ViTMSNEncoder, value: bool = False) -> None:
-        if isinstance(module, ViTMSNEncoder):
-            module.gradient_checkpointing = value
 
 
 VIT_MSN_START_DOCSTRING = r"""
@@ -464,8 +452,8 @@ VIT_MSN_START_DOCSTRING = r"""
 VIT_MSN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -527,6 +515,9 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
         Returns:
 
         Examples:
@@ -646,7 +637,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
         >>> print(model.config.id2label[predicted_label])
-        Kerry blue terrier
+        tusker
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

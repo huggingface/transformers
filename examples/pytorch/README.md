@@ -53,7 +53,7 @@ Coming soon!
 Most examples are equipped with a mechanism to truncate the number of dataset samples to the desired length. This is useful for debugging purposes, for example to quickly check that all stages of the programs can complete, before running the same setup on the full dataset which may take hours to complete.
 
 For example here is how to truncate all three splits to just 50 samples each:
-```
+```bash
 examples/pytorch/token-classification/run_ner.py \
 --max_train_samples 50 \
 --max_eval_samples 50 \
@@ -62,7 +62,7 @@ examples/pytorch/token-classification/run_ner.py \
 ```
 
 Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
-```
+```bash
 examples/pytorch/token-classification/run_ner.py -h
 ```
 
@@ -98,7 +98,7 @@ the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html)
 use the following command:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
 	--all_arguments_of_the_script
 ```
@@ -107,9 +107,9 @@ As an example, here is how you would fine-tune the BERT large model (with whole 
 classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -153,7 +153,7 @@ classification MNLI task using the `run_glue` script, with 8 TPUs (from this fol
 ```bash
 python xla_spawn.py --num_cores 8 \
     text-classification/run_glue.py \
-    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --model_name_or_path google-bert/bert-large-uncased-whole-word-masking \
     --task_name mnli \
     --do_train \
     --do_eval \
@@ -201,6 +201,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
 * [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 * [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
+* [DVCLive](https://dvc.org/doc/dvclive/ml-frameworks/huggingface)
 
 ### Weights & Biases
 
@@ -223,9 +224,9 @@ import wandb
 wandb.login()
 ```
 
-To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to all` if you have `wandb` installed.
+To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to_all` if you have `wandb` installed.
 
-Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
+Whenever you use the `Trainer` class, your losses, evaluation metrics, model topology and gradients will automatically be logged.
 
 Advanced configuration is possible by setting environment variables:
 
@@ -262,13 +263,13 @@ First, install the Neptune client library. You can do it with either `pip` or `c
 `pip`:
 
 ```bash
-pip install neptune-client
+pip install neptune
 ```
 
 `conda`:
 
 ```bash
-conda install -c conda-forge neptune-client
+conda install -c conda-forge neptune
 ```
 
 Next, in your model training script, import `NeptuneCallback`:
@@ -281,10 +282,10 @@ To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argu
 
 ```python
 training_args = TrainingArguments(
-    "quick-training-distilbert-mrpc", 
-    evaluation_strategy="steps",
-    eval_steps = 20,
-    report_to = "neptune",
+    "quick-training-distilbert-mrpc",
+    eval_strategy="steps",
+    eval_steps=20,
+    report_to="neptune",
 )
 
 trainer = Trainer(
@@ -293,6 +294,8 @@ trainer = Trainer(
     ...
 )
 ```
+
+**Note:** This method requires saving your Neptune credentials as environment variables (see the bottom of the section).
 
 Alternatively, for more logging options, create a Neptune callback:
 
@@ -318,7 +321,7 @@ neptune_callback = NeptuneCallback(
 Pass the callback to the Trainer:
 
 ```python
-training_args = TrainingArguments(..., report_to = None)
+training_args = TrainingArguments(..., report_to=None)
 trainer = Trainer(
     model,
     training_args,
@@ -336,7 +339,7 @@ Now, when you start the training with `trainer.train()`, your metadata will be l
 | `NEPTUNE_API_TOKEN`  | Your Neptune API token. To find and copy it, click your Neptune avatar and select **Get your API token**. |
 | `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
 
-For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face).
+For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations/transformers/).
 
 ### ClearML
 

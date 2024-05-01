@@ -15,15 +15,16 @@
 """ Testing suite for the PyTorch Nat model. """
 
 import collections
-import inspect
 import unittest
 
 from transformers import NatConfig
 from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import NatBackbone, NatForImageClassification, NatModel
-    from transformers.models.nat.modeling_nat import NAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -65,6 +65,7 @@ class NatModelTester:
         use_labels=True,
         num_labels=10,
         out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,6 +90,7 @@ class NatModelTester:
         self.use_labels = use_labels
         self.num_labels = num_labels
         self.out_features = out_features
+        self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,6 +123,7 @@ class NatModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -189,8 +192,7 @@ class NatModelTester:
 
 @require_natten
 @require_torch
-class NatModelTest(ModelTesterMixin, unittest.TestCase):
-
+class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             NatModel,
@@ -199,6 +201,11 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": NatModel, "image-classification": NatForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = False
 
@@ -251,18 +258,6 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         self.skipTest("Nat's attention operation is handled entirely by NATTEN.")
@@ -331,9 +326,9 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NatModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "shi-labs/nat-mini-in1k-224"
+        model = NatModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -355,16 +350,16 @@ class NatModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class NatModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = NatForImageClassification.from_pretrained("shi-labs/nat-mini-in1k-224").to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -375,3 +370,13 @@ class NatModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([0.3805, -0.8676, -0.3912]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+@require_natten
+class NatBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (NatBackbone,) if is_torch_available() else ()
+    config_class = NatConfig
+
+    def setUp(self):
+        self.model_tester = NatModelTester(self)

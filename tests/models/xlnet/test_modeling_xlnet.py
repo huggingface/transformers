@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -36,7 +37,6 @@ if is_torch_available():
         XLNetLMHeadModel,
         XLNetModel,
     )
-    from transformers.models.xlnet.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLNetModelTester:
@@ -55,7 +55,7 @@ class XLNetModelTester:
         hidden_size=32,
         num_attention_heads=4,
         d_inner=128,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         type_sequence_label_size=2,
         untie_r=True,
         bi_data=False,
@@ -509,7 +509,7 @@ class XLNetModelTester:
 
 
 @require_torch
-class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLNetModel,
@@ -526,8 +526,29 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     all_generative_model_classes = (
         (XLNetLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XLNetModel,
+            "question-answering": XLNetForQuestionAnsweringSimple,
+            "text-classification": XLNetForSequenceClassification,
+            "text-generation": XLNetLMHeadModel,
+            "token-classification": XLNetForTokenClassification,
+            "zero-shot": XLNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     # XLNet has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -625,7 +646,8 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
                     seq_len = 1
                 else:
                     # for first item dummy PAD token is appended so need one more
-                    seq_len = (min_length + 1) if idx == 0 else min_length
+                    # else offset+dummy_token when using cache
+                    seq_len = (min_length + 1) if idx == 0 else 3
 
                 expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
                 self.assertEqual(layer_hidden_states.shape, expected_shape)
@@ -644,8 +666,11 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
                 tgt_len = min_length
 
                 # for first item dummy PAD token is appended so need one more
+                # every token after consists of offset+dummy_token length when using cache
                 if idx == 0:
                     tgt_len += 1
+                else:
+                    tgt_len = 3
 
                 src_len = min_length + idx + 1
 
@@ -663,16 +688,16 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XLNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "xlnet/xlnet-base-cased"
+        model = XLNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class XLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
-        model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model = XLNetLMHeadModel.from_pretrained("xlnet/xlnet-base-cased")
         model.to(torch_device)
         # fmt: off
         input_ids = torch.tensor(

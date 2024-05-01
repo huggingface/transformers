@@ -25,15 +25,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/tokenizer.json",
-    },
-}
-
 
 class CpmTokenizerFast(PreTrainedTokenizerFast):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
@@ -53,7 +44,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
-        **kwargs
+        **kwargs,
     ):
         """
         Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
@@ -141,7 +132,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         try:
             import jieba
@@ -152,6 +142,10 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             )
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(

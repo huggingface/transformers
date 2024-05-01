@@ -29,6 +29,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -52,7 +53,7 @@ class FlaxGPTJModelTester:
         vocab_size=99,
         hidden_size=32,
         rotary_dim=4,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -178,7 +179,6 @@ class FlaxGPTJModelTester:
 
 @require_flax
 class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxGPTJModel, FlaxGPTJForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxGPTJForCausalLM,) if is_flax_available() else ()
 
@@ -199,7 +199,9 @@ class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
 
     @tooslow
     def test_batch_generation(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2", pad_token="<|endoftext|>", padding_side="left")
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            "openai-community/gpt2", pad_token="<|endoftext|>", padding_side="left"
+        )
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
         model = FlaxGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")

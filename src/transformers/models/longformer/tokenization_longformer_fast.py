@@ -28,66 +28,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "allenai/longformer-base-4096": (
-            "https://huggingface.co/allenai/longformer-base-4096/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/tokenizer.json"
-        ),
-    },
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/longformer-base-4096": 4096,
-    "allenai/longformer-large-4096": 4096,
-    "allenai/longformer-large-4096-finetuned-triviaqa": 4096,
-    "allenai/longformer-base-4096-extra.pos.embd.only": 4096,
-    "allenai/longformer-large-4096-extra.pos.embd.only": 4096,
-}
-
-
-# Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, Roberta->Longformer
+# Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with FacebookAI/roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, Roberta->Longformer
 class LongformerTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Longformer tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -96,12 +38,14 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LongformerTokenizerFast
+
     >>> tokenizer = LongformerTokenizerFast.from_pretrained("allenai/longformer-base-4096")
-    >>> tokenizer("Hello world")['input_ids']
-    [0, 31414, 232, 328, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
+    [0, 31414, 232, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -168,8 +112,6 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = LongformerTokenizer
 
@@ -188,8 +130,13 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
         super().__init__(
             vocab_file,
             merges_file,
@@ -247,8 +194,8 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
 
-        Longformer tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will
-        greedily comprise the space before the *<mask>*.
+        Longformer tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        comprise the space before the *<mask>*.
         """
         if self._mask_token is None:
             if self.verbose:
@@ -302,8 +249,8 @@ class LongformerTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):

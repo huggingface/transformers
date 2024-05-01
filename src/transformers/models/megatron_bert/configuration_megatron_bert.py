@@ -20,9 +20,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # See all MEGATRON_BERT models at https://huggingface.co/models?filter=bert
-}
+
+from ..deprecated._archive_maps import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class MegatronBertConfig(PretrainedConfig):
@@ -81,15 +80,16 @@ class MegatronBertConfig(PretrainedConfig):
     ```python
     >>> from transformers import MegatronBertConfig, MegatronBertModel
 
-    >>> # Initializing a MEGATRON_BERT bert-base-uncased style configuration
+    >>> # Initializing a MEGATRON_BERT google-bert/bert-base-uncased style configuration
     >>> configuration = MegatronBertConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = MegatronBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "megatron-bert"
 
     def __init__(
@@ -109,7 +109,7 @@ class MegatronBertConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

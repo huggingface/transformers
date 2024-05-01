@@ -33,6 +33,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_vision_available,
     logging,
@@ -48,22 +49,21 @@ if is_scipy_available():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "YolosConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "YolosImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
 
 
-YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/yolos-small",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-]
+from ..deprecated._archive_maps import YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -83,7 +83,7 @@ class YolosObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrImageProcessor.post_process`] to retrieve the unnormalized bounding
+            possible padding). You can use [`~YolosImageProcessor.post_process`] to retrieve the unnormalized bounding
             boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -323,7 +323,6 @@ class YolosSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -381,7 +380,6 @@ class YolosIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -495,17 +493,11 @@ class YolosEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -541,6 +533,7 @@ class YolosPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -553,10 +546,6 @@ class YolosPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: YolosEncoder, value: bool = False) -> None:
-        if isinstance(module, YolosEncoder):
-            module.gradient_checkpointing = value
 
 
 YOLOS_START_DOCSTRING = r"""
@@ -574,7 +563,7 @@ YOLOS_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`YolosImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -627,7 +616,6 @@ class YolosModel(YolosPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(YOLOS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -770,7 +758,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
@@ -782,11 +770,11 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected remote with confidence 0.994 at location [46.96, 72.61, 181.02, 119.73]
-        Detected remote with confidence 0.975 at location [340.66, 79.19, 372.59, 192.65]
-        Detected cat with confidence 0.984 at location [12.27, 54.25, 319.42, 470.99]
-        Detected remote with confidence 0.922 at location [41.66, 71.96, 178.7, 120.33]
-        Detected cat with confidence 0.914 at location [342.34, 21.48, 638.64, 372.46]
+        Detected remote with confidence 0.991 at location [46.48, 72.78, 178.98, 119.3]
+        Detected remote with confidence 0.908 at location [336.48, 79.27, 368.23, 192.36]
+        Detected cat with confidence 0.934 at location [337.18, 18.06, 638.14, 373.09]
+        Detected cat with confidence 0.979 at location [10.93, 53.74, 313.41, 470.67]
+        Detected remote with confidence 0.974 at location [41.63, 72.23, 178.09, 119.99]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -918,9 +906,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # Copied from transformers.models.detr.modeling_detr.DetrLoss with Detr->Yolos
 class YolosLoss(nn.Module):
     """
-    This class computes the losses for YolosForObjectDetection/YolosForSegmentation. The process happens in two steps:
-    1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each
-    pair of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for YolosForObjectDetection/YolosForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
 
     A note on the `num_classes` argument (copied from original repo in detr.py): "the naming of the `num_classes`
     parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
@@ -1088,11 +1076,12 @@ class YolosLoss(nn.Module):
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}

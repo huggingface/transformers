@@ -17,7 +17,7 @@ Fixes # (issue)
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
+- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
@@ -40,7 +40,7 @@ members/contributors who may be interested in your PR.
 Models:
 
 - text models: @ArthurZucker and @younesbelkada
-- vision models: @amyeroberts and @NielsRogge
+- vision models: @amyeroberts
 - speech models: @sanchit-gandhi
 - graph models: @clefourrier
 
@@ -51,14 +51,16 @@ Library:
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @sgugger
+- trainer: @muellerzr and @pacman100
 
 Integrations:
 
-- deepspeed: @stas00
+- deepspeed: HF Trainer/Accelerate: @pacman100
 - ray/raytune: @richardliaw, @amogkam
+- Big Model Inference: @SunMarc
+- quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
 
-Documentation: @sgugger, @stevhliu and @MKhalusova
+Documentation: @stevhliu and @MKhalusova
 
 HF projects:
 
@@ -70,7 +72,7 @@ HF projects:
 Maintained examples (not research project or legacy):
 
 - Flax: @sanchit-gandhi
-- PyTorch: @sgugger
+- PyTorch: See Models above and tag the person corresponding to the modality of the example.
 - TensorFlow: @Rocketknight1
 
  -->

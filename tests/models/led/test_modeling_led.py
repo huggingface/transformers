@@ -21,12 +21,20 @@ import unittest
 
 from transformers import LEDConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -268,17 +276,40 @@ class LEDModelTester:
 
 
 @require_torch
-class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForSequenceClassification, LEDForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": LEDForConditionalGeneration,
+            "feature-extraction": LEDModel,
+            "question-answering": LEDForQuestionAnswering,
+            "summarization": LEDForConditionalGeneration,
+            "text-classification": LEDForSequenceClassification,
+            "text2text-generation": LEDForConditionalGeneration,
+            "translation": LEDForConditionalGeneration,
+            "zero-shot": LEDForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
     test_torchscript = False
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = LEDModelTester(self)
@@ -339,13 +370,13 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = LEDForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -425,6 +456,20 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                     seq_length,
                 ],
             )
+
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+        # overwrite because LED does not have (bs, num_heads, seq_len, seq_len) shape
+        encoder_expected_shape = (
+            batch_size,
+            config.num_attention_heads,
+            seq_length,
+            self.model_tester.attention_window // 2 * 2 + 1,
+        )
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):

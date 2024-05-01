@@ -23,10 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uclanlp/plbart-base": "https://huggingface.co/uclanlp/plbart-base/resolve/main/config.json",
-    # See all PLBART models at https://huggingface.co/models?filter=plbart
-}
+
+from ..deprecated._archive_maps import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class PLBartConfig(PretrainedConfig):
@@ -102,6 +100,7 @@ class PLBartConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -132,7 +131,7 @@ class PLBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

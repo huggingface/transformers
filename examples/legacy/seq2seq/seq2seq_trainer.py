@@ -19,7 +19,6 @@ from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import PreTrainedModel, Trainer, logging
-from transformers.integrations import is_fairscale_available
 from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
     Adafactor,
@@ -33,11 +32,7 @@ from transformers.optimization import (
 )
 from transformers.trainer_pt_utils import get_tpu_sampler
 from transformers.training_args import ParallelMode
-from transformers.utils import is_torch_tpu_available
-
-
-if is_fairscale_available():
-    from fairscale.optim import OSS
+from transformers.utils import is_torch_xla_available
 
 
 logger = logging.get_logger(__name__)
@@ -70,7 +65,7 @@ class Seq2SeqTrainer(Trainer):
 
         if self.args.label_smoothing != 0 or (self.data_args is not None and self.data_args.ignore_pad_token_for_loss):
             assert self.config.pad_token_id is not None, (
-                "Make sure that `config.pad_token_id` is correcly defined when ignoring `pad_token` for loss"
+                "Make sure that `config.pad_token_id` is correctly defined when ignoring `pad_token` for loss"
                 " calculation or doing label smoothing."
             )
 
@@ -118,14 +113,7 @@ class Seq2SeqTrainer(Trainer):
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            if self.sharded_ddp:
-                self.optimizer = OSS(
-                    params=optimizer_grouped_parameters,
-                    optim=optimizer_cls,
-                    **optimizer_kwargs,
-                )
-            else:
-                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+            self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
@@ -147,7 +135,7 @@ class Seq2SeqTrainer(Trainer):
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
             return None
-        elif is_torch_tpu_available():
+        elif is_torch_xla_available():
             return get_tpu_sampler(self.train_dataset)
         else:
             if self.args.sortish_sampler:

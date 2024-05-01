@@ -50,26 +50,26 @@ COCO_DIR = os.path.join(os.getcwd(), "data")
 ds = datasets.load_dataset("ydshieh/coco_dataset_script", "2017", data_dir=COCO_DIR)
 ```
 
-### Create a model from a vision encoder model and a text decoder model
+### Create a model from a vision encoder model and a text encoder model
 Next, we create a [VisionTextDualEncoderModel](https://huggingface.co/docs/transformers/model_doc/vision-text-dual-encoder#visiontextdualencoder).
-The `VisionTextDualEncoderModel` class let's you load any vision and text encoder model to create a dual encoder. 
+The `VisionTextDualEncoderModel` class lets you load any vision and text encoder model to create a dual encoder.
 Here is an example of how to load the model using pre-trained vision and text models.
 
 ```python3
 from transformers import (
-    VisionTextDualEncoderModel, 
-    VisionTextDualEncoderProcessor, 
-    AutoTokenizer, 
-    AutoFeatureExtractor
+    VisionTextDualEncoderModel,
+    VisionTextDualEncoderProcessor,
+    AutoTokenizer,
+    AutoImageProcessor
 )
 
 model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-    "openai/clip-vit-base-patch32", "roberta-base"
+    "openai/clip-vit-base-patch32", "FacebookAI/roberta-base"
 )
 
-tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-feat_ext = AutoFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32")
-processor = VisionTextDualEncoderProcessor(feat_ext, tokenizer)
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
+processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
 
 # save the model and processor
 model.save_pretrained("clip-roberta")

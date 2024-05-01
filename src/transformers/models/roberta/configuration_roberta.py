@@ -24,14 +24,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "roberta-base": "https://huggingface.co/roberta-base/resolve/main/config.json",
-    "roberta-large": "https://huggingface.co/roberta-large/resolve/main/config.json",
-    "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/config.json",
-    "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/config.json",
-    "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/config.json",
-    "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class RobertaConfig(PretrainedConfig):
@@ -39,14 +33,14 @@ class RobertaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
     used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
-    [roberta-base](https://huggingface.co/roberta-base) architecture.
+    [FacebookAI/roberta-base](https://huggingface.co/FacebookAI/roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the RoBERTa model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`RobertaModel`] or [`TFRobertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -101,11 +95,12 @@ class RobertaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "roberta"
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=50265,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -123,7 +118,7 @@ class RobertaConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

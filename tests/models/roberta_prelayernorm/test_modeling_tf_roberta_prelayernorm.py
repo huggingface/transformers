@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import RobertaPreLayerNormConfig, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -28,7 +31,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.roberta_prelayernorm.modeling_tf_roberta_prelayernorm import (
-        TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaPreLayerNormForCausalLM,
         TFRobertaPreLayerNormForMaskedLM,
         TFRobertaPreLayerNormForMultipleChoice,
@@ -39,7 +41,7 @@ if is_tf_available():
     )
 
 
-# Copied from tests.models.roberta.test_modelling_tf_roberta.TFRobertaModelTester with Roberta->RobertaPreLayerNorm
+# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTester with Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormModelTester:
     def __init__(
         self,
@@ -54,7 +56,7 @@ class TFRobertaPreLayerNormModelTester:
         self.use_labels = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -548,9 +550,8 @@ class TFRobertaPreLayerNormModelTester:
 
 
 @require_tf
-# Copied from tests.models.roberta.test_modelling_tf_roberta.TFRobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
-class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
-
+# Copied from tests.models.roberta.test_modeling_tf_roberta.TFRobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.15
+class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRobertaPreLayerNormModel,
@@ -562,6 +563,19 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFRobertaPreLayerNormModel,
+            "fill-mask": TFRobertaPreLayerNormForMaskedLM,
+            "question-answering": TFRobertaPreLayerNormForQuestionAnswering,
+            "text-classification": TFRobertaPreLayerNormForSequenceClassification,
+            "text-generation": TFRobertaPreLayerNormForCausalLM,
+            "token-classification": TFRobertaPreLayerNormForTokenClassification,
+            "zero-shot": TFRobertaPreLayerNormForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False
@@ -642,9 +656,9 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "andreasmadsen/efficient_mlm_m0.15"
+        model = TFRobertaPreLayerNormModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

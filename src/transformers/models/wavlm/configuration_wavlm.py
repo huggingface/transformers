@@ -23,10 +23,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-}
+
+from ..deprecated._archive_maps import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class WavLMConfig(PretrainedConfig):
@@ -58,10 +56,15 @@ class WavLMConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`WavLMForCTC`].
+        layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -187,6 +190,7 @@ class WavLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "wavlm"
 
     def __init__(
@@ -246,7 +250,7 @@ class WavLMConfig(PretrainedConfig):
         adapter_stride=2,
         num_adapter_layers=3,
         output_hidden_size=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size

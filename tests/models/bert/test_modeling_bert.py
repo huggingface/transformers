@@ -18,11 +18,19 @@ import unittest
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -39,8 +47,8 @@ if is_torch_available():
         BertForTokenClassification,
         BertLMHeadModel,
         BertModel,
+        logging,
     )
-    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
@@ -55,7 +63,7 @@ class BertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -426,8 +434,7 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BertModel,
@@ -444,6 +451,19 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BertModel,
+            "fill-mask": BertForMaskedLM,
+            "question-answering": BertForQuestionAnswering,
+            "text-classification": BertForSequenceClassification,
+            "text-generation": BertLMHeadModel,
+            "token-classification": BertForTokenClassification,
+            "zero-shot": BertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
 
     # special case for ForPreTraining model
@@ -554,18 +574,43 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+    def test_for_warning_if_padding_and_no_attention_mask(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+
+        # Set pad tokens in the input_ids
+        input_ids[0, 0] = config.pad_token_id
+
+        # Check for warnings if the attention_mask is missing.
+        logger = logging.get_logger("transformers.modeling_utils")
+        # clear cache so we can test the warning is emitted (from `warning_once`).
+        logger.warning_once.cache_clear()
+
+        with CaptureLogger(logger) as cl:
+            model = BertModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
+        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
     @slow
-    @require_torch_gpu
+    def test_model_from_pretrained(self):
+        model_name = "google-bert/bert-base-uncased"
+        model = BertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @slow
+    @require_torch_accelerator
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # BertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == BertForMultipleChoice:
                 return
@@ -583,12 +628,85 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
+    # This test was copied from the common test_eager_matches_sdpa_generate(), but without low_cpu_mem_usage=True.
+    # TODO: Remove this and use the parent method (in common tests) once BERT supports low_cpu_mem_usage=True.
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        max_new_tokens = 30
+
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    # low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    # low_cpu_mem_usage=True,
+                    attn_implementation="eager",
+                ).to(torch_device)
+
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+                if not has_sdpa:
+                    raise ValueError("The SDPA model should have SDPA attention layers")
+
+                # Just test that a large cache works as expected
+                res_eager = model_eager.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                res_sdpa = model_sdpa.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertModel.from_pretrained("bert-base-uncased")
+        model = BertModel.from_pretrained("google-bert/bert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():

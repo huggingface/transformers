@@ -15,19 +15,13 @@
 Utilities for working with package versions
 """
 
+import importlib.metadata
 import operator
 import re
 import sys
 from typing import Optional
 
 from packaging import version
-
-
-# The package importlib_metadata is in a different place, depending on the python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
 
 
 ops = {
@@ -56,7 +50,7 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
-    The installed module version comes from the *site-packages* dir via *importlib_metadata*.
+    The installed module version comes from the *site-packages* dir via *importlib.metadata*.
 
     Args:
         requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
@@ -105,9 +99,9 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
 
     # check if any version is installed
     try:
-        got_ver = importlib_metadata.version(pkg)
-    except importlib_metadata.PackageNotFoundError:
-        raise importlib_metadata.PackageNotFoundError(
+        got_ver = importlib.metadata.version(pkg)
+    except importlib.metadata.PackageNotFoundError:
+        raise importlib.metadata.PackageNotFoundError(
             f"The '{requirement}' distribution was not found and is required by this application. {hint}"
         )
 
@@ -119,5 +113,5 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
 
 def require_version_core(requirement):
     """require_version wrapper which emits a core-specific hint on failure"""
-    hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git main"
+    hint = "Try: `pip install transformers -U` or `pip install -e '.[dev]'` if you're working with git main"
     return require_version(requirement, hint)

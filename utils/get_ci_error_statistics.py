@@ -2,19 +2,49 @@ import argparse
 import json
 import math
 import os
-import subprocess
 import time
+import traceback
 import zipfile
 from collections import Counter
 
 import requests
 
 
-def get_job_links(workflow_run_id):
-    """Extract job names and their job links in a GitHub Actions workflow run"""
+def get_jobs(workflow_run_id, token=None):
+    """Extract jobs in a GitHub Actions workflow run"""
+
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = requests.get(url).json()
+    result = requests.get(url, headers=headers).json()
+    jobs = []
+
+    try:
+        jobs.extend(result["jobs"])
+        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
+
+        for i in range(pages_to_iterate_over):
+            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
+            jobs.extend(result["jobs"])
+
+        return jobs
+    except Exception:
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+
+    return []
+
+
+def get_job_links(workflow_run_id, token=None):
+    """Extract job names and their job links in a GitHub Actions workflow run"""
+
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
+    result = requests.get(url, headers=headers).json()
     job_links = {}
 
     try:
@@ -22,21 +52,25 @@ def get_job_links(workflow_run_id):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}").json()
+            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
 
         return job_links
-    except Exception as e:
-        print("Unknown error, could not fetch links.", e)
+    except Exception:
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
     return {}
 
 
-def get_artifacts_links(worflow_run_id):
+def get_artifacts_links(worflow_run_id, token=None):
     """Get all artifact links from a workflow run"""
 
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{worflow_run_id}/artifacts?per_page=100"
-    result = requests.get(url).json()
+    result = requests.get(url, headers=headers).json()
     artifacts = {}
 
     try:
@@ -44,12 +78,12 @@ def get_artifacts_links(worflow_run_id):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}").json()
+            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
             artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
 
         return artifacts
-    except Exception as e:
-        print("Unknown error, could not fetch links.", e)
+    except Exception:
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
     return {}
 
@@ -57,23 +91,20 @@ def get_artifacts_links(worflow_run_id):
 def download_artifact(artifact_name, artifact_url, output_dir, token):
     """Download a GitHub Action artifact from a URL.
 
-    The URL is of the from `https://api.github.com/repos/huggingface/transformers/actions/artifacts/{ARTIFACT_ID}/zip`,
+    The URL is of the form `https://api.github.com/repos/huggingface/transformers/actions/artifacts/{ARTIFACT_ID}/zip`,
     but it can't be used to download directly. We need to get a redirect URL first.
     See https://docs.github.com/en/rest/actions/artifacts#download-an-artifact
     """
-    # Get the redirect URL first
-    cmd = f'curl -v -H "Accept: application/vnd.github+json" -H "Authorization: token {token}" {artifact_url}'
-    output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    o = output.stdout.decode("utf-8")
-    lines = o.splitlines()
+    headers = None
+    if token is not None:
+        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    for line in lines:
-        if line.startswith("< Location: "):
-            redirect_url = line[len("< Location: ") :]
-            r = requests.get(redirect_url, allow_redirects=True)
-            p = os.path.join(output_dir, f"{artifact_name}.zip")
-            open(p, "wb").write(r.content)
-            break
+    result = requests.get(artifact_url, headers=headers, allow_redirects=False)
+    download_url = result.headers["Location"]
+    response = requests.get(download_url, allow_redirects=True)
+    file_path = os.path.join(output_dir, f"{artifact_name}.zip")
+    with open(file_path, "wb") as fp:
+        fp.write(response.content)
 
 
 def get_errors_from_single_artifact(artifact_zip_path, job_links=None):
@@ -166,7 +197,7 @@ def reduce_by_model(logs, error_filter=None):
 
     logs = [(x[0], x[1], get_model(x[2])) for x in logs]
     logs = [x for x in logs if x[2] is not None]
-    tests = set([x[2] for x in logs])
+    tests = {x[2] for x in logs}
 
     r = {}
     for test in tests:
@@ -209,27 +240,21 @@ def make_github_table_per_model(reduced_by_model):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument(
-        "--workflow_run_id", default=None, type=str, required=True, help="A GitHub Actions workflow run id."
-    )
+    parser.add_argument("--workflow_run_id", type=str, required=True, help="A GitHub Actions workflow run id.")
     parser.add_argument(
         "--output_dir",
-        default=None,
         type=str,
         required=True,
         help="Where to store the downloaded artifacts and other result files.",
     )
-    parser.add_argument(
-        "--token", default=None, type=str, required=True, help="A token that has actions:read permission."
-    )
+    parser.add_argument("--token", default=None, type=str, help="A token that has actions:read permission.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    _job_links = get_job_links(args.workflow_run_id)
+    _job_links = get_job_links(args.workflow_run_id, token=args.token)
     job_links = {}
     # To deal with `workflow_call` event, where a job name is the combination of the job names in the caller and callee.
     # For example, `PyTorch 1.11 / Model tests (models/albert, single-gpu)`.
@@ -243,7 +268,7 @@ if __name__ == "__main__":
     with open(os.path.join(args.output_dir, "job_links.json"), "w", encoding="UTF-8") as fp:
         json.dump(job_links, fp, ensure_ascii=False, indent=4)
 
-    artifacts = get_artifacts_links(args.workflow_run_id)
+    artifacts = get_artifacts_links(args.workflow_run_id, token=args.token)
     with open(os.path.join(args.output_dir, "artifacts.json"), "w", encoding="UTF-8") as fp:
         json.dump(artifacts, fp, ensure_ascii=False, indent=4)
 
