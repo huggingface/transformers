@@ -674,7 +674,7 @@ class LlamaSdpaAttention(LlamaAttention):
         length = cache_position.size()[0]
         _key_states = key_states[:, :, :length, :]
         _value_states = value_states[:, :, :length, :]
-        _attn_mask = causal_mask[:, :, :, :key_states.size()[2]] if causal_mask is not None else causal_mask
+        _attn_mask = causal_mask[:, :, :, :_key_states.size()[2]] if causal_mask is not None else causal_mask
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
