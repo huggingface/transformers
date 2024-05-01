@@ -1018,7 +1018,7 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
-            "Error no file named pytorch_model.bin, model.safetensors", str(missing_model_file_error.exception)
+            "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
         )
 
     @require_safetensors
