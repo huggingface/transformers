@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
-    require_torch_fp16,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -154,20 +153,14 @@ class LlavaNextVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = (
-            ids_tensor(
-                [self.batch_size, self.seq_length], config.text_config.vocab_size - 1
-            )
-            + 1
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_sizes": torch.tensor(
-                [[self.vision_config["image_size"], self.vision_config["image_size"]]]
-                * self.batch_size
+                [[self.vision_config["image_size"], self.vision_config["image_size"]]] * self.batch_size
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -209,24 +202,18 @@ class LlavaNextVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaNextForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
-):
+class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `LlavaNextForConditionalGeneration`.
     """
 
-    all_model_classes = (
-        (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
-    )
+    all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
         self.model_tester = LlavaNextVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=LlavaNextConfig, has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=LlavaNextConfig, has_text_modality=False)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -274,9 +261,7 @@ class LlavaNextForConditionalGenerationModelTest(
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf"
-        )
+        self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
         url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
