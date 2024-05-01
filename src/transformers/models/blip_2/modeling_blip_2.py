@@ -1276,8 +1276,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        
-        
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):

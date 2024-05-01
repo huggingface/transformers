@@ -57,7 +57,6 @@ if is_torch_available():
         Blip2VisionModel,
         Blip2VisionModelWithProjection,
     )
-    from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -1001,7 +1000,12 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
 
         self.assertEqual(
-            outputs.text_embeds.shape, (self.model_tester.qformer_model_tester.batch_size, input_ids.shape[1], model.config.image_text_hidden_size)
+            outputs.text_embeds.shape,
+            (
+                self.model_tester.qformer_model_tester.batch_size,
+                input_ids.shape[1],
+                model.config.image_text_hidden_size,
+            ),
         )
 
 
@@ -1166,7 +1170,14 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values)
 
-        self.assertEqual(outputs.image_embeds.shape, (self.model_tester.vision_model_tester.batch_size, model.config.num_query_tokens, model.config.image_text_hidden_size))
+        self.assertEqual(
+            outputs.image_embeds.shape,
+            (
+                self.model_tester.vision_model_tester.batch_size,
+                model.config.num_query_tokens,
+                model.config.image_text_hidden_size,
+            ),
+        )
 
 
 class Blip2TextRetrievalModelTester:
