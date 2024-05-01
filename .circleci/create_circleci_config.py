@@ -348,7 +348,7 @@ exotic_models_job = CircleCIJob(
 
 repo_utils_job = CircleCIJob(
     "repo_utils",
-    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
+    docker_image=[{"image":"huggingface/transformers-consistency"}],
     install_steps=["uv venv", "uv pip install -e ."],
     parallelism=None,
     pytest_num_workers=1,
@@ -365,7 +365,7 @@ py_command = f"$(python3 -c '{py_command}')"
 command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
-    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
+    docker_image=[{"image":"huggingface/transformers-consistency"}],
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.

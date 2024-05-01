@@ -1,24 +1,12 @@
 FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
-RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git g++ cmake
+RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git
 ENV VIRTUAL_ENV=/usr/local
-RUN pip --no-cache-dir install uv
-RUN uv venv
-RUN uv pip install --no-cache-dir -U pip setuptools accelerate
+RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools accelerate
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir "transformers[sklearn,flax,torch,testing,sentencepiece,vision]"
+RUN uv pip install --no-cache-dir "transformers[flax, sklearn,sentencepiece,vision,testing]"
 
 
 RUN pip uninstall -y transformers
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN pip cache remove "nvidia-*"
-RUN pip uninstall -y `pip freeze | grep "nvidia-*"` || true
-RUN pip uninstall -y `pip freeze | grep "triton-*"` || true
-
-
-
-RUN pip cache remove triton
-RUN apt-get --purge remove "*nvidia*" || true
-RUN apt-get autoremove
-RUN apt-get autoclean
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
