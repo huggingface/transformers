@@ -217,7 +217,7 @@ timm==0.5.4
 tokenizers==0.11.6
 tomli==2.0.1
 toolz==0.11.2
-torch==1.11.0
+torch==1.13.1
 torchaudio==0.11.0
 torchvision==0.12.0
 tqdm==4.63.0
