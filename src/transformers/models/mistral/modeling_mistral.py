@@ -1089,6 +1089,9 @@ class MistralForCausalLM(MistralPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def reset_parameters(self):
+        self.apply(self._init_weights)
+
     def get_input_embeddings(self):
         return self.model.embed_tokens
 

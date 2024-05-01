@@ -161,6 +161,10 @@ class LlavaNextMultiModalProjector(nn.Module):
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
+    def reset_parameters(self):
+        self.linear_1.reset_parameters()
+        self.linear_2.reset_parameters()
+
 
 LLAVA_NEXT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -316,6 +320,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
+
+    def reset_parameters(self):
+        self.vision_tower.reset_parameters()
+        self.multi_modal_projector.reset_parameters()
+        self.language_model.reset_parameters()
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):

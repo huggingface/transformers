@@ -890,6 +890,9 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def reset_parameters(self):
+        self.vision_model.apply(self._init_weights)
+
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
