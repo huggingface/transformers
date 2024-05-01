@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Llava-NeXT model."""
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -306,8 +307,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
-
-        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
@@ -543,7 +544,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         image_feature = torch.cat(
                             (
                                 image_feature,
-                                self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                                self.image_newline[:, None, None]
+                                .expand(*image_feature.shape[:-1], 1)
+                                .to(image_feature.dtype),
                             ),
                             dim=-1,
                         )
@@ -554,6 +557,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                     new_image_features.append(image_feature)
                 image_features = torch.stack(new_image_features, dim=0)
+                inputs_embeds = inputs_embeds.to(image_features.dtype)
 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
