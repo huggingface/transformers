@@ -143,11 +143,7 @@ class CircleCIJob:
                 if test.endswith(".py"):
                     expanded_tests.append(test)
                 elif test == "tests/models":
-                    import subprocess
-                    files = glob.glob("tests/models/**/test*.py", recursive=True)
-                    for file in files:
-                        output = subprocess.check_output(['bash', '-c', f"grep -oE 'class[[:space:]]+[[:alnum:]_]+[[:space:]]*\\(' {file} | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\\(/\1/'"], text=True)
-                    expanded_tests.extend(output.split("\n"))
+                    expanded_tests.extend(glob.glob("tests/models/**/test*.py", recursive=True))
                 elif test == "tests/pipelines":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
@@ -168,7 +164,7 @@ class CircleCIJob:
             steps.append({"run": {"name": "Get tests", "command": command}})
 
             # grep -oE "class[[:space:]]+[[:alnum:]_]+[[:space:]]*\(" tests/models/llama/test_modeling_llama.py | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\(/\1/'
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=classname) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=name) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
