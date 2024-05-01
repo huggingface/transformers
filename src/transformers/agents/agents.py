@@ -294,7 +294,7 @@ class Agent:
             logger.setLevel(logging.DEBUG)
 
     @property
-    def toolbox(self) -> Dict[str, Tool]:
+    def toolbox(self) -> Toolbox:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
 
