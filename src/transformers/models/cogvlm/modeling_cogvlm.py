@@ -272,6 +272,9 @@ class CogvlmVisionModel(nn.Module):
 # Copied from transformers.models.mistral.modeling_mistral.MistralRMSNorm with Mistral->Cogvlm
 class CogvlmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
+        """
+        CogvlmRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
@@ -428,7 +431,6 @@ class CogvlmVisionExpertAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, q_len, hidden_size = hidden_states.size()
         vision_token_mask, language_token_mask = get_expert_mask(token_type_ids)
@@ -507,7 +509,6 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -522,7 +523,6 @@ class CogvlmVisionExpertSdpaAttention(CogvlmVisionExpertAttention):
                 attention_mask=attention_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
             )
 
         batch_size, q_len, hidden_size = hidden_states.size()
@@ -620,7 +620,6 @@ class CogvlmDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
-            use_cache=use_cache,
         )
 
         hidden_states = residual + hidden_states
@@ -950,6 +949,7 @@ class CogvlmForCausalLM(CogvlmPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+
         self.model = CogvlmModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
