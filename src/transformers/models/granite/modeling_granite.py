@@ -34,7 +34,6 @@ logger = logging.get_logger(__name__)
 
 class PositionEmbeddingType(Enum):
     learned_absolute = "learned_absolute"
-    alibi = "alibi"
     rope = "rope"
 
 
@@ -499,66 +498,6 @@ def get_attention_module(
     raise ValueError(f"unexpected `attention_implementation` {attention_implementation}")
 
 
-class Alibi(nn.Module):
-    def __init__(self, num_heads: int) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-
-        self.reset_parameters()
-
-    def forward(
-        self, attention_mask: torch.Tensor, batch_size: int, key_length: int, device: torch.device, dtype: torch.dtype
-    ) -> torch.Tensor:
-        """
-        Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
-        relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
-        `softmax(l+a) = softmax(l)`. Based on
-        https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-        TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
-
-        Args:
-            attention_mask (torch.Tensor): attention_mask tensor of shape (`batch_size`, `key_length`)
-            num_heads (int): `num_heads` for the model
-            batch_size (int): `batch_size`
-            key_length (int): `key_length`
-            device (torch.device): device for the tensors
-            dtype (torch.dtype): dtype to use for the tensors
-
-        Returns:
-            torch.Tensor: alibi tensor of shape (`batch_size`, `num_heads`, `key_length`)
-        """
-
-        # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
-        # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
-        # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
-        # => the query_length dimension will then be broadcasted correctly
-        # This is more or less identical to T5's relative position bias:
-        # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
-        if attention_mask is None:
-            arange_tensor = (
-                torch.arange(key_length, device=device).unsqueeze(0).unsqueeze(0).expand(batch_size, -1, -1)
-            )
-        else:
-            arange_tensor = (attention_mask.cumsum(dim=-1) - 1).masked_fill_(attention_mask == 0, 0).unsqueeze(1)
-
-        alibi = self.slopes.unsqueeze(1) * arange_tensor
-        return alibi.to(dtype)
-
-    def reset_parameters(self) -> None:
-        closest_power_of_2 = 2 ** math.floor(math.log2(self.num_heads))
-        base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), dtype=torch.float32)
-        powers = torch.arange(1, 1 + closest_power_of_2, dtype=torch.int32)
-        slopes = torch.pow(base, powers)
-
-        if closest_power_of_2 != self.num_heads:
-            extra_base = torch.tensor(2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), dtype=torch.float32)
-            num_remaining_heads = min(closest_power_of_2, self.num_heads - closest_power_of_2)
-            extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, dtype=torch.int32)
-            slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
-
-        self.register_buffer("slopes", slopes, persistent=False)
-
-
 class RoPE(nn.Module):
     def __init__(
         self,
@@ -748,7 +687,7 @@ class GranitePreTrainedModel(PreTrainedModel):
         self.initializer_range = config.initializer_range
 
     def _init_weights(self, module: nn.Module) -> None:
-        if isinstance(module, (nn.LayerNorm, GraniteRMSNorm, Alibi, RoPE)):
+        if isinstance(module, (nn.LayerNorm, GraniteRMSNorm, RoPE)):
             module.reset_parameters()
         elif isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0, std=self.initializer_range)
@@ -794,10 +733,6 @@ class GraniteModel(GranitePreTrainedModel):
 
         if self.position_embedding_type == PositionEmbeddingType.learned_absolute:
             self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
-        elif self.position_embedding_type == PositionEmbeddingType.alibi:
-            assert not self._use_flash_attention_2, "alibi is not implemented with FlashAttention"
-
-            self.alibi = Alibi(self.num_heads)
         elif self.position_embedding_type == PositionEmbeddingType.rope:
             self.rope = RoPE(self.head_dim, max_position_embeddings=config.n_positions, base=config.rope_theta)
         else:
@@ -841,10 +776,6 @@ class GraniteModel(GranitePreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if self.position_embedding_type == PositionEmbeddingType.alibi:
-            if position_ids is not None:
-                warnings.warn("`position_ids` have no functionality with Alibi.", FutureWarning)
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
@@ -932,26 +863,6 @@ class GraniteModel(GranitePreTrainedModel):
             position_ids = position_ids.unsqueeze(0).view(-1, query_length)
 
         return position_ids
-
-    def _get_alibi_bias(
-        self,
-        attention_mask: torch.Tensor,
-        batch_size: int,
-        query_length: int,
-        key_length: int,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        if self.position_embedding_type != PositionEmbeddingType.alibi:
-            return None
-
-        alibi_bias = self.alibi(attention_mask, batch_size, key_length, device, dtype)
-
-        alibi_bias = alibi_bias.unsqueeze(2)
-        if query_length != 1:
-            alibi_bias = alibi_bias.expand(-1, -1, query_length, -1)
-
-        return alibi_bias
 
     def _get_rope_cos_sin(
         self, key_length: int, position_ids: torch.Tensor, dtype: torch.dtype, device: torch.device
