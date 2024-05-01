@@ -122,7 +122,8 @@ class ModelArguments:
         metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
     )
     suppress_tokens: List[int] = field(
-        default=None, metadata={
+        default=None,
+        metadata={
             "help": (
                 "Deprecated. The use of `suppress_tokens` should not be required for the majority of fine-tuning examples."
                 "Should you need to use `suppress_tokens`, please manually update them in the fine-tuning script directly."
