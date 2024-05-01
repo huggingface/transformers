@@ -1,8 +1,6 @@
 """PyTorch Granite model."""
 
-import math
 import numbers
-import warnings
 from enum import Enum
 from typing import Optional, Tuple, Union
 
