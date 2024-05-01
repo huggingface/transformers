@@ -269,12 +269,14 @@ class CogvlmVisionModel(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralRMSNorm with Mistral->Cogvlm
 class CogvlmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
+    # Ignore copy
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
