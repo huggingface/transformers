@@ -174,7 +174,7 @@ class CircleCIJob:
             test_command = ""
             if self.timeout:
                 test_command = f"timeout {self.timeout} "
-            test_command += f"python3 -m pytest -rs -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=line -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
@@ -212,7 +212,7 @@ class CircleCIJob:
 torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -223,7 +223,7 @@ torch_and_flax_job = CircleCIJob(
     "torch_and_flax",
     additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
     docker_image=[{"image":"huggingface/transformers-torch-jax-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
@@ -231,8 +231,8 @@ torch_and_flax_job = CircleCIJob(
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
-    parallelism=1,
+    install_steps=["uv venv && uv pip install ."],
+    parallelism=6
 )
 
 
@@ -240,15 +240,15 @@ tf_job = CircleCIJob(
     "tf",
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
-    parallelism=1,
+    parallelism=6
 )
 
 
 flax_job = CircleCIJob(
     "flax",
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
-    parallelism=1,
+    install_steps=["uv venv && uv pip install ."],
+    parallelism=6
 )
 
 
@@ -256,7 +256,7 @@ pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     marker="is_pipeline_test",
 )
 
@@ -265,7 +265,7 @@ pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     additional_env={"RUN_PIPELINE_TESTS": True},
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     marker="is_pipeline_test",
 )
 
@@ -290,7 +290,7 @@ examples_torch_job = CircleCIJob(
     additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     pytest_num_workers=1,
 )
 
@@ -299,7 +299,7 @@ examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
 )
 
 
@@ -308,7 +308,7 @@ hub_job = CircleCIJob(
     additional_env={"HUGGINGFACE_CO_STAGING": True},
     docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
     install_steps=[
-        "uv venv", "uv pip install -e .",
+        "uv venv && uv pip install .",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
     ],
@@ -321,7 +321,7 @@ onnx_job = CircleCIJob(
     "onnx",
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}], # TODO do we really need torch for that job? torch-light?  
     install_steps=[
-        "uv venv", "uv pip install -e .",
+        "uv venv && uv pip install .",
         "uv pip install --upgrade eager pip",
         "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
@@ -332,7 +332,7 @@ onnx_job = CircleCIJob(
 
 exotic_models_job = CircleCIJob(
     "exotic_models",
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -349,7 +349,7 @@ exotic_models_job = CircleCIJob(
 repo_utils_job = CircleCIJob(
     "repo_utils",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
-    install_steps=["uv venv", "uv pip install -e ."],
+    install_steps=["uv venv && uv pip install ."],
     parallelism=None,
     pytest_num_workers=1,
     resource_class="large",
