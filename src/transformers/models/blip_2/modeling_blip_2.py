@@ -88,8 +88,7 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
 class Blip2ImageTextMatchingModelOutput(ModelOutput):
     """
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
-    scores.
+    last hidden states.
 
     Args:
         itm_score (`torch.FloatTensor`):
@@ -546,7 +545,7 @@ BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        use_itm_head (`bool`, *optional*):
+        use_itm_head (`bool`, *optional*): Whether to return the Image-Text Matching or Contrastive scores.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
