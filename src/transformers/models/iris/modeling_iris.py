@@ -24,7 +24,6 @@ from torch import nn
 from torch.cuda.amp import autocast
 
 # from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
@@ -43,7 +42,6 @@ _CHECKPOINT_FOR_DOC = "ruffy369/iris-breakout"
 _CONFIG_FOR_DOC = "IrisConfig"
 
 
-# from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 IRIS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ruffy369/iris-breakout",
     # See all Iris models at https://huggingface.co/models?filter=iris
@@ -53,42 +51,41 @@ IRIS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerOutput with DecisionTransformer->Iris
 class IrisOutput(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
-            Environment state predictions
-        action_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, action_dim)`):
-            Model action predictions
-        return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
+        loss (`torch.FloatTensor` of shape `(3,)`, *optional*, returned when `labels` is provided):
+            Agent's components' total loss (tokenizer, world model and actor critic).
+        reconstructed_img (`torch.FloatTensor` of shape `(batch_size, time_steps, num_channels, height, width)`):
+            Reconstructed image from input frame 
+        action_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, action_dim)`):
+            Policy action predictions
+        reward_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, 1)`):
             Predicted returns for each state
+        epsiode_end (`torch.FloatTensor` of shape `(batch_size, time_steps, 1)`):
+            Predicted potential episode termination
+        obs_preds (`torch.FloatTensor` of shape `(batch_size, time_Steps, 1)`):
+            Predicted tokens for next frame
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) ofshape `(batch_size, sequence_length, hidden_size)`. 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. 
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    state_preds: torch.FloatTensor = None
+    loss: Optional[torch.FloatTensor] = None
+    reconstructed_img: torch.FloatTensor = None
     action_preds: torch.FloatTensor = None
-    return_preds: torch.FloatTensor = None
-    hidden_states: torch.FloatTensor = None
-    attentions: torch.FloatTensor = None
-    last_hidden_state: torch.FloatTensor = None
+    reward_preds: torch.FloatTensor = None
+    epsiode_end: torch.FloatTensor = None
+    obs_preds: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerPreTrainedModel with DecisionTransformer->Iris,decision_transformer->iris
 class IrisPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -97,24 +94,23 @@ class IrisPreTrainedModel(PreTrainedModel):
 
     config_class = IrisConfig
     base_model_prefix = "iris"
-    main_input_name = "states"
-    supports_gradient_checkpointing = False
+    main_input_name = "observations"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range) #self.config.initializer_range=0.02 (in original code)
+            if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, IrisModel):
+            module.gradient_checkpointing = value
+
 
 
 IRIS_START_DOCSTRING = r"""
@@ -128,21 +124,28 @@ IRIS_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+#actor_critic :> inputs: torch.FloatTensor()(B, T, C, H, W), mask_padding: Optional[torch.BoolTensor](same size as inp) = None
+#world model:> tokens: torch.LongTensor((B, L(K+1)))(B: batch size, L: timesteps, K: number of tokens), past_keys_values: Optional[KeysValues] = None((n_layers,batch_size, num_heads, max_tokens, head_dim))
+#tokenizer:> x(B, T, C, H, W)(main): torch.Tensor, should_preprocess(main): bool = False, should_postprocess(main): bool = False
 IRIS_INPUTS_DOCSTRING = r"""
     Args:
-        states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
-            The states for each step in the trajectory
-        actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
-            The actions taken by the "expert" policy for the current state, these are masked for auto regressive
-            prediction
-        rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
-            The rewards for each state, action
-        returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
-            The returns for each state in the trajectory
-        timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
-            The timestep for each step in the trajectory
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, episode_length)`):
-            Masking, used to mask the actions when performing autoregressive prediction
+        observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
+            The image observations in the first timestep (only one frame is used from the environment and 
+            rest are imagined in the world model for training)
+        should_preprocess (`bool`, *optional*):
+            If set to `True`, `observations` are preprocessed before being passed to the model when encoding.
+        should_postprocess(`bool`, *optional*):
+            If set to `True`, `reconstructions` are postprocessed after being passed to the model when decoding.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        
+        
 """
 
 #CODE BLOCKS REQUIRED FOR THE IRIS MODELS(WIP)
@@ -1087,6 +1090,13 @@ class Agent(nn.Module):
 
 #########################################################################################################################
 
+###########################################################################################################
+
+
+
+
+
+################################################################################################
 @add_start_docstrings("The IRIS Model", IRIS_START_DOCSTRING)
 # Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerModel with DecisionTransformer->Iris,edbeeching/decision-transformer-gym-hopper-medium->ruffy369/iris-breakout
 class IrisModel(IrisPreTrainedModel):
@@ -1097,41 +1107,89 @@ class IrisModel(IrisPreTrainedModel):
 
     """
 
+    #MAKE SURE TO SUPPORT OUTPUT HIDDEN STATES AND OUTPUT ATTENTIONS###################
+    
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
-        self.hidden_size = config.hidden_size
-        # note: the only difference between this GPT2Model and the default Huggingface version
-        # is that the positional embeddings are removed (since we'll add those ourselves)
-        self.encoder = IrisGPT2Model(config)
+        
+        self.cfg = config
+        self.start_epoch = 1
+        self.device = torch.device(self.cfg.common.device)
 
-        self.embed_timestep = nn.Embedding(config.max_ep_len, config.hidden_size)
-        self.embed_return = torch.nn.Linear(1, config.hidden_size)
-        self.embed_state = torch.nn.Linear(config.state_dim, config.hidden_size)
-        self.embed_action = torch.nn.Linear(config.act_dim, config.hidden_size)
+        self.ckpt_dir = Path('checkpoints')
+        self.media_dir = Path('media')
+        self.episode_dir = self.media_dir / 'episodes'
+        self.reconstructions_dir = self.media_dir / 'reconstructions'
 
-        self.embed_ln = nn.LayerNorm(config.hidden_size)
+        if not self.cfg.common.resume:
+            config_dir = Path('config')
+            config_path = config_dir / 'trainer.yaml'
+            config_dir.mkdir(exist_ok=False, parents=False)
+            shutil.copy('.hydra/config.yaml', config_path)
+            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "src"), dst="./src")
+            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "scripts"), dst="./scripts")
+            self.ckpt_dir.mkdir(exist_ok=False, parents=False)
+            self.media_dir.mkdir(exist_ok=False, parents=False)
+            self.episode_dir.mkdir(exist_ok=False, parents=False)
+            self.reconstructions_dir.mkdir(exist_ok=False, parents=False)
 
-        # note: we don't predict states or returns for the paper
-        self.predict_state = torch.nn.Linear(config.hidden_size, config.state_dim)
-        self.predict_action = nn.Sequential(
-            *([nn.Linear(config.hidden_size, config.act_dim)] + ([nn.Tanh()] if config.action_tanh else []))
-        )
-        self.predict_return = torch.nn.Linear(config.hidden_size, 1)
+        episode_manager_train = EpisodeDirManager(self.episode_dir / 'train', max_num_episodes=self.cfg.collection.train.num_episodes_to_save)
+        episode_manager_test = EpisodeDirManager(self.episode_dir / 'test', max_num_episodes=self.cfg.collection.test.num_episodes_to_save)
+        self.episode_manager_imagination = EpisodeDirManager(self.episode_dir / 'imagination', max_num_episodes=self.cfg.evaluation.actor_critic.num_episodes_to_save)
+
+        def create_env(cfg_env, num_envs):
+            env_fn = partial(instantiate, config=cfg_env)
+            return MultiProcessEnv(env_fn, num_envs, should_wait_num_envs_ratio=1.0) if num_envs > 1 else SingleProcessEnv(env_fn)
+
+        if self.cfg.training.should:
+            train_env = create_env(self.cfg.env.train, self.cfg.collection.train.num_envs)
+            self.train_dataset = instantiate(self.cfg.datasets.train)
+            self.train_collector = Collector(train_env, self.train_dataset, episode_manager_train)
+
+        if self.cfg.evaluation.should:
+            test_env = create_env(self.cfg.env.test, self.cfg.collection.test.num_envs)
+            self.test_dataset = instantiate(cfg.datasets.test)
+            self.test_collector = Collector(test_env, self.test_dataset, episode_manager_test)
+
+        assert self.cfg.training.should or self.cfg.evaluation.should
+        env = train_env if self.cfg.training.should else test_env
+
+        tokenizer = instantiate(self.cfg.tokenizer)
+        world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=env.num_actions, config=instantiate(self.cfg.world_model))
+        actor_critic = ActorCritic(**self.cfg.actor_critic, act_vocab_size=env.num_actions)
+        self.agent = Agent(tokenizer, world_model, actor_critic).to(self.device)
+        print(f'{sum(p.numel() for p in self.agent.tokenizer.parameters())} parameters in agent.tokenizer')
+        print(f'{sum(p.numel() for p in self.agent.world_model.parameters())} parameters in agent.world_model')
+        print(f'{sum(p.numel() for p in self.agent.actor_critic.parameters())} parameters in agent.actor_critic')
+
+        self.optimizer_tokenizer = torch.optim.Adam(self.agent.tokenizer.parameters(), lr=self.cfg.training.learning_rate)
+        self.optimizer_world_model = configure_optimizer(self.agent.world_model, self.cfg.training.learning_rate, self.cfg.training.world_model.weight_decay)
+        self.optimizer_actor_critic = torch.optim.Adam(self.agent.actor_critic.parameters(), lr=self.cfg.training.learning_rate)
+
+        if self.cfg.initialization.path_to_checkpoint is not None:
+            self.agent.load(**self.cfg.initialization, device=self.device)
+
+        if self.cfg.common.resume:
+            self.load_checkpoint()
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(IRIS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+
+    def forward_component(self, component: nn.Module, **kwargs):
+        output1, output2, output3 = component.forward(**kwargs)
+        return (output1, output2, output3)
+        
+        
+                
+
+    @add_start_docstrings_to_model_forward(IRIS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=IrisOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        states: Optional[torch.FloatTensor] = None,
-        actions: Optional[torch.FloatTensor] = None,
-        rewards: Optional[torch.FloatTensor] = None,
-        returns_to_go: Optional[torch.FloatTensor] = None,
-        timesteps: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        observations: Optional[torch.FloatTensor] = None,
+        should_preprocess: Optional[bool] = None,
+        should_postprocess: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1150,7 +1208,7 @@ class IrisModel(IrisPreTrainedModel):
         >>> model = model.to(device)
         >>> model.eval()
 
-        >>> env = gym.make("Hopper-v3")
+        >>> env = create_env(self.cfg.env.train, self.cfg.collection.train.num_envs)
         >>> state_dim = env.observation_space.shape[0]
         >>> act_dim = env.action_space.shape[0]
 
@@ -1165,82 +1223,39 @@ class IrisModel(IrisPreTrainedModel):
         >>> # forward pass
         >>> with torch.no_grad():
         ...     state_preds, action_preds, return_preds = model(
-        ...         states=states,
-        ...         actions=actions,
-        ...         rewards=rewards,
-        ...         returns_to_go=target_return,
-        ...         timesteps=timesteps,
-        ...         attention_mask=attention_mask,
-        ...         return_dict=False,
+        ...         observations = observations,
+                    should_preprocess = True,
+                    should_postprocess = True,
+                    output_hidden_states = False,
+                    output_attentions = False,
+                    return_dict = True,
         ...     )
         ```"""
+        
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if should_preprocess == True:
+            # preprocess observations
+            observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
+        #tokenizer outputs = (outputs.z, outputs.z_quantized, reconstructions)
+        tokenizer_outputs = self.forward_component(self.agent.tokenizer, x=observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
-        batch_size, seq_length = states.shape[0], states.shape[1]
+        with torch.no_grad():
+            obs_tokens = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
+        act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
+        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+        world_model_outputs = self.forward_component(self.agent.world_model, tokens = tokens)[0]
 
-        if attention_mask is None:
-            # attention mask for GPT: 1 if can be attended to, 0 if not
-            attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
-
-        # embed each modality with a different head
-        state_embeddings = self.embed_state(states)
-        action_embeddings = self.embed_action(actions)
-        returns_embeddings = self.embed_return(returns_to_go)
-        time_embeddings = self.embed_timestep(timesteps)
-
-        # time embeddings are treated similar to positional embeddings
-        state_embeddings = state_embeddings + time_embeddings
-        action_embeddings = action_embeddings + time_embeddings
-        returns_embeddings = returns_embeddings + time_embeddings
-
-        # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
-        # which works nice in an autoregressive sense since states predict actions
-        stacked_inputs = (
-            torch.stack((returns_embeddings, state_embeddings, action_embeddings), dim=1)
-            .permute(0, 2, 1, 3)
-            .reshape(batch_size, 3 * seq_length, self.hidden_size)
-        )
-        stacked_inputs = self.embed_ln(stacked_inputs)
-
-        # to make the attention mask fit the stacked inputs, have to stack it as well
-        stacked_attention_mask = (
-            torch.stack((attention_mask, attention_mask, attention_mask), dim=1)
-            .permute(0, 2, 1)
-            .reshape(batch_size, 3 * seq_length)
-        )
-        device = stacked_inputs.device
-        # we feed in the input embeddings (not word indices as in NLP) to the model
-        encoder_outputs = self.encoder(
-            inputs_embeds=stacked_inputs,
-            attention_mask=stacked_attention_mask,
-            position_ids=torch.zeros(stacked_attention_mask.shape, device=device, dtype=torch.long),
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        x = encoder_outputs[0]
-
-        # reshape x so that the second dimension corresponds to the original
-        # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
-        x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
-
-        # get predictions
-        return_preds = self.predict_return(x[:, 2])  # predict next return given state and action
-        state_preds = self.predict_state(x[:, 2])  # predict next state given state and action
-        action_preds = self.predict_action(x[:, 1])  # predict next action given state
-        if not return_dict:
-            return (state_preds, action_preds, return_preds)
+        wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, self.cfg.common.device)
+        obs = wm_env.reset_from_initial_observations(observations[:, -1])
+        actor_critic_outputs = self.forward_component(self.agent.actor_critic, inputs = obs)[0]
 
         return IrisOutput(
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            state_preds=state_preds,
-            action_preds=action_preds,
-            return_preds=return_preds,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            loss = None,
+            reconstructed_img = tokenizer_outputs[2],
+            action_preds = actor_critic_outputs.actions,
+            reward_preds = actor_critic_outputs.rewards,
+            epsiode_end = actor_critic_outputs.ends,
+            obs_preds = actor_critic_outputs.observations,
+            hidden_states = None,
+            attentions = None,
         )
