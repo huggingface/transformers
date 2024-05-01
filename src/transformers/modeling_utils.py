@@ -1905,7 +1905,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model_embeds
 
         # Update base model and current model config
-        self.config.vocab_size = model_embeds.weight.shape[0]
+        if hasattr(self.config, "text_config"):
+            self.config.text_config.vocab_size = model_embeds.weight.shape[0]
+        else:
+            self.config.vocab_size = model_embeds.weight.shape[0]
         self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
