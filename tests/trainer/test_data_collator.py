@@ -439,6 +439,305 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["sentence_order_label"].shape, torch.Size((2,)))
 
 
+@require_torch
+class DataCollatorImmutabilityTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+        self.vocab_file = os.path.join(self.tmpdirname, "vocab.txt")
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def _turn_to_none(self, item):
+        """used to convert `item` to `None` type"""
+        return None
+
+    def _compare_assert_with_collator(self, collator, original, batch):
+        # we only care about side effects, the results are tested elsewhere
+        collator(batch)
+
+        # we go through every item and convert to `primitive` datatypes if necessary
+        # then compares for equivalence for the original data and the data that has been passed through the collator
+        for i in range(len(original)):
+            for key in original[i].keys():
+                if isinstance(original[i][key], np.ndarray):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], torch.Tensor):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], tf.Tensor):
+                    self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
+                else:
+                    self.assertEqual(original[i][key], batch[i][key])
+
+    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+        # using the arguments to recreate the features with their respective (potentially new) datatypes
+        features_original = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+        features_batch = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+
+        # some collators do not use labels, or sometimes we want to check if the collator with labels can handle such cases
+        if ignore_label:
+            for i in range(len(features_original)):
+                features_original[i].pop(label_key)
+                features_batch[i].pop(label_key)
+
+        self._compare_assert_with_collator(collator, features_original, features_batch)
+
+    def test_default_collator_immutability(self):
+        features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+        features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+
+        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, torch.tensor), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                default_data_collator,
+                features_base_single_label,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                default_data_collator,
+                features_base_multiple_labels,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
+        self._compare_assert_with_collator_on_datatypes(
+            default_data_collator,
+            features_base_single_label_alt,
+            "input_ids",
+            list,
+            "label",
+            float
+        )
+
+    def test_with_padding_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+        features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+
+        data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10)
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+    def test_for_token_classification_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": (0, 1, 2), "labels": (0, 1, 2)},
+            {"input_ids": (0, 1, 2, 3, 4, 5), "labels": (0, 1, 2, 3, 4, 5)},
+        ]
+        token_classification_collators = [
+            DataCollatorForTokenClassification(tokenizer),
+            DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10),
+            DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8),
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1)
+        ]
+
+        for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
+            for collator in token_classification_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            token_classification_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+    def test_seq2seq_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(6)), "labels": list(range(6))},
+        ]
+        seq2seq_collators = [
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1),
+        ]
+
+        for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
+            for collator in seq2seq_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            seq2seq_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+        features_base_no_pad = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+        ]
+        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD)
+        for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
+            self._compare_assert_with_collator_on_datatypes(
+                seq2seq_no_padding_collator,
+                features_base_no_pad,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label
+            )
+
+    def test_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
+        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        lm_collators = [
+            DataCollatorForLanguageModeling(tokenizer, mlm=False),
+            DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8),
+            DataCollatorForLanguageModeling(tokenizer),
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        ]
+
+        for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
+            for collator in lm_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_no_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+    def test_whole_world_masking_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
+
+        for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
+            self._compare_assert_with_collator_on_datatypes(
+                whole_word_masking_collator,
+                features_base,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label,
+                ignore_label=True
+            )
+
+    def test_permutation_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        plm_collator = DataCollatorForPermutationLanguageModeling(tokenizer)
+
+        no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, no_pad_features_original, no_pad_features_batch)
+
+        pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, pad_features_original, pad_features_batch)
+
+    def test_next_sentence_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+        features_batch = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer)
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+    def test_sentence_order_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+        features_batch = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer)
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
+
+
 @require_tf
 class TFDataCollatorIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -794,6 +1093,305 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["sentence_order_label"].shape.as_list(), [2])
 
 
+@require_tf
+class TFDataCollatorImmutabilityTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+        self.vocab_file = os.path.join(self.tmpdirname, "vocab.txt")
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def _turn_to_none(self, item):
+        """used to convert `item` to `None` type"""
+        return None
+
+    def _compare_assert_with_collator(self, collator, original, batch):
+        # we only care about side effects, the results are tested elsewhere
+        collator(batch)
+
+        # we go through every item and convert to `primitive` datatypes if necessary
+        # then compares for equivalence for the original data and the data that has been passed through the collator
+        for i in range(len(original)):
+            for key in original[i].keys():
+                if isinstance(original[i][key], np.ndarray):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], torch.Tensor):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], tf.Tensor):
+                    self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
+                else:
+                    self.assertEqual(original[i][key], batch[i][key])
+
+    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+        # using the arguments to recreate the features with their respective (potentially new) datatypes
+        features_original = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+        features_batch = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+
+        # some collators do not use labels, or sometimes we want to check if the collator with labels can handle such cases
+        if ignore_label:
+            for i in range(len(features_original)):
+                features_original[i].pop(label_key)
+                features_batch[i].pop(label_key)
+
+        self._compare_assert_with_collator(collator, features_original, features_batch)
+
+    def test_default_collator_immutability(self):
+        features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+        features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+
+        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, tf.constant), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                lambda x: default_data_collator(x, return_tensors="tf"),
+                features_base_single_label,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                lambda x: default_data_collator(x, return_tensors="tf"),
+                features_base_multiple_labels,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
+        self._compare_assert_with_collator_on_datatypes(
+            lambda x: default_data_collator(x, return_tensors="tf"),
+            features_base_single_label_alt,
+            "input_ids",
+            list,
+            "label",
+            float
+        )
+
+    def test_with_padding_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+        features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+
+        data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10, return_tensors="tf")
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+    def test_for_token_classification_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": (0, 1, 2), "labels": (0, 1, 2)},
+            {"input_ids": (0, 1, 2, 3, 4, 5), "labels": (0, 1, 2, 3, 4, 5)},
+        ]
+        token_classification_collators = [
+            DataCollatorForTokenClassification(tokenizer, return_tensors="tf"),
+            DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10, return_tensors="tf"),
+            DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8, return_tensors="tf"),
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="tf")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in token_classification_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            token_classification_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+    def test_seq2seq_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(6)), "labels": list(range(6))},
+        ]
+        seq2seq_collators = [
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, return_tensors="tf"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="tf"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="tf"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="tf")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in seq2seq_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            seq2seq_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+        features_base_no_pad = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+        ]
+        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="tf")
+        for datatype_input, datatype_label in [(list, list)]:
+            self._compare_assert_with_collator_on_datatypes(
+                seq2seq_no_padding_collator,
+                features_base_no_pad,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label
+            )
+
+    def test_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
+        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        lm_collators = [
+            DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="tf"),
+            DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8, return_tensors="tf"),
+            DataCollatorForLanguageModeling(tokenizer, return_tensors="tf"),
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in lm_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_no_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+    def test_whole_world_masking_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
+
+        for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
+            self._compare_assert_with_collator_on_datatypes(
+                whole_word_masking_collator,
+                features_base,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label,
+                ignore_label=True
+            )
+
+    def test_permutation_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        plm_collator = DataCollatorForPermutationLanguageModeling(tokenizer, return_tensors="tf")
+
+        no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, no_pad_features_original, no_pad_features_batch)
+
+        pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, pad_features_original, pad_features_batch)
+
+    def test_next_sentence_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+        features_batch = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="tf")
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+    def test_sentence_order_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+        features_batch = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="tf")
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
+
+
 class NumpyDataCollatorIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
@@ -1137,3 +1735,301 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["token_type_ids"].shape, (2, 8))
         self.assertEqual(batch["labels"].shape, (2, 8))
         self.assertEqual(batch["sentence_order_label"].shape, (2,))
+
+
+class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"]
+        self.vocab_file = os.path.join(self.tmpdirname, "vocab.txt")
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def _turn_to_none(self, item):
+        """used to convert `item` to `None` type"""
+        return None
+
+    def _compare_assert_with_collator(self, collator, original, batch):
+        # we only care about side effects, the results are tested elsewhere
+        collator(batch)
+
+        # we go through every item and convert to `primitive` datatypes if necessary
+        # then compares for equivalence for the original data and the data that has been passed through the collator
+        for i in range(len(original)):
+            for key in original[i].keys():
+                if isinstance(original[i][key], np.ndarray):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], torch.Tensor):
+                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
+                elif isinstance(original[i][key], tf.Tensor):
+                    self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
+                else:
+                    self.assertEqual(original[i][key], batch[i][key])
+
+    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+        # using the arguments to recreate the features with their respective (potentially new) datatypes
+        features_original = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+        features_batch = [
+            {
+                label_key: label_datatype(sample[label_key]),
+                input_key: input_datatype(sample[input_key])
+            }
+            for sample in base
+        ]
+
+        # some collators do not use labels, or sometimes we want to check if the collator with labels can handle such cases
+        if ignore_label:
+            for i in range(len(features_original)):
+                features_original[i].pop(label_key)
+                features_batch[i].pop(label_key)
+
+        self._compare_assert_with_collator(collator, features_original, features_batch)
+
+    def test_default_collator_immutability(self):
+        features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+        features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
+
+        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, np.array), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                lambda x: default_data_collator(x, return_tensors="np"),
+                features_base_single_label,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
+            self._compare_assert_with_collator_on_datatypes(
+                lambda x: default_data_collator(x, return_tensors="np"),
+                features_base_multiple_labels,
+                "inputs",
+                datatype_input,
+                "label",
+                datatype_label
+            )
+
+        features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
+        self._compare_assert_with_collator_on_datatypes(
+            lambda x: default_data_collator(x, return_tensors="np"),
+            features_base_single_label_alt,
+            "input_ids",
+            list,
+            "label",
+            float
+        )
+
+    def test_with_padding_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+        features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
+
+        data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10, return_tensors="np")
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8, return_tensors="np")
+        self._compare_assert_with_collator(data_collator, features_original, features_batch)
+
+    def test_for_token_classification_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": (0, 1, 2), "labels": (0, 1, 2)},
+            {"input_ids": (0, 1, 2, 3, 4, 5), "labels": (0, 1, 2, 3, 4, 5)},
+        ]
+        token_classification_collators = [
+            DataCollatorForTokenClassification(tokenizer, return_tensors="np"),
+            DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10, return_tensors="np"),
+            DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8, return_tensors="np"),
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="np")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in token_classification_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            token_classification_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+    def test_seq2seq_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(6)), "labels": list(range(6))},
+        ]
+        seq2seq_collators = [
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, return_tensors="np"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="np"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="np"),
+            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="np")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in seq2seq_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label
+                )
+
+        self._compare_assert_with_collator_on_datatypes(
+            seq2seq_collators[-1],
+            features_base,
+            "input_ids",
+            datatype_input,
+            "labels",
+            datatype_label,
+            ignore_label=True
+        )
+
+        features_base_no_pad = [
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+            {"input_ids": list(range(3)), "labels": list(range(3))},
+        ]
+        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="np")
+        for datatype_input, datatype_label in [(list, list)]:
+            self._compare_assert_with_collator_on_datatypes(
+                seq2seq_no_padding_collator,
+                features_base_no_pad,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label
+            )
+
+    def test_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
+        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        lm_collators = [
+            DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="np"),
+            DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8, return_tensors="np"),
+            DataCollatorForLanguageModeling(tokenizer, return_tensors="np"),
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
+        ]
+
+        for datatype_input, datatype_label in [(list, list)]:
+            for collator in lm_collators:
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_no_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+                self._compare_assert_with_collator_on_datatypes(
+                    collator,
+                    features_base_pad,
+                    "input_ids",
+                    datatype_input,
+                    "labels",
+                    datatype_label,
+                    ignore_label=True
+                )
+
+    def test_whole_world_masking_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
+
+        for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
+            self._compare_assert_with_collator_on_datatypes(
+                whole_word_masking_collator,
+                features_base,
+                "input_ids",
+                datatype_input,
+                "labels",
+                datatype_label,
+                ignore_label=True
+            )
+
+    def test_permutation_language_modelling_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        plm_collator = DataCollatorForPermutationLanguageModeling(tokenizer, return_tensors="np")
+
+        no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, no_pad_features_original, no_pad_features_batch)
+
+        pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        self._compare_assert_with_collator(plm_collator, pad_features_original, pad_features_batch)
+
+    def test_next_sentence_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+        features_batch = [
+            {"input_ids": [0, 1, 2, 3, 4], "token_type_ids": [0, 1, 2, 3, 4], "next_sentence_label": i}
+            for i in range(2)
+        ]
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="np")
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+        nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
+        self._compare_assert_with_collator(nsp_collator, features_original, features_batch)
+
+    def test_sentence_order_prediction_collator_immutability(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        features_original = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+        features_batch = [
+            {
+                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "sentence_order_label": i,
+            }
+            for i in range(2)
+        ]
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="np")
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
+
+        sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
+        self._compare_assert_with_collator(sop_collator, features_original, features_batch)
