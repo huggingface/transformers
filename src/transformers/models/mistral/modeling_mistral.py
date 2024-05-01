@@ -87,6 +87,8 @@ class MistralRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+    def reset_parameters(self):
+        self.weight.data.fill_(1.0)
 
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mistral
 # TODO @Arthur no longer copied from LLama after static cache

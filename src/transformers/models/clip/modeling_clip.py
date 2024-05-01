@@ -193,6 +193,10 @@ class CLIPVisionEmbeddings(nn.Module):
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
+    def reset_parameters(self):
+        self.class_embedding.data.normal_(mean=0.0, std=self.config.initializer_range)
+        self.patch_embedding.reset_parameters()
+        self.position_embedding.reset_parameters()
 
 class CLIPTextEmbeddings(nn.Module):
     def __init__(self, config: CLIPTextConfig):
