@@ -1746,16 +1746,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
 
+        using_default_template = False
+
         # First, handle the cases when the model has a dict of multiple templates
         if isinstance(self.chat_template, dict) or (
             self.chat_template is None and isinstance(self.default_chat_template, dict)
         ):
-            template_dict = self.chat_template or self.default_chat_template
+            if self.chat_template is not None:
+                template_dict = self.chat_template
+                using_default_dict = False
+            else:
+                template_dict = self.default_chat_template
+                using_default_dict = True
             if chat_template is not None and chat_template in template_dict:
                 # The user can pass the name of a template to the chat template argument instead of an entire template
                 chat_template = template_dict[chat_template]
+                if using_default_dict:
+                    using_default_template = True
             elif chat_template is None and "default" in template_dict:
                 chat_template = template_dict["default"]
+                if using_default_dict:
+                    using_default_template = True
             elif chat_template is None:
                 raise ValueError(
                     "This model has multiple chat templates with no default specified! Please either pass a chat "
@@ -1769,6 +1780,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = self.chat_template
             else:
                 chat_template = self.default_chat_template
+                using_default_template = True
+
+        if using_default_template:
+            logger.warning_once(
+                "No chat template is set for this tokenizer, falling back to a default class-level template. This is "
+                "very error-prone, because models are often trained with templates different from the class default! "
+                "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+                "point any code depending on them will stop working. We recommend setting a valid chat template before "
+                "then to ensure that this model continues working without issues."
+            )
 
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
@@ -1840,13 +1861,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         This template formats inputs in the standard ChatML format. See
         https://github.com/openai/openai-python/blob/main/chatml.md
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a ChatML template. "
-            "This is very error-prone, because most models are not trained with a ChatML template!"
-            "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         return (
             "{% for message in messages %}"
             "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
