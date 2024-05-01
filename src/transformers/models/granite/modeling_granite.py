@@ -909,12 +909,21 @@ class GraniteModel(GranitePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            hidden_states = block(
-                hidden_states,
-                past_key_values=past_key_values,
-                attention_mask=attention_mask,
-                rope_cos_sin=rope_cos_sin,
-            )
+            if self.gradient_checkpointing and self.training:
+                hidden_states = self._gradient_checkpointing_func(
+                    block.__call__,
+                    hidden_states,
+                    past_key_values,
+                    attention_mask,
+                    rope_cos_sin,
+                )
+            else:
+                hidden_states = block(
+                    hidden_states,
+                    past_key_values=past_key_values,
+                    attention_mask=attention_mask,
+                    rope_cos_sin=rope_cos_sin,
+                )
 
         hidden_states = self.ln_f(hidden_states)
 
