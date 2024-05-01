@@ -164,7 +164,7 @@ class CircleCIJob:
             steps.append({"run": {"name": "Get tests", "command": command}})
 
             # grep -oE "class[[:space:]]+[[:alnum:]_]+[[:space:]]*\(" tests/models/llama/test_modeling_llama.py | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\(/\1/'
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=name) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=testname) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
