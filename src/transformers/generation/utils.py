@@ -1370,7 +1370,7 @@ class GenerationMixin:
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should be in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
-            generation_config (`~generation.GenerationConfig`, *optional*):
+            generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
                 `generation_config` is not provided, the default will be used, which has the following loading
@@ -1624,11 +1624,7 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 logits_warper=prepared_logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -1639,12 +1635,7 @@ class GenerationMixin:
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -1656,19 +1647,11 @@ class GenerationMixin:
 
             result = self._contrastive_search(
                 input_ids,
-                top_k=generation_config.top_k,
-                penalty_alpha=generation_config.penalty_alpha,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
-                sequential=generation_config.low_memory,
                 **model_kwargs,
             )
 
@@ -1690,12 +1673,7 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -1725,15 +1703,8 @@ class GenerationMixin:
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
-                sequential=generation_config.low_memory,
                 **model_kwargs,
             )
 
@@ -1767,13 +1738,7 @@ class GenerationMixin:
                 logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
@@ -1803,13 +1768,7 @@ class GenerationMixin:
                 beam_scorer,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
@@ -1879,13 +1838,7 @@ class GenerationMixin:
                 constrained_beam_scorer=constrained_beam_scorer,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_attentions=generation_config.output_attentions,
-                output_hidden_states=generation_config.output_hidden_states,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
@@ -1914,19 +1867,11 @@ class GenerationMixin:
     def _contrastive_search(
         self,
         input_ids: torch.LongTensor,
-        top_k: int,
-        penalty_alpha: float,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
-        sequential: Optional[bool],
         **model_kwargs,
     ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
         r"""
@@ -1936,38 +1881,19 @@ class GenerationMixin:
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            top_k (`int`):
-                The size of the candidate set that is used to re-rank for contrastive search
-            penalty_alpha (`float`):
-                The degeneration penalty for contrastive search; activate when it is larger than 0
             logits_processor (`LogitsProcessorList`):
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool``):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors
-                for more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            sequential (`bool`, *optional*):
-                Switches topk hidden state computation from parallel to sequential to reduce memory if True.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -1981,6 +1907,15 @@ class GenerationMixin:
         """
         # init values
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
+        top_k = generation_config.top_k
+        penalty_alpha = generation_config.penalty_alpha
+        pad_token_id = generation_config.pad_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+        sequential = generation_config.low_memory
 
         # init attention / hidden states / scores tuples
         raw_logits = () if (return_dict_in_generate and output_logits) else None
@@ -2289,12 +2224,7 @@ class GenerationMixin:
         input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
         **model_kwargs,
@@ -2312,21 +2242,8 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors
-                for more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
@@ -2344,6 +2261,12 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
 
         # init attention / hidden states / scores tuples
@@ -2460,12 +2383,7 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         logits_warper: LogitsProcessorList,
-        pad_token_id: Optional[int],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
         **model_kwargs,
@@ -2487,21 +2405,8 @@ class GenerationMixin:
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
                 to warp the prediction score distribution of the language modeling head applied before multinomial
                 sampling at each generation step.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
@@ -2519,6 +2424,12 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
 
         # init attention / hidden states / scores tuples
@@ -2663,15 +2574,8 @@ class GenerationMixin:
         beam_scorer: BeamScorer,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[Union[int, List[int]]],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
-        sequential: Optional[bool],
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -2690,29 +2594,10 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`:
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            sequential (`bool`, *optional*):
-                By default, beam search has `batch_size * num_beams` as effective batch size (see `beam_search()` for
-                more details). This flag will avoid parallelizing the beam search and will instead run beam search
-                sequentially.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -2725,6 +2610,15 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id = generation_config.eos_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+        sequential = generation_config.low_memory
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
@@ -2947,13 +2841,7 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         logits_warper: LogitsProcessorList,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[Union[int, List[int]]],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
@@ -2977,23 +2865,8 @@ class GenerationMixin:
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
                 to warp the prediction score distribution of the language modeling head applied before multinomial
                 sampling at each generation step.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -3008,6 +2881,14 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id = generation_config.eos_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
@@ -3187,13 +3068,7 @@ class GenerationMixin:
         beam_scorer: BeamScorer,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[Union[int, List[int]]],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         **model_kwargs,
     ):
@@ -3213,23 +3088,8 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -3244,6 +3104,14 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id = generation_config.eos_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
@@ -3480,13 +3348,7 @@ class GenerationMixin:
         constrained_beam_scorer: ConstrainedBeamSearchScorer,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[Union[int, List[int]]],
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
@@ -3511,23 +3373,8 @@ class GenerationMixin:
                 An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsWarper`] used
                 to warp the prediction score distribution of the language modeling head applied before multinomial
                 sampling at each generation step.
-            pad_token_id (`int`, *optional*):
-                The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
-                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
@@ -3542,6 +3389,14 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        pad_token_id = generation_config.pad_token_id
+        eos_token_id = generation_config.eos_token_id
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
 
@@ -3728,11 +3583,7 @@ class GenerationMixin:
         logits_processor: LogitsProcessorList,
         logits_warper: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
-        output_attentions: bool,
-        output_hidden_states: bool,
-        output_scores: bool,
-        output_logits: bool,
-        return_dict_in_generate: bool,
+        generation_config: GenerationConfig,
         synced_gpus: bool,
         streamer: Optional["BaseStreamer"],
         **model_kwargs,
@@ -3759,19 +3610,8 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            output_attentions (`bool`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more details.
-            output_hidden_states (`bool`):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more details.
-            output_scores (`bool`):
-                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-            output_logits (`bool`):
-                Whether or not to return the raw prediction logit scores. See `logits` under returned tensors for
-                more details.
-            return_dict_in_generate (`bool`):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            generation_config ([`~generation.GenerationConfig`]):
+                The generation configuration to be used as parametrization of the decoding method.
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
@@ -3790,6 +3630,11 @@ class GenerationMixin:
         """
         # init values
         do_sample = logits_warper is not None
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
