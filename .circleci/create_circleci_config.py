@@ -92,7 +92,6 @@ class CircleCIJob:
             cache_branch_prefix = "pull"
 
         job = {
-            "working_directory": self.working_directory,
             "docker": self.docker_image,
             "environment": env,
         }
@@ -117,6 +116,7 @@ class CircleCIJob:
 
         steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
 
+        steps.append({"run": {"name": "copy init","command": "cp -f .circleci/resources/pytest_build_config.ini pytest.ini || true"}})
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
@@ -165,7 +165,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=classname) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=name) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
