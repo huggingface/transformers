@@ -174,7 +174,7 @@ class CircleCIJob:
             test_command = ""
             if self.command_timeout:
                 test_command = f"timeout {self.command_timeout} "
-            test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=line  junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=line  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
