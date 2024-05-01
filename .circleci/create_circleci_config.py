@@ -115,8 +115,6 @@ class CircleCIJob:
         )
 
         steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
-
-        steps.append({"run": {"name": "copy init","command": "cp -f .circleci/resources/pytest_build_config.ini pytest.ini || true"}})
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
@@ -145,7 +143,11 @@ class CircleCIJob:
                 if test.endswith(".py"):
                     expanded_tests.append(test)
                 elif test == "tests/models":
-                    expanded_tests.extend(glob.glob("tests/models/**/test*.py", recursive=True))
+                    import subprocess
+                    files = glob.glob("tests/models/**/test*.py", recursive=True)
+                    for file in files:
+                        output = subprocess.check_output(['bash', '-c', f"grep -oE 'class[[:space:]]+[[:alnum:]_]+[[:space:]]*\\(' {file} | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\\(/\1/'"], text=True)
+                    expanded_tests.extend(output.split("\n"))
                 elif test == "tests/pipelines":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
@@ -165,6 +167,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
+            # grep -oE "class[[:space:]]+[[:alnum:]_]+[[:space:]]*\(" tests/models/llama/test_modeling_llama.py | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\(/\1/'
             command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=classname) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
