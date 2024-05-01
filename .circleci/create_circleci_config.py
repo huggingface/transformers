@@ -147,7 +147,7 @@ class CircleCIJob:
                 elif test == "tests/models":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                     for x in os.listdir(test):
-                        expanded_tests.extend([os.path.join(test, x,y) for y in os.listdir(os.path.join(test, x)) ])
+                        expanded_tests.extend([os.path.join(test, x,y)for y in os.listdir(os.path.join(test, x))  if "test" in y  ])
                 elif test == "tests/pipelines":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
