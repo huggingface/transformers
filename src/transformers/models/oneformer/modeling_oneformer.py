@@ -2837,6 +2837,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 else:
                     for name, child in module.named_children():
                         _recursive_init(child)
+
             _recursive_init(module)
             for p in module.parameters():
                 if p.dim() > 1:
