@@ -82,6 +82,8 @@ def create_rename_keys(config):
     # QFormer
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.weight", "qformer.layernorm.weight"))
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.bias", "qformer.layernorm.bias"))
+    rename_keys.append(("Qformer.bert.embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"))
+    rename_keys.append(("Qformer.bert.embeddings.position_embeddings.weight", "embeddings.position_embeddings.weight"))
 
     # fmt: on
     return rename_keys
@@ -134,7 +136,9 @@ def get_blip2_config(model_name, eos_token_id):
 
 
 @torch.no_grad()
-def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_blip2_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False, lavis_device="cpu", hf_model_device="cpu"
+):
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
@@ -170,12 +174,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     }
 
     name, type = model_name_to_original[model_name]
-
-    # note: this script is tested on 2 GPUs, as models are compared in float32,
-    # which requires quite some memory. Hence loading both on a
-    # separate device is the easiest to compare
-    hf_model_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    lavis_device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     # load original model
     print("Loading original model...")
@@ -365,7 +363,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    # note: this script is tested on 2 GPUs, as models are compared in float32,
+    # which requires quite some memory. Hence loading both on a
+    # separate device is the easiest to compare
+    parser.add_argument(
+        "--lavis_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+    )
+    parser.add_argument(
+        "--hf_model_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+    )
 
     args = parser.parse_args()
 
-    convert_blip2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_blip2_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.lavis_device, args.hf_model_device
+    )

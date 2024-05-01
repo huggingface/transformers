@@ -1193,9 +1193,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        if config.use_qformer_text_input:
-            self.embeddings = Blip2TextEmbeddings(config)
-
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -1264,11 +1261,10 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.FloatTensor] = None,
+        query_embeds: torch.FloatTensor,
+        query_length: Optional[int] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        query_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -1278,11 +1274,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary of the language model.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -1307,27 +1298,16 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if input_ids is None and query_embeds is None:
-            raise ValueError("You have to specify query_embeds when input_ids is None")
-
         # past_key_values_length
         past_key_values_length = (
             past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
         )
 
-        query_length = query_embeds.shape[1] if query_embeds is not None else 0
+        query_length = (
+            query_length if query_length is not None else query_embeds.shape[1] if query_embeds is not None else 0
+        )
 
-        if self.config.use_qformer_text_input:
-            embedding_output = self.embeddings(
-                input_ids=input_ids,
-                position_ids=position_ids,
-                query_embeds=query_embeds,
-                past_key_values_length=past_key_values_length,
-            )
-        else:
-            embedding_output = query_embeds
-
-        embedding_output = self.layernorm(embedding_output)
+        embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
         input_shape = embedding_output.size()[:-1]
@@ -1765,6 +1745,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         super().__init__(config)
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
+        self.embeddings = Blip2TextEmbeddings(config.qformer_config)
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # text projection layer
@@ -1812,10 +1793,15 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.qformer(
+        query_embeds = self.embeddings(
             input_ids=input_ids,
-            attention_mask=attention_mask,
             position_ids=position_ids,
+        )
+
+        text_outputs = self.qformer(
+            query_embeds=query_embeds,
+            query_length=0,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -2302,6 +2288,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
 
+        self.embeddings = Blip2TextEmbeddings(config.qformer_config)
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # vision projection layer
@@ -2391,9 +2378,14 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(query_tokens.device)
             attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
 
-            qformer_outputs = self.qformer(
+            query_embeds = self.embeddings(
                 input_ids=input_ids,
                 query_embeds=query_tokens,
+            )
+
+            qformer_outputs = self.qformer(
+                query_embeds=query_embeds,
+                query_length=query_tokens.shape[1],
                 attention_mask=attention_mask,
                 encoder_hidden_states=image_embeds,
                 encoder_attention_mask=image_attention_mask,
@@ -2413,8 +2405,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             )
             image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
 
-            text_output = self.qformer(
+            query_embeds = self.embeddings(
                 input_ids=input_ids,
+            )
+            text_output = self.qformer(
+                query_embeds=query_embeds,
+                query_length=0,
                 attention_mask=attention_mask,
                 return_dict=return_dict,
             )
