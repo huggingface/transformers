@@ -701,9 +701,9 @@ class GenerationMixin:
                 input_ids=input_ids,
                 assistant_model=assistant_model,
                 generation_config=generation_config,
-                logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
             )
         return candidate_generator
 

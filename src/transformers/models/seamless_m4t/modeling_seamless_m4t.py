@@ -989,6 +989,20 @@ class SeamlessM4TConformerAdapter(nn.Module):
 ############ TEXT / UNITS related code ################
 
 
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100ScaledWordEmbedding with M2M100->SeamlessM4T
+class SeamlessM4TScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
@@ -1631,9 +1645,11 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
 
         if not self.is_t2u_encoder:
-            self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+            embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+            )
 
             if embed_tokens is not None:
                 self.embed_tokens.weight = embed_tokens.weight
@@ -1726,7 +1742,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.is_t2u_encoder:
             embed_pos = self.embed_positions(input)
@@ -1809,14 +1825,18 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             # if embed_tokens defined, use its shape instead
-            self.embed_tokens = nn.Embedding(embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                embed_tokens.num_embeddings, embed_tokens.embedding_dim, self.padding_idx, embed_scale=embed_scale
+            )
             self.embed_tokens.weight = embed_tokens.weight
         else:
-            self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
+            self.embed_tokens = SeamlessM4TScaledWordEmbedding(
+                self.vocab_size, config.hidden_size, self.padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
             self.max_target_positions,
@@ -1935,7 +1955,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
