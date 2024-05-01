@@ -48,13 +48,13 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 pipe = pipeline(task="depth-estimation", model="Intel/zoedepth-nyu-kitti")
 result = pipe(image)
-result["depth"]
+depth = result["depth"]
 ```
 
 Alternatively, one can also perform inference using the classes:
 
 ```python
->>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
+from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
 import torch
 import numpy as np
 from PIL import Image
