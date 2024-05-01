@@ -163,20 +163,9 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            # get test files while ignoring __init__ files
-            steps.append(
-                {"run": {"name": "Get tests", "command": """TESTFILES=$(circleci tests glob {tests} | sed 's/\S\+__init__.py//g') && \
-echo $TESTFILES | tr ' ' '\n' | sort | uniq > circleci_test_files.txt && \
-cat circleci_test_files.txt && \
-TESTFILES=$(circleci tests split --split-by=timings circleci_test_files.txt) && \
-# massage filepaths into format manage.py test accepts && \
-TESTFILES=$(echo $TESTFILES | tr "/" "." | sed 's/.py//g') && \
-echo $TESTFILES"""}
-                }
-            )
     
             # grep -oE "class[[:space:]]+[[:alnum:]_]+[[:space:]]*\(" tests/models/llama/test_modeling_llama.py | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\(/\1/'
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=testname) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
