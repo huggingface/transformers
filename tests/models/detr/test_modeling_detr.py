@@ -247,6 +247,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="DETR does not have a get_input_embeddings method")
     def test_model_common_attributes(self):
         pass
