@@ -496,7 +496,7 @@ def get_attention_module(
     raise ValueError(f"unexpected `attention_implementation` {attention_implementation}")
 
 
-class RoPE(nn.Module):
+class GraniteRoPE(nn.Module):
     def __init__(
         self,
         head_dim: int,
@@ -685,7 +685,7 @@ class GranitePreTrainedModel(PreTrainedModel):
         self.initializer_range = config.initializer_range
 
     def _init_weights(self, module: nn.Module) -> None:
-        if isinstance(module, (nn.LayerNorm, GraniteRMSNorm, RoPE)):
+        if isinstance(module, (nn.LayerNorm, GraniteRMSNorm, GraniteRoPE)):
             module.reset_parameters()
         elif isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0, std=self.initializer_range)
@@ -732,7 +732,7 @@ class GraniteModel(GranitePreTrainedModel):
         if self.position_embedding_type == PositionEmbeddingType.learned_absolute:
             self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
         elif self.position_embedding_type == PositionEmbeddingType.rope:
-            self.rope = RoPE(self.head_dim, max_position_embeddings=config.n_positions, base=config.rope_theta)
+            self.rope = GraniteRoPE(self.head_dim, max_position_embeddings=config.n_positions, base=config.rope_theta)
         else:
             raise NotImplementedError()
 
