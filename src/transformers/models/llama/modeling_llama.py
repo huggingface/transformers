@@ -604,6 +604,10 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seen_tokens = 0
+
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -630,7 +634,6 @@ class LlamaSdpaAttention(LlamaAttention):
                 use_cache=use_cache,
                 cache_position=cache_position,
             )
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -646,6 +649,8 @@ class LlamaSdpaAttention(LlamaAttention):
 
         # In case static cache is used, it is an instance attribute.
         past_key_value = getattr(self, "past_key_value", past_key_value)
+
+        self._seen_tokens += key_states.shape[-2]
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
