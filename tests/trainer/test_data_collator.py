@@ -1359,16 +1359,16 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
 
         features_original = [
             {
-                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
-                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "input_ids": tf.convert_to_tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": tf.convert_to_tensor([0, 1, 2, 3, 4]),
                 "sentence_order_label": i,
             }
             for i in range(2)
         ]
         features_batch = [
             {
-                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
-                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "input_ids": tf.convert_to_tensor([0, 1, 2, 3, 4]),
+                "token_type_ids": tf.convert_to_tensor([0, 1, 2, 3, 4]),
                 "sentence_order_label": i,
             }
             for i in range(2)
@@ -2005,16 +2005,16 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
 
         features_original = [
             {
-                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
-                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "input_ids": np.array([0, 1, 2, 3, 4]),
+                "token_type_ids": np.array([0, 1, 2, 3, 4]),
                 "sentence_order_label": i,
             }
             for i in range(2)
         ]
         features_batch = [
             {
-                "input_ids": torch.tensor([0, 1, 2, 3, 4]),
-                "token_type_ids": torch.tensor([0, 1, 2, 3, 4]),
+                "input_ids": np.array([0, 1, 2, 3, 4]),
+                "token_type_ids": np.array([0, 1, 2, 3, 4]),
                 "sentence_order_label": i,
             }
             for i in range(2)
