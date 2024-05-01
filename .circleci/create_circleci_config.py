@@ -172,8 +172,8 @@ class CircleCIJob:
             steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
 
             test_command = ""
-            if self.timeout:
-                test_command = f"timeout {self.timeout} "
+            if self.command_timeout:
+                test_command = f"timeout {self.command_timeout} "
             test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=line -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
