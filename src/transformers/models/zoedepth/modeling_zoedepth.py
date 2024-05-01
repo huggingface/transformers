@@ -1281,6 +1281,10 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         >>> formatted = (output * 255 / np.max(output)).astype("uint8")
         >>> depth = Image.fromarray(formatted)
         ```"""
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1309,10 +1313,6 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
             outconv_activation=out[0], bottleneck=out[1], feature_blocks=out[2:], relative_depth=relative_depth
         )
         metric_depth = metric_depth.squeeze(dim=1)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             if domain_logits is not None:
