@@ -545,7 +545,7 @@ BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        use_itm_head (`bool`, *optional*): Whether to return the Image-Text Matching or Contrastive scores.
+        use_image_text_matching_head (`bool`, *optional*): Whether to return the Image-Text Matching or Contrastive scores.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -1744,7 +1744,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # text projection layer
-        self.text_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+        self.text_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1804,7 +1804,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
         pooled_output = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
 
-        text_embeds = self.text_proj(pooled_output)
+        text_embeds = self.text_projection(pooled_output)
         text_embeds = nn.functional.normalize(text_embeds, dim=-1)
 
         if not return_dict:
@@ -1838,7 +1838,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # vision projection layer
-        self.vision_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+        self.vision_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1911,7 +1911,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         )
 
         embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
-        image_embeds = self.vision_proj(embeds)
+        image_embeds = self.vision_projection(embeds)
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
 
         if not return_dict:
@@ -2287,10 +2287,10 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         # vision projection layer
-        self.vision_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+        self.vision_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
 
         # text projection layer
-        self.text_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+        self.text_projection = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
 
         # image text matching head
         self.itm_head = nn.Linear(config.qformer_config.hidden_size, 2)
@@ -2305,7 +2305,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        use_itm_head: Optional[bool] = True,
+        use_image_text_matching_head: Optional[bool] = True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2333,12 +2333,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         >>> text = "two cats laying on a pink blanket"
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device, torch.float16)
-        >>> itm_out = model(**inputs, use_itm_head=True)
+        >>> itm_out = model(**inputs, use_image_text_matching_head=True)
         >>> itm_scores = torch.nn.functional.softmax(itm_out.itm_score, dim=1)
         >>> print(f"The image and text are matched with a probability of {itm_scores[:, 1].item():.3f}")
         The image and text are matched with a probability of 0.999
 
-        >>> itc_out = model(**inputs, use_itm_head=False)
+        >>> itc_out = model(**inputs, use_image_text_matching_head=False)
         >>> print(f"The image feature and text feature has a cosine similarity of {itc_out.itm_score.item():.4f}")
         The image feature and text feature has a cosine similarity of 0.4500
         ```
@@ -2359,7 +2359,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         image_embeds = vision_outputs[0]
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-        if use_itm_head:
+        if use_image_text_matching_head:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
             query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(query_tokens.device)
             attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
@@ -2402,8 +2402,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             )
             question_embeds = text_output[0] if not return_dict else text_output.last_hidden_state
 
-            image_feat = nn.functional.normalize(self.vision_proj(image_embeds), dim=-1)
-            text_feat = nn.functional.normalize(self.text_proj(question_embeds[:, 0, :]), dim=-1)
+            image_feat = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)
+            text_feat = nn.functional.normalize(self.text_projection(question_embeds[:, 0, :]), dim=-1)
 
             output = torch.bmm(image_feat, text_feat.unsqueeze(-1))
             output, _ = torch.max(output, dim=1)

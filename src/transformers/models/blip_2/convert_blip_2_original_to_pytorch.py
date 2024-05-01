@@ -84,6 +84,10 @@ def create_rename_keys(config):
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.bias", "qformer.layernorm.bias"))
     rename_keys.append(("Qformer.bert.embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"))
     rename_keys.append(("Qformer.bert.embeddings.position_embeddings.weight", "embeddings.position_embeddings.weight"))
+    rename_keys.append(("vision_proj.weight", "vision_projection.weight"))
+    rename_keys.append(("vision_proj.bias", "vision_projection.bias"))
+    rename_keys.append(("text_proj.weight", "text_projection.weight"))
+    rename_keys.append(("text_proj.bias", "text_projection.bias"))
 
     # fmt: on
     return rename_keys
@@ -267,7 +271,7 @@ def convert_blip2_checkpoint(
                 pixel_values=original_pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                use_itm_head=False,
+                use_image_text_matching_head=False,
             )
 
         assert original_logits.shape == logits.itm_score.shape

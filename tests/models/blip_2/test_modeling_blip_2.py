@@ -990,7 +990,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         model_name = "jpizarrom/blip2-itm-vit-g"
         model = Blip2TextModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
-        self.assertTrue(hasattr(model, "text_proj"))
+        self.assertTrue(hasattr(model, "text_projection"))
 
         _, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
 
@@ -1161,7 +1161,7 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         model_name = "jpizarrom/blip2-itm-vit-g"
         model = Blip2VisionModelWithProjection.from_pretrained(model_name)
         self.assertIsNotNone(model)
-        self.assertTrue(hasattr(model, "vision_proj"))
+        self.assertTrue(hasattr(model, "vision_projection"))
 
         _, pixel_values = self.model_tester.prepare_config_and_inputs()
 
@@ -1287,7 +1287,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["pixel_values", "input_ids", "attention_mask"]
-            expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else [])
+            expected_arg_names.extend(["use_image_text_matching_head"] if "use_image_text_matching_head" in arg_names else [])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_load_vision_qformer_text_config(self):
@@ -1323,7 +1323,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(
-                pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, use_itm_head=False
+                pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, use_image_text_matching_head=False
             )
         self.assertEqual(outputs.itm_score.shape, (self.model_tester.qformer_model_tester.batch_size, 1))
 
@@ -1573,7 +1573,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         out_itm = model(**inputs)
-        out = model(**inputs, use_itm_head=False)
+        out = model(**inputs, use_image_text_matching_head=False)
 
         # verify
         expected_scores = torch.Tensor([[0.0238, 0.9762]])
@@ -1592,7 +1592,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         out_itm = model(**inputs)
-        out = model(**inputs, use_itm_head=False)
+        out = model(**inputs, use_image_text_matching_head=False)
 
         # verify
         expected_scores = torch.Tensor([[0.0239, 0.9761]])
