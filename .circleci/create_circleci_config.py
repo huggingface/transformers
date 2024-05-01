@@ -232,7 +232,8 @@ torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=8
+    parallelism=8,
+    pytest_num_workers=16
 )
 
 
