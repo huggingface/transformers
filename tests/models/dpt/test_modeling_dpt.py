@@ -255,17 +255,11 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     def _test_models_weight_initialization(self, config, model_class, model):
-        # Skip the check for the backbone
-        backbone_params = []
-        for name, module in model.named_modules():
-            if module.__class__.__name__ == "DPTViTHybridEmbeddings":
-                backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
-                break
-
         for name, param in model.named_parameters():
+            # Backbone is responsible for its own init - can be in transformers or timm library
+            if name.startswith("backbone"):
+                continue
             if param.requires_grad:
-                if name in backbone_params:
-                    continue
                 self.assertIn(
                     ((param.data.mean() * 1e9).round() / 1e9).item(),
                     [0.0, 1.0],

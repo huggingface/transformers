@@ -2830,6 +2830,14 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p)
         elif isinstance(module, OneFormerPixelDecoder):
+            # For compatibility with config init, use default initiliazation then overwrite
+            def _recursive_init(module: nn.Module):
+                if hasattr(module, "reset_parameters"):
+                    module.reset_parameters()
+                else:
+                    for name, child in module.named_children():
+                        _recursive_init(child)
+            _recursive_init(module)
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p)

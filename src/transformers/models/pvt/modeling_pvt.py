@@ -474,7 +474,12 @@ class PvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Conv2d):
+            # We use the default here for backwards compatibility when loading from fast init
+            module = module.reset_parameters()
         elif isinstance(module, PvtPatchEmbeddings):
+            # We use the default here for backwards compatibility when loading from fast init
+            module.projection.reset_parameters()
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data,
                 mean=0.0,

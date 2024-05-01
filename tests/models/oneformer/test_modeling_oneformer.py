@@ -394,6 +394,19 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 model = model_class.from_pretrained(tmp_dir_name)
                 self._test_models_weight_initialization(configs_no_init, model_class, model)
 
+    def _test_models_weight_initialization(self, config, model_class, model):
+        for name, param in model.named_parameters():
+            if name.startswith("pixel_level_module.encoder"):
+                # Backbones are responsible for their own initialization
+                continue
+
+            if param.requires_grad:
+                self.assertIn(
+                    ((param.data.mean() * 1e9).round() / 1e9).item(),
+                    [0.0, 1.0],
+                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                )
+
     def test_training(self):
         if not self.model_tester.is_training:
             return

@@ -228,6 +228,10 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _test_models_weight_initialization(self, config, model_class, model):
         for name, param in model.named_parameters():
+            if name.startswith("backbone"):
+                # Backbone is responsible for initializing its own weights
+                continue
+
             if param.requires_grad:
                 self.assertIn(
                     ((param.data.mean() * 1e9).round() / 1e9).item(),
