@@ -14,12 +14,14 @@
 # limitations under the License.
 """ Testing suite for the FlauBERT tokenizer. """
 
-import os
 import json
+import os
 import unittest
+
 from transformers import FlaubertTokenizer
 from transformers.models.flaubert.tokenization_flaubert import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
+
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
@@ -27,7 +29,7 @@ class FlaubertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "flaubert/flaubert_base_cased"
     tokenizer_class = FlaubertTokenizer
     test_rust_tokenizer = False
-   
+
     def setUp(self):
         super().setUp()
 
@@ -59,10 +61,10 @@ class FlaubertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "wider</w>",
             "<unk>",
         ]
-        
+
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["n e 300", "ne w 301", "e r</w> 302", ""]
-        
+
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
@@ -74,7 +76,7 @@ class FlaubertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
         text = "lower newer"
-        bpe_tokens = ["l", "o", "w", "er</w>", "new", "er</w>"] 
+        bpe_tokens = ["l", "o", "w", "er</w>", "new", "er</w>"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 
