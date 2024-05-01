@@ -473,20 +473,16 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                 else:
                     self.assertEqual(original[i][key], batch[i][key])
 
-    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+    def _compare_assert_with_collator_on_datatypes(
+        self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False
+    ):
         # using the arguments to recreate the features with their respective (potentially new) datatypes
         features_original = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
         features_batch = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
 
@@ -502,34 +498,25 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
         features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
 
-        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, torch.tensor), (list, self._turn_to_none)]:
+        for datatype_input, datatype_label in [
+            (list, int),
+            (list, float),
+            (np.array, int),
+            (np.array, torch.tensor),
+            (list, self._turn_to_none),
+        ]:
             self._compare_assert_with_collator_on_datatypes(
-                default_data_collator,
-                features_base_single_label,
-                "inputs",
-                datatype_input,
-                "label",
-                datatype_label
+                default_data_collator, features_base_single_label, "inputs", datatype_input, "label", datatype_label
             )
 
         for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
             self._compare_assert_with_collator_on_datatypes(
-                default_data_collator,
-                features_base_multiple_labels,
-                "inputs",
-                datatype_input,
-                "label",
-                datatype_label
+                default_data_collator, features_base_multiple_labels, "inputs", datatype_input, "label", datatype_label
             )
 
         features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
         self._compare_assert_with_collator_on_datatypes(
-            default_data_collator,
-            features_base_single_label_alt,
-            "input_ids",
-            list,
-            "label",
-            float
+            default_data_collator, features_base_single_label_alt, "input_ids", list, "label", float
         )
 
     def test_with_padding_collator_immutability(self):
@@ -555,18 +542,13 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
             DataCollatorForTokenClassification(tokenizer),
             DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10),
             DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8),
-            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1)
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1),
         ]
 
         for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
             for collator in token_classification_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -576,7 +558,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
     def test_seq2seq_collator_immutability(self):
@@ -596,12 +578,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
             for collator in seq2seq_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -611,7 +588,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
         features_base_no_pad = [
@@ -626,19 +603,25 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                 "input_ids",
                 datatype_input,
                 "labels",
-                datatype_label
+                datatype_label,
             )
 
     def test_language_modelling_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
-        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        features_base_no_pad = [
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+        ]
+        features_base_pad = [
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+        ]
         lm_collators = [
             DataCollatorForLanguageModeling(tokenizer, mlm=False),
             DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8),
             DataCollatorForLanguageModeling(tokenizer),
-            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8),
         ]
 
         for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
@@ -650,7 +633,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
                 self._compare_assert_with_collator_on_datatypes(
@@ -660,13 +643,16 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
     def test_whole_world_masking_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        features_base = [
+            {"input_ids": list(range(10)), "labels": (1,)},
+            {"input_ids": list(range(10)), "labels": (1,)},
+        ]
         whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
 
         for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
@@ -677,7 +663,7 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                 datatype_input,
                 "labels",
                 datatype_label,
-                ignore_label=True
+                ignore_label=True,
             )
 
     def test_permutation_language_modelling_collator_immutability(self):
@@ -1127,20 +1113,16 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                 else:
                     self.assertEqual(original[i][key], batch[i][key])
 
-    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+    def _compare_assert_with_collator_on_datatypes(
+        self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False
+    ):
         # using the arguments to recreate the features with their respective (potentially new) datatypes
         features_original = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
         features_batch = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
 
@@ -1156,14 +1138,20 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
         features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
 
-        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, tf.constant), (list, self._turn_to_none)]:
+        for datatype_input, datatype_label in [
+            (list, int),
+            (list, float),
+            (np.array, int),
+            (np.array, tf.constant),
+            (list, self._turn_to_none),
+        ]:
             self._compare_assert_with_collator_on_datatypes(
                 lambda x: default_data_collator(x, return_tensors="tf"),
                 features_base_single_label,
                 "inputs",
                 datatype_input,
                 "label",
-                datatype_label
+                datatype_label,
             )
 
         for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
@@ -1173,7 +1161,7 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                 "inputs",
                 datatype_input,
                 "label",
-                datatype_label
+                datatype_label,
             )
 
         features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
@@ -1183,7 +1171,7 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
             "input_ids",
             list,
             "label",
-            float
+            float,
         )
 
     def test_with_padding_collator_immutability(self):
@@ -1209,18 +1197,13 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
             DataCollatorForTokenClassification(tokenizer, return_tensors="tf"),
             DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10, return_tensors="tf"),
             DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8, return_tensors="tf"),
-            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="tf")
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="tf"),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
             for collator in token_classification_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -1230,7 +1213,7 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
     def test_seq2seq_collator_immutability(self):
@@ -1243,19 +1226,18 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         seq2seq_collators = [
             DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, return_tensors="tf"),
             DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="tf"),
-            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="tf"),
-            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="tf")
+            DataCollatorForSeq2Seq(
+                tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="tf"
+            ),
+            DataCollatorForSeq2Seq(
+                tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="tf"
+            ),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
             for collator in seq2seq_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -1265,14 +1247,16 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
         features_base_no_pad = [
             {"input_ids": list(range(3)), "labels": list(range(3))},
             {"input_ids": list(range(3)), "labels": list(range(3))},
         ]
-        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="tf")
+        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="tf"
+        )
         for datatype_input, datatype_label in [(list, list)]:
             self._compare_assert_with_collator_on_datatypes(
                 seq2seq_no_padding_collator,
@@ -1280,19 +1264,25 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                 "input_ids",
                 datatype_input,
                 "labels",
-                datatype_label
+                datatype_label,
             )
 
     def test_language_modelling_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
-        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        features_base_no_pad = [
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+        ]
+        features_base_pad = [
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+        ]
         lm_collators = [
             DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="tf"),
             DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8, return_tensors="tf"),
             DataCollatorForLanguageModeling(tokenizer, return_tensors="tf"),
-            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf"),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
@@ -1304,7 +1294,7 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
                 self._compare_assert_with_collator_on_datatypes(
@@ -1314,13 +1304,16 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
     def test_whole_world_masking_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        features_base = [
+            {"input_ids": list(range(10)), "labels": (1,)},
+            {"input_ids": list(range(10)), "labels": (1,)},
+        ]
         whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="tf")
 
         for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
@@ -1331,7 +1324,7 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                 datatype_input,
                 "labels",
                 datatype_label,
-                ignore_label=True
+                ignore_label=True,
             )
 
     def test_permutation_language_modelling_collator_immutability(self):
@@ -1770,20 +1763,16 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                 else:
                     self.assertEqual(original[i][key], batch[i][key])
 
-    def _compare_assert_with_collator_on_datatypes(self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False):
+    def _compare_assert_with_collator_on_datatypes(
+        self, collator, base, input_key, input_datatype, label_key, label_datatype, ignore_label=False
+    ):
         # using the arguments to recreate the features with their respective (potentially new) datatypes
         features_original = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
         features_batch = [
-            {
-                label_key: label_datatype(sample[label_key]),
-                input_key: input_datatype(sample[input_key])
-            }
+            {label_key: label_datatype(sample[label_key]), input_key: input_datatype(sample[input_key])}
             for sample in base
         ]
 
@@ -1799,14 +1788,20 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
         features_base_multiple_labels = [{"label": (0, 1, 2), "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
 
-        for datatype_input, datatype_label in [(list, int), (list, float), (np.array, int), (np.array, np.array), (list, self._turn_to_none)]:
+        for datatype_input, datatype_label in [
+            (list, int),
+            (list, float),
+            (np.array, int),
+            (np.array, np.array),
+            (list, self._turn_to_none),
+        ]:
             self._compare_assert_with_collator_on_datatypes(
                 lambda x: default_data_collator(x, return_tensors="np"),
                 features_base_single_label,
                 "inputs",
                 datatype_input,
                 "label",
-                datatype_label
+                datatype_label,
             )
 
         for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
@@ -1816,7 +1811,7 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                 "inputs",
                 datatype_input,
                 "label",
-                datatype_label
+                datatype_label,
             )
 
         features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
@@ -1826,7 +1821,7 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
             "input_ids",
             list,
             "label",
-            float
+            float,
         )
 
     def test_with_padding_collator_immutability(self):
@@ -1852,18 +1847,13 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
             DataCollatorForTokenClassification(tokenizer, return_tensors="np"),
             DataCollatorForTokenClassification(tokenizer, padding="max_length", max_length=10, return_tensors="np"),
             DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8, return_tensors="np"),
-            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="np")
+            DataCollatorForTokenClassification(tokenizer, label_pad_token_id=-1, return_tensors="np"),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
             for collator in token_classification_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -1873,7 +1863,7 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
     def test_seq2seq_collator_immutability(self):
@@ -1886,19 +1876,18 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         seq2seq_collators = [
             DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, return_tensors="np"),
             DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.MAX_LENGTH, max_length=7, return_tensors="np"),
-            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="np"),
-            DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="np")
+            DataCollatorForSeq2Seq(
+                tokenizer, padding=PaddingStrategy.LONGEST, pad_to_multiple_of=8, return_tensors="np"
+            ),
+            DataCollatorForSeq2Seq(
+                tokenizer, padding=PaddingStrategy.LONGEST, label_pad_token_id=-1, return_tensors="np"
+            ),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
             for collator in seq2seq_collators:
                 self._compare_assert_with_collator_on_datatypes(
-                    collator,
-                    features_base,
-                    "input_ids",
-                    datatype_input,
-                    "labels",
-                    datatype_label
+                    collator, features_base, "input_ids", datatype_input, "labels", datatype_label
                 )
 
         self._compare_assert_with_collator_on_datatypes(
@@ -1908,14 +1897,16 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
             datatype_input,
             "labels",
             datatype_label,
-            ignore_label=True
+            ignore_label=True,
         )
 
         features_base_no_pad = [
             {"input_ids": list(range(3)), "labels": list(range(3))},
             {"input_ids": list(range(3)), "labels": list(range(3))},
         ]
-        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="np")
+        seq2seq_no_padding_collator = DataCollatorForSeq2Seq(
+            tokenizer, padding=PaddingStrategy.DO_NOT_PAD, return_tensors="np"
+        )
         for datatype_input, datatype_label in [(list, list)]:
             self._compare_assert_with_collator_on_datatypes(
                 seq2seq_no_padding_collator,
@@ -1923,19 +1914,25 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                 "input_ids",
                 datatype_input,
                 "labels",
-                datatype_label
+                datatype_label,
             )
 
     def test_language_modelling_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base_no_pad = [{"input_ids": tuple(range(10)), "labels": (1,)}, {"input_ids": tuple(range(10)), "labels": (1,)}]
-        features_base_pad = [{"input_ids": tuple(range(5)), "labels": (1,)}, {"input_ids": tuple(range(5)), "labels": (1,)}]
+        features_base_no_pad = [
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+            {"input_ids": tuple(range(10)), "labels": (1,)},
+        ]
+        features_base_pad = [
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+            {"input_ids": tuple(range(5)), "labels": (1,)},
+        ]
         lm_collators = [
             DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="np"),
             DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8, return_tensors="np"),
             DataCollatorForLanguageModeling(tokenizer, return_tensors="np"),
-            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
+            DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np"),
         ]
 
         for datatype_input, datatype_label in [(list, list)]:
@@ -1947,7 +1944,7 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
                 self._compare_assert_with_collator_on_datatypes(
@@ -1957,13 +1954,16 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                     datatype_input,
                     "labels",
                     datatype_label,
-                    ignore_label=True
+                    ignore_label=True,
                 )
 
     def test_whole_world_masking_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
 
-        features_base = [{"input_ids": list(range(10)), "labels": (1,)}, {"input_ids": list(range(10)), "labels": (1,)}]
+        features_base = [
+            {"input_ids": list(range(10)), "labels": (1,)},
+            {"input_ids": list(range(10)), "labels": (1,)},
+        ]
         whole_word_masking_collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
 
         for datatype_input, datatype_label in [(list, list), (np.array, np.array)]:
@@ -1974,7 +1974,7 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                 datatype_input,
                 "labels",
                 datatype_label,
-                ignore_label=True
+                ignore_label=True,
             )
 
     def test_permutation_language_modelling_collator_immutability(self):

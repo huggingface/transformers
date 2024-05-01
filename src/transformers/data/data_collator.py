@@ -606,42 +606,47 @@ class DataCollatorForSeq2Seq:
 
         # we have to pad the labels manually as we cannot rely on `tokenizer.pad` and we need them to be of the same length to return tensors
         no_padding = self.padding is False or self.padding == PaddingStrategy.DO_NOT_PAD
-        if no_padding:
-            if isinstance(features[0][label_name], list):
-                batch["labels"] = [label for label in labels]
+        if labels is not None:
+            if no_padding:
+                if isinstance(features[0][label_name], list):
+                    batch["labels"] = list(labels)
+                else:
+                    batch["labels"] = [np.concatenate([label, []]) for label in labels]
             else:
-                batch["labels"] = [np.concatenate([label, []]) for label in labels]
-        elif labels is not None and not no_padding:
-            max_padding = self.padding == PaddingStrategy.MAX_LENGTH and self.max_length is not None
-            max_label_length = max(len(l) for l in labels) if not max_padding else self.max_length
-            if self.pad_to_multiple_of is not None:
-                max_label_length = (
+                max_padding = self.padding == PaddingStrategy.MAX_LENGTH and self.max_length is not None
+                max_label_length = max(len(l) for l in labels) if not max_padding else self.max_length
+                if self.pad_to_multiple_of is not None:
+                    max_label_length = (
                         (max_label_length + self.pad_to_multiple_of - 1)
                         // self.pad_to_multiple_of
                         * self.pad_to_multiple_of
-                )
+                    )
 
-            padding_side = self.tokenizer.padding_side
-            if isinstance(features[0][label_name], list):
-                batch["labels"] = [
-                    label + [self.label_pad_token_id] * (max_label_length - len(label)) if padding_side == "right"
-                    else [self.label_pad_token_id] * (max_label_length - len(label)) + label
-                    for label in labels
-                ]
-            else:
-                batch["labels"] = [
-                    np.concatenate([label, [self.label_pad_token_id] * (max_label_length - len(label))]) if padding_side == "right"
-                    else np.concatenate([[self.label_pad_token_id] * (max_label_length - len(label)), label])
-                    for label in labels
-                ]
+                padding_side = self.tokenizer.padding_side
+                if isinstance(features[0][label_name], list):
+                    batch["labels"] = [
+                        label + [self.label_pad_token_id] * (max_label_length - len(label))
+                        if padding_side == "right"
+                        else [self.label_pad_token_id] * (max_label_length - len(label)) + label
+                        for label in labels
+                    ]
+                else:
+                    batch["labels"] = [
+                        np.concatenate([label, [self.label_pad_token_id] * (max_label_length - len(label))])
+                        if padding_side == "right"
+                        else np.concatenate([[self.label_pad_token_id] * (max_label_length - len(label)), label])
+                        for label in labels
+                    ]
 
         # reintroduce side effects via tokenizer that return respective datatypes for the `return_tensors` argument
-        if not batch.get("labels", None) is None:
+        if batch.get("labels", None) is not None:
             if return_tensors == "pt":
                 import torch
+
                 batch["labels"] = torch.tensor(batch["labels"], dtype=torch.int64)
             elif return_tensors == "tf":
                 import tensorflow as tf
+
                 batch["labels"] = tf.constant(batch["labels"], dtype=tf.int64)
             else:
                 batch["labels"] = np.array(batch["labels"], dtype=np.int64)
