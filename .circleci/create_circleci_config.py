@@ -165,7 +165,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split --split-by=timings test-results) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split --split-by=timings test-results/junit.xml) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
