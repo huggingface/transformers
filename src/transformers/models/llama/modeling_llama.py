@@ -650,6 +650,8 @@ class LlamaSdpaAttention(LlamaAttention):
         # In case static cache is used, it is an instance attribute.
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
+        if q_len > 1:
+            self._seen_tokens = 0
         self._seen_tokens += key_states.shape[-2]
 
         if past_key_value is not None:
