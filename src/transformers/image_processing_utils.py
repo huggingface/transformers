@@ -601,7 +601,7 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     def __call__(self, images, **kwargs) -> BatchFeature:
         """Preprocess an image or a batch of images."""
-        self._validate_inputs(**kwargs)
+        self._validate_inputs(images, **kwargs)
         return self.preprocess(images, **kwargs)
 
     def _validate_preprocess_arguments(self, **kwargs):
@@ -628,6 +628,19 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     def _validate_inputs(self, images, segmentation_maps=None, **kwargs):
         """Check if the arguments passed to the preprocess method are valid."""
+        return_tensors = kwargs.pop("return_tensors", None)
+        input_data_format = kwargs.pop("input_data_format", None)
+        data_format = kwargs.pop("data_format", None)
+
+        if return_tensors not in (None, "np", "pt", "tf", "jax"):
+            raise ValueError("return_tensors should be one of 'np', 'pt', 'tf', 'jax'.")
+
+        if input_data_format not in (None, ChannelDimension.FIRST, ChannelDimension.LAST):
+            raise ValueError("input_data_format should be one of 'channels_first' or 'channels_last'.")
+
+        if data_format not in (None, ChannelDimension.FIRST, ChannelDimension.LAST):
+            raise ValueError("data_format should be one of 'channels_first' or 'channels_last'.")
+
         if self._valid_processor_keys is None:
             raise ValueError("Each image processor must define self._valid_processor_keys")
 
