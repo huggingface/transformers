@@ -15,7 +15,7 @@
 """ BLIP-2 model configuration"""
 
 import os
-from typing import Union
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
@@ -350,7 +350,7 @@ class Blip2Config(PretrainedConfig):
         cls,
         vision_config: Blip2VisionConfig,
         qformer_config: Blip2QFormerConfig,
-        text_config: PretrainedConfig,
+        text_config: Optional[PretrainedConfig] = None,
         **kwargs,
     ):
         r"""
@@ -364,26 +364,6 @@ class Blip2Config(PretrainedConfig):
         return cls(
             vision_config=vision_config.to_dict(),
             qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict(),
-            **kwargs,
-        )
-
-    @classmethod
-    def from_vision_qformer_configs(
-        cls,
-        vision_config: Blip2VisionConfig,
-        qformer_config: Blip2QFormerConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision and Q-Former model configurations.
-
-        Returns:
-            [`Blip2Config`]: An instance of a configuration object
-        """
-
-        return cls(
-            vision_config=vision_config.to_dict(),
-            qformer_config=qformer_config.to_dict(),
+            text_config=text_config.to_dict() if text_config is not None else None,
             **kwargs,
         )
