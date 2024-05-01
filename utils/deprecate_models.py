@@ -117,7 +117,6 @@ def extract_model_info(model):
 
 
 def move_model_files_to_deprecated(model):
-    # FIXME - more robust path handling
     model_path = REPO_PATH / f"src/transformers/models/{model}"
     deprecated_model_path = REPO_PATH / f"src/transformers/models/deprecated/{model}"
 
@@ -146,8 +145,10 @@ def update_alphabetic_ordering_of_imports(filelines):
 
     new_init_file_lines = []
     else_block = []
-    # Sub-blocks are lines that are indented at the same level and are part. Blocks are separated by a blank line or comment
-    # This is to ensure that we maintain the same structure as the original file
+    # To make sure we keep the same structure and the original file, we need to keep track of grouped lines, for example
+    # lines of code which fall under a comment. When we sort alphabetically, we sort at the sub-block level.
+    # Sub-blocks are lines that are indented at the same level. Sub-blocks are separated by a blank line or comment.
+    # For example:
 
     # a = 1 - sub_block 1
     # b = 2 - sub_block 1
@@ -157,7 +158,7 @@ def update_alphabetic_ordering_of_imports(filelines):
     # d = 4 - sub_block 3
     sub_block = []
 
-    # Indented block is a block of lines have an indented section at the same level
+    # Indented block is a series of lines have an indented section at the same level in a sub-block
     # a = 1          - sub_block 1
     # b = [          - sub_block 1, indented_block 1
     #     1, 2, 3    - sub_block 1, indented_block 1
@@ -173,8 +174,11 @@ def update_alphabetic_ordering_of_imports(filelines):
     #            - maybe_else_block 2 (not part of else block)
     # c = 3
     maybe_else_block = []
+    # Track if we're in the else block or the base imports. These are the sections we're interested in, as they
+    # require manual sorting
     in_else_block = False
     in_base_imports = False
+    # Tracker for the indent level of the current indented block to know when we've exited it
     open_indent_level = -1
 
     # We iterate over each line in the init file to create a new init file
@@ -191,7 +195,7 @@ def update_alphabetic_ordering_of_imports(filelines):
             new_init_file_lines.append(line)
             in_else_block = True
 
-        # Not in the else block - just add the line directly
+        # Not in the else block or base imports block - just add the line directly
         elif not (in_else_block or in_base_imports):
             new_init_file_lines.append(line)
 
@@ -235,6 +239,7 @@ def update_alphabetic_ordering_of_imports(filelines):
                 maybe_else_block = []
 
             elif line.endswith(("[", "(")) and not indented_block:
+                # We're at the start of an indented block
                 indented_block.append(line)
                 open_indent_level = indent
 
@@ -242,7 +247,7 @@ def update_alphabetic_ordering_of_imports(filelines):
                 if indent == open_indent_level and (
                     line.strip().endswith(("]", ")")) or line.strip().startswith(("],", "),"))
                 ):
-                    # We're at the end of the indented block
+                    # We're at the end of the indented block. Add the block to the sub-block and reset it
                     indented_block.append(line)
                     sub_block.append("\n".join(indented_block))
                     indented_block = []
@@ -257,21 +262,24 @@ def update_alphabetic_ordering_of_imports(filelines):
                     else_block.append(sub_block)
                     sub_block = []
 
+                # When adding else blocks to the file lines, we sort each sub-block, but not between sub-blocks.
+                # Comment lines are added directly to make sure they stay between the sub-blocks they're associated with
+                # structure: [sub_block1, comment1, sub_block2, comment2, ...]
                 else_block.append(line)
 
             else:
                 sub_block.append(line)
 
-    # Add the last sub-block
+    # Add the last sub-block if it exists
     if else_block:
         # Sort the sub-blocks in the else block
         else_block = [
             [sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks]
             for sub_blocks in else_block
         ]
-
         # Flatten the lists so they're all lines
         else_block = [line for sub_block in else_block for line in sub_block]
+        new_init_file_lines.extend(else_block)
 
     return "\n".join(new_init_file_lines)
 
@@ -355,6 +363,40 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
         f.write("\n".join(new_file_lines))
 
 
+def add_models_to_deprecated_models_in_config_auto(models):
+    """
+    Add the models to the DEPRECATED_MODELS list in configuration_auto.py and sorts the list
+    to be in alphabetical order.
+    """
+    filepath = REPO_PATH / "src/transformers/models/auto/configuration_auto.py"
+    with open(filepath, "r") as f:
+        config_auto = f.read()
+
+    new_file_lines = []
+    deprecated_models_list = []
+    in_deprecated_models = False
+    for line in config_auto.split("\n"):
+        if line.strip() == "DEPRECATED_MODELS = [":
+            in_deprecated_models = True
+            new_file_lines.append(line)
+        elif in_deprecated_models and line.strip() == "]":
+            in_deprecated_models = False
+            # Add the new models to deprecated models list
+            deprecated_models_list.extend([f'"{model},"' for model in models])
+            # Sort so they're in alphabetical order in the file
+            deprecated_models_list = sorted(deprecated_models_list)
+            new_file_lines.extend(deprecated_models_list)
+            # Make sure we still have the closing bracket
+            new_file_lines.append(line)
+        elif in_deprecated_models:
+            deprecated_models_list.append(line.strip())
+        else:
+            new_file_lines.append(line)
+
+    with open(filepath, "w") as f:
+        f.write("\n".join(new_file_lines))
+
+
 def deprecate_models(models):
     # Get model info
     skipped_models = []
@@ -379,7 +421,8 @@ def deprecate_models(models):
     # Filter out skipped models
     models = [model for model in models if model not in skipped_models]
 
-    print(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
+    if skipped_models:
+        print(f"Skipped models: {skipped_models} as the model doc or model path could not be found.")
     print(f"Models to deprecate: {models}")
 
     # Remove model config classes from config check
@@ -416,6 +459,10 @@ def deprecate_models(models):
     remove_model_references_from_file(
         "utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line
     )
+
+    # Add models to DEPRECATED_MODELS in the configuration_auto.py
+    print("Adding models to DEPRECATED_MODELS in configuration_auto.py")
+    add_models_to_deprecated_models_in_config_auto(models)
 
 
 if __name__ == "__main__":
