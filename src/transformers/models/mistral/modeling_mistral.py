@@ -90,6 +90,7 @@ class MistralRMSNorm(nn.Module):
     def reset_parameters(self):
         self.weight.data.fill_(1.0)
 
+
 # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mistral
 # TODO @Arthur no longer copied from LLama after static cache
 class MistralRotaryEmbedding(nn.Module):
@@ -105,6 +106,11 @@ class MistralRotaryEmbedding(nn.Module):
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
             seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def reset_parameters(self):
+        self._set_cos_sin_cache(
+            seq_len=self.max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
