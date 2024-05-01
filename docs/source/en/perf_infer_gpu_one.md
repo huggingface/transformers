@@ -193,7 +193,6 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
 * [CogVLM](https://huggingface.co/docs/transformers/model_doc/cogvlm#transformers.CogVLMModel)
-* [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)

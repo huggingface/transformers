@@ -179,6 +179,7 @@ class CogvlmVisionAttention(nn.Module):
         return output
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->CogvlmVision
 class CogvlmVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -187,11 +188,11 @@ class CogvlmVisionMLP(nn.Module):
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation_fn(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class CogvlmVisionTransformerLayer(nn.Module):
@@ -845,13 +846,13 @@ class CogvlmModel(CogvlmPreTrainedModel):
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
