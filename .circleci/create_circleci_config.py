@@ -198,6 +198,7 @@ class CircleCIJob:
 
         steps.append({"store_test_results": {"path": "test-results"}})
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
+        steps.append({"store_artifacts": {"path": "test-results/junit.xml"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
 
         job["steps"] = steps
