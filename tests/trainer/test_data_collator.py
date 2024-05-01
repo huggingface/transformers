@@ -468,8 +468,6 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                     self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
                 elif isinstance(original[i][key], torch.Tensor):
                     self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
-                elif isinstance(original[i][key], tf.Tensor):
-                    self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
                 else:
                     self.assertEqual(original[i][key], batch[i][key])
 
@@ -1105,8 +1103,6 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         for i in range(len(original)):
             for key in original[i].keys():
                 if isinstance(original[i][key], np.ndarray):
-                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
-                elif isinstance(original[i][key], torch.Tensor):
                     self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
                 elif isinstance(original[i][key], tf.Tensor):
                     self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
@@ -1756,10 +1752,6 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
             for key in original[i].keys():
                 if isinstance(original[i][key], np.ndarray):
                     self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
-                elif isinstance(original[i][key], torch.Tensor):
-                    self.assertEqual(original[i][key].tolist(), batch[i][key].tolist())
-                elif isinstance(original[i][key], tf.Tensor):
-                    self.assertEqual(original[i][key].numpy().tolist(), batch[i][key].numpy().tolist())
                 else:
                     self.assertEqual(original[i][key], batch[i][key])
 
