@@ -19,7 +19,7 @@ import os
 import random
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
+import glob
 import yaml
 
 
@@ -145,9 +145,7 @@ class CircleCIJob:
                 if test.endswith(".py"):
                     expanded_tests.append(test)
                 elif test == "tests/models":
-                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
-                    for x in os.listdir(test):
-                        expanded_tests.extend([os.path.join(test, x,y)for y in os.listdir(os.path.join(test, x))  if "test" in y  ])
+                    expanded_tests.extend(glob.glob("tests/models/**/test*.py", recursive=True))
                 elif test == "tests/pipelines":
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
