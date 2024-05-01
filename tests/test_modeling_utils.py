@@ -1000,6 +1000,22 @@ class ModelUtilsTest(TestCasePlus):
             all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
             self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
             self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+            
+        # test no model file found when use_safetensors=None (default when safetensors package available)
+        with self.assertRaises(OSError) as missing_model_file_error:
+            BertModel.from_pretrained("hf-internal-testing/config-no-model")
+        
+        self.assertTrue("does not appear to have a file named pytorch_model.bin, model.safetensors," in str(missing_model_file_error.exception))
+        
+        with self.assertRaises(OSError) as missing_model_file_error:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                    f.write("{}")
+                f.close()
+                BertModel.from_pretrained(tmp_dir)
+
+        self.assertTrue("Error no file named pytorch_model.bin, model.safetensors", str(missing_model_file_error.exception))
+        
 
     @require_safetensors
     def test_safetensors_save_and_load(self):
