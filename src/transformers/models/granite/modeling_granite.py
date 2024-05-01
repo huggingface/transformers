@@ -799,7 +799,10 @@ class GraniteModel(GranitePreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            if attention_mask.dim() == 2:
+                position_ids = self._get_position_ids(attention_mask, past_seen_tokens, query_length, key_length, inputs_embeds.device)
+            else:
+                assert position_ids is not None, "position_ids should be passed explicitely with 4D mask"
 
         if self.position_embedding_type == PositionEmbeddingType.learned_absolute:
             inputs_embeds = inputs_embeds + self.wpe(position_ids)
@@ -846,6 +849,21 @@ class GraniteModel(GranitePreTrainedModel):
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
         )
+
+    def _get_position_ids(
+        self, attention_mask: torch.Tensor, past_length: int, query_length: int, key_length: int, device: torch.device
+    ) -> torch.Tensor:
+        if attention_mask is not None and len(attention_mask.shape) == 2:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 0)
+            if past_length > 0:
+                position_ids = position_ids[:, past_length:key_length:]
+        else:
+            position_ids = torch.arange(past_length, key_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).view(-1, query_length)
+
+        return position_ids
 
     def _get_rope_cos_sin(
         self, key_length: int, position_ids: torch.Tensor, dtype: torch.dtype, device: torch.device
