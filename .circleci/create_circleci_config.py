@@ -148,8 +148,6 @@ class CircleCIJob:
                     expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
                 else:
                     expanded_tests.append(test)
-            # Avoid long tests always being collected together
-            random.shuffle(expanded_tests)
             tests = " ".join(expanded_tests)
 
             # Each executor to run ~10 tests
@@ -163,9 +161,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-    
-            # grep -oE "class[[:space:]]+[[:alnum:]_]+[[:space:]]*\(" tests/models/llama/test_modeling_llama.py | grep 'Test' | sed -E 's/class[[:space:]]+([[:alnum:]_]+)[[:space:]]*\(/\1/'
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=timings) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
@@ -233,7 +229,7 @@ torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=8,
+    parallelism=16,
     pytest_num_workers=16
 )
 
