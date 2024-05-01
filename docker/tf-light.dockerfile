@@ -6,5 +6,6 @@ RUN apt-get install -y  cmake
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools tensorflow_probability "protobuf==3.20.3"
 RUN uv pip install  --upgrade --no-cache-dir "transformers[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]"
+RUN uv pip install --no-cache-dir  "protobuf==3.20.3"
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean
