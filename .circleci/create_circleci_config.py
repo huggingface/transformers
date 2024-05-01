@@ -229,7 +229,7 @@ torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=4,
+    parallelism=16,
     pytest_num_workers=16
 )
 
@@ -239,7 +239,7 @@ tf_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
     pytest_num_workers=16,
-    parallelism=4
+    parallelism=16
 )
 
 
@@ -247,7 +247,7 @@ flax_job = CircleCIJob(
     "flax",
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=4,
+    parallelism=16,
     pytest_num_workers=16
 )
 
