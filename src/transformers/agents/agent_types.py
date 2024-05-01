@@ -211,7 +211,7 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText}
+INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText}
 
 if is_vision_available():
     INSTANCE_TYPE_MAPPING[PIL.Image.Image] = AgentImage

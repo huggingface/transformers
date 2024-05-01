@@ -41,7 +41,7 @@ class CustomFormatter(logging.Formatter):
     green = "\x1b[32;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(message)s" # "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+    format = "%(message)s"  # "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
 
     FORMATS = {
         logging.DEBUG: grey + format + reset,
@@ -441,7 +441,6 @@ class CodeAgent(Agent):
             "\nNo tool description template is defined for this tokenizer - using a default tool description template."
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
-    
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -594,7 +593,6 @@ class ReactAgent(Agent):
                 self.logs[-1]["error"] = e
             finally:
                 iteration += 1
-
 
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
@@ -789,7 +787,6 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
-                print("Final answer in step:", result, type(result))
                 self.logger.warning(result)
                 return result
         return None

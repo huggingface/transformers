@@ -19,6 +19,7 @@ import uuid
 
 from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent
 from transformers.agents.default_tools import CalculatorTool
+from transformers.agents.agent_types import AgentText
 
 
 def get_new_path(suffix="") -> str:
@@ -85,6 +86,7 @@ class AgentTests(unittest.TestCase):
     def test_fake_react_json_agent(self):
         agent = ReactJsonAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
+        assert isinstance(output, AgentText)
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
         assert agent.logs[1]["observation"] == "7.2904"
@@ -103,6 +105,7 @@ Action:
     def test_fake_react_code_agent(self):
         agent = ReactCodeAgent(tools=[CalculatorTool()], llm_engine=fake_react_code_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
+        assert isinstance(output, AgentText)
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
         assert agent.logs[1]["observation"] == "\n12.511648652635412"
@@ -114,6 +117,7 @@ Action:
     def test_fake_code_agent(self):
         agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm_oneshot)
         output = agent.run("What is 2 multiplied by 3.6452?")
+        assert isinstance(output, AgentText)
         assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox(self):

@@ -26,9 +26,10 @@ from huggingface_hub import hf_hub_download, list_spaces
 from .. import requires_backends
 from ..utils import is_offline_mode
 from ..utils.import_utils import is_numexpr_available
+from .agent_types import INSTANCE_TYPE_MAPPING, AgentType
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
-from .agent_types import handle_agent_inputs, AgentType, INSTANCE_TYPE_MAPPING
+
 
 if is_numexpr_available():
     import numexpr

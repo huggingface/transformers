@@ -17,8 +17,8 @@ import unittest
 
 import pytest
 
-from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
 from transformers.agents.default_tools import BASE_PYTHON_TOOLS
+from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
 
 
 # Fake function we will use as tool
@@ -239,8 +239,19 @@ for block in text_block:
         code = "i = 0\nwhile i < 3:\n    i -= 1\ni"
         with pytest.raises(InterpretorError) as e:
             evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert "iterations in While loop exceeded" in str(e)
 
     def test_generator(self):
         code = "a = [1, 2, 3, 4, 5]; b = (i**2 for i in a); list(b)"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == [1, 4, 9, 16, 25]
+
+    def test_boolops(self):
+        code="""if (not (a > b and a > c)) or d > e:
+    best_city = "Brooklyn"
+else:
+    best_city = "Manhattan"
+    best_city
+    """
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={"a": 1, "b": 2, "c": 3, "d": 4, "e": 5})
+        assert result == "Brooklyn"

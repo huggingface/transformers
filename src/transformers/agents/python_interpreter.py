@@ -63,11 +63,11 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
             line_result = evaluate_ast(node, state, tools)
         except InterpretorError as e:
             msg = f"You tried to execute the following code:\n{code}\n"
-            msg += f"\nEvaluation stopped at line '{node}' because of the following error:\n{e}"
+            msg += f"You got these outputs:\n{state['print_outputs']}\n"
+            msg += f"Evaluation stopped at line '{node}' because of the following error:\n{e}"
             raise InterpretorError(msg)
         if line_result is not None:
             result = line_result
-            print(type(result))
 
     return result
 
@@ -106,7 +106,6 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
             The functions that may be called during the evaluation. Any call to another function will fail with an
             `InterpretorError`.
     """
-
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
         # We return the variable assigned as it may be used to determine the final result.
@@ -366,12 +365,11 @@ def evaluate_assign(assign, state, tools):
         else:
             state[var_names[0].id] = result
     else:
-        if len(result)!= len(var_names):
+        if len(result) != len(var_names):
             raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
         for var_name, r in zip(var_names, result):
             state[var_name.id] = r
     return result
-
 
 
 def evaluate_call(call, state, tools):
@@ -400,7 +398,6 @@ def evaluate_call(call, state, tools):
         args = [evaluate_ast(arg, state, tools) for arg in call.args]
         kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
         output = func(*args, **kwargs)
-        print("Function output type:", type(output))
 
         # store logs of print statements
         if func_name == "print":
@@ -474,7 +471,15 @@ def evaluate_condition(condition, state, tools):
 
 def evaluate_if(if_statement, state, tools):
     result = None
-    if evaluate_condition(if_statement.test, state, tools):
+    test_statement = if_statement.test
+    if isinstance(test_statement, ast.BoolOp):
+        test_result = evaluate_boolop(test_statement, state, tools)
+    elif isinstance(test_statement, ast.Compare):
+        test_result = evaluate_condition(test_statement, state, tools)
+    else:
+        raise InterpretorError(f"Operator not supported in 'if/else' conditions: {test_statement.__class__.__name__}")
+
+    if test_result:
         for line in if_statement.body:
             line_result = evaluate_ast(line, state, tools)
             if line_result is not None:
