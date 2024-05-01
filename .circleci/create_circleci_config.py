@@ -41,7 +41,7 @@ class EmptyJob:
 
     def to_dict(self):
         return {
-            "working_directory": "~/transformers",
+            "working_directory": "",
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps":["checkout"],
         }
@@ -61,7 +61,7 @@ class CircleCIJob:
     pytest_options: Dict[str, Any] = None
     resource_class: Optional[str] = "2xlarge"
     tests_to_run: Optional[List[str]] = None
-    working_directory: str = "~/transformers"
+    working_directory: str = ""
     # This should be only used for doctest job!
     command_timeout: Optional[int] = None
 
@@ -102,12 +102,12 @@ class CircleCIJob:
             job["parallelism"] = self.parallelism
         steps = [
             "checkout",
-            {"attach_workspace": {"at": "~/transformers/test_preparation"}},
+            {"attach_workspace": {"at": "test_preparation"}},
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}})
         steps.append({"run":{"name":"Show biggest libraries","command":"""dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ printf("%.5f GB %s\\n",$1/1024/1024, $2)}' || true"""}})
-        steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
+        steps.append({"store_artifacts": {"path": "installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
@@ -168,8 +168,8 @@ class CircleCIJob:
             command = 'TESTS=$(circleci tests split tests.txt --split-by=timings --timings-type=classname) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
-            steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
-            steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
+            steps.append({"store_artifacts": {"path": "tests.txt"}})
+            steps.append({"store_artifacts": {"path": "splitted_tests.txt"}})
 
             test_command = ""
             if self.command_timeout:
@@ -192,14 +192,14 @@ class CircleCIJob:
             test_command = f"({test_command} | tee tests_output.txt)"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --skip"}})
-        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --fail"}})
-        steps.append({"run": {"name": "Errors",        "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file ~/transformers/tests_output.txt --errors"}})
+        steps.append({"run": {"name": "Skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}})
+        steps.append({"run": {"name": "Failed tests",  "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}})
+        steps.append({"run": {"name": "Errors",        "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}})
 
         steps.append({"store_test_results": {"path": "test-results"}})
-        steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
+        steps.append({"store_artifacts": {"path": "tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "test-results/junit.xml"}})
-        steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
+        steps.append({"store_artifacts": {"path": "reports"}})
 
         job["steps"] = steps
         return job
