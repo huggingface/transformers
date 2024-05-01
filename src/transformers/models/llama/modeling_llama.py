@@ -670,8 +670,9 @@ class LlamaSdpaAttention(LlamaAttention):
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        _key_states = key_states[:, :, :cache_position[-1] + 1, :]
-        _value_states = value_states[:, :, :cache_position[-1] + 1, :]
+        length = int(cache_position[-1] + 1)
+        _key_states = key_states[:, :, :length, :]
+        _value_states = value_states[:, :, :length, :]
         _attn_mask = causal_mask[:, :, :, :key_states.size()[2]] if causal_mask is not None else causal_mask
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
