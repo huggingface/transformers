@@ -53,7 +53,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=main
+            REF=${{ github.ref_name }}
           push: true
           tags: huggingface/transformers-all-latest-gpu-push-ci
 
