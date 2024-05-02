@@ -1133,6 +1133,7 @@ _import_structure = {
         "BitsAndBytesConfig",
         "EetqConfig",
         "GPTQConfig",
+        "HqqConfig",
         "QuantoConfig",
     ],
 }
@@ -6099,6 +6100,7 @@ if TYPE_CHECKING:
         BitsAndBytesConfig,
         EetqConfig,
         GPTQConfig,
+        HqqConfig,
         QuantoConfig,
     )
 
