@@ -327,8 +327,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        image_to_overwrite = torch.full(
+            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+        )
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
@@ -435,6 +438,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
+                inputs_embeds = inputs_embeds.to(image_features.dtype)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )

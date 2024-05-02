@@ -84,14 +84,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             }
             if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
-                    """
-                    Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
-                    quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules
-                    in 32-bit, you need to set `llm_int8_enable_fp32_cpu_offload=True` and pass a custom `device_map` to
-                    `from_pretrained`. Check
-                    https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                    for more details.
-                    """
+                    "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
+                    "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
+                    "in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to "
+                    "`from_pretrained`. Check "
+                    "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
+                    "for more details. "
                 )
 
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.39.0"):

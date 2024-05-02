@@ -355,11 +355,18 @@ class ElectraSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
+ELECTRA_SELF_ATTENTION_CLASSES = {
+    "eager": ElectraSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra,BERT->ELECTRA
 class ElectraAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ElectraSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ELECTRA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ElectraSelfOutput(config)
         self.pruned_heads = set()
 

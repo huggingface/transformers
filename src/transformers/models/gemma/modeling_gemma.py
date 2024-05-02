@@ -174,15 +174,13 @@ class GemmaMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         if config.hidden_activation is None:
             logger.warning_once(
-                "Gemma's activation function should be approximate GeLU and not exact GeLU.\n"
-                "Changing the activation function to `gelu_pytorch_tanh`."
-                f"if you want to use the legacy `{config.hidden_act}`, "
-                f"edit the `model.config` to set `hidden_activation={config.hidden_act}` "
-                "  instead of `hidden_act`. See https://github.com/huggingface/transformers/pull/29402 for more details."
+                "`config.hidden_act` is ignored, you should use `config.hidden_activation` instead.\n"
+                "Gemma's activation function will be set to `gelu_pytorch_tanh`. Please, use\n"
+                "`config.hidden_activation` if you want to override this behaviour.\n"
+                "See https://github.com/huggingface/transformers/pull/29402 for more details."
             )
-            hidden_activation = "gelu_pytorch_tanh"
-        else:
-            hidden_activation = config.hidden_activation
+            config.hidden_activation = "gelu_pytorch_tanh"
+        hidden_activation = config.hidden_activation
         self.act_fn = ACT2FN[hidden_activation]
 
     def forward(self, x):
@@ -332,6 +330,11 @@ class GemmaFlashAttention2(GemmaAttention):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -570,15 +573,17 @@ class GemmaSdpaAttention(GemmaAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        # In case we are not compiling, we may set `causal_mask` to None, which is required to dispatch to SDPA's Flash Attention 2 backend, rather
-        # relying on the `is_causal` argument.
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+        # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=causal_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -613,7 +618,7 @@ class GemmaDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -714,23 +719,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        for layer in self.model.layers:
-            weights = layer.self_attn.o_proj.weight
-            layer.self_attn.past_key_value = cache_cls(
-                self.config, max_batch_size, max_cache_len, device=weights.device, dtype=weights.dtype
-            )
-
-    def _reset_cache(self):
-        for layer in self.model.layers:
-            layer.self_attn.past_key_value = None
 
 
 GEMMA_INPUTS_DOCSTRING = r"""
@@ -848,7 +836,7 @@ class GemmaModel(GemmaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -877,13 +865,11 @@ class GemmaModel(GemmaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -891,7 +877,7 @@ class GemmaModel(GemmaPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -950,7 +936,9 @@ class GemmaModel(GemmaPreTrainedModel):
         next_cache = None
         if use_cache:
             next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
+                next_decoder_cache.to_legacy_cache()
+                if isinstance(next_decoder_cache, DynamicCache)
+                else next_decoder_cache
             )
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
@@ -966,7 +954,7 @@ class GemmaModel(GemmaPreTrainedModel):
         attention_mask: torch.Tensor,
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
-        past_seen_tokens: int,
+        past_key_values: Cache,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
@@ -978,20 +966,26 @@ class GemmaModel(GemmaPreTrainedModel):
                 return attention_mask
             return None
 
-        if self.config._attn_implementation == "sdpa":
-            # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument,
-            # in order to dispatch on Flash Attention 2.
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        if self.config._attn_implementation == "sdpa" and not using_static_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask, inputs_embeds=input_tensor, past_key_values_length=past_seen_tokens
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
             ):
                 return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
-        if hasattr(getattr(self.layers[0], "self_attn", {}), "past_key_value"):  # static cache
-            target_length = self.config.max_position_embeddings
-        else:  # dynamic cache
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
             target_length = (
                 attention_mask.shape[-1]
                 if isinstance(attention_mask, torch.Tensor)
@@ -1013,6 +1007,10 @@ class GemmaModel(GemmaPreTrainedModel):
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
                 if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    logger.warning_once(
+                        "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
+                        "transformers v4.42.0"
+                    )
                     offset = cache_position[0]
                 else:
                     offset = 0
@@ -1074,7 +1072,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1166,13 +1164,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         use_cache=True,
         **kwargs,
     ):
-        # With static cache, the `past_key_values` is None
-        # TODO joao: standardize interface for the different Cache classes and remove of this if
-        has_static_cache = False
-        if past_key_values is None:
-            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
-            has_static_cache = past_key_values is not None
-
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -1190,8 +1181,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
@@ -1230,9 +1220,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
         elif use_cache:
             cache_position = cache_position[-input_length:]
-
-        if has_static_cache:
-            past_key_values = None
 
         model_inputs.update(
             {
@@ -1293,7 +1280,7 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

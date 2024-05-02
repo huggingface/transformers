@@ -357,6 +357,9 @@ class TrainingArguments:
             Note that when this is true, you won't be able to resume training from checkpoint.
             This enables you to save storage by not storing the optimizer, scheduler & rng state.
             You can only load the model using `from_pretrained` with this option set to `True`.
+        restore_callback_states_from_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to restore the callback states from the checkpoint. If `True`, will override
+            callbacks passed to the `Trainer` if they exist in the checkpoint."
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -949,6 +952,12 @@ class TrainingArguments:
                 "This enables you to save storage by not storing the optimizer, scheduler & rng state."
                 "You can only load the model using from_pretrained with this option set to True."
             )
+        },
+    )
+    restore_callback_states_from_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to restore the callback states from the checkpoint. If `True`, will override callbacks passed to the `Trainer` if they exist in the checkpoint."
         },
     )
     no_cuda: bool = field(
@@ -1831,12 +1840,12 @@ class TrainingArguments:
                         )
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
 
-            sync_module_states = self.fsdp_config.get("sync_module_states", "true")
-            cpu_ram_efficient_loading = self.fsdp_config.get("cpu_ram_efficient_loading", "false")
+            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
+            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
 
-            if str(sync_module_states).lower() == "false" and str(cpu_ram_efficient_loading).lower() == "true":
+            if sync_module_states == "false" and cpu_ram_efficient_loading == "true":
                 # In this case, all the processes except the main process would have random weights leading
                 # to unexpected behaviour during training, thus throwing error here to prevent it.
                 raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
@@ -1844,7 +1853,7 @@ class TrainingArguments:
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
