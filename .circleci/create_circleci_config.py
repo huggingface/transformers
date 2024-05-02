@@ -163,7 +163,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split tests.txt --split-by=filesize) && echo $TESTS > splitted_tests.txt'
+            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "tests.txt"}})
@@ -231,7 +231,7 @@ torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=4,
+    parallelism=3,
     pytest_num_workers=16
 )
 
@@ -241,7 +241,7 @@ tf_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
     install_steps=["uv venv", "uv pip install -e."],
     pytest_num_workers=16,
-    parallelism=4
+    parallelism=3
 )
 
 
@@ -249,7 +249,7 @@ flax_job = CircleCIJob(
     "flax",
     docker_image=[{"image":"huggingface/transformers-jax-light"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=4,
+    parallelism=3,
     pytest_num_workers=16
 )
 
