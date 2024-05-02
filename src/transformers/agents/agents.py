@@ -511,8 +511,8 @@ class CodeAgent(Agent):
         if len(kwargs) > 0:
             self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
 
-        self.logger.warn("=====New task=====")
-        self.logger.warn(self.task)
+        self.logger.warning("=====New task=====")
+        self.logger.warning(self.task)
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
         self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
@@ -545,8 +545,8 @@ class CodeAgent(Agent):
 
         # Execute
         try:
-            self.logger.warn("\n\n====Executing the code below:====")
-            self.logger.warn(code_action)
+            self.logger.warning("\n\n====Executing the code below:====")
+            self.logger.warning(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
             self.logger.info(self.state["print_outputs"])
@@ -726,7 +726,7 @@ class ReactJsonAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
-        self.logger.warn(f"Calling tool: {tool_name} with arguments: {arguments}")
+        self.logger.warning(f"Calling tool: {tool_name} with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
                 answer = arguments["answer"]
@@ -820,7 +820,7 @@ class ReactCodeAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
-        self.logger.warn(f"====Agent is executing the code below:\n{code_action}\n====")
+        self.logger.warning(f"====Agent is executing the code below:\n{code_action}\n====")
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(code_action, available_tools, state=self.state)

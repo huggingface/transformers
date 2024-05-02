@@ -212,11 +212,14 @@ class AgentAudio(AgentType):
             return self._path
 
 
-AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio}
-
-if is_vision_available():
-    INSTANCE_TYPE_MAPPING[ImageType] = AgentImage
+AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
+INSTANCE_TYPE_MAPPING = {
+    str: AgentText,
+    float: AgentText,
+    int: AgentText,
+    Tensor: AgentAudio,
+    ImageType: AgentImage
+}
 
 
 def handle_agent_inputs(*args, **kwargs):

@@ -13,12 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import unittest
+from pathlib import Path
+from PIL import Image
+import torch
 
 from transformers import load_tool
+from transformers.testing_utils import get_tests_dir
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentType
 
 from .test_tools_common import ToolTesterMixin
-
 
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
@@ -27,9 +32,35 @@ class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool(**self.inputs)
+        result = self.tool("Final answer")
         self.assertEqual(result, "Final answer")
 
     def test_exact_match_kwarg(self):
         result = self.tool(answer=self.inputs["answer"])
         self.assertEqual(result, "Final answer")
+
+    def create_inputs(self):
+        inputs_text = {"answer": "Text input"}
+        inputs_image = {"answer": Image.open(
+            Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"
+        ).resize((512, 512))}
+        inputs_audio = {"answer": torch.Tensor(np.ones(3000))}
+        return {
+            "text": inputs_text,
+            "image": inputs_image,
+            "audio": inputs_audio
+        }
+
+    def test_agent_type_output(self):
+        inputs = self.create_inputs()
+        for input_type, input in inputs.items():
+            output = self.tool(**input)
+            agent_type = AGENT_TYPE_MAPPING[input_type]
+            self.assertTrue(isinstance(output, agent_type))
+
+    def test_agent_types_inputs(self):
+        inputs = self.create_inputs()
+        for input_type, input in inputs.items():
+            output = self.tool(**input)
+            agent_type = AGENT_TYPE_MAPPING[input_type]
+            self.assertTrue(isinstance(output, agent_type))

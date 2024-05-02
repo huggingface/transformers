@@ -29,7 +29,7 @@ if is_vision_available():
     from PIL import Image
 
 
-AUTHORIZED_TYPES = ["text", "audio", "image"]
+AUTHORIZED_TYPES = ["text", "audio", "image", "any"]
 
 
 def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
