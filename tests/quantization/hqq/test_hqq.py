@@ -55,8 +55,8 @@ def cleanup():
 
 def check_hqqlayer(test_module, hqq_layer, batch_size=1, context_size=1024):
     # Test HQQ layer
-    W_r = hqq_layer.dequantize()
-    x = (
+    W_dequant = hqq_layer.dequantize()  # Reconstructed weights
+    inputs = (
         torch.randn(
             (batch_size, context_size, hqq_layer.meta["shape"][1]),
             device=hqq_layer.device,
@@ -65,10 +65,10 @@ def check_hqqlayer(test_module, hqq_layer, batch_size=1, context_size=1024):
         / 10.0
     )
     with torch.no_grad():
-        y = hqq_layer(x)
-    test_module.assertEqual(y.shape[-1], W_r.shape[0])
-    test_module.assertEqual(y.dtype, hqq_layer.compute_dtype)
-    del W_r, x, y
+        outputs = hqq_layer(inputs)
+    test_module.assertEqual(outputs.shape[-1], W_dequant.shape[0])
+    test_module.assertEqual(outputs.dtype, hqq_layer.compute_dtype)
+    del W_dequant, inputs, outputs
     cleanup()
 
 
