@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url ht
 RUN git lfs install
 
 RUN uv pip install --no-cache-dir pypi-kenlm
-RUN pip install --no-cache-dir  "git+https://github.com/user/transformers.git@${REF}#egg=transformers[tf-cpu,sklearn,sentencepiece,vision,testing]"
+RUN pip install --no-cache-dir  "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[tf-cpu,sklearn,sentencepiece,vision,testing]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" librosa
 
 
