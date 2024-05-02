@@ -184,7 +184,8 @@ _deps = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
     "uvicorn",
-    "pytest-rich"
+    "pytest-rich",
+    "tensorflow-probability"
 ]
 
 
@@ -258,7 +259,7 @@ extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachip
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list("keras", "tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("keras", "tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp", "tensorflow-probability")
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
