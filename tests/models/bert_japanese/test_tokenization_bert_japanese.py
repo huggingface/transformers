@@ -187,7 +187,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れた", "\u3000", "。"],
+            ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れた", "\\␣", "。"],
         )
 
     def test_mecab_tokenizer_no_normalize(self):
@@ -282,7 +282,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_sudachi_tokenizer_no_normalize(self):
         tokenizer = SudachiTokenizer(normalize_text=False, sudachi_dict_type="core")
 
-        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "ｱｯﾌﾟﾙ", "ストア", "で", "iPhone", "８", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", "\u3000", "。", " ", " "])  # fmt: skip
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "ｱｯﾌﾟﾙ", "ストア", "で", "iPhone", "８", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", "\\␣", "。", " ", " "])  # fmt: skip
 
     @require_sudachi_projection
     def test_sudachi_tokenizer_trim_whitespace(self):
@@ -319,19 +319,19 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = JumanppTokenizer()
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iPhone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"])  # fmt: skip
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iPhone", "8", "\\␣", "が", "\\␣", "\\␣", "\\␣", "発売", "さ", "れた", "\\␣", "。"])  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_lower(self):
         tokenizer = JumanppTokenizer(do_lower_case=True)
 
-        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iphone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iphone", "8", "\\␣", "が", "\\␣", "\\␣", "\\␣", "発売", "さ", "れた", "\\␣", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_no_normalize(self):
         tokenizer = JumanppTokenizer(normalize_text=False)
 
-        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\\␣", "が", "\\␣", "\\␣", "\\␣", "発売", "さ", "れた", "\\␣", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_trim_whitespace(self):
