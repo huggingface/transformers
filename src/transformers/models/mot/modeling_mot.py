@@ -373,7 +373,7 @@ class MoTMLP(nn.Module):
 
         self.d_model: int = config.n_embd
         self.d_ff: int = config.n_inner if inner_dim is None else inner_dim
-        self.n_experts: int = config.n_head
+        self.n_experts: int = config.n_expert
         self.group_size: int = config.group_size
         self.sparsity_dim: int = sparsity_dim
         self.expert_size: int = config.expert_size
