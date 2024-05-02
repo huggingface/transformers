@@ -463,7 +463,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         segment_size = model_inputs.pop("segment_size", None)
         is_last = model_inputs.pop("is_last")
 
-        if stride is not None and segment_size is not None: 
+        if stride is not None and segment_size is not None:
             raise ValueError("segment_size must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
