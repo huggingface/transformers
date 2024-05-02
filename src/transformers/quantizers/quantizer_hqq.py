@@ -150,9 +150,8 @@ class HQQHfQuantizer(HfQuantizer):
                 del_orig=True,
             )
 
-            if hqq_layer.bias is not None:
-                if isinstance(hqq_layer.bias, torch.Tensor):
-                    hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+            if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+                hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
 
             if self.using_multi_gpu:
                 hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
