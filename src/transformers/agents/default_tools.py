@@ -23,9 +23,7 @@ from typing import Dict
 
 from huggingface_hub import hf_hub_download, list_spaces
 
-from .. import requires_backends
 from ..utils import is_offline_mode
-from .agent_types import INSTANCE_TYPE_MAPPING, AgentType
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
 
@@ -174,16 +172,5 @@ class FinalAnswerTool(Tool):
     inputs = {"answer": {"type": "text", "description": "The final answer to the problem"}}
     output_type = "any"
 
-    def __call__(self, *args, **kwargs):
-        if args:
-            output = args[0]
-        elif kwargs:
-            output = next(iter(kwargs.values()))
-        if isinstance(output, AgentType):
-            return output
-        else:
-            # If the class does not have defined output, then we map according to the type
-            for _k, _v in INSTANCE_TYPE_MAPPING.items():
-                if isinstance(output, _k):
-                    return _v(output)
-            return AgentType(output)
+    def forward(self, final_answer):
+        return final_answer

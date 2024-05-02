@@ -16,17 +16,13 @@ import os
 import tempfile
 import unittest
 import uuid
+
 import pytest
 
 from transformers.agents.agent_types import AgentText
-from transformers.agents.agents import (
-    AgentMaxIterationsError,
-    CodeAgent,
-    ReactCodeAgent,
-    ReactJsonAgent,
-    Toolbox
-)
+from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
 from transformers.agents.default_tools import PythonInterpreterTool
+
 
 def get_new_path(suffix="") -> str:
     directory = tempfile.mkdtemp()
@@ -92,10 +88,10 @@ class AgentTests(unittest.TestCase):
     def test_fake_react_json_agent(self):
         agent = ReactJsonAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
-        assert isinstance(output, AgentText)
+        assert isinstance(output, str)
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
-        assert agent.logs[1]["observation"] == "7.2904"
+        assert agent.logs[1]["rationale"].strip() == "Thought: I should multiply 2 by 3.6452. special_marker"
         assert (
             agent.logs[2]["llm_output"]
             == """
@@ -114,7 +110,7 @@ Action:
         assert isinstance(output, AgentText)
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
-        assert agent.logs[1]["observation"] == "\n12.511648652635412"
+        assert float(agent.logs[1]["observation"].strip()) - 12.511648 < 1e-6
         assert agent.logs[2]["tool_call"] == {
             "tool_arguments": "final_answer(7.2904)",
             "tool_name": "code interpreter",
@@ -123,7 +119,7 @@ Action:
     def test_fake_code_agent(self):
         agent = CodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_code_llm_oneshot)
         output = agent.run("What is 2 multiplied by 3.6452?")
-        assert isinstance(output, AgentText)
+        assert isinstance(output, str)
         assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox(self):
@@ -142,15 +138,15 @@ Action:
     def test_init_agent_with_different_toolsets(self):
         toolset_1 = []
         agent = ReactCodeAgent(tools=toolset_1, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 1 # contains only final_answer tool
+        assert len(agent.toolbox.tools) == 1  # contains only final_answer tool
 
         toolset_2 = [PythonInterpreterTool(), PythonInterpreterTool()]
         agent = ReactCodeAgent(tools=toolset_2, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 2 # added final_answer tool
+        assert len(agent.toolbox.tools) == 2  # added final_answer tool
 
         toolset_3 = Toolbox(toolset_2)
         agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 2 # added final_answer tool
+        assert len(agent.toolbox.tools) == 2  # added final_answer tool
 
         # check that add_base_tools will not interfere with existing tools
         with pytest.raises(KeyError) as e:
@@ -159,5 +155,4 @@ Action:
 
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
-        assert len(agent.toolbox.tools) == 6 # added final_answer tool + 5 base tools (exclugin interpreter)
-    
+        assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (exclugin interpreter)

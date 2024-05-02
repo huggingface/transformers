@@ -154,7 +154,6 @@ class Toolbox:
             self.add_base_tools()
         self._load_tools_if_needed()
 
-
     def add_base_tools(self, add_python_interpreter: bool = False):
         global _tools_are_initialized
         global HUGGINGFACE_DEFAULT_TOOLS
@@ -165,7 +164,6 @@ class Toolbox:
             if tool.name != "python_interpreter" or add_python_interpreter:
                 self.add_tool(tool)
         self._load_tools_if_needed()
-
 
     @property
     def tools(self) -> Dict[str, Tool]:
@@ -316,7 +314,7 @@ class Agent:
         if isinstance(tools, Toolbox):
             self._toolbox = tools
             if add_base_tools:
-                self._toolbox.add_base_tools(add_python_interpreter = (self.__class__==ReactJsonAgent))
+                self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
