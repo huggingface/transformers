@@ -170,6 +170,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -290,6 +291,10 @@ def is_cv2_available():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_hqq_available():
+    return _hqq_available
 
 
 def get_torch_version():
