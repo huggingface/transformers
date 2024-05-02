@@ -155,14 +155,15 @@ class Toolbox:
         self._load_tools_if_needed()
 
 
-    def add_base_tools(self):
+    def add_base_tools(self, add_python_interpreter: bool = False):
         global _tools_are_initialized
         global HUGGINGFACE_DEFAULT_TOOLS
         if not _tools_are_initialized:
             HUGGINGFACE_DEFAULT_TOOLS = setup_default_tools(logger)
             _tools_are_initialized = True
         for tool in HUGGINGFACE_DEFAULT_TOOLS.values():
-            self.add_tool(tool)
+            if tool.name != "python_interpreter" or add_python_interpreter:
+                self.add_tool(tool)
         self._load_tools_if_needed()
 
 
@@ -315,7 +316,7 @@ class Agent:
         if isinstance(tools, Toolbox):
             self._toolbox = tools
             if add_base_tools:
-                self._toolbox.add_base_tools()
+                self._toolbox.add_base_tools(add_python_interpreter = (self.__class__==ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 

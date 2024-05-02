@@ -152,7 +152,12 @@ Action:
         agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm)
         assert len(agent.toolbox.tools) == 2 # added final_answer tool
 
+        # check that add_base_tools will not interfere with existing tools
         with pytest.raises(KeyError) as e:
-            agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm, add_base_tools=True)
+            agent = ReactJsonAgent(tools=toolset_3, llm_engine=fake_react_json_llm, add_base_tools=True)
         assert "python_interpreter already exists in the toolbox" in str(e)
+
+        # check that python_interpreter base tool does not get added to code agents
+        agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
+        assert len(agent.toolbox.tools) == 6 # added final_answer tool + 5 base tools (exclugin interpreter)
     

@@ -243,9 +243,9 @@ For maximum flexibility, you can overwrite the whole system prompt template by p
 
 ```python
 from transformers import ReactJsonAgent
-from transformers.agents import CalculatorTool
+from transformers.agents import PythonInterpreterTool
 
-agent = ReactJsonAgent(tools = [CalculatorTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJsonAgent(tools = [PythonInterpreterTool()], system_prompt="{your_custom_prompt}")
 ```
 
 > [!WARNING]
@@ -256,7 +256,7 @@ of the available tools.
 
 A tool is an atomic function to be used by an agent.
 
-You can for instance check the [~CalculatorTool]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
+You can for instance check the [~PythonInterpreterTool]: it has a name, a description, input descriptions, an output type, and a `__call__` method to perform the action.
 
 When the agent is initialized, the tool attributes are used to generate a tool description which is baked into the agent's system prompt. This lets the agent know which tools it can use and why.
 
@@ -269,8 +269,7 @@ Transformers comes with a default toolbox for empowering agents, that you can ad
 - **Speech to text**: given an audio recording of a person talking, transcribe the speech into text ([Whisper](./model_doc/whisper))
 - **Text to speech**: convert text to speech ([SpeechT5](./model_doc/speecht5))
 - **Translation**: translates a given sentence from source language to target language.
-- **Calculator**: performs simple calculations.
-- **Python code evaluator**: runs your the LLM generated Python code in a secure environment.
+- **Python code interpreter**: runs your the LLM generated Python code in a secure environment. This tool will only be added to [~ReactJsonAgent] if you use `add_base_tools=True`, since code-based tools can already execute Python code
 
 
 You can manually use a tool by calling the [`load_tool`] function and a task to perform.
