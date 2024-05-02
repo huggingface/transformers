@@ -125,10 +125,11 @@ caption = image_captioner(image)
 Above example were using tools that might not exist for you. You only have acces to those Tools:
 <<tool_names>>
 
-Now Begin!
-Remember to make sure that variables you use are all defined. <<additional_args>>
-Be sure to provide an 'Code:' sequence before the code, else you will get an, error.
+Remember to make sure that variables you use are all defined.
+Be sure to provide a 'Code:' sequence before the code, else you will get an error.
+DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
+Now Begin!
 """
 
 
@@ -257,8 +258,7 @@ Action:
   "action_input": "Shanghai"
 }
 
-Now begin! <<additional_args>>
-
+Now begin!
 """
 
 
@@ -370,11 +370,11 @@ Above example were using tools that might not exist for you. You only have acces
 <<tool_names>>
 You also can perform computations in the python code you generate.
 
-Always provide a 'Thought:' and an 'Code:\n```py' sequence ending with '```<end_code>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
+Always provide a 'Thought:' and a 'Code:\n```py' sequence ending with '```<end_code>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
 
 Remember to not perform too many operations in a single code block! You should split the task into intermediate code blocks. Then use one single print() at the end of each step to save the intermediate result. Then use final_answer() to return the final result.
 
 DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
-Now Begin! <<additional_args>>
+Now Begin!
 """

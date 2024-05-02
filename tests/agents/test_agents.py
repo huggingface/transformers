@@ -38,7 +38,7 @@ Thought: I should multiply 2 by 3.6452. special_marker
 Action:
 {
     "action": "python_interpreter",
-    "action_input": {"expression": "2*3.6452"}
+    "action_input": {"code": "2*3.6452"}
 }
 """
     else:  # We're at step 2
@@ -85,12 +85,19 @@ print(result)
 
 
 class AgentTests(unittest.TestCase):
+    def test_fake_code_agent(self):
+        agent = CodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_code_llm_oneshot)
+        output = agent.run("What is 2 multiplied by 3.6452?")
+        assert isinstance(output, str)
+        assert output == "7.2904"
+
     def test_fake_react_json_agent(self):
         agent = ReactJsonAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert isinstance(output, str)
         assert output == "7.2904"
         assert agent.logs[0]["task"] == "What is 2 multiplied by 3.6452?"
+        assert agent.logs[1]["observation"] == "7.2904"
         assert agent.logs[1]["rationale"].strip() == "Thought: I should multiply 2 by 3.6452. special_marker"
         assert (
             agent.logs[2]["llm_output"]
@@ -115,12 +122,6 @@ Action:
             "tool_arguments": "final_answer(7.2904)",
             "tool_name": "code interpreter",
         }
-
-    def test_fake_code_agent(self):
-        agent = CodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_code_llm_oneshot)
-        output = agent.run("What is 2 multiplied by 3.6452?")
-        assert isinstance(output, str)
-        assert output == "7.2904"
 
     def test_setup_agent_with_empty_toolbox(self):
         ReactJsonAgent(llm_engine=fake_react_json_llm, tools=[])
@@ -155,4 +156,4 @@ Action:
 
         # check that python_interpreter base tool does not get added to code agents
         agent = ReactCodeAgent(tools=[], llm_engine=fake_react_code_llm, add_base_tools=True)
-        assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (exclugin interpreter)
+        assert len(agent.toolbox.tools) == 6  # added final_answer tool + 5 base tools (excluding interpreter)

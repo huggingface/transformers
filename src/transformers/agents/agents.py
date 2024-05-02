@@ -244,16 +244,6 @@ def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_descri
     return prompt
 
 
-def add_additional_args_if_needed(prompt: str, additional_args: Dict[str, Any]) -> str:
-    if "<<additional_args>>" in prompt and len(additional_args) > 0:
-        return prompt.replace(
-            "<<additional_args>>",
-            f"You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(additional_args)}.",
-        )
-    else:
-        return prompt.replace("<<additional_args>>", "")
-
-
 class AgentError(Exception):
     """Base class for other agent-related exceptions"""
 
@@ -512,12 +502,22 @@ class CodeAgent(Agent):
         """
         # Run LLM
         self.state = kwargs.copy()
-        self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
+
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
+
+
+        self.logger.warn("=====New task=====")
+        self.logger.warn(self.task)
+        self.logger.debug("System prompt is as follows:")
+        self.logger.debug(self.system_prompt)
+        self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
 
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
         task_message = {
             "role": MessageRole.USER,
-            "content": "Task: " + task,
+            "content": "Task: " + self.task,
         }
         self.prompt = [prompt_message, task_message]
         self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
@@ -542,8 +542,8 @@ class CodeAgent(Agent):
 
         # Execute
         try:
-            self.logger.info("\n\n====Executing the code below:====")
-            self.logger.info(code_action)
+            self.logger.warn("\n\n====Executing the code below:====")
+            self.logger.warn(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
             self.logger.info(self.state["print_outputs"])
@@ -614,10 +614,13 @@ class ReactAgent(Agent):
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
+    
         self.state = kwargs.copy()
-        self.system_prompt = add_additional_args_if_needed(self.system_prompt, self.state)
 
         self.task = task
+        if len(kwargs) > 0:
+            self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
+
         self.logger.warn("=====New task=====")
         self.logger.warn(self.task)
         self.logger.debug("System prompt is as follows:")
