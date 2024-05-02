@@ -223,7 +223,6 @@ class HqqConfig(QuantizationConfigMixin):
         axis: int = 0,
         dynamic_config: Optional[dict] = None,
         skip_modules: List[str] = ["lm_head"],
-        show_progress: bool = True,
         **kwargs,
     ):
         if is_hqq_available():
@@ -251,7 +250,6 @@ class HqqConfig(QuantizationConfigMixin):
 
         self.quant_method = QuantizationMethod.HQQ
         self.skip_modules = skip_modules
-        self.show_progress = show_progress
 
         self.post_init()
 
