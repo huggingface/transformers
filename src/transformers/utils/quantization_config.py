@@ -202,7 +202,8 @@ class HqqConfig(QuantizationConfigMixin):
         axis (`int`, *optional*, defaults to 0):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
-            Parameters for dynamic configuration. The key is the name tag of the layer.
+            Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
+            If set, each layer specified by its id will use its dedicated quantization configuration.
         skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
             List of `nn.Linear` layers to skip.
         show_progress ('bool', *optional*, defaults to `True`):
