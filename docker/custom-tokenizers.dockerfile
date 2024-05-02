@@ -15,7 +15,7 @@ RUN make install
 
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu 
-RUN uv pip install  --no-cache-dir "transformers[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]" unidic unidic-lite 
+RUN uv pip install  --no-cache-dir "transformers[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]" unidic unidic-lite spacy 
 RUN python3 -m unidic download
 RUN pip uninstall -y transformers
 
