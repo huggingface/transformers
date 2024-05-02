@@ -103,7 +103,7 @@ class HQQHfQuantizer(HfQuantizer):
     ) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
 
-        return type(module) is torch.nn.Linear
+        return isinstance(module, torch.nn.Linear)
 
     def create_quantized_param(
         self,
