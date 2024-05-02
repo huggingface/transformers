@@ -42,7 +42,7 @@ class CustomFormatter(logging.Formatter):
     green = "\x1b[32;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(message)s"  # "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+    format = "%(message)s"
 
     FORMATS = {
         logging.DEBUG: grey + format + reset,
@@ -78,7 +78,7 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
             f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}, decoding failed at '{json_blob[place-4:place+5]}'."
         )
     except Exception as e:
-        raise ValueError(f"Error in parsing the JSON blob: {e}.")
+        raise ValueError("Error in parsing the JSON blob.") from e
 
 
 def parse_code_blob(code_blob: str) -> str:
@@ -120,7 +120,7 @@ def parse_text_tool_call(text: str) -> Tuple[str, Union[str, Dict[str, str]]]:
         return tool_name.strip().replace('"', "").replace("\\", ""), tool_input
     except Exception as e:
         raise ValueError(
-            f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repet your previous incorrect tool call."
+            f"Error in parsing the text tool call: {e}. Be sure to provide the correct format. DO NOT repeat your previous incorrect tool call."
         )
 
 
@@ -440,7 +440,7 @@ class Agent:
 
     def run(self, **kwargs):
         """To be implemented in the child class"""
-        pass
+        raise NotImplementedError
 
 
 class CodeAgent(Agent):

@@ -213,13 +213,7 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {
-    str: AgentText,
-    float: AgentText,
-    int: AgentText,
-    Tensor: AgentAudio,
-    ImageType: AgentImage
-}
+INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio, ImageType: AgentImage}
 
 
 def handle_agent_inputs(*args, **kwargs):
