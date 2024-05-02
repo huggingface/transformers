@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...activations import get_activation as get_base_activation
-from ...cache_utils import DynamicCache, Cache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -19,7 +20,6 @@ from ...utils import (
     logging,
 )
 from .configuration_granite import GraniteConfig
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 
 
 if is_flash_attn_2_available():
@@ -434,7 +434,7 @@ class GraniteFlashAttention2(GraniteAttention):
             attn_output = flash_attn_func(
                 query,
                 key,
-                value, 
+                value,
                 dropout_p=self.attn_pdrop if self.training else 0,
                 softmax_scale=self.attention_multiplier if self.scale_attn_weights else 1,
                 causal=True,
@@ -766,7 +766,7 @@ class GraniteModel(GranitePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple]:
         # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -810,7 +810,9 @@ class GraniteModel(GranitePreTrainedModel):
 
         if position_ids is None:
             if attention_mask.dim() == 2:
-                position_ids = self._get_position_ids(attention_mask, past_seen_tokens, query_length, key_length, inputs_embeds.device)
+                position_ids = self._get_position_ids(
+                    attention_mask, past_seen_tokens, query_length, key_length, inputs_embeds.device
+                )
             else:
                 assert position_ids is not None, "position_ids should be passed explicitely with 4D mask"
 
@@ -944,9 +946,9 @@ class GraniteModel(GranitePreTrainedModel):
                     offset = 0
                 mask_shape = attention_mask.shape
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
+                causal_mask[: mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]] = (
+                    mask_slice
+                )
 
         if (
             self.config._attn_implementation == "sdpa"
