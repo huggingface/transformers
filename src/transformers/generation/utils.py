@@ -2027,7 +2027,8 @@ class GenerationMixin:
                     )
                 elif (
                     not isinstance(past_key_values[0], (tuple, torch.Tensor))
-                    or past_key_values[0][0].shape[0] != batch_size
+                    or (isinstance(past_key_values[0][0], torch.Tensor) and past_key_values[0][0].shape[0] != batch_size)
+                    or (isinstance(past_key_values[0][0], list) and past_key_values[0][0][0].shape[0] != batch_size)
                 ):
                     raise ValueError(
                         f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
@@ -2062,6 +2063,7 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
             past = model_kwargs["past_key_values"]
@@ -2069,10 +2071,18 @@ class GenerationMixin:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
-                    if sequential:
-                        items.append(item.repeat_interleave(1, dim=0))
+                    # New cache structure
+                    if isinstance(item, list):
+                        if sequential:
+                            items.append([x.repeat_interleave(1, dim=0) for x in item])
+                        else:
+                            items.append([x.repeat_interleave(top_k, dim=0) for x in item])
+                    # Old cache structure
                     else:
-                        items.append(item.repeat_interleave(top_k, dim=0))
+                        if sequential:
+                            items.append(item.repeat_interleave(1, dim=0))
+                        else:
+                            items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(tuple(items))
             if not isinstance(past, DynamicCache):
                 past = tuple(new_key_values)
@@ -2080,6 +2090,7 @@ class GenerationMixin:
                 for layer_idx in range(len(new_key_values)):
                     past.key_cache[layer_idx] = new_key_values[layer_idx][0]
                     past.value_cache[layer_idx] = new_key_values[layer_idx][1]
+
             model_kwargs["past_key_values"] = past
 
             if sequential:
@@ -2108,6 +2119,11 @@ class GenerationMixin:
                     output_hidden_states=True,
                     output_attentions=output_attentions,
                 )
+
+            # This is essential to avoid having a last reference to the big past K-V and double the necesary memory
+            # in the next loop
+            del next_model_inputs
+
             # name is different for encoder-decoder and decoder-only models
             if self.config.is_encoder_decoder:
                 next_hidden = outputs.decoder_hidden_states[-1]
@@ -2117,7 +2133,6 @@ class GenerationMixin:
                 full_hidden_states = outputs.hidden_states
 
             logits = outputs.logits[:, -1, :]
-
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
@@ -2125,6 +2140,9 @@ class GenerationMixin:
             # introduce (noticeable) slowdowns on single-device runs.
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
             selected_idx = selected_idx.to("cpu")
+
+            # This will be used instead of the previous inneficient torch.stack(torch.split())
+            augmented_idx = torch.tensor([x + i*top_k for i, x in enumerate(selected_idx)])
 
             # prepare for the next step: (1) next token_id; (2) past_key_values; (3) last_hidden_states for computing
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
@@ -2160,8 +2178,14 @@ class GenerationMixin:
                     items = []
                     # item is either the key or the value matrix
                     for item in layer:
-                        item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
-                        item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
+                        if isinstance(item, list):
+                            # This is equivalent to the old torch.stack(torch.split(x, top_k, dim=0))[range(batch_size), selected_idx, ...]
+                            # but much more efficient
+                            item = [x[augmented_idx, :, :, :] for x in item]
+                        else:
+                            # item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
+                            # item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
+                            item = item[augmented_idx, :, :, :]
                         items += [item]
                     new_key_values += [items]
 
@@ -2236,7 +2260,10 @@ class GenerationMixin:
                 for layer in model_kwargs["past_key_values"]:
                     layer_past_key_values = []
                     for item in layer:
-                        layer_past_key_values.append(item[..., :-1, :])
+                        if isinstance(item, list):
+                            layer_past_key_values.append([x[..., :-1, :] for x in item])
+                        else:
+                            layer_past_key_values.append(item[..., :-1, :])
                     past_key_values.append(tuple(layer_past_key_values))
                 model_kwargs["past_key_values"] = tuple(past_key_values)
 
