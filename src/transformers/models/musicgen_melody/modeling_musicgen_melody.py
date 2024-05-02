@@ -1586,8 +1586,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         batch_size = input_ids.shape[0] // self.num_codebooks
 
         # 4. Define other model kwargs
-        model_kwargs["output_attentions"] = generation_config.output_attentions
-        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
@@ -1684,10 +1682,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -1710,10 +1705,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -2318,12 +2310,13 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str] = None,
-        guidance_scale: Optional[float] = None,
+        model_input_name: Optional[str],
+        generation_config: GenerationConfig,
     ) -> Dict[str, Any]:
         encoder_hidden_states = None
         # attention mask is consumed once to produce text conditional hidden states through the text encoder
         encoder_attention_mask = model_kwargs.pop("attention_mask")
+        guidance_scale = generation_config.guidance_scale
 
         # 1. condition on text
         if inputs_tensor is not None:
@@ -2346,6 +2339,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 encoder_kwargs = {
                     argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
                 }
+            encoder_kwargs["output_attentions"] = generation_config.output_attentions
+            encoder_kwargs["output_hidden_states"] = generation_config.output_hidden_states
 
             # make sure that encoder returns `ModelOutput`
             model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
@@ -2572,8 +2567,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         batch_size = inputs_tensor.shape[0]
 
         # 4. Define other model kwargs
-        model_kwargs["output_attentions"] = generation_config.output_attentions
-        model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
@@ -2585,10 +2578,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         if "encoder_hidden_states" not in model_kwargs:
             # encoder_hidden_states are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_hidden_states_kwargs_for_generation(
-                inputs_tensor,
-                model_kwargs,
-                model_input_name,
-                guidance_scale=generation_config.guidance_scale,
+                inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 
         # 5. Prepare `input_ids` which will be used for auto-regressive generation
@@ -2684,14 +2674,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self.greedy_search(
+            outputs = self._greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -2710,15 +2697,12 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             )
 
             # 12. run sample
-            outputs = self.sample(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
