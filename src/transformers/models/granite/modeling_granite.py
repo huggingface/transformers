@@ -14,11 +14,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    add_start_docstrings,
-    is_flash_attn_2_available,
-    logging,
-)
+from ...utils import add_start_docstrings, is_flash_attn_2_available, logging
 from .configuration_granite import GraniteConfig
 
 
