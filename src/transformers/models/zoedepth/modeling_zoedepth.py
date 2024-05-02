@@ -522,12 +522,14 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
 
 
 class ZoeDepthSeedBinRegressor(nn.Module):
-    def __init__(self, in_features, n_bins=16, mlp_dim=256, min_depth=1e-3, max_depth=10):
-        """Bin center regressor network. Bin centers are bounded on (min_depth, max_depth) interval.
+    def __init__(self, config, n_bins=16, mlp_dim=256, min_depth=1e-3, max_depth=10):
+        """Bin center regressor network.
+
+        Can be "normed" or "unnormed". If "normed", bin centers are bounded on the (min_depth, max_depth) interval.
 
         Args:
-            in_features (`int`):
-                Number of input channels.
+            config (`int`):
+                Model configuration.
             n_bins (`int`, *optional*, defaults to 16):
                 Number of bin centers.
             mlp_dim (`int`, *optional*, defaults to 256):
@@ -538,57 +540,16 @@ class ZoeDepthSeedBinRegressor(nn.Module):
                 Max depth value.
         """
         super().__init__()
+
+        self.in_features = config.bottleneck_features
+        self.bin_centers_type = config.bin_centers_type
         self.min_depth = min_depth
         self.max_depth = max_depth
 
-        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
+        self.conv1 = nn.Conv2d(self.in_features, mlp_dim, 1, 1, 0)
         self.act1 = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(mlp_dim, n_bins, 1, 1, 0)
-        self.act2 = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        """
-        Returns tensor of bin_width vectors (centers). One vector b for every pixel
-        """
-        x = self.conv1(x)
-        x = self.act1(x)
-        x = self.conv2(x)
-        bins = self.act2(x)
-
-        bins = bins + 1e-3
-        bin_widths_normed = bins / bins.sum(dim=1, keepdim=True)
-        # shape (batch_size, num_channels, height, width)
-        bin_widths = (self.max_depth - self.min_depth) * bin_widths_normed
-        # pad has the form (left, right, top, bottom, front, back)
-        bin_widths = nn.functional.pad(bin_widths, (0, 0, 0, 0, 1, 0), mode="constant", value=self.min_depth)
-        # shape (batch_size, num_channels, height, width)
-        bin_edges = torch.cumsum(bin_widths, dim=1)
-
-        bin_centers = 0.5 * (bin_edges[:, :-1, ...] + bin_edges[:, 1:, ...])
-        return bin_widths_normed, bin_centers
-
-
-class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
-    def __init__(self, in_features, n_bins=16, mlp_dim=256, min_depth=1e-3, max_depth=10):
-        """Bin center regressor network. Bin centers are unbounded
-
-        Args:
-            in_features (`int`):
-                Number of input channels.
-            n_bins (`int`, *optional*, defaults to 16):
-                Number of bin centers.
-            mlp_dim (`int`, *optional*, defaults to 256):
-                Hidden dimension.
-            min_depth (`float`, *optional*):
-                Not used. (for compatibility with SeedBinRegressor)
-            max_depth (`float`, *optional*):
-                Not used. (for compatibility with SeedBinRegressor)
-        """
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
-        self.act1 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(mlp_dim, n_bins, 1, 1, 0)
-        self.act2 = nn.Softplus()
+        self.act2 = nn.ReLU(inplace=True) if self.bin_centers_type == "normed" else nn.Softplus()
 
     def forward(self, x):
         """
@@ -599,7 +560,21 @@ class ZoeDepthSeedBinRegressorUnnormed(nn.Module):
         x = self.conv2(x)
         bin_centers = self.act2(x)
 
-        return bin_centers, bin_centers
+        if self.bin_centers_type == "normed":
+            bin_centers = bin_centers + 1e-3
+            bin_widths_normed = bin_centers / bin_centers.sum(dim=1, keepdim=True)
+            # shape (batch_size, num_channels, height, width)
+            bin_widths = (self.max_depth - self.min_depth) * bin_widths_normed
+            # pad has the form (left, right, top, bottom, front, back)
+            bin_widths = nn.functional.pad(bin_widths, (0, 0, 0, 0, 1, 0), mode="constant", value=self.min_depth)
+            # shape (batch_size, num_channels, height, width)
+            bin_edges = torch.cumsum(bin_widths, dim=1)
+
+            bin_centers = 0.5 * (bin_edges[:, :-1, ...] + bin_edges[:, 1:, ...])
+            return bin_widths_normed, bin_centers
+
+        else:
+            return bin_centers, bin_centers
 
 
 @torch.jit.script
@@ -918,9 +893,8 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
 
         bin_embedding_dim = config.bin_embedding_dim
         n_attractors = config.num_attractors
-
-        self.bin_centers_type = config.bin_centers_type
         self.bin_configurations = config.bin_configurations
+        self.bin_centers_type = config.bin_centers_type
 
         # Bottleneck convolution
         bottleneck_features = config.bottleneck_features
@@ -933,18 +907,15 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
 
         # Regressor and attractor
         if self.bin_centers_type == "normed":
-            SeedBinRegressorLayer = ZoeDepthSeedBinRegressor
             Attractor = ZoeDepthAttractorLayer
         elif self.bin_centers_type == "softplus":
-            SeedBinRegressorLayer = ZoeDepthSeedBinRegressorUnnormed
             Attractor = ZoeDepthAttractorLayerUnnormed
-
         # We have bins for each bin configuration
         # Create a map (ModuleDict) of 'name' -> seed_bin_regressor
         self.seed_bin_regressors = nn.ModuleDict(
             {
-                conf["name"]: SeedBinRegressorLayer(
-                    bottleneck_features,
+                conf["name"]: ZoeDepthSeedBinRegressor(
+                    config,
                     n_bins=conf["n_bins"],
                     mlp_dim=bin_embedding_dim // 2,
                     min_depth=conf["min_depth"],
@@ -1071,14 +1042,12 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
 
         # Regressor and attractor
         if self.bin_centers_type == "normed":
-            SeedBinRegressorLayer = ZoeDepthSeedBinRegressor
             Attractor = ZoeDepthAttractorLayer
         elif self.bin_centers_type == "softplus":
-            SeedBinRegressorLayer = ZoeDepthSeedBinRegressorUnnormed
             Attractor = ZoeDepthAttractorLayerUnnormed
 
-        self.seed_bin_regressor = SeedBinRegressorLayer(
-            bottleneck_features, n_bins=n_bins, min_depth=min_depth, max_depth=max_depth
+        self.seed_bin_regressor = ZoeDepthSeedBinRegressor(
+            config, n_bins=n_bins, min_depth=min_depth, max_depth=max_depth
         )
         self.seed_projector = ZoeDepthProjector(bottleneck_features, bin_embedding_dim)
 
