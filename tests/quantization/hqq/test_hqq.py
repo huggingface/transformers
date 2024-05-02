@@ -109,7 +109,7 @@ class HQQTest(unittest.TestCase):
         Simple LLM model testing fp16
         """
         compute_dtype = torch.float16
-        device = "cuda:0"
+        torch_device = "cuda:0"
         cache_dir = None
 
         quant_config = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0)
@@ -118,7 +118,7 @@ class HQQTest(unittest.TestCase):
             model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
-            device=device,
+            device=torch_device,
             cache_dir=cache_dir,
         )
 
@@ -130,7 +130,7 @@ class HQQTest(unittest.TestCase):
         Simple LLM model testing bfp16 with meta-data offloading
         """
         compute_dtype = torch.bfloat16
-        device = "cuda:0"
+        torch_device = "cuda:0"
         cache_dir = None
 
         q4_config = {"nbits": 4, "group_size": 64, "quant_zero": False, "quant_scale": False}
@@ -151,7 +151,7 @@ class HQQTest(unittest.TestCase):
             model_id=model_id,
             quant_config=quant_config,
             compute_dtype=compute_dtype,
-            device=device,
+            device=torch_device,
             cache_dir=cache_dir,
         )
 
