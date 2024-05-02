@@ -62,7 +62,7 @@ if is_tensorflow_probability_available():
     try:
         import tensorflow_probability as tfp
 
-        # On the first call, check whether a compatible version of TensorFlow is installed
+        # On the first call, check whether a compatible version of TensorFlow is instalTFTapasMainLayerled
         # TensorFlow Probability depends on a recent stable release of TensorFlow
         n = tfp.distributions.Normal(loc=0.0, scale=1.0)
     except ImportError:
@@ -839,7 +839,6 @@ class TFTapasMainLayer(keras.layers.Layer):
     config_class = TapasConfig
 
     def __init__(self, config: TapasConfig, add_pooling_layer: bool = True, **kwargs):
-        requires_backends(self, "tensorflow_probability")
         super().__init__(**kwargs)
 
         self.config = config
