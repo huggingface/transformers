@@ -125,7 +125,7 @@ _deps = [
     "jieba",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
-    "keras<2.16",
+    "keras>2.9,<2.16",
     "keras-nlp>=0.3.1",
     "librosa",
     "nltk",
@@ -168,8 +168,8 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>=2.6,<2.16",
-    "tensorflow>=2.6,<2.16",
+    "tensorflow-cpu>2.9,<2.16",
+    "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
     "tf2onnx",
     "timeout-decorator",
