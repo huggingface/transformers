@@ -762,10 +762,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         array = np.concatenate(
             [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
         )
-        pipe = pipeline(
-            model="openai/whisper-large-v3",
-            return_timestamps=True,
-        )
+        pipe = pipeline(model="openai/whisper-large-v3", return_timestamps=True)
 
         output = pipe(ds[40]["audio"])
         self.assertDictEqual(

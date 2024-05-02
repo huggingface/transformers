@@ -493,7 +493,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         else:
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
 
-                    if stride is None:
+                    else:
                         if isinstance(segment_size, int):
                             generate_kwargs["num_frames"] = segment_size // self.feature_extractor.hop_length
                         else:
