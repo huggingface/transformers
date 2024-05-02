@@ -9,6 +9,8 @@ RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc4/jumanpp-
 RUN tar xvf jumanpp-2.0.0-rc4.tar.xz
 RUN mkdir jumanpp-2.0.0-rc4/bld
 WORKDIR ./jumanpp-2.0.0-rc4/bld
+RUN curl -LO https://github.com/catchorg/Catch2/releases/download/v2.13.8/catch.hpp
+RUN mv catch.hpp ../libs/
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
 RUN make install
 

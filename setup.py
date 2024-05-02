@@ -171,7 +171,7 @@ _deps = [
     "tensorflow-cpu>2.9,<2.16",
     "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
-    "tensorflow-probability",
+    "tensorflow-probability<2.16",
     "tf2onnx",
     "timeout-decorator",
     "timm",
@@ -186,7 +186,6 @@ _deps = [
     "urllib3<2.0.0",
     "uvicorn",
     "pytest-rich",
-    "tensorflow-probability"
 ]
 
 
