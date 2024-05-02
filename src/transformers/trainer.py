@@ -304,7 +304,10 @@ class Trainer:
             inner layers, dropout probabilities etc).
         compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
-            a dictionary string to metric values.
+            a dictionary string to metric values. *Note* When passing TrainingArgs with `batch_eval_metrics` set to
+            `True`, your compute_metrics function must take a boolean `compute_result` argument. This will be triggered
+            after the last eval batch to signal that the function needs to calculate and return the global summary
+            statistics rather than accumulating the batch-level statistics.
         callbacks (List of [`TrainerCallback`], *optional*):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in [here](callback).
@@ -359,6 +362,13 @@ class Trainer:
             output_dir = "tmp_trainer"
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
+        if args.batch_eval_metrics and compute_metrics is not None:
+            if "compute_result" not in inspect.signature(compute_metrics).parameters.keys():
+                raise ValueError(
+                    "When using `batch_eval_metrics`, your `compute_metrics` function must take a `compute_result`"
+                    " boolean argument which will be triggered after the last batch of the eval set to signal that the"
+                    " summary statistics should be returned by the function."
+                )
         self.args = args
         # Seed must be set before instantiating the model when using model
         enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
@@ -3442,7 +3452,7 @@ class Trainer:
 
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
-                    is_last_step = step == len(dataloader) - 1
+                    is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     if args.include_inputs_for_metrics:
                         metrics = self.compute_metrics(
                             EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),
@@ -4015,7 +4025,7 @@ class Trainer:
 
             if self.args.batch_eval_metrics:
                 if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
-                    is_last_step = step == len(dataloader) - 1
+                    is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     if args.include_inputs_for_metrics:
                         metrics = self.compute_metrics(
                             EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),

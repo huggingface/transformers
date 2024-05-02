@@ -697,9 +697,11 @@ class TrainingArguments:
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
 
-        batch_eval_metrics (`Optional[bool]`):
-            If set to True, evaluation will call compute_metrics at the end of each batch to accumulate statistics
-            rather than saving all eval logits in memory.
+        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+            If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
+            rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
+            that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
+            summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
     """
 
     framework = "pt"
