@@ -42,7 +42,7 @@ def find_parent(model, name):
     return parent
 
 
-class HQQHfQuantizer(HfQuantizer):
+class HqqHfQuantizer(HfQuantizer):
     """
     HQQ quantizer base HF class.
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
