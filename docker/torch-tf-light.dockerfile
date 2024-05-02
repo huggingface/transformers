@@ -8,8 +8,8 @@ RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https:
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN git lfs install
 
-RUN uv pip install --no-cache-dir pypi-kenlm "keras<2.16"
-RUN uv pip install --no-cache-dir "transformers[tf-cpu,sklearn,sentencepiece,vision, testing]"
+RUN uv pip install --no-cache-dir pypi-kenlm
+RUN pip install --no-cache-dir "transformers[tf-cpu,sklearn,sentencepiece,vision, testing]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" tensorflow_probability
 
 

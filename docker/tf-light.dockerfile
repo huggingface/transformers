@@ -5,7 +5,6 @@ RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-de
 RUN apt-get install -y  cmake
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install "keras<2.16"
 RUN pip install  --upgrade --no-cache-dir "transformers[tf-cpu,sklearn,testing,sentencepiece,tf-speech,vision]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" tensorflow_probability
 RUN pip uninstall -y transformers
