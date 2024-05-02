@@ -755,7 +755,7 @@ For installation, we recommend you use the following approach to get the latest 
 pip install hqq
 ```
 
-To quantize a model, you need to create an ```HqqConfig``` as follows:
+To quantize a model, you need to create an [`HqqConfig`] as follows:
 ``` Python
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
