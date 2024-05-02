@@ -5,7 +5,7 @@ RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-de
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools accelerate
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
-RUN uv pip install --no-cache-dir "transformers[flax, sklearn,sentencepiece,vision,testing]"
+RUN pip install --no-cache-dir "transformers[flax, sklearn,sentencepiece,vision,testing]"
 
 
 RUN pip uninstall -y transformers
