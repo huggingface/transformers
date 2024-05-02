@@ -1,6 +1,7 @@
 FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
+RUN echo ${REF}
 USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git git-lfs
 ENV VIRTUAL_ENV=/usr/local
@@ -10,7 +11,7 @@ RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url ht
 RUN git lfs install
 
 RUN uv pip install --no-cache-dir pypi-kenlm
-RUN pip install --no-cache-dir  "git+https://github.com/user/transformers.git@${REF}#egg=transformers[tf-cpu,sklearn,sentencepiece,vision, testing]"
+RUN pip install --no-cache-dir  "git+https://github.com/user/transformers.git@${REF}#egg=transformers[tf-cpu,sklearn,sentencepiece,vision,testing]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" librosa
 
 
