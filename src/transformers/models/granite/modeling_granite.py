@@ -23,7 +23,7 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 
 
 if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
@@ -154,10 +154,9 @@ def get_normalization_function(name: str, normalized_shape: int, eps: float = 1e
 
 
 class GraniteAttention(nn.Module):
-    def __init__(self, config: GraniteConfig, causal: bool, layer_idx: Optional[int] = None) -> None:
+    def __init__(self, config: GraniteConfig, layer_idx: Optional[int] = None) -> None:
         super().__init__()
 
-        self.causal = causal
         self.hidden_size = config.n_embd
         self.num_heads = config.n_head
         self.num_key_value_heads = config.num_key_value_heads
@@ -430,49 +429,62 @@ class GraniteFlashAttention2(GraniteAttention):
             value = value.transpose(1, 2)
 
         batch_size, query_length = query.shape[:2]
-        key_length = key.shape[1]
-        indices_k, cu_seqlens_k, max_seqlen_k = get_unpad_data(attention_mask)
 
-        key = index_first_axis(
-            key.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
-        )
-        value = index_first_axis(
-            value.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
-        )
-
-        if query_length == key_length:
-            query = index_first_axis(
-                query.reshape(batch_size * key_length, self.num_heads, self.head_dim), indices_k
+        if attention_mask is None:
+            attn_output = flash_attn_func(
+                query,
+                key,
+                value, 
+                dropout_p=self.attn_pdrop if self.training else 0,
+                softmax_scale=self.attention_multiplier if self.scale_attn_weights else 1,
+                causal=True,
             )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_q = max_seqlen_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query = query.squeeze(1)
         else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query, attention_mask)
+            key_length = key.shape[1]
 
-        attn_output = flash_attn_varlen_func(
-            query,
-            key,
-            value,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_q,
-            max_seqlen_k=max_seqlen_k,
-            dropout_p=self.attn_pdrop if self.training else 0,
-            softmax_scale=self.attention_multiplier if self.scale_attn_weights else 1,
-            causal=self.causal,
-        )
+            indices_k, cu_seqlens_k, max_seqlen_k = get_unpad_data(attention_mask)
 
-        attn_output = pad_input(attn_output, indices_q, batch_size, query_length)
+            key = index_first_axis(
+                key.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
+            )
+            value = index_first_axis(
+                value.reshape(batch_size * key_length, self.num_key_value_heads, self.head_dim), indices_k
+            )
+
+            if query_length == key_length:
+                query = index_first_axis(
+                    query.reshape(batch_size * key_length, self.num_heads, self.head_dim), indices_k
+                )
+                cu_seqlens_q = cu_seqlens_k
+                max_seqlen_q = max_seqlen_k
+                indices_q = indices_k
+            elif query_length == 1:
+                max_seqlen_q = 1
+                cu_seqlens_q = torch.arange(
+                    batch_size + 1, dtype=torch.int32, device=query.device
+                )  # There is a memcpy here, that is very bad.
+                indices_q = cu_seqlens_q[:-1]
+                query = query.squeeze(1)
+            else:
+                # The -q_len: slice assumes left padding.
+                attention_mask = attention_mask[:, -query_length:]
+                query, indices_q, cu_seqlens_q, max_seqlen_q = unpad_input(query, attention_mask)
+
+            attn_output = flash_attn_varlen_func(
+                query,
+                key,
+                value,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_k,
+                dropout_p=self.attn_pdrop if self.training else 0,
+                softmax_scale=self.attention_multiplier if self.scale_attn_weights else 1,
+                causal=True,
+            )
+
+            attn_output = pad_input(attn_output, indices_q, batch_size, query_length)
+
         attn_output = attn_output.view(batch_size, query_length, -1)
 
         attn_output = self.c_proj(attn_output)
@@ -488,11 +500,9 @@ _ATTENTION_MODULES = {
 }
 
 
-def get_attention_module(
-    config: GraniteConfig, causal: bool, attention_implementation: str, layer_idx: int
-) -> GraniteAttention:
+def get_attention_module(config: GraniteConfig, attention_implementation: str, layer_idx: int) -> GraniteAttention:
     if attention_implementation in _ATTENTION_MODULES:
-        return _ATTENTION_MODULES[attention_implementation](config, causal=causal, layer_idx=layer_idx)
+        return _ATTENTION_MODULES[attention_implementation](config, layer_idx=layer_idx)
     raise ValueError(f"unexpected `attention_implementation` {attention_implementation}")
 
 
@@ -599,7 +609,7 @@ class GraniteBlock(nn.Module):
             hidden_size,
             eps=config.layer_norm_epsilon,
         )
-        self.attn = get_attention_module(config, True, attention_implementation, layer_idx)
+        self.attn = get_attention_module(config, attention_implementation, layer_idx)
         self.ln_2 = get_normalization_function(
             config.normalization_function,
             hidden_size,
