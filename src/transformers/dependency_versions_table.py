@@ -76,6 +76,7 @@ deps = {
     "tensorflow-cpu": "tensorflow-cpu>2.9,<2.16",
     "tensorflow": "tensorflow>2.9,<2.16",
     "tensorflow-text": "tensorflow-text<2.16",
+    "tensorflow-probability": "tensorflow-probability",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
@@ -90,5 +91,4 @@ deps = {
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
     "pytest-rich": "pytest-rich",
-    "tensorflow-probability": "tensorflow-probability",
 }

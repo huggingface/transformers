@@ -171,6 +171,7 @@ _deps = [
     "tensorflow-cpu>2.9,<2.16",
     "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
+    "tensorflow-probability",
     "tf2onnx",
     "timeout-decorator",
     "timm",

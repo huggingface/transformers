@@ -8,5 +8,8 @@ RUN uv pip install --no-deps accelerate
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir "scipy<1.13" "transformers[flax, audio, sklearn,sentencepiece,vision,testing]"
 
+
+# RUN pip install --no-cache-dir "scipy<1.13" "transformers[flax,testing,sentencepiece,flax-speech,vision]"
+
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean

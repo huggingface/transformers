@@ -50,7 +50,6 @@ from ...utils import (
     is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
