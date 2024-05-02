@@ -599,10 +599,8 @@ class ZoeDepthAttractorLayer(nn.Module):
     def __init__(
         self,
         config,
-        in_features,
         n_bins,
         n_attractors=16,
-        mlp_dim=128,
         min_depth=1e-3,
         max_depth=10,
         memory_efficient=False,
@@ -623,6 +621,7 @@ class ZoeDepthAttractorLayer(nn.Module):
         self.memory_efficient = memory_efficient
 
         # MLP to predict attractor points
+        in_features = mlp_dim = config.bin_embedding_dim
         self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
         self.act1 = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(mlp_dim, n_attractors * 2, 1, 1, 0)  # x2 for linear norm
@@ -694,10 +693,8 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
     def __init__(
         self,
         config,
-        in_features,
         n_bins,
         n_attractors=16,
-        mlp_dim=128,
         min_depth=1e-3,
         max_depth=10,
         memory_efficient=True,
@@ -716,6 +713,7 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
         self.kind = config.attractor_kind
         self.memory_efficient = memory_efficient
 
+        in_features = mlp_dim = config.bin_embedding_dim
         self.conv1 = nn.Conv2d(in_features, mlp_dim, 1, 1, 0)
         self.act1 = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(mlp_dim, n_attractors, 1, 1, 0)
@@ -944,9 +942,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
                     [
                         Attractor(
                             config,
-                            bin_embedding_dim,
                             n_bins=n_attractors[i],
-                            mlp_dim=bin_embedding_dim,
                             min_depth=configuration["min_depth"],
                             max_depth=configuration["max_depth"],
                         )
@@ -1065,7 +1061,6 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
             [
                 Attractor(
                     config,
-                    bin_embedding_dim,
                     n_bins=n_bins,
                     n_attractors=n_attractors[i],
                     min_depth=min_depth,
