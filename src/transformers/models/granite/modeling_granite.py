@@ -26,11 +26,6 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-class PositionEmbeddingType(Enum):
-    learned_absolute = "learned_absolute"
-    rope = "rope"
-
-
 class AttentionHeadType(Enum):
     mha = "mha"
     mqa = "mqa"
@@ -165,7 +160,6 @@ class GraniteAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.attention_head_type = AttentionHeadType(config.attention_head_type)
 
-        self.position_embedding_type = PositionEmbeddingType(config.position_embedding_type)
         self.scale_attn_weights = config.scale_attn_weights
         self.attention_multiplier = config.attention_multiplier
 
@@ -284,9 +278,8 @@ class GraniteAttention(nn.Module):
     ) -> torch.Tensor:
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
 
-        if self.position_embedding_type == PositionEmbeddingType.rope:
-            query = apply_rotary_pos_emb(query, rope_cos_sin)
-            key = apply_rotary_pos_emb(key, rope_cos_sin)
+        query = apply_rotary_pos_emb(query, rope_cos_sin)
+        key = apply_rotary_pos_emb(key, rope_cos_sin)
 
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
@@ -360,9 +353,8 @@ class GraniteSDPA(GraniteAttention):
         query_length = hidden_states.shape[1]
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
 
-        if self.position_embedding_type == PositionEmbeddingType.rope:
-            query = apply_rotary_pos_emb(query, rope_cos_sin)
-            key = apply_rotary_pos_emb(key, rope_cos_sin)
+        query = apply_rotary_pos_emb(query, rope_cos_sin)
+        key = apply_rotary_pos_emb(key, rope_cos_sin)
 
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
@@ -408,9 +400,8 @@ class GraniteFlashAttention2(GraniteAttention):
     ) -> torch.Tensor:
         query, key, value = self._prepare_qkv_for_forward(hidden_states)
 
-        if self.position_embedding_type == PositionEmbeddingType.rope:
-            query = apply_rotary_pos_emb(query, rope_cos_sin)
-            key = apply_rotary_pos_emb(key, rope_cos_sin)
+        query = apply_rotary_pos_emb(query, rope_cos_sin)
+        key = apply_rotary_pos_emb(key, rope_cos_sin)
 
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
@@ -733,14 +724,7 @@ class GraniteModel(GranitePreTrainedModel):
             eps=config.layer_norm_epsilon,
         )
 
-        self.position_embedding_type = PositionEmbeddingType(config.position_embedding_type)
-
-        if self.position_embedding_type == PositionEmbeddingType.learned_absolute:
-            self.wpe = nn.Embedding(config.n_positions, self.embed_dim)
-        elif self.position_embedding_type == PositionEmbeddingType.rope:
-            self.rope = GraniteRoPE(self.head_dim, max_position_embeddings=config.n_positions, base=config.rope_theta)
-        else:
-            raise NotImplementedError()
+        self.rope = GraniteRoPE(self.head_dim, max_position_embeddings=config.n_positions, base=config.rope_theta)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -805,15 +789,7 @@ class GraniteModel(GranitePreTrainedModel):
             )
 
         if position_ids is None:
-            if attention_mask.dim() == 2:
-                position_ids = self._get_position_ids(
-                    attention_mask, past_seen_tokens, query_length, key_length, inputs_embeds.device
-                )
-            else:
-                assert position_ids is not None, "position_ids should be passed explicitely with 4D mask"
-
-        if self.position_embedding_type == PositionEmbeddingType.learned_absolute:
-            inputs_embeds = inputs_embeds + self.wpe(position_ids)
+            position_ids = cache_position.unsqueeze(0)
 
         if token_type_ids is not None:
             inputs_embeds = inputs_embeds + self.wte(token_type_ids)
@@ -876,11 +852,10 @@ class GraniteModel(GranitePreTrainedModel):
     def _get_rope_cos_sin(
         self, key_length: int, position_ids: torch.Tensor, dtype: torch.dtype, device: torch.device
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
-        if self.position_embedding_type == PositionEmbeddingType.rope:
-            cos, sin = self.rope(key_length, dtype=dtype, device=device)
-            cos = cos[position_ids].unsqueeze(1)
-            sin = sin[position_ids].unsqueeze(1)
-            return cos, sin
+        cos, sin = self.rope(key_length, dtype=dtype, device=device)
+        cos = cos[position_ids].unsqueeze(1)
+        sin = sin[position_ids].unsqueeze(1)
+        return cos, sin
 
     def _update_causal_mask(
         self,

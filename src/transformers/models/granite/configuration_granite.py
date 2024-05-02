@@ -61,8 +61,6 @@ class GraniteConfig(PretrainedConfig):
             Whether to scale the attention softmax in float32.
         add_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias for linear layers in the model.
-        position_embedding_type (`str`, *optional*, defaults to `"learned_absolute"`):
-            The positional encoding method for the transformer model. Can be one of ["learned_absolute", "alibi", "rope"].
         rope_theta (`float`, *optional*, defaults to 10000):
             The base period of the RoPE embeddings.
 
@@ -114,7 +112,6 @@ class GraniteConfig(PretrainedConfig):
         attention_softmax_in_fp32: bool = True,
         scale_attention_softmax_in_fp32: bool = True,
         add_bias: bool = True,
-        position_embedding_type: str = "learned_absolute",
         rope_theta: int = 10000,
         **kwargs,
     ) -> None:
@@ -138,7 +135,6 @@ class GraniteConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_softmax_in_fp32 = attention_softmax_in_fp32
         self.scale_attention_softmax_in_fp32 = scale_attention_softmax_in_fp32
-        self.position_embedding_type = position_embedding_type
         self.add_bias = add_bias
         self.rope_theta = rope_theta
 
