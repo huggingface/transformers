@@ -10,7 +10,7 @@ RUN git lfs install
 
 RUN uv pip install --no-cache-dir pypi-kenlm
 RUN pip install --no-cache-dir "transformers[tf-cpu,sklearn,sentencepiece,vision, testing]"
-RUN uv pip install --no-cache-dir  "protobuf==3.20.3" soundfile
+RUN uv pip install --no-cache-dir  "protobuf==3.20.3" librosa
 
 
 RUN pip uninstall -y transformers
