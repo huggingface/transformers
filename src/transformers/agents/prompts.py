@@ -182,6 +182,81 @@ Action:
   "action_input": {"answer": "insert your final answer here"}
 }
 
+
+Examples:
+---
+Task: "Generate an image of the oldest person in this document."
+
+Thought: I will proceed step by step and use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
+Action:
+{
+  "action": "document_qa",
+  "action_input": {"document": "document.pdf", "question": "Who is the oldest person mentioned?"}
+}
+Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
+
+
+Thought: I will now generate an image showcasing the oldest person.
+Action:
+{
+  "action": "image_generator",
+  "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
+}
+Observation: "image.png"
+
+Thought: I will now return the generated image.
+Action:
+{
+  "action": "final_answer",
+  "action_input": "image.png"
+}
+
+
+---
+Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
+
+Thought: I will use python code evaluator to compute the result of the operation and then return the final answer using the `final_answer` tool
+Action:
+{
+    "action": "python_interpreter",
+    "action_input": {"code": "5 + 3 + 1294.678"}
+}
+Observation: 1302.678
+
+Thought: Now that I know the result, I will now return it.
+Action:
+{
+  "action": "final_answer",
+  "action_input": "1302.678"
+}
+
+---
+Task: "Which city has the highest population , Guangzhou or Shanghai?"
+
+Thought: I will use the tool `search` to get the population of both cities.
+Action:
+{
+    "action": "search",
+    "action_input": "Population Guangzhou"
+}
+Observation: ['Guangzhou has a population of 15 million inhabitants as of 2021.']
+
+
+Thought: Now let's get the population of Shanghai.
+Action:
+{
+    "action": "search",
+    "action_input": "Population Shanghai"
+}
+Observation: '26 million (2019)'
+
+Thought: Now I know that Shanghai has a larger population. Let's return the result.
+Action:
+{
+  "action": "final_answer",
+  "action_input": "Shanghai"
+}
+
 Now begin! <<additional_args>>
 
 """
@@ -239,40 +314,13 @@ final_answer(image)
 
 
 ---
-Task: "Summarize the text given in the variable `text` and read it out loud."
-
-Thought: I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
-
-Code:
-```py
-summarized_text = summarizer(text)
-print(f"Summary: {summarized_text}")
-audio_summary = text_reader(summarized_text)
-final_answer(audio_summary)
-```<end_code>
-
----
-Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
-
-Thought: I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
-
-Be sure to provide an 'Code:' token, else the system will be stuck in a loop.
-
-Code:
-```py
-answer = text_qa(text=text, question=question)
-image = image_generator(answer)
-final_answer(image)
-```<end_code>
-
----
-Task: "What is the result of the following operation: 5 + 3 + 1298987654.6789098765?"
+Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
 
 Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool
 
 Code:
 ```py
-result = 5 + 3 + 1298987654.6789098765
+result = 5 + 3 + 1294.678
 final_answer(result)
 ```<end_code>
 
@@ -289,9 +337,9 @@ print("Population Shanghai:", population_shanghai)
 ```<end_code>
 Observation:
 Population Guangzhou: ['Guangzhou has a population of 15 million inhabitants as of 2021.']
-Population Shanghai: '24 million'
+Population Shanghai: '26 million (2019)'
 
-Thought: I know that Shanghai has the highest population.
+Thought: Now I know that Shanghai has the highest population.
 Code:
 ```py
 final_answer("Shanghai")
