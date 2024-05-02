@@ -149,16 +149,22 @@ class Toolbox:
     """
 
     def __init__(self, tools: List[Tool], add_base_tools: bool = False):
-        global _tools_are_initialized
-        global HUGGINGFACE_DEFAULT_TOOLS
-
         self._tools = {tool.name: tool for tool in tools}
         if add_base_tools:
-            if not _tools_are_initialized:
-                HUGGINGFACE_DEFAULT_TOOLS = setup_default_tools(logger)
-                _tools_are_initialized = True
-            self._tools = self._tools | HUGGINGFACE_DEFAULT_TOOLS.copy()
+            self.add_base_tools()
         self._load_tools_if_needed()
+
+
+    def add_base_tools(self):
+        global _tools_are_initialized
+        global HUGGINGFACE_DEFAULT_TOOLS
+        if not _tools_are_initialized:
+            HUGGINGFACE_DEFAULT_TOOLS = setup_default_tools(logger)
+            _tools_are_initialized = True
+        for tool in HUGGINGFACE_DEFAULT_TOOLS.values():
+            self.add_tool(tool)
+        self._load_tools_if_needed()
+
 
     @property
     def tools(self) -> Dict[str, Tool]:
@@ -224,10 +230,10 @@ class Toolbox:
                 self._tools[name] = load_tool(task_or_repo_id)
 
     def __repr__(self):
-        toolbox = "Toolbox contents:\n"
+        toolbox_description = "Toolbox contents:\n"
         for tool in self._tools.values():
-            toolbox += f"\t{tool.name}: {tool.description}\n"
-        return toolbox
+            toolbox_description += f"\t{tool.name}: {tool.description}\n"
+        return toolbox_description
 
 
 def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
@@ -284,7 +290,7 @@ class AgentGenerationError(AgentError):
 class Agent:
     def __init__(
         self,
-        tools: List[Tool],
+        tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = HfEngine(),
         system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
         tool_description_template=None,
@@ -306,7 +312,12 @@ class Agent:
         self.logger = logger
         self.tool_parser = tool_parser
 
-        self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
+        if isinstance(tools, Toolbox):
+            self._toolbox = tools
+            if add_base_tools:
+                self._toolbox.add_base_tools()
+        else:
+            self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)
 
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template

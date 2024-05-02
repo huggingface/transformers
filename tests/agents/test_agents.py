@@ -16,11 +16,17 @@ import os
 import tempfile
 import unittest
 import uuid
+import pytest
 
 from transformers.agents.agent_types import AgentText
-from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent
+from transformers.agents.agents import (
+    AgentMaxIterationsError,
+    CodeAgent,
+    ReactCodeAgent,
+    ReactJsonAgent,
+    Toolbox
+)
 from transformers.agents.default_tools import CalculatorTool
-
 
 def get_new_path(suffix="") -> str:
     directory = tempfile.mkdtemp()
@@ -132,3 +138,21 @@ Action:
         agent.run("What is 2 multiplied by 3.6452?")
         assert len(agent.logs) == 7
         assert type(agent.logs[-1]["error"]) == AgentMaxIterationsError
+
+    def test_init_agent_with_different_toolsets(self):
+        toolset_1 = []
+        agent = ReactCodeAgent(tools=toolset_1, llm_engine=fake_react_code_llm)
+        assert len(agent.toolbox.tools) == 1 # contains only final_answer tool
+
+        toolset_2 = [CalculatorTool(), CalculatorTool()]
+        agent = ReactCodeAgent(tools=toolset_2, llm_engine=fake_react_code_llm)
+        assert len(agent.toolbox.tools) == 2 # added final_answer tool
+
+        toolset_3 = Toolbox(toolset_2)
+        agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm)
+        assert len(agent.toolbox.tools) == 2 # added final_answer tool
+
+        with pytest.raises(KeyError) as e:
+            agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm, add_base_tools=True)
+        assert "calculator already exists in the toolbox" in str(e)
+    
