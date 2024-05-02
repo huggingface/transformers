@@ -232,7 +232,7 @@ image = image_generator("An image of John Doe, an old man.")
 final_answer(image)
 ```<end_code>
 
-Example:::
+Example:
 Task: "Generate an image using the text given in the variable `caption`."
 
 Thought: I will use the following tool: `image_generator` to generate an image.
@@ -242,7 +242,7 @@ image = image_generator(prompt=caption)
 final_answer(image)
 ```<end_code>
 
-Example:::
+Example:
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
 Thought: I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
@@ -263,7 +263,7 @@ audio_summary = text_reader(summarized_text)
 final_answer(audio_summary)
 ```<end_code>
 
-Example:::
+Example:
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
 Thought: I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
@@ -277,7 +277,7 @@ image = image_generator(answer)
 final_answer(image)
 ```<end_code>
 
-Example:::
+Example:
 Task: "What is the result of the following operation: 5 + 3 + 1298987654.6789098765?"
 
 Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool
@@ -288,7 +288,7 @@ result = 5 + 3 + 1298987654.6789098765
 final_answer(result)
 ```<end_code>
 
-Example:::
+Example:
 Task: "Which city has the highest population , Guangzhou or Shanghai?"
 
 Thought: I will use the tool `search` to get the population of both cities.
@@ -309,7 +309,7 @@ Code:
 final_answer("Shanghai")
 ```<end_code>
 
-Example:::
+Example:
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
 Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.

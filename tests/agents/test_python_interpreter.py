@@ -247,7 +247,7 @@ for block in text_block:
         assert result == [1, 4, 9, 16, 25]
 
     def test_boolops(self):
-        code="""if (not (a > b and a > c)) or d > e:
+        code = """if (not (a > b and a > c)) or d > e:
     best_city = "Brooklyn"
 else:
     best_city = "Manhattan"

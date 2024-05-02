@@ -17,9 +17,9 @@ import tempfile
 import unittest
 import uuid
 
+from transformers.agents.agent_types import AgentText
 from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent
 from transformers.agents.default_tools import CalculatorTool
-from transformers.agents.agent_types import AgentText
 
 
 def get_new_path(suffix="") -> str:

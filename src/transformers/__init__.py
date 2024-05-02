@@ -57,10 +57,7 @@ _import_structure = {
     "agents": [
         "Agent",
         "CodeAgent",
-        "DocumentQuestionAnsweringTool",
-        "FinalAnswerTool",
         "HfEngine",
-        "ImageQuestionAnsweringTool",
         "PipelineTool",
         "ReactAgent",
         "ReactCodeAgent",
@@ -5054,6 +5051,7 @@ if TYPE_CHECKING:
         ReactCodeAgent,
         ReactJsonAgent,
         Tool,
+        Toolbox,
         ToolCollection,
         launch_gradio_demo,
         load_tool,

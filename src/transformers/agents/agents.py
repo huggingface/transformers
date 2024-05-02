@@ -137,6 +137,17 @@ _tools_are_initialized = False
 
 
 class Toolbox:
+    """
+    The toolbox contains all tools that the agent can perform operations with, as well as a few methods to
+    manage them.
+
+    Args:
+        tools (`List[Tool]`):
+            The list of tools to instantiate the toolbox with
+        add_base_tools (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to add the tools available within `transformers` to the toolbox.
+    """
+
     def __init__(self, tools: List[Tool], add_base_tools: bool = False):
         global _tools_are_initialized
         global HUGGINGFACE_DEFAULT_TOOLS
@@ -147,7 +158,7 @@ class Toolbox:
                 HUGGINGFACE_DEFAULT_TOOLS = setup_default_tools(logger)
                 _tools_are_initialized = True
             self._tools = self._tools | HUGGINGFACE_DEFAULT_TOOLS.copy()
-        self.load_tools_if_needed()
+        self._load_tools_if_needed()
 
     @property
     def tools(self) -> Dict[str, Tool]:
@@ -161,12 +172,26 @@ class Toolbox:
         )
 
     def add_tool(self, tool: Tool):
-        """Adds a tool to the toolbox"""
+        """
+        Adds a tool to the toolbox
+
+        Args:
+            tool (`Tool`):
+                The tool to add to the toolbox.
+        """
+
         if tool.name in self._tools:
             raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
         self._tools[tool.name] = tool
 
     def remove_tool(self, tool_name: str):
+        """
+        Removes a tool from the toolbox
+
+        Args:
+            tool_name (`str`):
+                The tool to remove from the toolbox.
+        """
         """Removes a tool from the toolbox"""
         if tool_name not in self._tools:
             raise KeyError(
@@ -175,7 +200,13 @@ class Toolbox:
         del self._tools[tool_name]
 
     def update_tool(self, tool: Tool):
-        """Updates a tool in the toolbox"""
+        """
+        Updates a tool in the toolbox according to its name.
+
+        Args:
+            tool (`Tool`):
+                The tool to update to the toolbox.
+        """
         if tool.name not in self._tools:
             raise KeyError(
                 f"Error: tool {tool.name} not found in toolbox for update, should be instead one of {list(self._tools.keys())}."
@@ -186,7 +217,7 @@ class Toolbox:
         """Clears the toolbox"""
         self._tools = {}
 
-    def load_tools_if_needed(self):
+    def _load_tools_if_needed(self):
         for name, tool in self._tools.items():
             if not isinstance(tool, Tool):
                 task_or_repo_id = tool.task if tool.repo_id is None else tool.repo_id

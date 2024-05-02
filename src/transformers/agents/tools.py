@@ -811,6 +811,31 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
 
 
 class ToolCollection:
+    """
+    Tool collections enable loading all Spaces from a collection in order to be added to the agent's toolbox.
+
+    > [!NOTE]
+    > Only Spaces will be fetched, so you can feel free to add models and datasets to your collection if you'd
+    > like for this collection to showcase them.
+
+    Args:
+        collection_slug (str):
+            The collection slug referencing the collection.
+        token (str, *optional*):
+            The authentication token if the collection is private.
+
+    Example:
+
+    ```py
+    >>> from transformers import ToolCollection, ReactCodeAgent
+
+    >>> image_tool_collection = ToolCollection(collection_slug="huggingface-tools/diffusion-tools-6630bb19a942c2306a2cdb6f")
+    >>> agent = ReactCodeAgent(tools=[*image_tool_collection.tools], add_base_tools=True)
+
+    >>> agent.run("Please draw me a picture of rivers and lakes.")
+    ```
+    """
+
     def __init__(self, collection_slug: str, token: Optional[str] = None):
         self._collection = get_collection(collection_slug, token=token)
         self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}

@@ -61,6 +61,10 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] Tool
 
+### Toolbox
+
+[[autodoc]] Toolbox
+
 ### PipelineTool
 
 [[autodoc]] PipelineTool
@@ -68,6 +72,25 @@ We provide two types of agents, based on the main [`Agent`] class:
 ### launch_gradio_demo
 
 [[autodoc]] launch_gradio_demo
+
+### ToolCollection
+
+[[autodoc]] ToolCollection
+
+## Engines
+
+You're free to create and use your own engines to be usable by the Agents framework.
+These engines have the following specification:
+1. It follows the [messages format](../chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a string.
+2. It stops generating outputs *before* the sequences passed in the argument `stop`
+3. It accepts a `tools` argument, which is a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
+
+### HfEngine
+
+For convenience, we have added a `HfEngine` that implements this and uses an inference endpoint for the execution of the LLM.
+
+[[autodoc]] HfEngine
+
 
 ## Agent Types
 

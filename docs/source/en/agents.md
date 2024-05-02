@@ -138,7 +138,7 @@ def llm_engine(messages, stop=["Task"]) -> str:
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.) for its input (`List[Dict[str, str]]`) and returns a `str`
+1. it follows the [messages format](./chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a `str`
 2. it stops generating outputs *before* the sequences passed in the argument `stop`
 
 You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
