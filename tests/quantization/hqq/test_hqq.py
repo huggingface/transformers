@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils import is_hqq_available, is_torch_available
 
@@ -108,18 +109,10 @@ class HQQTest(unittest.TestCase):
         """
         Simple LLM model testing fp16
         """
-        compute_dtype = torch.float16
-        torch_device = "cuda:0"
-        cache_dir = None
-
         quant_config = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0)
 
         hqq_runner = HQQLLMRunner(
-            model_id=model_id,
-            quant_config=quant_config,
-            compute_dtype=compute_dtype,
-            device=torch_device,
-            cache_dir=cache_dir,
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
         )
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -129,10 +122,6 @@ class HQQTest(unittest.TestCase):
         """
         Simple LLM model testing bfp16 with meta-data offloading
         """
-        compute_dtype = torch.bfloat16
-        torch_device = "cuda:0"
-        cache_dir = None
-
         q4_config = {"nbits": 4, "group_size": 64, "quant_zero": False, "quant_scale": False}
         q3_config = {"nbits": 3, "group_size": 32, "quant_zero": False, "quant_scale": False, "offload_meta": True}
         quant_config = HqqConfig(
@@ -148,11 +137,7 @@ class HQQTest(unittest.TestCase):
         )
 
         hqq_runner = HQQLLMRunner(
-            model_id=model_id,
-            quant_config=quant_config,
-            compute_dtype=compute_dtype,
-            device=torch_device,
-            cache_dir=cache_dir,
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.bfloat16, device=torch_device
         )
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
@@ -171,17 +156,11 @@ class HQQTestMultiGPU(unittest.TestCase):
         """
         Simple LLM model testing fp16 with multi-gpu
         """
-        compute_dtype = torch.float16
-        cache_dir = None
 
         quant_config = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0)
 
         hqq_runner = HQQLLMRunner(
-            model_id=model_id,
-            quant_config=quant_config,
-            compute_dtype=compute_dtype,
-            device="auto",
-            cache_dir=cache_dir,
+            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device="auto"
         )
 
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
