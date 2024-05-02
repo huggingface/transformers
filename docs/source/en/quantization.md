@@ -759,7 +759,7 @@ To quantize a model, you need to create an [`HqqConfig`] as follows:
 ``` Python
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
-# Linear layers will use the same quantization config
+#   })Linear layers will use the same quantization config
 quant_config  = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0) #axis=0 is used by default
 
 # Each type of linear layer (referred to as linear tag) will use different quantization parameters
@@ -774,7 +774,7 @@ quant_config  = HqqConfig(dynamic_config={
   'mlp.gate_proj':q3_config,
   'mlp.up_proj'  :q3_config,
   'mlp.down_proj':q3_config,
-  })
+})
 ```
 
 Then you simply quantize the model as follows
