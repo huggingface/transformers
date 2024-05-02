@@ -6,10 +6,7 @@ RUN apt-get install -y g++ cmake
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools albumentations seqeval
-RUN uv pip install --no-cache-dir "transformers[flax,testing,sentencepiece,vision]"
-
+RUN pip install  --upgrade --no-cache-dir "transformers[tf-cpu,sklearn,testing,sentencepiece,tf-speech,vision]"
+RUN uv pip install --no-cache-dir  "protobuf==3.20.3" 
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN apt-get autoremove  --purge -y cmake
-RUN pip cache remove "nvidia-*"
-RUN pip cache remove triton

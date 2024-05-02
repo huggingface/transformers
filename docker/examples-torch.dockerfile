@@ -8,3 +8,4 @@ RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url ht
 RUN uv pip install --no-deps timm accelerate --extra-index-url https://download.pytorch.org/whl/cpu 
 RUN uv pip install --no-cache-dir librosa "transformers[sklearn,sentencepiece,vision,testing]" seqeval
 RUN pip uninstall -y transformers
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
