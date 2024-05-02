@@ -21,9 +21,9 @@ from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from .test_tools_common import ToolTesterMixin
 
 
-class PythonEvaluatorToolTester(unittest.TestCase, ToolTesterMixin):
+class PythonInterpreterToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
-        self.tool = load_tool("python_evaluator")
+        self.tool = load_tool("python_interpreter")
         self.tool.setup()
 
     def test_exact_match_arg(self):
