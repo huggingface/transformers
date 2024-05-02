@@ -727,7 +727,7 @@ class WavLMEncoder(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -810,7 +810,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
