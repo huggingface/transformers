@@ -1134,6 +1134,7 @@ _import_structure = {
         "BitsAndBytesConfig",
         "EetqConfig",
         "GPTQConfig",
+        "HqqConfig",
         "QuantoConfig",
     ],
 }
@@ -1421,6 +1422,7 @@ else:
             "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
+            "EosTokenCriteria",
             "EpsilonLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
@@ -1446,6 +1448,7 @@ else:
             "SequenceBiasLogitsProcessor",
             "StoppingCriteria",
             "StoppingCriteriaList",
+            "StopStringCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
             "TemperatureLogitsWarper",
@@ -3919,6 +3922,7 @@ else:
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
+        "get_wsd_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -6105,6 +6109,7 @@ if TYPE_CHECKING:
         BitsAndBytesConfig,
         EetqConfig,
         GPTQConfig,
+        HqqConfig,
         QuantoConfig,
     )
 
@@ -6381,6 +6386,7 @@ if TYPE_CHECKING:
             DisjunctiveConstraint,
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,
+            EosTokenCriteria,
             EpsilonLogitsWarper,
             EtaLogitsWarper,
             ExponentialDecayLengthPenalty,
@@ -6406,6 +6412,7 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
@@ -8428,6 +8435,7 @@ if TYPE_CHECKING:
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
+            get_wsd_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 

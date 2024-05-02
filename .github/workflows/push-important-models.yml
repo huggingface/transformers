@@ -127,7 +127,7 @@ jobs:
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        if: ${{ failure() || runner.debug == '1'}}
+        if: ${{ runner.debug == '1'}}
         uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}

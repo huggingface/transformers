@@ -786,15 +786,10 @@ class WandbCallback(TrainerCallback):
             self._wandb.run._label(code="transformers_trainer")
 
             # add number of model parameters to wandb config
-            if any(
-                (
-                    isinstance(model, PreTrainedModel),
-                    isinstance(model, PushToHubMixin),
-                    (is_tf_available() and isinstance(model, TFPreTrainedModel)),
-                    (is_torch_available() and isinstance(model, torch.nn.Module)),
-                )
-            ):
+            try:
                 self._wandb.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info("Could not log the number of model parameters in Weights & Biases.")
 
             # log the initial model and architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
