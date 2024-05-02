@@ -11,8 +11,8 @@ RUN mkdir jumanpp-2.0.0-rc3/bld
 WORKDIR ./jumanpp-2.0.0-rc3/bld
 RUN wget -LO catch.hpp https://github.com/catchorg/Catch2/releases/download/v2.13.8/catch.hpp
 RUN mv catch.hpp ../libs/
-RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
-RUN make install
+RUN cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+RUN make install -j 10
 
 
 RUN uv pip install --no-cache --upgrade 'torch' --index-url https://download.pytorch.org/whl/cpu
