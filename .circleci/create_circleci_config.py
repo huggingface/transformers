@@ -308,7 +308,7 @@ examples_tensorflow_job = CircleCIJob(
 hub_job = CircleCIJob(
     "hub",
     additional_env={"HUGGINGFACE_CO_STAGING": True},
-    docker_image=[{"image":"huggingface/transformers-consistency"}], # TODO do we really need torch for that job? torch-light?  
+    docker_image=[{"image":"huggingface/transformers-hub"}],
     install_steps=[
         "uv venv && uv pip install .",
         'git config --global user.email "ci@dummy.com"',
