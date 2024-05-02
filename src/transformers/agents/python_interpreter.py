@@ -29,7 +29,7 @@ class InterpretorError(ValueError):
     pass
 
 
-LIST_SAFE_MODULES = ["random", "math", "time", "queue", "itertools", "re", "stat"]
+LIST_SAFE_MODULES = ["random", "math", "time", "queue", "itertools", "re", "stat", "statistics"]
 
 
 def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):

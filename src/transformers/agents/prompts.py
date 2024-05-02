@@ -57,6 +57,7 @@ Be sure to provide an 'Code:' token, else the system will be stuck in a loop.
 Tools:
 <<tool_descriptions>>
 
+Examples:
 ---
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
@@ -216,33 +217,28 @@ final_answer(f"The answer is {answer}")
 The 'Action input:' should be the input for the tool you are using.
 Make sure to have the $ACTION_INPUT as a dictionnary, with the right keys for the tool you are using, and do not put variable names as input if you know the right values.
 
+Examples:
+---
+Task: "Generate an image of the oldest person in this document."
+
 Thought: I will proceed step by step and use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 Code:
 ```py
-answer = document_qa(document=document, question="What is the oldest person?")
+answer = document_qa(document=document, question="Who is the oldest person mentioned?")
 print(answer)
 ```<end_code>
-Observation: "The oldest person in the document is John Doe."
+Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
 
 Thought: I will now generate an image showcasing the oldest person.
 
 Code:
 ```py
-image = image_generator("An image of John Doe, an old man.")
+image = image_generator("A portrait of John Doe, a 55-year-old man living in Canada.")
 final_answer(image)
 ```<end_code>
 
-Example:
-Task: "Generate an image using the text given in the variable `caption`."
 
-Thought: I will use the following tool: `image_generator` to generate an image.
-Code:
-```py
-image = image_generator(prompt=caption)
-final_answer(image)
-```<end_code>
-
-Example:
+---
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
 Thought: I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
@@ -251,19 +247,11 @@ Code:
 ```py
 summarized_text = summarizer(text)
 print(f"Summary: {summarized_text}")
-```<end_code>
-
-Observation: "Summary: 'The text is about the history of the Roman Empire.'"
-
-Thought: I will now read the summarized text out loud.
-
-Code:
-```py
 audio_summary = text_reader(summarized_text)
 final_answer(audio_summary)
 ```<end_code>
 
-Example:
+---
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
 Thought: I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
@@ -277,7 +265,7 @@ image = image_generator(answer)
 final_answer(image)
 ```<end_code>
 
-Example:
+---
 Task: "What is the result of the following operation: 5 + 3 + 1298987654.6789098765?"
 
 Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool
@@ -288,7 +276,7 @@ result = 5 + 3 + 1298987654.6789098765
 final_answer(result)
 ```<end_code>
 
-Example:
+---
 Task: "Which city has the highest population , Guangzhou or Shanghai?"
 
 Thought: I will use the tool `search` to get the population of both cities.
@@ -309,7 +297,7 @@ Code:
 final_answer("Shanghai")
 ```<end_code>
 
-Example:
+---
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
 Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.
