@@ -507,7 +507,6 @@ class CodeAgent(Agent):
         if len(kwargs) > 0:
             self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
 
-
         self.logger.warn("=====New task=====")
         self.logger.warn(self.task)
         self.logger.debug("System prompt is as follows:")
@@ -614,7 +613,7 @@ class ReactAgent(Agent):
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
-    
+
         self.state = kwargs.copy()
 
         self.task = task

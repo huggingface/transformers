@@ -33,6 +33,9 @@ else:
 
 if is_torch_available():
     import torch
+    from torch import Tensor
+else:
+    Tensor = object
 
 if is_soundfile_availble():
     import soundfile as sf
@@ -211,7 +214,7 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText}
+INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio}
 
 if is_vision_available():
     INSTANCE_TYPE_MAPPING[PIL.Image.Image] = AgentImage
