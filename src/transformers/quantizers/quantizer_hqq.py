@@ -158,11 +158,7 @@ class HQQHfQuantizer(HfQuantizer):
             if self.using_multi_gpu:
                 hqq_layer = self._patch_layer_for_multigpu(hqq_layer)
 
-            setattr(
-                parent_module,
-                node,
-                hqq_layer,
-            )
+            setattr(parent_module, node, hqq_layer)
 
         else:
             module = module.to(dtype=self.torch_dtype, device=target_device)
