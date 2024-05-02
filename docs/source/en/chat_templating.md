@@ -233,6 +233,94 @@ The sun.</s>
 
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
+## Can I pass other arguments to the chat template?
+
+Yes, you can! The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
+argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
+chat templates for many things. There are no restrictions on the names or the format of these arguments - you can pass
+strings, lists, dicts or whatever else you want. 
+
+That said, there are some common use-cases for these extra arguments,
+such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
+we have some opinionated recommendations about what the names and formats of these arguments should be. By sticking
+to these conventions when writing your template, you make it easier for users to use stabdard tool-use or RAG input
+pipelines with your model without needing any manual reformatting.
+
+### Arguments for tool use
+
+Our recommendation for "tool use" LLMs which can choose to call functions as external tools is that their template
+should accept a `tools` argument. This should be a list of tools, defined via [JSON Schema](https://json-schema.org/). Each "tool"
+is a single function that the model can choose to call, and the schema should include the function name, its description
+and the expected spec for its arguments.
+
+#### Example
+
+```python
+# A simple function that takes no arguments
+current_time = {
+    "name": "current_time",
+    "description": "Get the current local time as a string.",
+    "parameters": {},  # TODO - double-check if this is the correct schema for this case
+    }
+
+# A more complete function that takes two numerical arguments
+multiply = {
+    "name": "multiply",
+    "description": "Multiply two numbers together.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "a": {"type": "number", "description": "The first number to multiply."},
+            "b": {"type": "number", "description": "The second number to multiply."},
+        },
+        "required": ["a", "b"],
+        }
+    }
+
+model_input = tokenizer.apply_chat_template(
+    messages,
+    tools = [current_time, multiply]
+)
+```
+
+JSON schemas permit highly detailed parameter specifications, so you can pass in functions with very complex, nested
+arguments. Be careful, however - we find that in practice this can degrade performance, even for state-of-the-art 
+models. We recommend trying to keep your tool schemas simple and flat where possible.
+
+### Automated function conversion
+
+Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
+that writing them can be annoying. Don't panic, though, we have a solution!
+
+TODO Should descriptions come from the docstrings or the type hints? 
+
+TODO Do we need to define a special format for args in the docstrings?
+
+### Arguments for retrieval-augmented generation (RAG)
+
+Our recommendation for "RAG" LLMs which can search a corpus of documents for information is that their template
+should accept a `documents` argument. This should be a list of documents, where each "document"
+is a single dict with `title` and `contents` keys, both of which are strings.
+
+#### Example
+
+```python
+document1 = {
+    "title": "The Moon: Our Age-Old Foe",
+    "contents": "Man has always dreamed of destroying the moon. In this essay, I shall..."
+}
+
+document2 = {
+    "title": "The Sun: Our Age-Old Friend",
+    "contents": "Although often underappreciated, the sun provides several notable benefits..."
+}
+
+model_input = tokenizer.apply_chat_template(
+    messages,
+    documents = [document1, document2]
+)
+```
+
 ## Advanced: How do chat templates work?
 
 The chat template for a model is stored on the `tokenizer.chat_template` attribute. If no chat template is set, the

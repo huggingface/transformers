@@ -1683,6 +1683,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
+        tools: Optional[List[Dict]] = None,
+        documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1703,6 +1705,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
+            tools (List[Dict], *optional*): A list of tools (callable functions) that will be accessible
+                to the model. If the template does not support function calling, this argument will have no effect.
+                We recommend passing the list of tools as a JSON Schema[link!], although note that some models and
+                templates may require a different format. Please see the docs for examples of passing tools with
+                chat templates[link!!].
+            documents (List[Dict[str, str]], *optional*): A list of dicts representing documents that will be accessible
+                to the model if it is performing RAG (retrieval-augmented generation). If the template does not support
+                RAG, this argument will have no effect. We recommend that each document should be a dict containing
+                "title" and "text" keys. Please see the docs for examples of passing documents with chat
+                templates [link!!].
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
             add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
@@ -1809,7 +1821,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # Indicates it's a Conversation object
                 chat = chat.messages
             rendered_chat = compiled_template.render(
-                messages=chat, add_generation_prompt=add_generation_prompt, **template_kwargs
+                messages=chat,
+                tools=tools,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **template_kwargs,
             )
             rendered.append(rendered_chat)
 
