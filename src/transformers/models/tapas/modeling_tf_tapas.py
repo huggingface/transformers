@@ -77,8 +77,8 @@ else:
 
         # On the first call, check whether a compatible version of TensorFlow is installed
         # TensorFlow Probability depends on a recent stable release of TensorFlow
-        _ = tfp.distributions.Normal(loc=0.0, scale=1.0) 
-    except:
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
         pass
 
 _CONFIG_FOR_DOC = "TapasConfig"
