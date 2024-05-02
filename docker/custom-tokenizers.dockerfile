@@ -5,10 +5,10 @@ RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git cmak
 ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 
-RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz
-RUN tar xvf jumanpp-2.0.0-rc3.tar.xz
-RUN mkdir jumanpp-2.0.0-rc3/bld
-WORKDIR ./jumanpp-2.0.0-rc3/bld
+RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc4/jumanpp-2.0.0-rc4.tar.xz
+RUN tar xvf jumanpp-2.0.0-rc4.tar.xz
+RUN mkdir jumanpp-2.0.0-rc4/bld
+WORKDIR ./jumanpp-2.0.0-rc4/bld
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
 RUN make install
 
