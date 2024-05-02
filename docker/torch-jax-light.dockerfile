@@ -6,7 +6,7 @@ ENV VIRTUAL_ENV=/usr/local
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install --no-deps accelerate
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir "transformers[flax, sklearn,sentencepiece,vision,testing]" librosa
+RUN pip install --no-cache-dir "transformers[flax, audio, klearn,sentencepiece,vision,testing]"
 
 RUN pip uninstall -y transformers
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get autoremove && apt-get autoclean

@@ -291,7 +291,7 @@ examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
-    docker_image=[{"image":"huggingface/transformers-torch-light"}],
+    docker_image=[{"image":"huggingface/transformers-example-torch"}],
     install_steps=["uv venv && uv pip install ."],
     pytest_num_workers=1,
 )
@@ -300,7 +300,7 @@ examples_torch_job = CircleCIJob(
 examples_tensorflow_job = CircleCIJob(
     "examples_tensorflow",
     cache_name="tensorflow_examples",
-    docker_image=[{"image":"huggingface/transformers-tf-light"}],
+    docker_image=[{"image":"huggingface/transformers-example-tf"}],
     install_steps=["uv venv && uv pip install ."],
 )
 
@@ -321,7 +321,7 @@ hub_job = CircleCIJob(
 
 onnx_job = CircleCIJob(
     "onnx",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}], # TODO do we really need torch for that job? torch-light?  
+    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
     install_steps=[
         "uv venv && uv pip install .",
         "uv pip install --upgrade eager pip",
