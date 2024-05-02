@@ -231,7 +231,6 @@ class HqqConfig(QuantizationConfigMixin):
         if axis not in [0, 1]:
             raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
 
-
         if dynamic_config is not None:
             self.quant_config = {}
             for key in dynamic_config:
