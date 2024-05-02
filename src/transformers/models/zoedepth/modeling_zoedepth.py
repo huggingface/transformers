@@ -40,8 +40,6 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "ZoeDepthConfig"
 
-N_MIDAS_OUT = 32
-
 
 @dataclass
 class ZoeDepthDepthEstimatorOutput(ModelOutput):
@@ -372,8 +370,8 @@ class ZoeDepthRelativeDepthEstimationHead(nn.Module):
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-        self.conv2 = nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0)
+        self.conv2 = nn.Conv2d(features // 2, config.num_relative_features, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(config.num_relative_features, 1, kernel_size=1, stride=1, padding=0)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
@@ -959,7 +957,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             }
         )
 
-        last_in = N_MIDAS_OUT
+        last_in = config.num_relative_features
         # conditional log binomial for each bin configuration
         self.conditional_log_binomial = nn.ModuleDict(
             {
@@ -1077,7 +1075,7 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
             ]
         )
 
-        last_in = N_MIDAS_OUT + 1  # +1 for relative depth
+        last_in = config.num_relative_features + 1  # +1 for relative depth
 
         # use log binomial instead of softmax
         self.conditional_log_binomial = ZoeDepthConditionalLogBinomialSoftmax(

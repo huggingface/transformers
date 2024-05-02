@@ -77,6 +77,8 @@ class ZoeDepthConfig(PretrainedConfig):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
         use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
+        num_relative_features (`int`, *optional*, defaults to 32):
+            The number of features to use in the relative depth estimation head.
         add_projection (`bool`, *optional*, defaults to `False`):
             Whether to add a projection layer before the depth estimation head.
         bottleneck_features (`int`, *optional*, defaults to 256):
@@ -141,6 +143,7 @@ class ZoeDepthConfig(PretrainedConfig):
         head_in_index=-1,
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=None,
+        num_relative_features=32,
         add_projection=False,
         bottleneck_features=256,
         num_attractors=[16, 8, 4, 1],
@@ -201,6 +204,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.head_in_index = head_in_index
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
+        self.num_relative_features = num_relative_features
         self.add_projection = add_projection
 
         self.bottleneck_features = bottleneck_features
