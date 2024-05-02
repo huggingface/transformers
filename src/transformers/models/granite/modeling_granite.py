@@ -20,7 +20,7 @@ from .configuration_granite import GraniteConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 
 
 logger = logging.get_logger(__name__)
@@ -44,10 +44,10 @@ def get_unpad_data(attention_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Te
 
 
 def repeat_key_value(x: torch.Tensor, num_heads: int, num_key_value_heads: int) -> torch.Tensor:
-    num_groups = num_heads // num_key_value_heads
+    num_repeat = num_heads // num_key_value_heads
 
     # mha
-    if num_groups == 1:
+    if num_repeat == 1:
         return x
 
     # mqa
@@ -55,7 +55,7 @@ def repeat_key_value(x: torch.Tensor, num_heads: int, num_key_value_heads: int) 
         return x.expand(-1, num_heads, -1, -1)
 
     # gqa
-    return x.repeat_interleave(num_groups, dim=1)
+    return x.repeat_interleave(num_repeat, dim=1)
 
 
 _GLU_BASE_MAPPING = {
@@ -129,7 +129,6 @@ class GraniteRMSNorm(nn.Module):
 
 
 ALL_LAYERNORM_LAYERS.append(GraniteRMSNorm)
-
 
 _NORMALIZATION_FUNCTIONS = {
     "layernorm": nn.LayerNorm,
@@ -207,65 +206,38 @@ class GraniteAttention(nn.Module):
         self.resid_dropout = nn.Identity() if self.resid_pdrop == 0 else nn.Dropout(self.resid_pdrop)
 
     def _prepare_qkv_for_forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # the output of following is a tuple if using MQA with tensor parallel
         hidden_states = self.c_attn(hidden_states)
 
-        # for MHA, we can get away with doing just 1 transpose which is not true for GQA
+        batch_size, query_length, _ = hidden_states.shape
+
         if self.attention_head_type == AttentionHeadType.mha:
-            query, key, value = self._prepare_qkv_for_forward_mha(hidden_states)
+            hidden_states = hidden_states.view(batch_size, query_length, self.num_heads, -1)
+            hidden_states = hidden_states.transpose(1, 2)
+
+            query, key, value = hidden_states.chunk(3, dim=-1)
         elif self.attention_head_type == AttentionHeadType.gqa:
-            query, key, value = self._prepare_qkv_for_forward_gqa(hidden_states)
+            hidden_states = hidden_states.view(batch_size, query_length, self.num_key_value_heads, -1)
+
+            query, key, value = hidden_states.split(
+                ((self.num_heads // self.num_key_value_heads) * self.head_dim, self.head_dim, self.head_dim), dim=-1
+            )
+
+            # this needs to be a reshape instead of view sadly
+            query = query.reshape(batch_size, query_length, -1, self.head_dim)
+
+            query = query.transpose(1, 2)
+            key = key.transpose(1, 2)
+            value = value.transpose(1, 2)
         elif self.attention_head_type == AttentionHeadType.mqa:
-            query, key, value = self._prepare_qkv_for_forward_mqa(hidden_states)
+            query, key, value = hidden_states.split((self.hidden_size, self.head_dim, self.head_dim), dim=-1)
+
+            query = query.view(batch_size, query_length, self.num_heads, -1)
+
+            query = query.transpose(1, 2)
+            key = key.unsqueeze(1)
+            value = value.unsqueeze(1)
         else:
             raise ValueError(f"unexpected attention_head_type ({self.attention_head_type})")
-
-        return query, key, value
-
-    def _prepare_qkv_for_forward_mha(
-        self, hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, query_length = hidden_states.shape[:-1]
-
-        hidden_states = hidden_states.view(batch_size, query_length, self.num_heads, -1)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        query, key, value = hidden_states.chunk(3, dim=-1)
-
-        return query, key, value
-
-    def _prepare_qkv_for_forward_gqa(
-        self, hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, query_length = hidden_states.shape[:-1]
-
-        hidden_states = hidden_states.view(batch_size, query_length, self.num_key_value_heads, -1)
-
-        query, key, value = hidden_states.split(
-            ((self.num_heads // self.num_key_value_heads) * self.head_dim, self.head_dim, self.head_dim), dim=-1
-        )
-
-        # this needs to be a reshape instead of view sadly
-        query = query.reshape(batch_size, query_length, -1, self.head_dim)
-
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        return query, key, value
-
-    def _prepare_qkv_for_forward_mqa(
-        self, hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, query_length = hidden_states.shape[:-1]
-
-        query, key, value = hidden_states.split((self.hidden_size, self.head_dim, self.head_dim), dim=-1)
-
-        query = query.view(batch_size, query_length, self.num_heads, -1)
-
-        query = query.transpose(1, 2)
-        key = key.unsqueeze(1)
-        value = value.unsqueeze(1)
 
         return query, key, value
 
