@@ -237,13 +237,11 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         resized_image = nn.functional.interpolate(
             torch_image, (int(height), int(width)), mode=mode, align_corners=True
         )
-        resized_image = (
-            resized_image.squeeze().permute(1, 2, 0).numpy()
-            if data_format == "channels_last"
-            else resized_image.squeeze().numpy()
-        )
+        resized_image = resized_image.squeeze().numpy()
 
-        resized_image = to_channel_dimension_format(resized_image, data_format, input_channel_dim=input_data_format)
+        resized_image = to_channel_dimension_format(
+            resized_image, data_format, input_channel_dim=ChannelDimension.FIRST
+        )
 
         return resized_image
 

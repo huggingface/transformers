@@ -925,10 +925,16 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
             }
         )
 
-        self.seed_projector = ZoeDepthProjector(in_features=bottleneck_features, out_features=bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
+        self.seed_projector = ZoeDepthProjector(
+            in_features=bottleneck_features, out_features=bin_embedding_dim, mlp_dim=bin_embedding_dim // 2
+        )
         self.projectors = nn.ModuleList(
             [
-                ZoeDepthProjector(in_features=config.fusion_hidden_size, out_features=bin_embedding_dim, mlp_dim=bin_embedding_dim // 2)
+                ZoeDepthProjector(
+                    in_features=config.fusion_hidden_size,
+                    out_features=bin_embedding_dim,
+                    mlp_dim=bin_embedding_dim // 2,
+                )
                 for _ in range(4)
             ]
         )
@@ -1052,7 +1058,10 @@ class ZoeDepthMetricDepthEstimationHead(nn.Module):
         self.seed_projector = ZoeDepthProjector(in_features=bottleneck_features, out_features=bin_embedding_dim)
 
         self.projectors = nn.ModuleList(
-            [ZoeDepthProjector(in_features=config.fusion_hidden_size, out_features=bin_embedding_dim) for _ in range(4)]
+            [
+                ZoeDepthProjector(in_features=config.fusion_hidden_size, out_features=bin_embedding_dim)
+                for _ in range(4)
+            ]
         )
         self.attractors = nn.ModuleList(
             [
