@@ -47,7 +47,7 @@ class HQQHfQuantizer(HfQuantizer):
     """
     HQQ quantizer base HF class.
     nn.Linear modules are first tagged with quant_config in _process_model_before_weight_loading().
-    The actually quantization and offloading to the GPU is done in check_quantized_param().
+    The actual quantization and offloading to the GPU is done in check_quantized_param().
     self.show_progress (bool) is used to show quantization progress in each shard.
     """
 
