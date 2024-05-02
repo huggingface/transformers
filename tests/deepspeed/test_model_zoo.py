@@ -236,6 +236,8 @@ def make_task_cmds():
         --train_file {data_dir_wmt}/train.json
         --source_lang en
         --target_lang ro
+        --max_source_length 12
+        --max_target_length 12
         """,
         "sum": f"""
         {scripts_dir}/summarization/run_summarization.py
@@ -269,6 +271,7 @@ def make_task_cmds():
             --remove_unused_columns False
             --max_steps 10
             --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+            --label_column_name labels
         """,
     }
 

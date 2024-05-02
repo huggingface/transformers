@@ -46,7 +46,7 @@ body:
           - Big Model Inference: @SunMarc
           - quantization (bitsandbytes, autogpt): @SunMarc and @younesbelkada
         
-        Documentation: @stevhliu and @MKhalusova
+        Documentation: @stevhliu
         
         Model hub:
 
