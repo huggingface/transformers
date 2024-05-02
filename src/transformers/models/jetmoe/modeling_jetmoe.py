@@ -152,11 +152,6 @@ class JetMoeParallelExperts(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
 
-    def extra_repr(self):
-        return "num_experts={}, input_size={}, output_size={}".format(
-            self.num_experts, self.input_size, self.output_size
-        )
-
     def forward(self, inputs, expert_size):
         """
         Forward pass of the JetMoeParallelExperts module.
@@ -198,12 +193,6 @@ class JetMoeTopKGating(nn.Module):
         self.top_k = top_k
 
         self.layer = nn.Linear(input_size, num_experts, bias=False)
-
-    def extra_repr(self):
-        """
-        Return extra representation string for the module.
-        """
-        return "k={}, num_experts={}".format(self.top_k, self.num_experts)
 
     def compute_topo(self, top_k_indices, top_k_gates):
         zeros = torch.zeros(
