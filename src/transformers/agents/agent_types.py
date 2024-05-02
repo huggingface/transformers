@@ -25,7 +25,6 @@ from ..utils import is_soundfile_availble, is_torch_available, is_vision_availab
 logger = logging.get_logger(__name__)
 
 if is_vision_available():
-    import PIL.Image
     from PIL import Image
     from PIL.Image import Image as ImageType
 else:
@@ -217,7 +216,7 @@ AGENT_TYPE_MAPPING = {str: AgentText, "text": AgentText, "image": AgentImage, "a
 INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio}
 
 if is_vision_available():
-    INSTANCE_TYPE_MAPPING[PIL.Image.Image] = AgentImage
+    INSTANCE_TYPE_MAPPING[ImageType] = AgentImage
 
 
 def handle_agent_inputs(*args, **kwargs):

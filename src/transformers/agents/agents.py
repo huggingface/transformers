@@ -405,7 +405,7 @@ class Agent:
             )
         return rationale, action
 
-    def execute(self, tool_name: str, arguments: Dict[str, str]) -> Any:
+    def execute_tool_call(self, tool_name: str, arguments: Dict[str, str]) -> Any:
         """
         Execute tool with the provided input and returns the result.
 
@@ -732,7 +732,7 @@ class ReactJsonAgent(ReactAgent):
                 answer = self.state[answer]
             return answer
         else:
-            observation = self.execute(tool_name, arguments)
+            observation = self.execute_tool_call(tool_name, arguments)
             observation_type = type(observation)
             if observation_type == AgentText:
                 updated_information = str(observation).strip()

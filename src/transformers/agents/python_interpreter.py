@@ -471,14 +471,7 @@ def evaluate_condition(condition, state, tools):
 
 def evaluate_if(if_statement, state, tools):
     result = None
-    test_statement = if_statement.test
-    if isinstance(test_statement, ast.BoolOp):
-        test_result = evaluate_boolop(test_statement, state, tools)
-    elif isinstance(test_statement, ast.Compare):
-        test_result = evaluate_condition(test_statement, state, tools)
-    else:
-        raise InterpretorError(f"Operator not supported in 'if/else' conditions: {test_statement.__class__.__name__}")
-
+    test_result = evaluate_ast(if_statement.test, state, tools)
     if test_result:
         for line in if_statement.body:
             line_result = evaluate_ast(line, state, tools)

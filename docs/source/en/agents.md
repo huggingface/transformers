@@ -249,7 +249,7 @@ agent = ReactJsonAgent(tools = [PythonInterpreterTool()], system_prompt="{your_c
 ```
 
 > [!WARNING]
-> Please make sure to define the `<<all_tools>>` string somewhere in the `template` so the agent is aware 
+> Please make sure to define the `<<tool_descriptions>>` string somewhere in the `template` so the agent is aware 
 of the available tools.
 
 ## Tools
@@ -438,32 +438,24 @@ Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
 
 Transformers supports `gradio_tools` with the [`Tool.from_gradio`] method. For example, let's use the [`StableDiffusionPromptGeneratorTool`](https://github.com/freddyaboulton/gradio-tools/blob/main/gradio_tools/tools/prompt_generator.py) from `gradio-tools` toolkit for improving prompts to generate better images.
 
-Import and instantiate the tool:
+Import and instantiate the tool, then pass it to the `Tool.from_gradio` method:
 
 ```python
 from gradio_tools import StableDiffusionPromptGeneratorTool
+from transformers import Tool, load_tool, CodeAgent
 
 gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
-```
-
-Pass the tool to the `Tool.from_gradio` method:
-
-```python
-from transformers import Tool
-
 prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
 ```
 
 Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
 
 ```python
-from transformers import CodeAgent
-
 image_generation_tool = load_tool('huggingface-tools/text-to-image')
 agent = CodeAgent(tools=[prompt_generator_tool, image_generation_tool], llm_engine=llm_engine)
 
 agent.run(
-    "Improve this prompt: 'A rabbit wearing a space suit', then generate an image of it.",
+    "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
 )
 ```
 

@@ -255,3 +255,21 @@ else:
     """
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={"a": 1, "b": 2, "c": 3, "d": 4, "e": 5})
         assert result == "Brooklyn"
+
+        code = """if d > e and a < b:
+    best_city = "Brooklyn"
+elif d < e and a < b:
+    best_city = "Sacramento"
+else:
+    best_city = "Manhattan"
+    best_city
+    """
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={"a": 1, "b": 2, "c": 3, "d": 4, "e": 5})
+        assert result == "Sacramento"
+
+    def test_if_conditions(self):
+        code = """char='a'
+if char.isalpha():
+    print('2')"""
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "2"
