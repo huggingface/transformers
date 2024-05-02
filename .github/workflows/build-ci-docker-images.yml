@@ -48,7 +48,7 @@ jobs:
         with:
           context: ./docker
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
           push: true
           tags: huggingface/transformers-${{ matrix.file }}
