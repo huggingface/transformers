@@ -206,8 +206,6 @@ class HqqConfig(QuantizationConfigMixin):
             If set, each layer specified by its id will use its dedicated quantization configuration.
         skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
             List of `nn.Linear` layers to skip.
-        show_progress ('bool', *optional*, defaults to `True`):
-            Show tqdm quantization progress for each shard.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
