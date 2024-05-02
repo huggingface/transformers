@@ -779,7 +779,12 @@ quant_config  = HqqConfig(dynamic_config={
 
 Then you simply quantize the model as follows
 ``` Python
-model = transformers.AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="cuda", quantization_config=quant_config)
+model = transformers.AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    torch_dtype=torch.float16, 
+    device_map="cuda", 
+    quantization_config=quant_config
+)
 ```
 ### Optimized Runtime
 HQQ supports various backends, including pure Pytorch and custom dequantization CUDA kernels. These backends are suitable for older gpus and peft/QLoRA training.
