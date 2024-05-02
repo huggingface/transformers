@@ -1034,6 +1034,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     config_class = AltCLIPConfig
     base_model_prefix = "altclip"
     supports_gradient_checkpointing = True
+    _no_split_module = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

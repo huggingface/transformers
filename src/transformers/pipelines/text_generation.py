@@ -8,6 +8,7 @@ from .base import Pipeline, build_pipeline_init_args
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+    from .pt_utils import KeyDataset
 
 if is_tf_available():
     import tensorflow as tf
@@ -243,7 +244,9 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (`torch.Tensor` or `tf.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        if isinstance(text_inputs, (list, tuple)) and isinstance(text_inputs[0], (list, tuple, dict)):
+        if isinstance(
+            text_inputs, (list, tuple, KeyDataset) if is_torch_available() else (list, tuple)
+        ) and isinstance(text_inputs[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
             if isinstance(text_inputs[0], dict):
                 return super().__call__(Chat(text_inputs), **kwargs)
@@ -380,7 +383,8 @@ class TextGenerationPipeline(Pipeline):
                     if isinstance(prompt_text, str):
                         all_text = prompt_text + all_text
                     elif isinstance(prompt_text, Chat):
-                        all_text = prompt_text.messages + [{"role": "assistant", "content": all_text}]
+                        # Explicit list parsing is necessary for parsing chat datasets
+                        all_text = list(prompt_text.messages) + [{"role": "assistant", "content": all_text}]
 
                 record = {"generated_text": all_text}
             records.append(record)
