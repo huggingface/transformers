@@ -136,10 +136,8 @@ class HQQHfQuantizer(HfQuantizer):
         for key in module_state_dict:
             setattr(module, key, torch.nn.Parameter(module_state_dict[key]))
 
-        """
-        Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
-        directly doesn't work.
-        """
+        # Step 2: Replace module with either HQQLinear or move it to device. We do this via setattr on the parent as doing on it on the module
+        # directly doesn't work.
 
         if hasattr(module, "quant_config"):
             hqq_layer = HQQLinear(
