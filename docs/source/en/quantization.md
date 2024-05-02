@@ -755,14 +755,16 @@ For installation, we recommend you use the following approach to get the latest 
 pip install hqq
 ```
 
-To quantize a model, you need to create an [`HqqConfig`] as follows:
+To quantize a model, you need to create an [`HqqConfig`]. There are two ways of doing it:
 ``` Python
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
-# Linear layers will use the same quantization config
+# Method 1: all linear layers will use the same quantization config
 quant_config  = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0) #axis=0 is used by default
+```
 
-# Each type of linear layer (referred to as linear tag) will use different quantization parameters
+``` Python
+# Method 2: each linear layer with the same tag will use a dedicated quantization config
 q4_config = {'nbits':4, 'group_size':64, 'quant_zero':False, 'quant_scale':False}
 q3_config = {'nbits':3, 'group_size':32, 'quant_zero':False, 'quant_scale':False}
 quant_config  = HqqConfig(dynamic_config={
@@ -776,6 +778,9 @@ quant_config  = HqqConfig(dynamic_config={
   'mlp.down_proj':q3_config,
 })
 ```
+
+The second approach is especially interesting for quantizing Mixture-of-Experts (MoEs) because the experts are less affected by lower quantization settings.
+
 
 Then you simply quantize the model as follows
 ``` Python
