@@ -19,6 +19,7 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Tuple, Union
 
+from .. import is_torch_available
 from ..utils import logging as transformers_logging
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
@@ -304,6 +305,9 @@ class Agent:
         if isinstance(tools, Toolbox):
             self._toolbox = tools
             if add_base_tools:
+                if not is_torch_available():
+                    raise ImportError("Using the base tools requires torch to be installed.")
+
                 self._toolbox.add_base_tools(add_python_interpreter=(self.__class__ == ReactJsonAgent))
         else:
             self._toolbox = Toolbox(tools, add_base_tools=add_base_tools)

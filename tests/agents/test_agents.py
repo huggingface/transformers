@@ -22,6 +22,7 @@ import pytest
 from transformers.agents.agent_types import AgentText
 from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
 from transformers.agents.default_tools import PythonInterpreterTool
+from transformers.testing_utils import require_torch
 
 
 def get_new_path(suffix="") -> str:
@@ -136,6 +137,7 @@ Action:
         assert len(agent.logs) == 7
         assert type(agent.logs[-1]["error"]) == AgentMaxIterationsError
 
+    @require_torch
     def test_init_agent_with_different_toolsets(self):
         toolset_1 = []
         agent = ReactCodeAgent(tools=toolset_1, llm_engine=fake_react_code_llm)
