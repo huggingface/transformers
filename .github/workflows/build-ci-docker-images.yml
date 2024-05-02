@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - change-ci
+      - change-ci # for now let's only build on this branch
   repository_dispatch:
   workflow_call:
     inputs:
