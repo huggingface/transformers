@@ -337,6 +337,7 @@ src/transformers/agents/prompts.py
 src/transformers/agents/python_interpreter.py
 src/transformers/agents/speech_to_text.py
 src/transformers/agents/text_to_speech.py
+src/transformers/agents/tools.py
 src/transformers/agents/translation.py
 src/transformers/audio_utils.py
 src/transformers/benchmark/benchmark.py
