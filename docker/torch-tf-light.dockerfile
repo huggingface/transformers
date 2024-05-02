@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url ht
 RUN git lfs install
 
 RUN uv pip install --no-cache-dir pypi-kenlm
-RUN pip install --no-cache-dir "transformers[tf-cpu,sklearn,sentencepiece,vision, testing]"
+RUN pip install --no-cache-dir "transformers[tf-cpu,sklearn,sentencepiece,vision, testing]" tensorflow-probability
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" librosa
 
 
