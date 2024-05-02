@@ -26,7 +26,7 @@ from transformers.agents.agents import (
     ReactJsonAgent,
     Toolbox
 )
-from transformers.agents.default_tools import CalculatorTool
+from transformers.agents.default_tools import PythonInterpreterTool
 
 def get_new_path(suffix="") -> str:
     directory = tempfile.mkdtemp()
@@ -41,7 +41,7 @@ def fake_react_json_llm(messages, stop=None) -> str:
 Thought: I should multiply 2 by 3.6452. special_marker
 Action:
 {
-    "action": "calculator",
+    "action": "python_interpreter",
     "action_input": {"expression": "2*3.6452"}
 }
 """
@@ -82,7 +82,7 @@ def fake_code_llm_oneshot(messages, stop=None) -> str:
 Thought: I should multiply 2 by 3.6452. special_marker
 Code:
 ```py
-result = calculator(expression="2*3.6452")
+result = python_interpreter(code="2*3.6452")
 print(result)
 ```
 """
@@ -90,7 +90,7 @@ print(result)
 
 class AgentTests(unittest.TestCase):
     def test_fake_react_json_agent(self):
-        agent = ReactJsonAgent(tools=[CalculatorTool()], llm_engine=fake_react_json_llm)
+        agent = ReactJsonAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_json_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert isinstance(output, AgentText)
         assert output == "7.2904"
@@ -109,7 +109,7 @@ Action:
         )
 
     def test_fake_react_code_agent(self):
-        agent = ReactCodeAgent(tools=[CalculatorTool()], llm_engine=fake_react_code_llm)
+        agent = ReactCodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_react_code_llm)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert isinstance(output, AgentText)
         assert output == "7.2904"
@@ -121,7 +121,7 @@ Action:
         }
 
     def test_fake_code_agent(self):
-        agent = CodeAgent(tools=[CalculatorTool()], llm_engine=fake_code_llm_oneshot)
+        agent = CodeAgent(tools=[PythonInterpreterTool()], llm_engine=fake_code_llm_oneshot)
         output = agent.run("What is 2 multiplied by 3.6452?")
         assert isinstance(output, AgentText)
         assert output == "7.2904"
@@ -131,7 +131,7 @@ Action:
 
     def test_react_fails_max_iterations(self):
         agent = ReactCodeAgent(
-            tools=[CalculatorTool()],
+            tools=[PythonInterpreterTool()],
             llm_engine=fake_code_llm_oneshot,  # use this callable because it never ends
             max_iterations=5,
         )
@@ -144,7 +144,7 @@ Action:
         agent = ReactCodeAgent(tools=toolset_1, llm_engine=fake_react_code_llm)
         assert len(agent.toolbox.tools) == 1 # contains only final_answer tool
 
-        toolset_2 = [CalculatorTool(), CalculatorTool()]
+        toolset_2 = [PythonInterpreterTool(), PythonInterpreterTool()]
         agent = ReactCodeAgent(tools=toolset_2, llm_engine=fake_react_code_llm)
         assert len(agent.toolbox.tools) == 2 # added final_answer tool
 
@@ -154,5 +154,5 @@ Action:
 
         with pytest.raises(KeyError) as e:
             agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm, add_base_tools=True)
-        assert "calculator already exists in the toolbox" in str(e)
+        assert "python_interpreter already exists in the toolbox" in str(e)
     

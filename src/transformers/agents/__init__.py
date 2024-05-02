@@ -35,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["default_tools"] = ["CalculatorTool", "FinalAnswerTool", "PythonEvaluatorTool"]
+    _import_structure["default_tools"] = ["FinalAnswerTool", "PythonInterpreterTool"]
     _import_structure["document_question_answering"] = ["DocumentQuestionAnsweringTool"]
     _import_structure["image_question_answering"] = ["ImageQuestionAnsweringTool"]
     _import_structure["speech_to_text"] = ["SpeechToTextTool"]
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .default_tools import CalculatorTool, FinalAnswerTool, PythonEvaluatorTool
+        from .default_tools import FinalAnswerTool, PythonInterpreterTool
         from .document_question_answering import DocumentQuestionAnsweringTool
         from .image_question_answering import ImageQuestionAnsweringTool
         from .speech_to_text import SpeechToTextTool

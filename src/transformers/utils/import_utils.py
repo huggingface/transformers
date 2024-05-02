@@ -128,7 +128,6 @@ _keras_nlp_available = _is_package_available("keras_nlp")
 _levenshtein_available = _is_package_available("Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
-_numexpr_available = _is_package_available("numexpr")
 _nltk_available = _is_package_available("nltk")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
@@ -975,10 +974,6 @@ def is_natten_available():
     return _natten_available
 
 
-def is_numexpr_available():
-    return _numexpr_available
-
-
 def is_nltk_available():
     return _nltk_available
 
@@ -1421,7 +1416,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
-        ("numexpr", (is_numexpr_available, NUMEXPR_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),

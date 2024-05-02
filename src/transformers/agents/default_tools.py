@@ -25,14 +25,9 @@ from huggingface_hub import hf_hub_download, list_spaces
 
 from .. import requires_backends
 from ..utils import is_offline_mode
-from ..utils.import_utils import is_numexpr_available
 from .agent_types import INSTANCE_TYPE_MAPPING, AgentType
 from .python_interpreter import evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
-
-
-if is_numexpr_available():
-    import numexpr
 
 
 def custom_print(*args):
@@ -155,38 +150,8 @@ def setup_default_tools(logger):
     return default_tools
 
 
-class CalculatorTool(Tool):
-    name = "calculator"
-    description = "This is a tool that calculates. It can be used to perform simple arithmetic operations."
-
-    inputs = {
-        "expression": {
-            "type": "text",
-            "description": "The expression to be evaluated.The variables used CANNOT be placeholders like 'x' or 'mike's age', they must be numbers",
-        }
-    }
-    output_type = "text"
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["numexpr"])
-        super().__init__(*args, **kwargs)
-
-    def forward(self, expression):
-        if isinstance(expression, Dict):
-            expression = expression["expression"]
-        local_dict = {"pi": math.pi, "e": math.e}
-        output = str(
-            numexpr.evaluate(
-                expression.strip().replace("^", "**"),
-                global_dict={},  # restrict access to globals
-                local_dict=local_dict,  # add common mathematical functions
-            )
-        )
-        return output
-
-
-class PythonEvaluatorTool(Tool):
-    name = "python_evaluator"
+class PythonInterpreterTool(Tool):
+    name = "python_interpreter"
     description = "This is a tool that evaluates python code. It can be used to perform calculations. It can only import base python libraries like math and random."
 
     inputs = {
