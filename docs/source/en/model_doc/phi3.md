@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -57,7 +57,10 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 >>> outputs = model.generate(inputs, max_new_tokens=32)
 >>> text = tokenizer.batch_decode(outputs)[0]
 >>> print(text)
-<s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Absolutely! Bananas and dragonfruits are both delicious fruits that can be combined in various ways to create tasty and nutrit
+<s><|user|> 
+Can you provide ways to eat combinations of bananas and dragonfruits?<|end|> 
+<|assistant|> 
+Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and
 ```
 
 ## Phi3Config
