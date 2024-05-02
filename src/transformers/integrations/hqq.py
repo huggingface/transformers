@@ -18,8 +18,6 @@ from ..utils import is_hqq_available, is_torch_available, logging
 
 if is_torch_available():
     import torch
-else:
-    torch = None
 
 logger = logging.get_logger(__name__)
 
