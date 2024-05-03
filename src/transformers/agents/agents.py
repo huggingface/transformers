@@ -171,8 +171,14 @@ class Toolbox:
         """Get all tools currently in the toolbox"""
         return self._tools
 
-    def show_tool_descriptions(self, tool_description_template=None) -> str:
-        """Returns the description of all tools in the toolbox"""
+    def show_tool_descriptions(self, tool_description_template: str = None) -> str:
+        """
+        Returns the description of all tools in the toolbox
+
+        Args:
+            tool_description_template (`str`, *optional*):
+                The template to use to describe the tools. If not provided, the default template will be used.
+        """
         return "\n".join(
             [get_tool_description_with_args(tool, tool_description_template) for tool in self._tools.values()]
         )
@@ -185,7 +191,6 @@ class Toolbox:
             tool (`Tool`):
                 The tool to add to the toolbox.
         """
-
         if tool.name in self._tools:
             raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
         self._tools[tool.name] = tool
@@ -198,7 +203,6 @@ class Toolbox:
             tool_name (`str`):
                 The tool to remove from the toolbox.
         """
-        """Removes a tool from the toolbox"""
         if tool_name not in self._tools:
             raise KeyError(
                 f"Error: tool {tool_name} not found in toolbox for removal, should be instead one of {list(self._tools.keys())}."
@@ -490,6 +494,7 @@ class CodeAgent(Agent):
 
         Args:
             task (`str`): The task to perform
+            return_generated_code (`bool`, *optional*, defaults to `False`): Whether to return the generated code instead of running it
             kwargs (additional keyword arguments, *optional*):
                 Any keyword argument to send to the agent when evaluating the code.
 
