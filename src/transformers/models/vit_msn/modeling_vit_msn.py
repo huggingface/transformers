@@ -421,6 +421,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ViTMSNAttention"]
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
