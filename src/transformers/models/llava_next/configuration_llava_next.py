@@ -90,6 +90,7 @@ class LlavaNextConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_grid_pinpoints=None,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -138,4 +139,4 @@ class LlavaNextConfig(PretrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
