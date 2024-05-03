@@ -26,7 +26,6 @@ jiwer
 librosa
 evaluate >= 0.2.0
 timm
-# TODO: replace with `albumentations` when version > 1.4.4 released
-git+https://github.com/albumentations-team/albumentations@cc0d5a0c68f9c1d3e3262fd610e1d3bc9807e2fb#egg=albumentations
+albumentations >= 1.4.5
 torchmetrics
 pycocotools
