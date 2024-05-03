@@ -331,7 +331,6 @@ class Agent:
         )
         self.prompt = None
         self.logs = []
-        self.agent_memory = []
         self.task = None
         self.memory_verbose = memory_verbose
 
@@ -346,6 +345,20 @@ class Agent:
     def toolbox(self) -> Toolbox:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
+
+    def initialize_for_run(self, task: str, **kwargs):
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+        self.state = kwargs.copy()
+        self.system_prompt = format_prompt_with_tools(
+            self._toolbox, self.system_prompt_template, self.tool_description_template
+        )
+        self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
+        self.logger.warn("=====New task=====")
+        self.logger.log(33, self.task)
+        self.logger.debug("System prompt is as follows:")
+        self.logger.debug(self.system_prompt)
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
@@ -420,6 +433,7 @@ class Agent:
     def execute_tool_call(self, tool_name: str, arguments: Dict[str, str]) -> Any:
         """
         Execute tool with the provided input and returns the result.
+        This method replaces arguments with the actual values from the state if they refer to state variables.
 
         Args:
             tool_name (`str`): Name of the Tool to execute (shoulde be one from self.toolbox).
@@ -453,6 +467,7 @@ class Agent:
         else:
             self.logger.log(31, code_action)
         self.logger.warning("====")
+
 
     def run(self, **kwargs):
         """To be implemented in the child class"""
@@ -506,6 +521,7 @@ class CodeAgent(Agent):
         cleaned in the `run` method.
         """
         return parse_code_blob(result)
+    
 
     def run(self, task: str, return_generated_code: bool = False, **kwargs):
         """
@@ -527,20 +543,7 @@ class CodeAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        # Run LLM
-        self.state = kwargs.copy()
-
-        self.task = task
-        if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
-
-        self.logger.warning("=====New task=====")
-        self.logger.log(33, self.task)
-        self.logger.debug("System prompt is as follows:")
-        self.logger.debug(self.system_prompt)
-        self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
-
-        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
+        self.initialize_for_run(task, **kwargs)
 
         # Run LLM
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
@@ -548,6 +551,7 @@ class CodeAgent(Agent):
             "role": MessageRole.USER,
             "content": "Task: " + self.task,
         }
+
         self.prompt = [prompt_message, task_message]
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
@@ -624,23 +628,7 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-
-        self.logs = []
-        self.system_prompt = format_prompt_with_tools(
-            self._toolbox, self.system_prompt_template, self.tool_description_template
-        )
-
-        self.state = kwargs.copy()
-
-        self.task = task
-        if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
-
-        self.logger.warn("=====New task=====")
-        self.logger.log(33, self.task)
-        self.logger.debug("System prompt is as follows:")
-        self.logger.debug(self.system_prompt)
-        self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
+        self.initialize_for_run(task, **kwargs)
 
         final_answer = None
         iteration = 0
@@ -664,7 +652,7 @@ class ReactAgent(Agent):
                     "content": "An agent tried to answer a user query but it failed to do so. You are tasked with providing an answer instead. Here is the agent's memory:",
                 }
             ]
-            self.prompt += self.agent_memory[1:].copy()
+            self.prompt += self.write_inner_memory_from_logs()[1:]
             self.prompt += [
                 {
                     "role": MessageRole.USER,
@@ -709,11 +697,10 @@ class ReactJsonAgent(ReactAgent):
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
         """
-        self.agent_memory = self.write_inner_memory_from_logs()
-        self.logs[-1]["agent_memory"] = self.agent_memory.copy()
+        agent_memory = self.write_inner_memory_from_logs()
 
-        self.prompt = self.agent_memory.copy()
-        # self.prompt = agent_memory + "\nThought: " # prepend the answer to steer the llm
+        self.logs[-1]["agent_memory"] = agent_memory.copy()
+        self.prompt = agent_memory
         self.logger.debug("=====New step=====")
 
         # Add new step in logs
@@ -757,13 +744,13 @@ class ReactJsonAgent(ReactAgent):
             if observation_type == AgentText:
                 updated_information = str(observation).strip()
             else:
+                # TODO: observation naming could allow for different names of same type
                 if observation_type == AgentImage:
                     observation_name = "image.png"
                 elif observation_type == AgentAudio:
                     observation_name = "audio.mp3"
                 else:
                     observation_name = "object.object"
-                # TODO: improve observation name choice
 
                 self.state[observation_name] = observation
                 updated_information = f"Stored '{observation_name}' in memory."
@@ -811,10 +798,10 @@ class ReactCodeAgent(ReactAgent):
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
         """
-        self.agent_memory = self.write_inner_memory_from_logs()
-        self.logs[-1]["agent_memory"] = self.agent_memory.copy()
+        agent_memory = self.write_inner_memory_from_logs()
+        self.logs[-1]["agent_memory"] = agent_memory.copy()
 
-        self.prompt = self.agent_memory.copy()
+        self.prompt = agent_memory.copy()
 
         self.logger.debug("=====New step=====")
 
