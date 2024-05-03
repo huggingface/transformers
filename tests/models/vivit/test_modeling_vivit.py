@@ -40,8 +40,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import VivitImageProcessor
 
 
@@ -378,7 +376,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.5608,  0.6402,  0.1368], [-0.1167, -0.1180, -0.3220], [-0.1988, -0.2729, -0.0176]]
+            [[-0.5608, 0.6402, 0.1368], [-0.1167, -0.1180, -0.3220], [-0.1988, -0.2729, -0.0176]]
         ).to(torch_device)
         print(outputs.last_hidden_state[0, :3, :3])
 
