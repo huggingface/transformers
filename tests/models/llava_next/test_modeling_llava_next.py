@@ -27,12 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_fp16, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -270,6 +265,16 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+    @require_torch_fp16
+
+    def test_llava_next_model_fp16_forward(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_llava_next_model_fp16_forward(config, **inputs)
+
+    @require_torch_fp16
+    def test_llava_next_model_fp16_autocast_forward(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_llava_next_model_fp16_autocast_forward(config, **inputs)
 
 
 @require_torch
