@@ -519,7 +519,9 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             for imsize in inputs["image_sizes"]
         ]
         for pix_val, num_patch in zip(pixel_values, image_num_patches):
-            self.assertTrue(torch.all(pix_val[num_patch:] == 0))
+            self.assertTrue(torch.all(pix_val[num_patch:] == 0))  # pad on the right
+            for i in range(num_patch):
+                self.assertFalse(torch.all(pix_val[i : i + 1] == 0))  # no padding expected in any of patches
 
         # check loss when labels are passed
         inputs["labels"] = inputs["input_ids"].clone()
@@ -540,4 +542,37 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_batch_matches_single(self):
+        model = LlavaNextForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-mistral-7b-hf",
+            load_in_4bit=True,
+        )
+
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
+        cats_image = Image.open(requests.get(url, stream=True).raw)
+        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+
+        inputs_batched = self.processor(
+            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+        ).to(torch_device)
+
+        inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
+            torch_device
+        )
+
+        # verify generation
+        output_batched = model.generate(**inputs_batched, max_new_tokens=50)
+        output_single = model.generate(**inputs_single, max_new_tokens=50)
+        print(
+            self.processor.decode(output_batched[0], skip_special_tokens=True),
+            self.processor.decode(output_single[0], skip_special_tokens=True),
+        )
+        self.assertEqual(
+            self.processor.decode(output_batched[0], skip_special_tokens=True),
+            self.processor.decode(output_single[0], skip_special_tokens=True),
         )

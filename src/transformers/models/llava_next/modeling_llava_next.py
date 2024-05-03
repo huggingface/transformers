@@ -367,6 +367,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         return self._padding_side
 
     def set_padding_side(self, padding_side: str):
+        print("WHY SET")
         if padding_side not in ["left", "right"]:
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
@@ -522,7 +523,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 left_padding = False
             elif not _left_padding and not _right_padding:
                 # both side is 1, so cannot tell
-                left_padding = self.padding_side == "left"
+                left_padding = self.padding_side() == "left"
             else:
                 # invalid attention_mask
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
