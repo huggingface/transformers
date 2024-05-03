@@ -17,13 +17,53 @@ import unittest
 
 import pytest
 
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from transformers.agents.default_tools import BASE_PYTHON_TOOLS
 from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
 
+from transformers import load_tool
+
+from .test_tools_common import ToolTesterMixin
 
 # Fake function we will use as tool
 def add_two(x):
     return x + 2
+
+
+class PythonInterpreterToolTester(unittest.TestCase, ToolTesterMixin):
+    def setUp(self):
+        self.tool = load_tool("python_interpreter")
+        self.tool.setup()
+
+    def test_exact_match_arg(self):
+        result = self.tool("(2 / 2) * 4")
+        self.assertEqual(result, "4.0")
+
+    def test_exact_match_kwarg(self):
+        result = self.tool(code="(2 / 2) * 4")
+        self.assertEqual(result, "4.0")
+
+    def test_agent_type_output(self):
+        inputs = ["2 * 2"]
+        output = self.tool(*inputs)
+        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, output_type))
+
+    def test_agent_types_inputs(self):
+        inputs = ["2 * 2"]
+        _inputs = []
+
+        for _input, expected_input in zip(inputs, self.tool.inputs.values()):
+            input_type = expected_input["type"]
+            if isinstance(input_type, list):
+                _inputs.append([AGENT_TYPE_MAPPING[_input_type](_input) for _input_type in input_type])
+            else:
+                _inputs.append(AGENT_TYPE_MAPPING[input_type](_input))
+
+        # Should not raise an error
+        output = self.tool(*inputs)
+        output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
+        self.assertTrue(isinstance(output, output_type))
 
 
 class PythonInterpreterTester(unittest.TestCase):
@@ -182,15 +222,6 @@ for block in text_block:
         result = evaluate_python_code(code, {"len": len, "range": range}, state={})
         assert result == "THESEAGULL"
 
-    def test_imports(self):
-        code = "import math\nmath.sqrt(4)"
-        result = evaluate_python_code(code, {}, state={})
-        assert result == 2.0
-
-        code = "from random import choice, seed\nseed(12)\nchoice(['win', 'lose', 'draw'])"
-        result = evaluate_python_code(code, {}, state={})
-        assert result == "lose"
-
     def test_tuples(self):
         code = "x = (1, 2, 3)\nx[1]"
         result = evaluate_python_code(code, {}, state={})
@@ -273,3 +304,40 @@ if char.isalpha():
     print('2')"""
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "2"
+
+    def test_imports(self):
+        code = "import math\nmath.sqrt(4)"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == 2.0
+
+        code = "from random import choice, seed\nseed(12)\nchoice(['win', 'lose', 'draw'])"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "lose"
+
+        code = "import time\ntime.sleep(0.1)"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result is None
+
+        code = "from queue import Queue\nq = Queue()\nq.put(1)\nq.get()"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == 1
+
+        code = "import itertools\nlist(itertools.islice(range(10), 3))"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == [0, 1, 2]
+
+        code = "import re\nre.search('a', 'abc').group()"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "a"
+
+        code = "import stat\nstat.S_ISREG(0o100644)"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == True
+
+        code = "import statistics\nstatistics.mean([1, 2, 3, 4, 4])"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == 2.8
+
+        code = "import unicodedata\nunicodedata.name('A')"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "LATIN CAPITAL LETTER A"

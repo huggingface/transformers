@@ -379,16 +379,19 @@ class Tool:
         """
         Creates a [`Tool`] from a gradio tool.
         """
+        import inspect
 
         class GradioToolWrapper(Tool):
             def __init__(self, _gradio_tool):
                 super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
-                self.output_type = str
+                self.output_type = "text"
                 self._gradio_tool = _gradio_tool
+                func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
+                self.inputs = {key: "" for key in func_args}
 
-            def __call__(self, *args, **kwargs):
+            def forward(self, *args, **kwargs):
                 return self._gradio_tool.run(*args, **kwargs)
 
         return GradioToolWrapper(gradio_tool)
@@ -398,6 +401,7 @@ class Tool:
         """
         Creates a [`Tool`] from a langchain tool.
         """
+        import inspect
 
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
@@ -405,20 +409,17 @@ class Tool:
                 self.name = _langchain_tool.name
                 self.description = _langchain_tool.description
                 self.inputs = parse_langchain_args(_langchain_tool.args)
-                self.output_type = str
+                self.output_type = "text"
                 self.langchain_tool = _langchain_tool
+                print(list(inspect.signature(_langchain_tool.run).parameters.keys()))
+                print(self.inputs)
 
-            def __call__(self, *args, **kwargs):
-                # This lets the user type args either as kwargs or positional arguments
+            def forward(self, *args, **kwargs):
+                tool_input = kwargs.copy()
                 for index, argument in enumerate(args):
                     if index < len(self.inputs):
                         input_key = next(iter(self.inputs))
-                        kwargs[input_key] = argument
-
-                tool_input = {}
-                for key, value in kwargs.items():
-                    tool_input[key] = value
-
+                        tool_input[input_key] = argument
                 return self.langchain_tool.run(tool_input)
 
         return LangChainToolWrapper(langchain_tool)

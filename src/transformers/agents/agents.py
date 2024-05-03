@@ -48,6 +48,7 @@ class CustomFormatter(logging.Formatter):
     red = "\x1b[31;20m"
     green = "\x1b[32;20m"
     bold_red = "\x1b[31;1m"
+    bold_white = "\x1b[37;1m"
     reset = "\x1b[0m"
     format = "%(message)s"
 
@@ -56,6 +57,8 @@ class CustomFormatter(logging.Formatter):
         logging.INFO: format,
         logging.WARNING: bold_yellow + format + reset,
         31: reset + format + reset,
+        32: green + format + reset,
+        33: bold_white + format + reset,
         logging.ERROR: red + format + reset,
         logging.CRITICAL: bold_red + format + reset,
     }
@@ -449,6 +452,14 @@ class Agent:
                 f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
                 f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
+        
+    def log_code_action(self, code_action: str) -> None:
+        self.logger.warning("====Agent is executing the code below:")
+        if is_pygments_available():
+            self.logger.log(31, highlight(code_action, PythonLexer(), Terminal256Formatter()))
+        else:
+            self.logger.log(31, code_action)
+        self.logger.warning("====")
 
     def run(self, **kwargs):
         """To be implemented in the child class"""
@@ -521,10 +532,10 @@ class CodeAgent(Agent):
 
         self.task = task
         if len(kwargs) > 0:
-            self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
+            self.task += f"\nYou have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
 
         self.logger.warning("=====New task=====")
-        self.logger.warning(self.task)
+        self.logger.log(33, self.task)
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
         self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
@@ -552,13 +563,12 @@ class CodeAgent(Agent):
             code_action = self.parse_code_blob(code_action)
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Be sure to provide correct code"
-            self.logger.error(error_msg)
+            self.logger.error(error_msg, exc_info=1)
             return error_msg
 
         # Execute
+        self.log_code_action(code_action)
         try:
-            self.logger.warning("\n\n====Executing the code below:====")
-            self.logger.warning(code_action)
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(code_action, available_tools, state=self.state)
             self.logger.info(self.state["print_outputs"])
@@ -633,10 +643,10 @@ class ReactAgent(Agent):
 
         self.task = task
         if len(kwargs) > 0:
-            self.task += f" You have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
+            self.task += f"\nYou have been provided with these initial arguments, that you should absolutely use if needed rather than hallucinating arguments: {str(kwargs)}."
 
         self.logger.warn("=====New task=====")
-        self.logger.warn(self.task)
+        self.logger.log(33, self.task)
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
         self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
@@ -647,7 +657,7 @@ class ReactAgent(Agent):
             try:
                 final_answer = self.step()
             except AgentError as e:
-                self.logger.error(e)
+                self.logger.error(e, exc_info=1)
                 self.logs[-1]["error"] = e
             finally:
                 iteration += 1
@@ -655,12 +665,12 @@ class ReactAgent(Agent):
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
             self.logs.append({"error": AgentMaxIterationsError(error_message)})
-            self.logger.error(error_message)
+            self.logger.error(error_message, exc_info=1)
 
             self.prompt = [
                 {
                     "role": MessageRole.SYSTEM,
-                    "content": "An agent tried to answer a user query but it failed to do so. You are tasked with prviding an answer instead. Here is the agent's memory:",
+                    "content": "An agent tried to answer a user query but it failed to do so. You are tasked with providing an answer instead. Here is the agent's memory:",
                 }
             ]
             self.prompt += self.agent_memory[1:].copy()
@@ -704,6 +714,10 @@ class ReactJsonAgent(ReactAgent):
         )
 
     def step(self):
+        """
+        Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
+        The errors are raised here, they are caught and logged in the run() method.
+        """
         self.agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = self.agent_memory.copy()
 
@@ -802,6 +816,10 @@ class ReactCodeAgent(ReactAgent):
         self.python_evaluator = evaluate_python_code
 
     def step(self):
+        """
+        Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
+        The errors are raised here, they are caught and logged in the run() method.
+        """
         self.agent_memory = self.write_inner_memory_from_logs()
         self.logs[-1]["agent_memory"] = self.agent_memory.copy()
 
@@ -830,8 +848,6 @@ class ReactCodeAgent(ReactAgent):
 
         try:
             code_action = parse_code_blob(raw_code_action)
-            if is_pygments_available():
-                code_action = highlight(code_action, PythonLexer(), Terminal256Formatter())
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
             raise AgentParsingError(error_msg)
@@ -840,14 +856,13 @@ class ReactCodeAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
-        self.logger.warning("====Agent is executing the code below:")
-        self.logger.log(31, code_action)
-        self.logger.warning("====")
+        self.log_code_action(code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(code_action, available_tools, state=self.state)
             information = self.state["print_outputs"]
-            self.logger.info(information)
+            self.logger.warning("Print outputs:")
+            self.logger.log(32, information)
             self.logs[-1]["observation"] = information
         except Exception as e:
             error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
@@ -856,6 +871,7 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
-                self.logger.warning(result)
+                self.logger.warning("Final answer:")
+                self.logger.log(32, result)
                 return result
         return None

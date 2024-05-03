@@ -484,14 +484,19 @@ To import a tool from LangChain, use the `from_langchain()` method.
 
 ```python
 # Load langchain tool
-from langchain_community.tools import WikipediaQueryRun
-from langchain_community.utilities import WikipediaAPIWrapper
-
-api_wrapper = WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100)
-langchain_tool = WikipediaQueryRun(api_wrapper=api_wrapper)
-
-# Initialize transformers tool from langchain tool
+from langchain.agents import load_tools
 from transformers import Tool
 
-tool = Tool.from_langchain(langchain_tool)
+wikipedia_tool_langchain = load_tools(["wikipedia"])[0]
+wikipedia_tool = Tool.from_langchain(wikipedia_tool_langchain)
+```
+
+Then you can use it normally:
+
+```python
+from transformers import ReactCodeAgent
+
+agent = ReactCodeAgent(tools=[wikipedia_tool])
+
+agent.run("Who is the president of Nicaragua?")
 ```
