@@ -3786,12 +3786,11 @@ class ModelTesterMixin:
                                     logits_eager = torch.cat(
                                         [outputs_eager.image_embeds, outputs_eager.text_embeds], dim=0
                                     )
+                                elif is_encoder_decoder:
+                                    logits_eager = outputs_eager.decoder_hidden_states[-1]
                                 else:
-                                    logits_eager = (
-                                        outputs_eager.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_eager.decoder_hidden_states[-1]
-                                    )
+                                    logits_eager = outputs_eager.hidden_states[-1]
+
                                 if model_class.__name__ == "CLIPModel":
                                     logits_sdpa = torch.cat(
                                         [outputs_sdpa.image_embeds, outputs_sdpa.text_embeds], dim=0
