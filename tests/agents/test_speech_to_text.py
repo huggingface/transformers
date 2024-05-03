@@ -22,9 +22,6 @@ from transformers import is_torch_available, load_tool
 from .test_tools_common import ToolTesterMixin
 
 
-    pass
-
-
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.tool = load_tool("speech-to-text")

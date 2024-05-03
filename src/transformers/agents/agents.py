@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
+from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
@@ -33,6 +34,12 @@ from .tools import (
     get_tool_description_with_args,
     load_tool,
 )
+
+
+if is_pygments_available():
+    from pygments import highlight
+    from pygments.formatters import Terminal256Formatter
+    from pygments.lexers import PythonLexer
 
 
 class CustomFormatter(logging.Formatter):
@@ -48,6 +55,7 @@ class CustomFormatter(logging.Formatter):
         logging.DEBUG: grey + format + reset,
         logging.INFO: format,
         logging.WARNING: bold_yellow + format + reset,
+        31: reset + format + reset,
         logging.ERROR: red + format + reset,
         logging.CRITICAL: bold_red + format + reset,
     }
@@ -784,6 +792,13 @@ class ReactCodeAgent(ReactAgent):
             else self.default_tool_description_template,
             **kwargs,
         )
+
+        if not is_pygments_available():
+            transformers_logging.warning_once(
+                "pygments isn't installed. Installing pygments will enable color syntax highlighting in the "
+                "ReactCodeAgent."
+            )
+
         self.python_evaluator = evaluate_python_code
 
     def step(self):
@@ -815,6 +830,8 @@ class ReactCodeAgent(ReactAgent):
 
         try:
             code_action = parse_code_blob(raw_code_action)
+            if is_pygments_available():
+                code_action = highlight(code_action, PythonLexer(), Terminal256Formatter())
         except Exception as e:
             error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
             raise AgentParsingError(error_msg)
@@ -823,7 +840,9 @@ class ReactCodeAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
-        self.logger.warning(f"====Agent is executing the code below:\n{code_action}\n====")
+        self.logger.warning("====Agent is executing the code below:")
+        self.logger.log(31, code_action)
+        self.logger.warning("====")
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             result = self.python_evaluator(code_action, available_tools, state=self.state)
@@ -831,7 +850,7 @@ class ReactCodeAgent(ReactAgent):
             self.logger.info(information)
             self.logs[-1]["observation"] = information
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{code_action}\nThis failed due to the following error:\n{str(e)}"
+            error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
                 error_msg += "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
             raise AgentExecutionError(error_msg)
