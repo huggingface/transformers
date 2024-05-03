@@ -1038,7 +1038,6 @@ class GroupViTTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder, CLIP_TEXT->GROUPVIT_TEXT
 class GroupViTTextTransformer(nn.Module):
     def __init__(self, config: GroupViTTextConfig):
         super().__init__()
@@ -1047,7 +1046,6 @@ class GroupViTTextTransformer(nn.Module):
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._attn_implementation = config._attn_implementation
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id

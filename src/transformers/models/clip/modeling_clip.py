@@ -416,10 +416,10 @@ class CLIPMLP(nn.Module):
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, attn_implementation="eager"):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = CLIP_ATTENTION_CLASSES[attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -642,10 +642,15 @@ class CLIPEncoder(nn.Module):
         config: CLIPConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, attn_implementation="eager"):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                CLIPEncoderLayer(config, attn_implementation=attn_implementation)
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -731,14 +736,13 @@ class CLIPEncoder(nn.Module):
 
 
 class CLIPTextTransformer(nn.Module):
-    def __init__(self, config: CLIPTextConfig):
+    def __init__(self, config: CLIPTextConfig, attn_implementation="eager"):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = CLIPEncoder(config, attn_implementation=attn_implementation)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self._attn_implementation = config._attn_implementation
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
@@ -890,14 +894,14 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
 
 class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: CLIPVisionConfig, attn_implementation="eager"):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = CLIPVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = CLIPEncoder(config, attn_implementation=attn_implementation)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
