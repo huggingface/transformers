@@ -122,7 +122,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (defaults to `None`):
+            resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
@@ -221,7 +221,7 @@ FROM_PRETRAINED_TF_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (defaults to `None`):
+            resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
@@ -320,7 +320,7 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (defaults to `None`):
+            resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):

@@ -244,7 +244,7 @@ def get_cached_module_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (defaults to `None`):
+        resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
@@ -433,7 +433,7 @@ def get_class_from_dynamic_module(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (defaults to `None`):
+        resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
