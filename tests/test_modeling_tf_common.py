@@ -728,14 +728,6 @@ class TFModelTesterMixin:
                 pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(
                     pt_model, tf_checkpoint_path, allow_missing_keys=allow_missing_keys
                 )
-                ######### for debugging CI failure, will be reverted ##########
-                mismatches = self.compare_models(pt_model, tf_model)
-                if mismatches:
-                    for mismatch in mismatches:
-                        print(mismatch)
-                else:
-                    print("loading from disk: All parameters match successfully!")
-                ######### for debugging CI failure, will be reverted ##########
 
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
