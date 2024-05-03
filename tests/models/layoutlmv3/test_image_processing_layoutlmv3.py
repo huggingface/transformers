@@ -95,7 +95,6 @@ class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-
     def test_LayoutLMv3_integration_test(self):
         # with apply_OCR = True
         image_processing = LayoutLMv3ImageProcessor()
