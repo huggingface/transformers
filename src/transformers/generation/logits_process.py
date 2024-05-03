@@ -2226,6 +2226,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
             eos_token_id = torch.tensor(eos_token_id)
+        self.eos_token_id = eos_token_id
 
         if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
             logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
@@ -2237,6 +2238,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         scores_processed = scores
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         if self.min_eos_p:
             probs = torch.nn.functional.softmax(scores.float(), dim=-1)
             # create scores full of -inf except for the eos_token_id

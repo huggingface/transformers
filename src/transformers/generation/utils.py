@@ -1341,13 +1341,17 @@ class GenerationMixin:
         """
         Prepares the special tokens for generation, overwriting the generation config with their processed versions
         converted to tensor.
+
         Note that `generation_config` is changed in place and stops being serializable after this method is called.
-        If called outside `generate`, consider creating a copy of `generation_config` first.
+        That is no problem is callen within `generate` (`generation_config` is a local copy that doesn't leave the
+        function). However, if called outside `generate`, consider creating a copy of `generation_config` first.
         """
 
         # Convert special tokens to tensors (if they exist)
         def _tensor_or_none(token):
-            return torch.tensor(token, device=self.device, dtype=torch.long) if token is not None else None
+            if token is None or isinstance(token, torch.Tensor):
+                return token
+            return torch.tensor(token, device=self.device, dtype=torch.long)
 
         bos_token_id = _tensor_or_none(generation_config.bos_token_id)
         eos_token_id = _tensor_or_none(generation_config.eos_token_id)
@@ -2652,9 +2656,6 @@ class GenerationMixin:
         return_dict_in_generate = generation_config.return_dict_in_generate
         sequential = generation_config.low_memory
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
 
@@ -2778,7 +2779,7 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-            n_eos_tokens = len(eos_token_id) if eos_token_id else 0
+            n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, max(2, 1 + n_eos_tokens) * num_beams, dim=1, largest=True, sorted=True
             )
@@ -2921,9 +2922,6 @@ class GenerationMixin:
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
-
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
 
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
@@ -3145,9 +3143,6 @@ class GenerationMixin:
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-
         num_beams = beam_scorer.num_beams
         num_beam_groups = beam_scorer.num_beam_groups
         num_sub_beams = num_beams // num_beam_groups
@@ -3250,7 +3245,7 @@ class GenerationMixin:
                 next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
 
                 # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-                n_eos_tokens = len(eos_token_id) if eos_token_id else 0
+                n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
                 next_token_scores, next_tokens = torch.topk(
                     next_token_scores, max(2, 1 + n_eos_tokens) * group_size, dim=1, largest=True, sorted=True
                 )
@@ -3430,9 +3425,6 @@ class GenerationMixin:
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
 
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-
         batch_size = len(constrained_beam_scorer._beam_hyps)
         num_beams = constrained_beam_scorer.num_beams
 
@@ -3522,7 +3514,7 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-            n_eos_tokens = len(eos_token_id) if eos_token_id else 0
+            n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, max(2, 1 + n_eos_tokens) * num_beams, dim=1, largest=True, sorted=True
             )
