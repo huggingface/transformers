@@ -519,11 +519,14 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    @unittest.skip("tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
     @require_tensorflow_probability
+    @unittest.skip("tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence()
 
+    @unittest.skip("tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
+    def test_tf_from_pt_safetensors(self):
+        pass
 
 def prepare_tapas_single_inputs_for_inference():
     # Here we prepare a single table-question pair to test TAPAS inference on:
