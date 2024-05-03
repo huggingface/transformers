@@ -7,10 +7,11 @@ BASIC_TYPES = (int, float, str, bool, Any)
 
 
 def get_json_schema(func):
-    doc = inspect.getdoc(func).strip()
+    doc = inspect.getdoc(func)
     if not doc:
         raise ValueError(f"Cannot generate JSON schema for {func.__name__} because it has no docstring!")
-    param_descriptions = _get_argument_descriptions_from_docstring(doc)
+    doc = doc.strip()
+    main_doc, param_descriptions = _get_argument_descriptions_from_docstring(doc)
 
     json_schema = _convert_type_hints_to_json_schema(func)
     for arg in json_schema["properties"]:
@@ -20,13 +21,14 @@ def get_json_schema(func):
             )
         json_schema["properties"][arg]["description"] = param_descriptions[arg]
 
-    return json_schema
+    return {"name": func.__name__, "description": main_doc, "parameters": json_schema}
 
 
 def _get_argument_descriptions_from_docstring(doc):
     param_pattern = r":param (\w+): (.+)"
     params = re.findall(param_pattern, doc)
-    return dict(params)
+    main_doc = doc.split(":param")[0].strip()
+    return main_doc, dict(params)
 
 
 def _convert_type_hints_to_json_schema(func):
@@ -64,7 +66,9 @@ def _convert_type_hints_to_json_schema(func):
         else:
             properties[param_name] = _get_json_schema_type(param_type)
 
-    schema = {"type": "object", "properties": properties, "required": required}
+    schema = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
 
     return schema
 
