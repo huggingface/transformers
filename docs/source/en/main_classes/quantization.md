@@ -52,3 +52,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## HfQuantizer
 
 [[autodoc]] quantizers.base.HfQuantizer
+
+## HqqConfig
+
+[[autodoc]] HqqConfig
