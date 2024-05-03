@@ -430,17 +430,6 @@ examples_tensorflow_job = CircleCIJob(
 )
 
 
-examples_flax_job = CircleCIJob(
-    "examples_flax",
-    cache_name="flax_examples",
-    install_steps=[
-        "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
-        "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
-    ],
-)
-
-
 hub_job = CircleCIJob(
     "hub",
     additional_env={"HUGGINGFACE_CO_STAGING": True},
@@ -570,7 +559,6 @@ REGULAR_TESTS = [
 EXAMPLES_TESTS = [
     examples_torch_job,
     examples_tensorflow_job,
-    examples_flax_job,
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,

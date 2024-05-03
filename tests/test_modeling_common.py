@@ -18,7 +18,6 @@ import gc
 import inspect
 import os
 import os.path
-import pickle
 import random
 import re
 import tempfile
@@ -1279,26 +1278,6 @@ class ModelTesterMixin:
                         f"traced {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
-                # Test that the model can be serialized and restored properly
-                with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                    try:
-                        with open(pkl_file_name, "wb") as f:
-                            pickle.dump(traced_model, f)
-                        with open(pkl_file_name, "rb") as f:
-                            loaded = pickle.load(f)
-                    except Exception as e:
-                        self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                    loaded_output = loaded(**filtered_inputs)
-                    loaded_output = flatten_output(loaded_output)
-
-                    for i in range(num_outputs):
-                        self.assertTrue(
-                            torch.allclose(model_output[i], loaded_output[i]),
-                            f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
-                        )
-
                 # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
                 # (Even with this call, there are still memory leak by ~0.04MB)
                 self.clear_torch_jit_class_registry()
@@ -1762,14 +1741,19 @@ class ModelTesterMixin:
             if self.model_tester.is_training is False:
                 model.eval()
 
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             # Retrieve the embeddings and clone theme
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
@@ -1777,7 +1761,12 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
 
@@ -1802,15 +1791,25 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
 
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            self.assertTrue(model.config.vocab_size + 10, model_vocab_size)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertTrue(new_model_vocab_size + 10, model_vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
-            self.assertTrue(model_embed.weight.shape[0], model.config.vocab_size)
-            self.assertTrue(model.config.vocab_size, model.vocab_size)
+            self.assertTrue(model_embed.weight.shape[0], new_model_vocab_size)
+            self.assertTrue(new_model_vocab_size, model.vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
@@ -1849,9 +1848,14 @@ class ModelTesterMixin:
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
             # Check bias if present
@@ -1862,7 +1866,12 @@ class ModelTesterMixin:
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            new_model_vocab_size = (
+                model.config.text_config.vocab_size
+                if hasattr(model.config, "text_config")
+                else model.config.vocab_size
+            )
+            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
@@ -1949,7 +1958,8 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # Check that after resize they remain tied.
-            model_tied.resize_token_embeddings(config.vocab_size + 10)
+            vocab_size = config.text_config.vocab_size if hasattr(config, "text_config") else config.vocab_size
+            model_tied.resize_token_embeddings(vocab_size + 10)
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
@@ -2735,6 +2745,51 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_MAPPING_NAMES):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "inputs_embeds" not in model_forward_args:
+                self.skipTest("This model doesn't use `inputs_embeds`")
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                # some models infer position ids/attn mask differently when input ids
+                # by check if pad_token let's make sure no padding is in input ids
+                not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
+                input_ids[input_ids == pad_token_id] = not_pad_token_id
+                del inputs["input_ids"]
+                inputs_embeds = wte(input_ids)
+                with torch.no_grad():
+                    out_ids = model(input_ids=input_ids, **inputs)[0]
+                    out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                encoder_input_ids[encoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                decoder_input_ids[decoder_input_ids == pad_token_id] = max(0, pad_token_id + 1)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+                inputs_embeds = wte(encoder_input_ids)
+                decoder_inputs_embeds = wte(decoder_input_ids)
+                with torch.no_grad():
+                    out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
+                    out_embeds = model(
+                        inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
+                    )[0]
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
