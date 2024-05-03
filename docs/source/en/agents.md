@@ -15,27 +15,13 @@ rendered properly in your Markdown viewer.
 -->
 # Agents and tools
 
-Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
-
-One approach to overcome this weakness is to create an *agent*, a program powered by an LLM. The agent is empowered by *tools* to help the agent perform an action.
-
-
-```python
-agent.run("Read the following text out loud", text=text)
-```
-
-```markdown
-| **Input**                                                                                                               | **Output**                                   |
-|-------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| A beaver is swimming in the water | <audio controls><source src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tts_example.wav" type="audio/wav"> your browser does not support the audio element. </audio>
-```
-
-In this tutorial, you'll learn what agents and tools are, how to build them with Transformers, and how to use them.
-
-
-## Agents
+[[open-in-colab]]
 
 ### What is an agent?
+
+Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
+
+One approach to overcome this weakness is to create an *agent*.
 
 An agent is a system that uses an LLM as its engine, and it has access to functions called *tools*.
 
@@ -146,23 +132,29 @@ You also need a `tools` argument which accepts a list of `Tools`. You can provid
 Now you can create an agent, like `CodeAgent`, and run it. For convenience, we also provide the `HfEngine` class that uses `huggingface_hub.InferenceClient` under the hood.
 
 ```python
-from transformers import ReactCodeAgent, HfEngine
+from transformers import CodeAgent, HfEngine
 
 llm_engine = HfEngine(model="meta-llama/Meta-Llama-3-70B-Instruct")
-agent = ReactCodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
+agent = CodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
 
-agent.run("Could you translate this sentence from French and say it out loud: 'Où est la boulangerie la plus proche?'")
+agent.run(
+    "Could you translate this sentence from French, say it out loud and give me the audio.",
+    sentence="Où est la boulangerie la plus proche?",
+)
 ```
 
 This will be handy in case of emergency baguette need!
 You can even leave argument `llm_engine` undefined, and an `HfEngine` will be created by default.
 
 ```python
-from transformers import ReactCodeAgent, HfEngine
+from transformers import CodeAgent, HfEngine
 
-agent = ReactCodeAgent(tools=[], add_base_tools=True)
+agent = CodeAgent(tools=[], add_base_tools=True)
 
-agent.run("Could you translate this sentence from French and say it out loud: 'Où est la boulangerie la plus proche?'")
+agent.run(
+    "Could you translate this sentence from French, say it out loud and give me the audio.",
+    sentence="Où est la boulangerie la plus proche?",
+)
 ```
 
 The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
@@ -187,47 +179,39 @@ The execution will stop at any code trying to perform an illegal operation or if
 
 ### The system prompt
 
-An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out the system prompt of the ReAct agent.
+An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out this part of the system prompt for the `ReactCodeAgent`.
 
 ```text
-Solve the following task as best you can. You have access to the following tools:
-
+You will be given a task to solve as best you can.
+You have access to the following tools:
 <<tool_descriptions>>
 
-The way you use the tools is by specifying a json blob.
-Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
+To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
-The value in the "action" field should belong to this list: <<tool_names>>.
+At each step, in the 'Thought:' sequence, you should first explain your reasoning towards solving the task, then the tools that you want to use.
+Then in the 'Code:' sequence, you shold write the code in simple Python. The code sequence must end with '/End code' sequence.
+During each intermediate step, you can use 'print()' to save whatever important information you will then need.
+These print outputs will then be available in the 'Observation:' field, for using this information as input for the next step.
 
-The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in json. Do not try to escape special characters. Here is an example of a valid $ACTION_JSON_BLOB:
-Action:
-{
-  "action": $TOOL_NAME,
-  "action_input": $INPUT
-}
+In the end you have to return a final answer using the `final_answer` tool.
 
-Make sure to have the $INPUT in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
+Here are a few examples using notional tools:
+---
+{examples}
 
-You will be given:
+Above example were using notional tools that might not exist for you. You only have acces to those tools:
+<<tool_names>>
+You also can perform computations in the python code you generate.
 
-Task: the task you are given.
+Always provide a 'Thought:' and a 'Code:\n```py' sequence ending with '```<end_code>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
 
-And you should ALWAYS answer in the following format:
+Remember to not perform too many operations in a single code block! You should split the task into intermediate code blocks.
+Print results at the end of each step to save the intermediate results. Then use final_answer() to return the final result.
 
-Thought: you should always think about one action to take. Then use the action as follows:
-Action:
-$ACTION_JSON_BLOB
-Observation: the result of the action
-... (this Thought/Action/Observation can repeat N times, you should take several steps when needed. The $ACTION_JSON_BLOB must only use a SINGLE action at a time.)
+Remember to make sure that variables you use are all defined.
+DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
-ALWAYS provide a 'Thought:' and an 'Action:' part. You MUST provide at least the 'Action:' part to move forward.
-To provide the final answer to the task, use an action blob with "action": 'final_answer' tool.It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
-{
-  "action": 'final_answer',
-  "action_input": "insert your final answer here"
-}
-
-Now begin!
+Now Begin!
 ```
 
 The system prompt includes:
@@ -235,7 +219,6 @@ The system prompt includes:
 - A description of all the tools that is defined by a `<<tool_descriptions>>` token that is dynamically replaced at runtime with the tools defined/chosen by the user.
     - The tool description comes from the tool attributes, `name`, `description`, `inputs` and `output_type`,  and a simple `jinja2` template that you can refine.
 - The expected output format.
-- An explanation of the task to perform.
 
 You could improve the system prompt, for example, by adding an explanation of the output format.
 
@@ -245,7 +228,7 @@ For maximum flexibility, you can overwrite the whole system prompt template by p
 from transformers import ReactJsonAgent
 from transformers.agents import PythonInterpreterTool
 
-agent = ReactJsonAgent(tools = [PythonInterpreterTool()], system_prompt="{your_custom_prompt}")
+agent = ReactJsonAgent(tools=[PythonInterpreterTool()], system_prompt="{your_custom_prompt}")
 ```
 
 > [!WARNING]
@@ -362,10 +345,12 @@ agent.run(
 
 You get the following:
 ```text
-==Executing the code below:==
-task = 'text-to-video'
-model_name = model_download_counter(task=task)
-print(f"The most downloaded model in the '{task}' task is '{model_name}'.")
+=====New task=====
+Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?
+====Agent is executing the code below:
+most_downloaded_model = model_download_counter(task="text-to-video")
+print(f"The most downloaded model for the 'text-to-video' task is {most_downloaded_model}.")
+====
 ```
 
 And the output:
@@ -388,7 +373,7 @@ Now we can leverage both the new tool and the previous text-to-speech tool:
 
 ```python
 agent.run(
-    "Can you read out loud the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
+    "Can you read out loud the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub and return the audio?"
 )
 ```
 

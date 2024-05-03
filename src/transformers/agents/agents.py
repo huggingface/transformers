@@ -25,7 +25,7 @@ from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
-from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_SYSTEM_PROMPT
+from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_JSON_SYSTEM_PROMPT
 from .python_interpreter import evaluate_python_code
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
@@ -296,7 +296,7 @@ class Agent:
         self,
         tools: Union[List[Tool], Toolbox],
         llm_engine: Callable = HfEngine(),
-        system_prompt=DEFAULT_REACT_SYSTEM_PROMPT,
+        system_prompt=DEFAULT_REACT_JSON_SYSTEM_PROMPT,
         tool_description_template=None,
         additional_args={},
         max_iterations: int = 6,
@@ -380,7 +380,7 @@ class Agent:
                 message_content = (
                     "Error: "
                     + str(step_log["error"])
-                    + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches if you can.\n"
+                    + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches.\n"
                 )
             elif "observation" in step_log:
                 message_content = f"Observation: {step_log['observation']}"
@@ -484,16 +484,14 @@ class CodeAgent(Agent):
         tools: List[Tool],
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str = None,
+        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         **kwargs,
     ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
-            tool_description_template=tool_description_template
-            if tool_description_template
-            else self.default_tool_description_template,
+            tool_description_template=tool_description_template,
             **kwargs,
         )
 
@@ -505,15 +503,6 @@ class CodeAgent(Agent):
 
         self.python_evaluator = evaluate_python_code
 
-    @property
-    def default_tool_description_template(self) -> str:
-        """
-        This template is taking can describe a tool as it is expected by the model
-        """
-        logger.warning_once(
-            "\nNo tool description template is defined for this tokenizer - using a default tool description template."
-        )
-        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -594,17 +583,15 @@ class ReactAgent(Agent):
         self,
         tools: List[Tool],
         llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
-        tool_description_template: str = None,
+        system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
+        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         **kwargs,
     ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
-            tool_description_template=tool_description_template
-            if tool_description_template
-            else self.default_tool_description_template,
+            tool_description_template=tool_description_template,
             **kwargs,
         )
         if "final_answer" not in self._toolbox.tools:
@@ -678,17 +665,15 @@ class ReactJsonAgent(ReactAgent):
         self,
         tools: List[Tool],
         llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_REACT_SYSTEM_PROMPT,
-        tool_description_template: str = None,
+        system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         **kwargs,
     ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
-            tool_description_template=tool_description_template
-            if tool_description_template
-            else self.default_tool_description_template,
+            tool_description_template=tool_description_template,
             **kwargs,
         )
 
@@ -729,7 +714,7 @@ class ReactJsonAgent(ReactAgent):
         self.logs[-1]["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
-        self.logger.warning(f"Calling tool: {tool_name} with arguments: {arguments}")
+        self.logger.warning(f"Calling tool: '{tool_name}' with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
                 answer = arguments["answer"]
@@ -772,16 +757,14 @@ class ReactCodeAgent(ReactAgent):
         tools: List[Tool],
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str = None,
+        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
         **kwargs,
     ):
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
-            tool_description_template=tool_description_template
-            if tool_description_template
-            else self.default_tool_description_template,
+            tool_description_template=tool_description_template,
             **kwargs,
         )
 
