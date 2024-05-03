@@ -97,6 +97,7 @@ _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
@@ -170,6 +171,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -290,6 +292,10 @@ def is_cv2_available():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_hqq_available():
+    return _hqq_available
 
 
 def get_torch_version():
@@ -832,6 +838,10 @@ def is_quanto_available():
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_eetq_available():
+    return _eetq_available
 
 
 def is_levenshtein_available():

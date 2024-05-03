@@ -76,7 +76,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_accumulation_steps="2" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -111,7 +111,7 @@ torchrun \
 	--per_device_train_batch_size="4" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -162,7 +162,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 	--gradient_accumulation_steps="2" \
 	--learning_rate="5e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--save_steps="500" \
 	--eval_steps="500" \
@@ -293,7 +293,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -330,7 +330,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -368,6 +368,7 @@ python run_speech_recognition_seq2seq.py \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--dataset_config_name="hi" \
 	--language="hindi" \
+	--task="transcribe" \
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--max_steps="5000" \
@@ -378,18 +379,16 @@ python run_speech_recognition_seq2seq.py \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
 	--generation_max_length="225" \
 	--preprocessing_num_workers="16" \
-	--length_column_name="input_length" \
 	--max_duration_in_seconds="30" \
 	--text_column_name="sentence" \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
-	--group_by_length \
 	--fp16 \
 	--overwrite_output_dir \
 	--do_train \
@@ -399,7 +398,8 @@ python run_speech_recognition_seq2seq.py \
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
-If training on a different language, you should be sure to change the `language` argument. The `language` argument should be omitted for English speech recognition.
+If training on a different language, you should be sure to change the `language` argument. The `language` and `task` 
+arguments should be omitted for English speech recognition.
 
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 2 GPU devices in half-precision:
@@ -410,6 +410,7 @@ torchrun \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--dataset_config_name="hi" \
 	--language="hindi" \
+	--task="transcribe" \
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--max_steps="5000" \
@@ -419,18 +420,16 @@ torchrun \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
 	--generation_max_length="225" \
 	--preprocessing_num_workers="16" \
-	--length_column_name="input_length" \
 	--max_duration_in_seconds="30" \
 	--text_column_name="sentence" \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
-	--group_by_length \
 	--fp16 \
 	--overwrite_output_dir \
 	--do_train \
@@ -547,7 +546,7 @@ python run_speech_recognition_seq2seq.py \
 	--gradient_accumulation_steps="8" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \
@@ -589,7 +588,7 @@ torchrun \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \

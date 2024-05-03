@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Trainieren mit einem Skript
 
-Neben den 🤗 Transformers [notebooks](./noteboks/README) gibt es auch Beispielskripte, die zeigen, wie man ein Modell für eine Aufgabe mit [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow) oder [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax) trainiert.
+Neben den 🤗 Transformers [notebooks](./notebooks) gibt es auch Beispielskripte, die zeigen, wie man ein Modell für eine Aufgabe mit [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow) oder [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax) trainiert.
 
 Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https://github.com/huggingface/transformers/tree/main/examples/research_projects) und [Legacy-Beispielen](https://github.com/huggingface/transformers/tree/main/examples/legacy) verwendet haben und die größtenteils von der Community stammen. Diese Skripte werden nicht aktiv gepflegt und erfordern eine bestimmte Version von 🤗 Transformers, die höchstwahrscheinlich nicht mit der neuesten Version der Bibliothek kompatibel ist.
 

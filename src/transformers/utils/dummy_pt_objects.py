@@ -177,6 +177,13 @@ class EncoderRepetitionPenaltyLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class EosTokenCriteria(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EpsilonLogitsWarper(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -346,6 +353,13 @@ class StoppingCriteria(metaclass=DummyObject):
 
 
 class StoppingCriteriaList(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StopStringCriteria(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2457,6 +2471,27 @@ class Data2VecVisionPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class DbrxForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DbrxModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DbrxPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4526,6 +4561,34 @@ class InstructBlipVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class JambaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JambaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JambaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JambaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6221,6 +6284,27 @@ class NystromformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OlmoForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OlmoModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OlmoPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6676,6 +6760,44 @@ class PhiModel(metaclass=DummyObject):
 
 
 class PhiPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+PHI3_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Phi3ForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi3ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi3ForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi3Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Phi3PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -9913,6 +10035,10 @@ def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
 
 def get_scheduler(*args, **kwargs):
     requires_backends(get_scheduler, ["torch"])
+
+
+def get_wsd_schedule(*args, **kwargs):
+    requires_backends(get_wsd_schedule, ["torch"])
 
 
 class Conv1D(metaclass=DummyObject):

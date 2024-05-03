@@ -1476,7 +1476,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
         self.connector = Idefics2Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config)
+        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
@@ -1580,6 +1580,12 @@ class Idefics2Model(Idefics2PreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.training and self.text_model.gradient_checkpointing and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
+            use_cache = False
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None:

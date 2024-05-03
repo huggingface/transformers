@@ -143,6 +143,10 @@ class CLIPImageProcessor(BaseImageProcessor):
         # for backwards compatibility of KOSMOS-2
         if "use_square_size" in kwargs:
             self.size = {"height": size["shortest_edge"], "width": size["shortest_edge"]}
+            # Let's remove `use_square_size` (as it is removed from #27690), so the future Kosmos-2 image processors
+            # won't have this attr. being saved. (otherwise, it will enter this if branch while there is no more
+            # `shortest_edge` key.
+            delattr(self, "use_square_size")
 
     def resize(
         self,
