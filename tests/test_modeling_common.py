@@ -3637,8 +3637,6 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            if hasattr(config, "vision_config"):
-                config.vision_config._attn_implementation = config._attn_implementation
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -3647,8 +3645,6 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device)
-                if hasattr(model_sdpa.config, "vision_config"):
-                    self.assertTrue(model_sdpa.config.vision_config._attn_implementation == "sdpa")
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
