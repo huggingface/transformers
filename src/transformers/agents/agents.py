@@ -29,7 +29,6 @@ from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMP
 from .python_interpreter import evaluate_python_code
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
-    OPENAI_TOOL_DESCRIPTION_TEMPLATE,
     Tool,
     get_tool_description_with_args,
     load_tool,
@@ -310,7 +309,7 @@ class Agent:
         self.llm_engine = llm_engine
         self.system_prompt_template = system_prompt
         self.tool_description_template = (
-            tool_description_template if tool_description_template else OPENAI_TOOL_DESCRIPTION_TEMPLATE
+            tool_description_template if tool_description_template else DEFAULT_TOOL_DESCRIPTION_TEMPLATE
         )
         self.additional_args = additional_args
         self.max_iterations = max_iterations
@@ -347,9 +346,6 @@ class Agent:
     def toolbox(self) -> Toolbox:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
-
-    def show_logs(self):
-        self.logger.info("\n".join(self.logs))
 
     def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
         """
@@ -399,9 +395,6 @@ class Agent:
                     }
                 )
         return memory
-
-    def show_message_history(self) -> None:
-        self.logger.info("\n".join(self.messages))
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -488,6 +481,13 @@ class CodeAgent(Agent):
             else self.default_tool_description_template,
             **kwargs,
         )
+
+        if not is_pygments_available():
+            transformers_logging.warning_once(
+                "pygments isn't installed. Installing pygments will enable color syntax highlighting in the "
+                "CodeAgent."
+            )
+
         self.python_evaluator = evaluate_python_code
 
     @property
@@ -540,15 +540,15 @@ class CodeAgent(Agent):
         self.logger.debug(self.system_prompt)
         self.logs.append({"system_prompt": self.system_prompt, "task": self.task})
 
+        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
+
+        # Run LLM
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
         task_message = {
             "role": MessageRole.USER,
             "content": "Task: " + self.task,
         }
         self.prompt = [prompt_message, task_message]
-        self.logs.append({"task": task_message, "system_prompt": self.system_prompt})
-
-        # Run LLM
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
         llm_output = self.llm_engine(self.prompt, stop=["<end_code>"])
@@ -606,15 +606,6 @@ class ReactAgent(Agent):
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
 
-    @property
-    def default_tool_description_template(self) -> str:
-        """
-        This template is taking can describe a tool as it is expected by the model
-        """
-        logger.warning_once(
-            "\nNo tool description template is defined for this tokenizer - using a default tool description template."
-        )
-        return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
     def run(self, task: str, **kwargs):
         """
