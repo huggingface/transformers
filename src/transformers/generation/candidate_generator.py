@@ -123,7 +123,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
             )
             assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, assistant_kwargs, model_input_name
+                inputs_tensor, assistant_kwargs, model_input_name, assistant_model.generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]

@@ -62,7 +62,7 @@ prometheus-client==0.8.0
 prompt-toolkit==3.0.7
 ptyprocess==0.6.0
 pyaml==20.4.0
-pyarrow==1.0.1
+pyarrow==15.0.0
 pycparser==2.20
 Pygments>=2.7.4
 pyparsing==2.4.6
@@ -84,7 +84,7 @@ six==1.14.0
 terminado==0.8.3
 testpath==0.4.4
 tokenizers==0.8.1rc2
-torch==1.6.0
+torch==1.13.1
 torchvision==0.7.0
 tornado==6.3.3
 tqdm==4.48.2

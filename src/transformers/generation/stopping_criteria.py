@@ -98,7 +98,7 @@ class MaxNewTokensCriteria(StoppingCriteria):
 
     def __init__(self, start_length: int, max_new_tokens: int):
         warnings.warn(
-            "The class `MaxNewTokensCriteria` is deprecated. "
+            "The class `MaxNewTokensCriteria` is deprecated and will be removed in v4.43. "
             f"Please use `MaxLengthCriteria(max_length={start_length + max_new_tokens})` "
             "with `max_length = start_length + max_new_tokens` instead.",
             FutureWarning,

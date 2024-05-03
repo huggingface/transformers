@@ -246,13 +246,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
         information.
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         return (
             "{% for message in messages %}"
             "{% if not loop.first %}{{ bos_token}}{% endif %}"
