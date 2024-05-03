@@ -621,44 +621,6 @@ class TFModelTesterMixin:
 
         self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
 
-    def compare_models(self, pt_model, tf_model, tolerance=1e-5):
-         tf_weights = {
-             '/'.join(weight.name.split('/')[2:]): weight.numpy()
-             for weight in tf_model.weights
-             if len(weight.name.split('/')) > 2  # Ensure there are at least two tokens to strip
-         }
-         mismatch_info = []
-         for name, pt_param in pt_model.named_parameters():
-             tf_name = name.replace('.', '/') + ':0'  # Adjust the name mapping convention as necessary
-             if tf_name in tf_weights:
-                 tf_param = tf_weights[tf_name]
-                 pt_param_np = pt_param.detach().cpu().numpy()
-
-                 # Check shape
-                 if pt_param_np.shape != tf_param.shape:
-                     mismatch_info.append(f"Shape mismatch: {name} (PyTorch) vs {tf_name} (TensorFlow), "
-                                          f"{pt_param_np.shape} vs {tf_param.shape}")
-                     continue
-
-                 # Check values
-                 if not np.allclose(pt_param_np, tf_param, atol=tolerance):
-                     mismatch_info.append(f"Value mismatch: {name} (PyTorch) vs {tf_name} (TensorFlow)")
-             else:
-                 mismatch_info.append(f"Missing TensorFlow parameter: {tf_name}")
-
-
-         # Check for TensorFlow parameters not present in PyTorch
-         pt_param_names = set()
-         for name, _ in pt_model.named_parameters():
-             first_dot_index = name.find('.')
-             # Create the name in TensorFlow format for comparison
-             pt_name_as_tf = name[:first_dot_index] + name[first_dot_index:].replace('.', '/') + ':0'
-             pt_param_names.add(pt_name_as_tf)
-
-         for tf_name in tf_weights:
-             if tf_name not in pt_param_names:
-                 mismatch_info.append(f"Extra TensorFlow parameter: {tf_name}")
-
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
@@ -701,14 +663,7 @@ class TFModelTesterMixin:
             pt_model = transformers.load_tf2_model_in_pytorch_model(
                 pt_model, tf_model, allow_missing_keys=allow_missing_keys
             )
-            ######### for debugging CI failure, will be reverted ##########
-            mismatches = self.compare_models(pt_model, tf_model)
-            if mismatches:
-                for mismatch in mismatches:
-                    print(mismatch)
-            else:
-                print("All parameters match successfully!")
-            ######### for debugging CI failure, will be reverted ##########
+
             # Original test: check without `labels`
             self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
             # check with `labels`
