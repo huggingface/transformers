@@ -197,13 +197,25 @@ class PaLIGemmaProcessor(ProcessorMixin):
         
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
-        text_inputs = self.tokenizer(
-            input_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
+
+        inputs = self.tokenizer(
+            input_strings, 
             add_special_tokens=False,
+            return_tensors=None,
+            padding="do_not_pad",
+            max_length=max_length,
+            truncation=truncation,
+        )
+        newline_token = self.tokenizer("\n", add_special_tokens=False, return_tensors=None)
+
+        concatenated_ids = [ids + newline_token['input_ids'] for ids in inputs['input_ids']]
+        concatenated_attention_masks = [mask + newline_token['attention_mask'] for mask in inputs['attention_mask']]
+
+        text_inputs = self.tokenizer.pad(
+            {'input_ids': concatenated_ids, 'attention_mask': concatenated_attention_masks},
+            max_length=max_length,
+            padding=padding,
+            return_tensors=return_tensors,
         )
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
