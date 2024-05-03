@@ -508,7 +508,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             else:
                 generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
 
-            if generate_kwargs["assistant_model"]:
+            if "assistant_model" in generate_kwargs:
                 generate_kwargs["input_features"] = inputs
 
             tokens = self.model.generate(
