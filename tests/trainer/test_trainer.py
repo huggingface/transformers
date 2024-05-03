@@ -198,6 +198,21 @@ class AlmostAccuracy:
         return {"accuracy": true.astype(np.float32).mean().item()}
 
 
+class AlmostAccuracyBatched:
+    def __init__(self, thresh=0.25):
+        self.thresh = thresh
+        self.batch_acc = []
+
+    def __call__(self, eval_pred, compute_result):
+        predictions, labels = eval_pred
+        true = torch.abs(predictions - labels) <= self.thresh
+        self.batch_acc.append(true.type(torch.FloatTensor).mean().item())
+        if compute_result:
+            result = {"accuracy": np.mean(self.batch_acc)}
+            self.batch_acc = []
+            return result
+
+
 class RegressionModelConfig(PretrainedConfig):
     def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
@@ -1123,6 +1138,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_loss = ((pred - y) ** 2).mean()
         self.assertAlmostEqual(results["eval_loss"], expected_loss)
         expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_evaluate_with_batch_eval_metrics(self):
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     def test_evaluate_with_jit(self):
