@@ -302,6 +302,7 @@ examples_tensorflow_job = CircleCIJob(
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
     install_steps=["uv venv && uv pip install ."],
+    pytest_num_workers=16
 )
 
 
