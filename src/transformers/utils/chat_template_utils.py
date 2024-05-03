@@ -1,6 +1,7 @@
 import inspect
 import re
 from typing import Any, Union, get_origin, get_type_hints
+import pdb
 
 
 BASIC_TYPES = (int, float, str, bool, Any)
@@ -43,8 +44,8 @@ def _convert_type_hints_to_json_schema(func):
     for param_name, param_type in type_hints.items():
         if param_name == "return":
             continue
-
-        if origin := get_origin(param_type) is not None:
+        pdb.set_trace()
+        if (origin := get_origin(param_type)) is not None:
             if origin is Union:
                 if all(t in BASIC_TYPES for t in param_type.__args__):
                     properties[param_name] = {
