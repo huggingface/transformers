@@ -55,6 +55,8 @@ class LlavaNextConfig(PretrainedConfig):
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
