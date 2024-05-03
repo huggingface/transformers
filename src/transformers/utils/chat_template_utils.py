@@ -44,7 +44,6 @@ def _convert_type_hints_to_json_schema(func):
     for param_name, param_type in type_hints.items():
         if param_name == "return":
             continue
-        pdb.set_trace()
         if (origin := get_origin(param_type)) is not None:
             if origin is Union:
                 if all(t in BASIC_TYPES for t in param_type.__args__):
