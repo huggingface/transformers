@@ -389,7 +389,7 @@ class Tool:
                 self._gradio_tool = _gradio_tool
 
             def __call__(self, *args, **kwargs):
-                return self._gradio_tool.run(*args, *list(kwargs.values()))
+                return self._gradio_tool.run(*args, **kwargs)
 
         return GradioToolWrapper(gradio_tool)
 
