@@ -431,8 +431,8 @@ class BertSdpaSelfAttention(BertSelfAttention):
             key_layer = key_layer.contiguous()
             value_layer = value_layer.contiguous()
 
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
-        # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
         # a causal mask in case tgt_len == 1.
         is_causal = True if self.is_decoder and attention_mask is None and tgt_len > 1 else False
