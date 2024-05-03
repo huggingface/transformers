@@ -40,6 +40,8 @@ if is_torch_available():
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import VivitImageProcessor
 
 
@@ -353,3 +355,31 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-0.9498, 2.7971, -1.4049, 0.1024, -1.8353]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # Vivit models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = VivitModel.from_pretrained("google/vivit-b-16x2").to(torch_device)
+
+        image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2", size=480)
+        video = prepare_video()
+        inputs = image_processor(video, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 3137, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[-0.5608,  0.6402,  0.1368], [-0.1167, -0.1180, -0.3220], [-0.1988, -0.2729, -0.0176]]
+        ).to(torch_device)
+        print(outputs.last_hidden_state[0, :3, :3])
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
