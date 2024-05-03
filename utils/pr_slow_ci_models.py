@@ -142,4 +142,4 @@ if __name__ == "__main__":
     new_model = get_new_model()
     specified_models = get_models(args.commit_message)
     models = ([] if new_model == "" else [new_model]) + specified_models
-    print(models)
+    print(sorted(set(models)))
