@@ -18,7 +18,7 @@ import inspect
 import math
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -2453,6 +2453,25 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         for param in self.text_encoder.parameters():
             param.requires_grad = False
         self.text_encoder._requires_grad = False
+
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration._get_decoder_start_token_id
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+    ) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
 
     @torch.no_grad()
     def generate(
