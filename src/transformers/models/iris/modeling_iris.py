@@ -128,7 +128,7 @@ IRIS_START_DOCSTRING = r"""
 #world model:> tokens: torch.LongTensor((B, L(K+1)))(B: batch size, L: timesteps, K: number of tokens), past_keys_values: Optional[KeysValues] = None((n_layers,batch_size, num_heads, max_tokens, head_dim))
 #tokenizer:> x(B, T, C, H, W)(main): torch.Tensor, should_preprocess(main): bool = False, should_postprocess(main): bool = False
 IRIS_INPUTS_DOCSTRING = r"""
-    Args:#batch keys(): (['observations', 'actions', 'rewards', 'ends', 'mask_padding'])
+    Args:
         observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
             The image observations from real environment in L timesteps (only one frame is used from the environment and 
             rest are imagined in the world model for training)
@@ -538,8 +538,14 @@ class Head(Slicer):
         self.head_module = head_module
 
     def forward(self, x: torch.Tensor, num_steps: int, prev_steps: int) -> torch.Tensor:
+        hidden_states = ()
         x_sliced = x[:, self.compute_slice(num_steps, prev_steps)]  # x is (B, T, E)
-        return self.head_module(x_sliced)
+        # Add the hidden state to the tuple after Relu activation
+        x_sliced_hidden = self.head_module[1](self.head_module[0](x_sliced))
+        hidden_states = hidden_states + (x_sliced_hidden,)
+        hidden_states = hidden_states+ (self.head_module[2](x_sliced_hidden),)
+
+        return self.head_module(x_sliced), hidden_states
 
 
 class Embedder(nn.Module):
@@ -560,8 +566,370 @@ class Embedder(nn.Module):
             output[:, s] = emb(tokens[:, s])
         return output
 
+#NETSSS
+class Encoder(nn.Module):
+    def __init__(self, config: EncoderDecoderConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.num_resolutions = len(config.ch_mult)
+        temb_ch = 0  # timestep embedding #channels
+
+        # downsampling
+        self.conv_in = torch.nn.Conv2d(config.in_channels,
+                                       config.ch,
+                                       kernel_size=3,
+                                       stride=1,
+                                       padding=1)
+
+        curr_res = config.resolution
+        in_ch_mult = (1,) + tuple(config.ch_mult)
+        self.down = nn.ModuleList()
+        for i_level in range(self.num_resolutions):
+            block = nn.ModuleList()
+            attn = nn.ModuleList()
+            block_in = config.ch * in_ch_mult[i_level]
+            block_out = config.ch * config.ch_mult[i_level]
+            for i_block in range(self.config.num_res_blocks):
+                block.append(ResnetBlock(in_channels=block_in,
+                                         out_channels=block_out,
+                                         temb_channels=temb_ch,
+                                         dropout=config.dropout))
+                block_in = block_out
+                if curr_res in config.attn_resolutions:
+                    attn.append(AttnBlock(block_in))
+            down = nn.Module()
+            down.block = block
+            down.attn = attn
+            if i_level != self.num_resolutions - 1:
+                down.downsample = Downsample(block_in, with_conv=True)
+                curr_res = curr_res // 2
+            self.down.append(down)
+
+        # middle
+        self.mid = nn.Module()
+        self.mid.block_1 = ResnetBlock(in_channels=block_in,
+                                       out_channels=block_in,
+                                       temb_channels=temb_ch,
+                                       dropout=config.dropout)
+        self.mid.attn_1 = AttnBlock(block_in)
+        self.mid.block_2 = ResnetBlock(in_channels=block_in,
+                                       out_channels=block_in,
+                                       temb_channels=temb_ch,
+                                       dropout=config.dropout)
+
+        # end
+        self.norm_out = Normalize(block_in)
+        self.conv_out = torch.nn.Conv2d(block_in,
+                                        config.z_channels,
+                                        kernel_size=3,
+                                        stride=1,
+                                        padding=1)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        temb = None  # timestep embedding
+
+        # downsampling
+        hs = [self.conv_in(x)]
+        hidden_states = ()
+        for i_level in range(self.num_resolutions):
+            for i_block in range(self.config.num_res_blocks):
+                h = self.down[i_level].block[i_block](hs[-1], temb)
+                if len(self.down[i_level].attn) > 0:
+                    h = self.down[i_level].attn[i_block](h)
+                hs.append(h)
+                # Add the hidden state to the tuple
+                hidden_states = hidden_states + (h,)
+            if i_level != self.num_resolutions - 1:
+                hs.append(self.down[i_level].downsample(hs[-1]))
+
+        # middle
+        h = hs[-1]
+        h = self.mid.block_1(h, temb)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+        h = self.mid.attn_1(h)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+        h = self.mid.block_2(h, temb)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+
+        # end
+        h = self.norm_out(h)
+        h = nonlinearity(h)
+        h = self.conv_out(h)
+        return h, hidden_states
 
 
+
+class Decoder(nn.Module):
+    def __init__(self, config: EncoderDecoderConfig) -> None:
+        super().__init__()
+        self.config = config
+        temb_ch = 0
+        self.num_resolutions = len(config.ch_mult)
+
+        # compute in_ch_mult, block_in and curr_res at lowest res
+        in_ch_mult = (1,) + tuple(config.ch_mult)
+        block_in = config.ch * config.ch_mult[self.num_resolutions - 1]
+        curr_res = config.resolution // 2 ** (self.num_resolutions - 1)
+        print(f"Tokenizer : shape of latent is {config.z_channels, curr_res, curr_res}.")
+
+        # z to block_in
+        self.conv_in = torch.nn.Conv2d(config.z_channels,
+                                       block_in,
+                                       kernel_size=3,
+                                       stride=1,
+                                       padding=1)
+
+        # middle
+        self.mid = nn.Module()
+        self.mid.block_1 = ResnetBlock(in_channels=block_in,
+                                       out_channels=block_in,
+                                       temb_channels=temb_ch,
+                                       dropout=config.dropout)
+        self.mid.attn_1 = AttnBlock(block_in)
+        self.mid.block_2 = ResnetBlock(in_channels=block_in,
+                                       out_channels=block_in,
+                                       temb_channels=temb_ch,
+                                       dropout=config.dropout)
+
+        # upsampling
+        self.up = nn.ModuleList()
+        for i_level in reversed(range(self.num_resolutions)):
+            block = nn.ModuleList()
+            attn = nn.ModuleList()
+            block_out = config.ch * config.ch_mult[i_level]
+            for i_block in range(config.num_res_blocks + 1):
+                block.append(ResnetBlock(in_channels=block_in,
+                                         out_channels=block_out,
+                                         temb_channels=temb_ch,
+                                         dropout=config.dropout))
+                block_in = block_out
+                if curr_res in config.attn_resolutions:
+                    attn.append(AttnBlock(block_in))
+            up = nn.Module()
+            up.block = block
+            up.attn = attn
+            if i_level != 0:
+                up.upsample = Upsample(block_in, with_conv=True)
+                curr_res = curr_res * 2
+            self.up.insert(0, up)  # prepend to get consistent order
+
+        # end
+        self.norm_out = Normalize(block_in)
+        self.conv_out = torch.nn.Conv2d(block_in,
+                                        config.out_ch,
+                                        kernel_size=3,
+                                        stride=1,
+                                        padding=1)
+
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        temb = None  # timestep embedding
+
+        # z to block_in
+        h = self.conv_in(z)
+        hidden_states = ()
+
+        # middle
+        h = self.mid.block_1(h, temb)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+        h = self.mid.attn_1(h)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+        h = self.mid.block_2(h, temb)
+        # Add the hidden state to the tuple
+        hidden_states = hidden_states + (h,)
+
+        # upsampling
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.config.num_res_blocks + 1):
+                h = self.up[i_level].block[i_block](h, temb)
+                # Add the hidden state to the tuple
+                hidden_states = hidden_states + (h,)
+                if len(self.up[i_level].attn) > 0:
+                    h = self.up[i_level].attn[i_block](h)
+                    # Add the hidden state to the tuple
+                    hidden_states = hidden_states + (h,)
+            if i_level != 0:
+                h = self.up[i_level].upsample(h)
+                # Add the hidden state to the tuple
+                hidden_states = hidden_states + (h,)
+
+        # end
+        h = self.norm_out(h)
+        h = nonlinearity(h)
+        h = self.conv_out(h)
+        return h, hidden_states
+
+
+
+def nonlinearity(x: torch.Tensor) -> torch.Tensor:
+    # swish
+    return x * torch.sigmoid(x)
+
+
+def Normalize(in_channels: int) -> nn.Module:
+    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+
+
+class Upsample(nn.Module):
+    def __init__(self, in_channels: int, with_conv: bool) -> None:
+        super().__init__()
+        self.with_conv = with_conv
+        if self.with_conv:
+            self.conv = torch.nn.Conv2d(in_channels,
+                                        in_channels,
+                                        kernel_size=3,
+                                        stride=1,
+                                        padding=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+        if self.with_conv:
+            x = self.conv(x)
+        return x
+
+
+class Downsample(nn.Module):
+    def __init__(self, in_channels: int, with_conv: bool) -> None:
+        super().__init__()
+        self.with_conv = with_conv
+        if self.with_conv:
+            # no asymmetric padding in torch conv, must do it ourselves
+            self.conv = torch.nn.Conv2d(in_channels,
+                                        in_channels,
+                                        kernel_size=3,
+                                        stride=2,
+                                        padding=0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.with_conv:
+            pad = (0, 1, 0, 1)
+            x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+            x = self.conv(x)
+        else:
+            x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        return x
+
+
+class ResnetBlock(nn.Module):
+    def __init__(self, *, in_channels: int, out_channels: int = None, conv_shortcut: bool = False,
+                 dropout: float, temb_channels: int = 512) -> None:
+        super().__init__()
+        self.in_channels = in_channels
+        out_channels = in_channels if out_channels is None else out_channels
+        self.out_channels = out_channels
+        self.use_conv_shortcut = conv_shortcut
+
+        self.norm1 = Normalize(in_channels)
+        self.conv1 = torch.nn.Conv2d(in_channels,
+                                     out_channels,
+                                     kernel_size=3,
+                                     stride=1,
+                                     padding=1)
+        if temb_channels > 0:
+            self.temb_proj = torch.nn.Linear(temb_channels,
+                                             out_channels)
+        self.norm2 = Normalize(out_channels)
+        self.dropout = torch.nn.Dropout(dropout)
+        self.conv2 = torch.nn.Conv2d(out_channels,
+                                     out_channels,
+                                     kernel_size=3,
+                                     stride=1,
+                                     padding=1)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut = torch.nn.Conv2d(in_channels,
+                                                     out_channels,
+                                                     kernel_size=3,
+                                                     stride=1,
+                                                     padding=1)
+            else:
+                self.nin_shortcut = torch.nn.Conv2d(in_channels,
+                                                    out_channels,
+                                                    kernel_size=1,
+                                                    stride=1,
+                                                    padding=0)
+
+    def forward(self, x: torch.Tensor, temb: torch.Tensor) -> torch.Tensor:
+        h = x
+        h = self.norm1(h)
+        h = nonlinearity(h)
+        h = self.conv1(h)
+
+        if temb is not None:
+            h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
+
+        h = self.norm2(h)
+        h = nonlinearity(h)
+        h = self.dropout(h)
+        h = self.conv2(h)
+
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                x = self.conv_shortcut(x)
+            else:
+                x = self.nin_shortcut(x)
+
+        return x + h
+
+
+class AttnBlock(nn.Module):
+    def __init__(self, in_channels: int) -> None:
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = Normalize(in_channels)
+        self.q = torch.nn.Conv2d(in_channels,
+                                 in_channels,
+                                 kernel_size=1,
+                                 stride=1,
+                                 padding=0)
+        self.k = torch.nn.Conv2d(in_channels,
+                                 in_channels,
+                                 kernel_size=1,
+                                 stride=1,
+                                 padding=0)
+        self.v = torch.nn.Conv2d(in_channels,
+                                 in_channels,
+                                 kernel_size=1,
+                                 stride=1,
+                                 padding=0)
+        self.proj_out = torch.nn.Conv2d(in_channels,
+                                        in_channels,
+                                        kernel_size=1,
+                                        stride=1,
+                                        padding=0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        # compute attention
+        b, c, h, w = q.shape
+        q = q.reshape(b, c, h * w)
+        q = q.permute(0, 2, 1)      # b,hw,c
+        k = k.reshape(b, c, h * w)  # b,c,hw
+        w_ = torch.bmm(q, k)        # b,hw,hw    w[b,i,j]=sum_c q[b,i,c]k[b,c,j]
+        w_ = w_ * (int(c) ** (-0.5))
+        w_ = torch.nn.functional.softmax(w_, dim=2)
+
+        # attend to values
+        v = v.reshape(b, c, h * w)
+        w_ = w_.permute(0, 2, 1)   # b,hw,hw (first hw of k, second of q)
+        h_ = torch.bmm(v, w_)     # b, c,hw (hw of q) h_[b,c,j] = sum_i v[b,c,i] w_[b,i,j]
+        h_ = h_.reshape(b, c, h, w)
+
+        h_ = self.proj_out(h_)
+
+        return x + h_
+################################################################
+########################3TOKENIZER
 class Tokenizer(nn.Module):
     def __init__(self, vocab_size: int, embed_dim: int, encoder: Encoder, decoder: Decoder, with_lpips: bool = True) -> None:
         super().__init__()
@@ -578,10 +946,10 @@ class Tokenizer(nn.Module):
         return "tokenizer"
 
     def forward(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> Tuple[torch.Tensor]:
-        outputs = self.encode(x, should_preprocess)
+        outputs, all_hidden_states_enc = self.encode(x, should_preprocess)
         decoder_input = outputs.z + (outputs.z_quantized - outputs.z).detach()
-        reconstructions = self.decode(decoder_input, should_postprocess)
-        return outputs.z, outputs.z_quantized, reconstructions
+        reconstructions, all_hidden_states_dec = self.decode(decoder_input, should_postprocess)
+        return outputs.z, outputs.z_quantized, reconstructions, (all_hidden_states_enc, all_hidden_states_dec)
 
     def compute_loss(self, batch: Batch, **kwargs: Any) -> LossWithIntermediateLosses:
         assert self.lpips is not None
@@ -604,7 +972,7 @@ class Tokenizer(nn.Module):
             x = self.preprocess_input(x)
         shape = x.shape  # (..., C, H, W)
         x = x.view(-1, *shape[-3:])
-        z = self.encoder(x)
+        z, all_hidden_states = self.encoder(x)
         z = self.pre_quant_conv(z)
         b, e, h, w = z.shape
         z_flattened = rearrange(z, 'b e h w -> (b h w) e')
@@ -618,17 +986,17 @@ class Tokenizer(nn.Module):
         z_q = z_q.reshape(*shape[:-3], *z_q.shape[1:])
         tokens = tokens.reshape(*shape[:-3], -1)
 
-        return TokenizerEncoderOutput(z, z_q, tokens)
+        return TokenizerEncoderOutput(z, z_q, tokens), all_hidden_states
 
     def decode(self, z_q: torch.Tensor, should_postprocess: bool = False) -> torch.Tensor:
         shape = z_q.shape  # (..., E, h, w)
         z_q = z_q.view(-1, *shape[-3:])
         z_q = self.post_quant_conv(z_q)
-        rec = self.decoder(z_q)
+        rec, all_hidden_states = self.decoder(z_q)
         rec = rec.reshape(*shape[:-3], *rec.shape[1:])
         if should_postprocess:
             rec = self.postprocess_output(rec)
-        return rec
+        return rec, all_hidden_states
 
     @torch.no_grad()
     def encode_decode(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> torch.Tensor:
@@ -657,13 +1025,18 @@ class Transformer(nn.Module):
         return KeysValues(n, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
 
     def forward(self, sequences: torch.Tensor, past_keys_values: Optional[KeysValues] = None) -> torch.Tensor:
+        hidden_states = ()
         assert past_keys_values is None or len(past_keys_values) == len(self.blocks)
+        #pos and token embeddings to return in hidden states
         x = self.drop(sequences)
+        hidden_states = hidden_states + (x,)
         for i, block in enumerate(self.blocks):
             x = block(x, None if past_keys_values is None else past_keys_values[i])
+            hidden_states = hidden_states + (x,)
 
         x = self.ln_f(x)
-        return x
+        hidden_states = hidden_states + (x,)
+        return x, hidden_states
 
 
 class Block(nn.Module):
@@ -897,13 +1270,13 @@ class WorldModel(nn.Module):
 
         sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(prev_steps + torch.arange(num_steps, device=tokens.device))
 
-        x = self.transformer(sequences, past_keys_values)
+        x, transformer_hidden_states = self.transformer(sequences, past_keys_values)
 
-        logits_observations = self.head_observations(x, num_steps=num_steps, prev_steps=prev_steps)
-        logits_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
-        logits_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
+        logits_observations, head_hidden_states_observations = self.head_observations(x, num_steps=num_steps, prev_steps=prev_steps)
+        logits_rewards, head_hidden_states_rewards = self.head_rewards(x, num_steps=num_steps, prev_steps=prev_steps)
+        logits_ends, head_hidden_states_ends = self.head_ends(x, num_steps=num_steps, prev_steps=prev_steps)
 
-        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends)
+        return WorldModelOutput(x, logits_observations, logits_rewards, logits_ends), (transformer_hidden_states, head_hidden_states_observations, head_hidden_states_rewards, head_hidden_states_ends)
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
 
@@ -984,21 +1357,28 @@ class ActorCritic(nn.Module):
         x = inputs[mask_padding] if mask_padding is not None else inputs
 
         x = x.mul(2).sub(1)
+        hidden_states = ()
         x = F.relu(self.maxp1(self.conv1(x)))
+        hidden_states = hidden_states + (x,)
         x = F.relu(self.maxp2(self.conv2(x)))
+        hidden_states = hidden_states + (x,)
         x = F.relu(self.maxp3(self.conv3(x)))
+        hidden_states = hidden_states + (x,)
         x = F.relu(self.maxp4(self.conv4(x)))
         x = torch.flatten(x, start_dim=1)
+        hidden_states = hidden_states + (x,)
 
         if mask_padding is None:
             self.hx, self.cx = self.lstm(x, (self.hx, self.cx))
         else:
             self.hx[mask_padding], self.cx[mask_padding] = self.lstm(x, (self.hx[mask_padding], self.cx[mask_padding]))
+        
+        hidden_states = hidden_states + (self.hx,)
 
         logits_actions = rearrange(self.actor_linear(self.hx), 'b a -> b 1 a')
         means_values = rearrange(self.critic_linear(self.hx), 'b 1 -> b 1 1')
 
-        return ActorCriticOutput(logits_actions, means_values)
+        return ActorCriticOutput(logits_actions, means_values), hidden_states
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, imagine_horizon: int, gamma: float, lambda_: float, entropy_weight: float, **kwargs: Any) -> LossWithIntermediateLosses:
         assert not self.use_original_obs
@@ -1185,37 +1565,14 @@ class IrisModel(IrisPreTrainedModel):
 
 
     def forward_component(self, component: nn.Module, **kwargs):
-        output1, output2, output3 = component.forward(**kwargs)
-        return (output1, output2, output3)
+        output1, output2, output3, all_hidden_states = component.forward(**kwargs)
+        return (output1, output2, output3), all_hidden_states
     
     def component_losses(self, component: nn.Module, batch, grad_acc_steps: int, **kwargs_loss:Any):
         losses = component.compute_loss(batch, **kwargs_loss) / grad_acc_steps
         losses = losses.loss_total
         return losses
         
-        # observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
-        #     The image observations from real environment in L timesteps (only one frame is used from the environment and 
-        #     rest are imagined in the world model for training)
-        # actions (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
-        #     The actions from real environment in L timesteps
-        # rewards (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
-        #     The rewards from real environment in L timesteps
-        # ends (`torch.IntTensor` of shape `(batch_size, timesteps)`):
-        #     The episode termination booleans from real environment in L timesteps
-        # mask_padding (`torch.BoolTensor` of shape `(batch_size, 1)`):
-        #     The padding mask for input observations before putting them in encode and decoder
-        # should_preprocess (`bool`, *optional*):
-        #     If set to `True`, `observations` are preprocessed before being passed to the model when encoding.
-        # should_postprocess(`bool`, *optional*):
-        #     If set to `True`, `reconstructions` are postprocessed after being passed to the model when decoding.
-        # output_attentions (`bool`, *optional*):
-        #     Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-        #     tensors for more detail.
-        # output_hidden_states (`bool`, *optional*):
-        #     Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-        #     more detail.
-        # return_dict (`bool`, *optional*):
-        #     Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
     @add_start_docstrings_to_model_forward(IRIS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=IrisOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1269,6 +1626,12 @@ class IrisModel(IrisPreTrainedModel):
         ...     )
         ```"""
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+
         cfg_tokenizer = self.cfg.training.tokenizer
         cfg_world_model = self.cfg.training.world_model
         cfg_actor_critic = self.cfg.training.actor_critic
@@ -1285,20 +1648,23 @@ class IrisModel(IrisPreTrainedModel):
             # preprocess observations
             observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
         #tokenizer outputs = (outputs.z, outputs.z_quantized, reconstructions)
-        tokenizer_outputs = self.forward_component(self.agent.tokenizer, x=observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
+        tokenizer_outputs,all_hidden_states_tokenizer = self.forward_component(self.agent.tokenizer, x=observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
             obs_tokens = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
         act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
         tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
         #world_model_outputs = WorldModelOutput() instance
-        world_model_outputs = self.forward_component(self.agent.world_model, tokens = tokens)[0]
+        world_model_outputs, all_hidden_states_world_model = self.forward_component(self.agent.world_model, tokens = tokens)[0]
 
         wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, self.cfg.common.device)
         obs = wm_env.reset_from_initial_observations(observations[:, -1])
         #actor_critic_outputs = ActorCriticOutput() instance
-        actor_critic_outputs = self.forward_component(self.agent.actor_critic, inputs = obs)[0]
+        actor_critic_outputs, all_hidden_states_actor_critic = self.forward_component(self.agent.actor_critic, inputs = obs)[0]
 
+        all_hidden_states = (all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic) if output_hidden_states else None
+            
+       
         return IrisOutput(
             losses = losses,
             reconstructed_img = tokenizer_outputs[2],
@@ -1306,6 +1672,6 @@ class IrisModel(IrisPreTrainedModel):
             reward_preds = actor_critic_outputs.rewards,
             epsiode_end = actor_critic_outputs.ends,
             obs_preds = actor_critic_outputs.observations,
-            hidden_states = None,
+            hidden_states = all_hidden_states, 
             attentions = None,
         )
