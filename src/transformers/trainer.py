@@ -1385,9 +1385,11 @@ class Trainer:
         elif args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             if not is_lomo_available():
                 raise ImportError(
-                    "You need to install `galore_torch` in order to use GaLore optimizers"
-                    " install it with `pip install git+https://github.com/jiaweizzhao/GaLore`"
+                    "You need to install `lomo_optim` in order to use LOMO optimizers"
+                    " install it with `pip install lomo-optim`"
                 )
+            if not is_accelerate_available("0.30.0"):
+                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use LOMO optimizers")
 
             if model is None:
                 raise ValueError("You need to pass a `model` in order to correctly initialize a LOMO optimizer.")
