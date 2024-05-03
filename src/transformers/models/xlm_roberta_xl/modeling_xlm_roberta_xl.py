@@ -50,11 +50,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
-XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/xlm-roberta-xl",
-    "facebook/xlm-roberta-xxl",
-    # See all RoBERTa models at https://huggingface.co/models?filter=xlm-roberta-xl
-]
+
+from ..deprecated._archive_maps import XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class XLMRobertaXLEmbeddings(nn.Module):
@@ -667,7 +664,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     an input to the forward pass. .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRobertaXL
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->XLMRobertaXL
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -700,7 +697,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

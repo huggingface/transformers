@@ -26,18 +26,8 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-pegasus-large-arxiv": (
-        "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-pubmed": (
-        "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json"
-    ),
-    "google/bigbird-pegasus-large-bigpatent": (
-        "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json"
-    ),
-    # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
-}
+
+from ..deprecated._archive_maps import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BigBirdPegasusConfig(PretrainedConfig):

@@ -36,27 +36,6 @@ RESOURCE_FILES_NAMES = {
     "vocab_file": "vocab.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
-        "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
-    },
-    "sentencepiece_model_file": {
-        "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
-        "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ernie-m-base": 514,
-    "ernie-m-large": 514,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "ernie-m-base": {"do_lower_case": False},
-    "ernie-m-large": {"do_lower_case": False},
-}
-
 
 # Adapted from paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer
 class ErnieMTokenizer(PreTrainedTokenizer):
@@ -89,9 +68,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     model_input_names: List[str] = ["input_ids"]
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     resource_files_names = RESOURCE_FILES_NAMES
 
     def __init__(

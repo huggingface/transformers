@@ -18,11 +18,11 @@ import tempfile
 import unittest
 
 import pytest
+from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers import LlamaConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -50,6 +50,11 @@ if is_torch_available():
         LlamaForSequenceClassification,
         LlamaModel,
         LlamaTokenizer,
+    )
+    from transformers.models.llama.modeling_llama import (
+        LlamaDynamicNTKScalingRotaryEmbedding,
+        LlamaLinearScalingRotaryEmbedding,
+        LlamaRotaryEmbedding,
     )
 
 
@@ -368,7 +373,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
+    def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
@@ -397,6 +402,69 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_rope_scaling(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        hidden_size = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = hidden_size // num_heads
+        scaling_factor = 10
+        short_input_length = 10
+        long_input_length = int(config.max_position_embeddings * 1.5)
+
+        # Inputs
+        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        position_ids_short = position_ids_short.unsqueeze(0)
+        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = position_ids_long.unsqueeze(0)
+
+        # Sanity check original RoPE
+        original_rope = LlamaRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+        ).to(torch_device)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        linear_scaling_rope = LlamaLinearScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
+            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        ntk_scaling_rope = LlamaDynamicNTKScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
     @require_flash_attn
     @require_torch_gpu
@@ -529,8 +597,18 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
-@require_torch
+@require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_7b_logits(self):
@@ -606,51 +684,60 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-        ]
+        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
+        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        EXPECTED_TEXT_COMPLETION = {
+            8: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            7: [
+                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
+                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
+                "be.\nThe theory of relativity",
+                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
+                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+            ],
+        }
+
         prompts = [
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+        )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        def decode_one_tokens(model, cur_token, input_pos, cache_position):
-            logits = model(
-                cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
-            )[0]
-            new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            return new_token
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
 
-        batch_size, seq_length = inputs["input_ids"].shape
-        with torch.no_grad():
-            model._setup_cache(StaticCache, 2, max_cache_len=4096)
-            cache_position = torch.arange(seq_length, device=torch_device)
-            generated_ids = torch.zeros(
-                batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
-            )
-            generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
 
-            logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            generated_ids[:, seq_length] = next_token[:, 0]
-
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-            cache_position = torch.tensor([seq_length + 1], device=torch_device)
-            for _ in range(1, NUM_TOKENS_TO_GENERATE):
-                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    with CaptureLogger(logging.get_logger(__name__)) as cl:
-                        next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-                        self.assertNotIn("skipping cudagraphs due to", cl.out)
-                    generated_ids[:, cache_position] = next_token.int()
-                cache_position += 1
-
-        text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
 
 
 @require_torch
@@ -695,6 +782,7 @@ end
 
     @require_torch_accelerator
     @slow
+    @unittest.skip("Model is too large")
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")

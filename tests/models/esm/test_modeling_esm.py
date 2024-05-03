@@ -30,7 +30,6 @@ if is_torch_available():
 
     from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
     from transformers.models.esm.modeling_esm import (
-        ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         EsmEmbeddings,
         create_position_ids_from_input_ids,
     )
@@ -243,9 +242,9 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EsmModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/esm2_t6_8M_UR50D"
+        model = EsmModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression

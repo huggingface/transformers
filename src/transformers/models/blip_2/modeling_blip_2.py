@@ -47,10 +47,8 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
-BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/blip2-opt-2.7b",
-    # See all BLIP-2 models at https://huggingface.co/models?filter=blip
-]
+
+from ..deprecated._archive_maps import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1196,9 +1194,13 @@ class Blip2Model(Blip2PreTrainedModel):
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(config.text_config)
+            language_model = AutoModelForCausalLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            language_model = AutoModelForSeq2SeqLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:
@@ -1551,9 +1553,13 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(config.text_config)
+            language_model = AutoModelForCausalLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            language_model = AutoModelForSeq2SeqLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:
@@ -1828,8 +1834,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
         # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
+        # -1 is to account for the prepended BOS after `generate.`
+        # TODO (joao, raushan): refactor `generate` to avoid these operations with VLMs
         if not self.language_model.config.is_encoder_decoder:
-            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1]
+            generate_kwargs["max_length"] = generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
             generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
 
         outputs = self.language_model.generate(
@@ -1838,4 +1846,16 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             **generate_kwargs,
         )
 
+        # this is a temporary workaround to be consistent with other generation models and
+        # have BOS as the first token, even though under the hood we are calling LM with embeds
+        if not self.language_model.config.is_encoder_decoder:
+            bos_tokens = (
+                torch.LongTensor([[self.config.text_config.bos_token_id]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
+            if not isinstance(outputs, torch.Tensor):
+                outputs.sequences = torch.cat([bos_tokens, outputs.sequences], dim=-1)
+            else:
+                outputs = torch.cat([bos_tokens, outputs], dim=-1)
         return outputs

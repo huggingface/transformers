@@ -65,17 +65,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
-TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "albert/albert-base-v1",
-    "albert/albert-large-v1",
-    "albert/albert-xlarge-v1",
-    "albert/albert-xxlarge-v1",
-    "albert/albert-base-v2",
-    "albert/albert-large-v2",
-    "albert/albert-xlarge-v2",
-    "albert/albert-xxlarge-v2",
-    # See all ALBERT models at https://huggingface.co/models?filter=albert
-]
+
+from ..deprecated._archive_maps import TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class TFAlbertPreTrainingLoss:

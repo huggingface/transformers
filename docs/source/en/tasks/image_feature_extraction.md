@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image Feature Extraction
+# Image Feature Extraction
 
 [[open-in-colab]]
 

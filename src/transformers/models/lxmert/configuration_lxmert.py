@@ -21,9 +21,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "unc-nlp/lxmert-base-uncased": "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class LxmertConfig(PretrainedConfig):

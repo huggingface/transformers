@@ -60,10 +60,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TableTransformerConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/table-transformer-detection"
 
-TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/table-transformer-detection",
-    # See all Table Transformer models at https://huggingface.co/models?filter=table-transformer
-]
+
+from ..deprecated._archive_maps import TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -281,17 +279,23 @@ class TableTransformerConvEncoder(nn.Module):
 
         self.config = config
 
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
-            kwargs = {}
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
-                kwargs["output_stride"] = 16
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(1, 2, 3, 4),
-                in_chans=config.num_channels,
+                out_indices=out_indices,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:

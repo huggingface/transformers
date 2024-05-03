@@ -94,10 +94,6 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # The length of the vocab keys can be different
         # self.assertEqual(len(vocab_keys), tokenizer.vocab_size)
 
-    @unittest.skip("Skip this test while all models are still to be uploaded.")
-    def test_pretrained_model_lists(self):
-        pass
-
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 

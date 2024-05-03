@@ -56,7 +56,6 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
         MODEL_MAPPING_NAMES,
     )
-    from transformers.models.perceiver.modeling_perceiver import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -832,9 +831,9 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PerceiverModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "deepmind/language-perceiver"
+        model = PerceiverModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

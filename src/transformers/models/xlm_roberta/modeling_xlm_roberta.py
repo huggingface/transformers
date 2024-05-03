@@ -51,15 +51,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
-XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/xlm-roberta-base",
-    "FacebookAI/xlm-roberta-large",
-    "FacebookAI/xlm-roberta-large-finetuned-conll02-dutch",
-    "FacebookAI/xlm-roberta-large-finetuned-conll02-spanish",
-    "FacebookAI/xlm-roberta-large-finetuned-conll03-english",
-    "FacebookAI/xlm-roberta-large-finetuned-conll03-german",
-    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
-]
+
+from ..deprecated._archive_maps import XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->XLMRoberta
@@ -302,11 +295,18 @@ class XLMRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta
+XLM_ROBERTA_SELF_ATTENTION_CLASSES = {
+    "eager": XLMRobertaSelfAttention,
+}
+
+
+# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta,ROBERTA->XLM_ROBERTA
 class XLMRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = XLMRobertaSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = XLM_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = XLMRobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -697,7 +697,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRoberta
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->XLMRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -730,7 +730,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

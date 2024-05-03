@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -38,8 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
-    from transformers.models.pvt_v2.modeling_pvt_v2 import PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import AutoImageProcessor, PvtV2ForImageClassification, PvtV2Model
 
 
 if is_vision_available():
@@ -289,7 +288,7 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class.__name__ in MODEL_MAPPING_NAMES.values():
                 continue
             model = model_class(config)
             model.to(torch_device)
@@ -312,9 +311,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "OpenGVLab/pvt_v2_b0"
+        model = PvtV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

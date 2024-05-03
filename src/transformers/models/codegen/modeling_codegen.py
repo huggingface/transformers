@@ -34,21 +34,7 @@ _CHECKPOINT_FOR_DOC = "Salesforce/codegen-2B-mono"
 _CONFIG_FOR_DOC = "CodeGenConfig"
 
 
-CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/codegen-350M-nl",
-    "Salesforce/codegen-350M-multi",
-    "Salesforce/codegen-350M-mono",
-    "Salesforce/codegen-2B-nl",
-    "Salesforce/codegen-2B-multi",
-    "Salesforce/codegen-2B-mono",
-    "Salesforce/codegen-6B-nl",
-    "Salesforce/codegen-6B-multi",
-    "Salesforce/codegen-6B-mono",
-    "Salesforce/codegen-16B-nl",
-    "Salesforce/codegen-16B-multi",
-    "Salesforce/codegen-16B-mono",
-    # See all CodeGen models at https://huggingface.co/models?filter=codegen
-]
+from ..deprecated._archive_maps import CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
@@ -608,7 +594,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # Omit tokens covered by past_key_values
         if past_key_values:
@@ -635,14 +621,22 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids.contiguous()}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
+        return model_inputs
 
     @add_start_docstrings_to_model_forward(CODEGEN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

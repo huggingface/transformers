@@ -52,10 +52,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "WhisperConfig"
 
 
-TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
+from ..deprecated._archive_maps import TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 LARGE_NEGATIVE = -1e8
 

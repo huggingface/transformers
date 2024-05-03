@@ -21,7 +21,7 @@ more. It also plays a role in a variety of mixed-modality applications that have
 and vision-to-text. Some of the models that can generate text include
 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper.
 
-Check out a few examples that use [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
+Check out a few examples that use [`~generation.GenerationMixin.generate`] method to produce
 text outputs for different tasks:
 * [Text summarization](./tasks/summarization#inference)
 * [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
@@ -57,9 +57,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 >>> model.generation_config
 GenerationConfig {
-    "bos_token_id": 50256,
-    "eos_token_id": 50256,
+  "bos_token_id": 50256,
+  "eos_token_id": 50256
 }
+<BLANKLINE>
 ```
 
 Printing out the `model.generation_config` reveals only the values that are different from the default generation
@@ -87,7 +88,7 @@ to stop generation whenever the full generation exceeds some amount of time. To 
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
-sequences that start with a lower probability initial tokens and would've been ignored by the greedy search.
+sequences that start with a lower probability initial tokens and would've been ignored by the greedy search. Visualize how it works [here](https://huggingface.co/spaces/m-ric/beam_search_visualizer).
 - `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
@@ -244,8 +245,7 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because when you go to the World Cup and you don\'t, or when you don\'t get invited,
-that\'s a terrible feeling."']
+["Today was an amazing day because we received these wonderful items by the way of a gift shop. The box arrived on a Thursday and I opened it on Monday afternoon to receive the gifts. Both bags featured pieces from all the previous years!\n\nThe box had lots of surprises in it, including some sweet little mini chocolate chips! I don't think I'd eat all of these. This was definitely one of the most expensive presents I have ever got, I actually got most of them for free!\n\nThe first package came"]
 ```
 
 ### Beam-search decoding
@@ -253,6 +253,12 @@ that\'s a terrible feeling."']
 Unlike greedy search, beam-search decoding keeps several hypotheses at each time step and eventually chooses
 the hypothesis that has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
 sequences that start with lower probability initial tokens and would've been ignored by the greedy search.
+
+<a href="https://huggingface.co/spaces/m-ric/beam_search_visualizer" class="flex flex-col justify-center">
+    <img style="max-width: 90%; margin: auto;" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/beam_search.png"/>
+</a>
+
+You can visualize how beam-search decoding works in [this interactive demo](https://huggingface.co/spaces/m-ric/beam_search_visualizer): type your input sentence, and play with the parameters to see how the decoding beams change.
 
 To enable this decoding strategy, specify the `num_beams` (aka number of hypotheses to keep track of) that is greater than 1.
 
@@ -387,7 +393,7 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are going to the same party. It is a small party, in a small']
+['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
 
 Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed

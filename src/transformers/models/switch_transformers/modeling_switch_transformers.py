@@ -54,18 +54,8 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/switch-base-8",
-    "google/switch-base-16",
-    "google/switch-base-32",
-    "google/switch-base-64",
-    "google/switch-base-128",
-    "google/switch-base-256",
-    "google/switch-large-128",
-    "google/switch-xxl-128",
-    "google/switch-c-2048",
-    # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
-]
+
+from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -1731,6 +1721,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        output_router_logits = kwargs.get("output_router_logits", True)
+
         return {
             "decoder_input_ids": input_ids,
             "past_key_values": past_key_values,
@@ -1740,6 +1732,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
+            "output_router_logits": output_router_logits,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):

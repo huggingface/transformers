@@ -56,19 +56,7 @@ _CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
 
 
-ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nghuyong/ernie-1.0-base-zh",
-    "nghuyong/ernie-2.0-base-en",
-    "nghuyong/ernie-2.0-large-en",
-    "nghuyong/ernie-3.0-base-zh",
-    "nghuyong/ernie-3.0-medium-zh",
-    "nghuyong/ernie-3.0-mini-zh",
-    "nghuyong/ernie-3.0-micro-zh",
-    "nghuyong/ernie-3.0-nano-zh",
-    "nghuyong/ernie-gram-zh",
-    "nghuyong/ernie-health-zh",
-    # See all ERNIE models at https://huggingface.co/models?filter=ernie
-]
+from ..deprecated._archive_maps import ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class ErnieEmbeddings(nn.Module):
@@ -297,11 +285,18 @@ class ErnieSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie
+ERNIE_SELF_ATTENTION_CLASSES = {
+    "eager": ErnieSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Ernie,BERT->ERNIE
 class ErnieAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ErnieSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ERNIE_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ErnieSelfOutput(config)
         self.pruned_heads = set()
 
@@ -799,7 +794,7 @@ class ErnieModel(ErniePreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Ernie
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Ernie
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

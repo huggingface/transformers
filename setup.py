@@ -161,6 +161,7 @@ _deps = [
     "safetensors>=0.4.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
+    "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
@@ -174,7 +175,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.14,<0.19",
+    "tokenizers>=0.19,<0.20",
     "torch",
     "torchaudio",
     "torchvision",
@@ -267,7 +268,7 @@ if os.name == "nt":  # windows
     extras["flax"] = []  # jax is not supported on windows
 else:
     extras["retrieval"] = deps_list("faiss-cpu", "datasets")
-    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax")
+    extras["flax"] = deps_list("jax", "jaxlib", "flax", "optax", "scipy")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
@@ -321,6 +322,7 @@ extras["testing"] = (
         "beautifulsoup4",
         "tensorboard",
         "pydantic",
+        "sentencepiece",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
@@ -428,7 +430,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.39.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.41.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

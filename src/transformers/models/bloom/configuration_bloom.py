@@ -29,14 +29,8 @@ from ...utils import is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
-    "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/config.json",
-    "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
-    "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/config.json",
-    "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/config.json",
-    "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/config.json",
-}
+
+from ..deprecated._archive_maps import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class BloomConfig(PretrainedConfig):

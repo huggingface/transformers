@@ -47,11 +47,7 @@ _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
 
 
-BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/biogpt",
-    "microsoft/BioGPT-Large",
-    # See all BioGPT models at https://huggingface.co/models?filter=biogpt
-]
+from ..deprecated._archive_maps import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
@@ -77,6 +73,20 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
         positions = positions[:, past_key_values_length:]
 
         return super().forward(positions + self.offset)
+
+
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->BioGpt
+class BioGptScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BioGpt
@@ -427,9 +437,11 @@ class BioGptModel(BioGptPreTrainedModel):
         self.dropout = config.hidden_dropout_prob
         self.embed_dim = config.hidden_size
         self.padding_idx = config.pad_token_id
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, self.embed_dim, self.padding_idx)
+        self.embed_tokens = BioGptScaledWordEmbedding(
+            config.vocab_size, self.embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
         self.embed_positions = BioGptLearnedPositionalEmbedding(config.max_position_embeddings, self.embed_dim)
 
         self.layers = nn.ModuleList([BioGptDecoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -486,7 +498,7 @@ class BioGptModel(BioGptPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input)
 
         if attention_mask is None:
             attention_mask = torch.ones(

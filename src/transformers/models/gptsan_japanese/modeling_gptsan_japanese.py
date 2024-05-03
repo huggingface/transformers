@@ -44,10 +44,8 @@ _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Tanrei/GPTSAN-japanese",
-    # See all GPTSAN-japanese models at https://huggingface.co/models?filter=gptsan-japanese
-]
+
+from ..deprecated._archive_maps import GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
@@ -922,6 +920,10 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         device = self.position_embeddings.weight.device
         if input_ids is None:
             input_ids = torch.zeros([1, 1]).int().to(device)  # dummy for input_ids was None
+        if inputs_embeds is not None:
+            raise NotImplementedError(
+                "GPTSanJapaneseModel does not use `inputs_embeds`. Make sure to pass in `input_ids` instead."
+            )
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
         pasts_or_spout_value = None

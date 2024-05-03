@@ -55,11 +55,7 @@ _CHECKPOINT_FOR_DOC = "Intel/dpt-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 
-DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Intel/dpt-large",
-    "Intel/dpt-hybrid-midas",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-]
+from ..deprecated._archive_maps import DPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1079,10 +1075,10 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         super().__init__(config)
 
         self.backbone = None
-        if config.backbone_config is not None and config.is_hybrid is False:
-            self.backbone = load_backbone(config)
-        else:
+        if config.is_hybrid or config.backbone_config is None:
             self.dpt = DPTModel(config, add_pooling_layer=False)
+        else:
+            self.backbone = load_backbone(config)
 
         # Neck
         self.neck = DPTNeck(config)

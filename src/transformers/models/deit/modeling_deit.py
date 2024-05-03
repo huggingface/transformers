@@ -59,10 +59,7 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/deit-base-distilled-patch16-224",
-    # See all DeiT models at https://huggingface.co/models?filter=deit
-]
+from ..deprecated._archive_maps import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class DeiTEmbeddings(nn.Module):
@@ -735,7 +732,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: magpie
+        Predicted class: Polaroid camera, Polaroid Land camera
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

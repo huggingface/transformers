@@ -41,10 +41,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "CarlCochet/trajectory-transformer-halfcheetah-medium-v2"
 _CONFIG_FOR_DOC = "TrajectoryTransformerConfig"
 
-TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "CarlCochet/trajectory-transformer-halfcheetah-medium-v2",
-    # See all TrajectoryTransformer models at https://huggingface.co/models?filter=trajectory_transformer
-]
+
+from .._archive_maps import TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_trajectory_transformer(model, config, tf_checkpoint_path):

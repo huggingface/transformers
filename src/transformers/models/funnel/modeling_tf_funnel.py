@@ -62,18 +62,9 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
 
-TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "funnel-transformer/small",  # B4-4-4H768
-    "funnel-transformer/small-base",  # B4-4-4H768, no decoder
-    "funnel-transformer/medium",  # B6-3x2-3x2H768
-    "funnel-transformer/medium-base",  # B6-3x2-3x2H768, no decoder
-    "funnel-transformer/intermediate",  # B6-6-6H768
-    "funnel-transformer/intermediate-base",  # B6-6-6H768, no decoder
-    "funnel-transformer/large",  # B8-8-8H1024
-    "funnel-transformer/large-base",  # B8-8-8H1024, no decoder
-    "funnel-transformer/xlarge-base",  # B10-10-10H1024
-    "funnel-transformer/xlarge",  # B10-10-10H1024, no decoder
-]
+
+from ..deprecated._archive_maps import TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
 
 INF = 1e6
 

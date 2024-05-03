@@ -37,7 +37,6 @@ if is_torch_available():
 
     from transformers import PvtConfig, PvtForImageClassification, PvtImageProcessor, PvtModel
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.pvt.modeling_pvt import PVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -254,9 +253,9 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Zetatech/pvt-tiny-224"
+        model = PvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -1153,6 +1153,14 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Assert there is online added_tokens special_tokens
                 self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
     @require_torch
     @slow
     def test_torch_encode_plus_sent_to_model(self):
@@ -1718,10 +1726,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_alignement_methods(self):
         pass
 
-    @unittest.skip("#TODO will be removed in main")
-    def test_pretrained_model_lists(self):
-        pass
-
     @unittest.skip("UDOP tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
@@ -1889,3 +1893,31 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(encoding_p["attention_mask"], [1, 1, 1])
         self.assertDictEqual(dict(encoding_p), dict(encoding_r))
         self.assertEqual(tokenizer_p.decode(encoding_p["input_ids"]), expected_decoding)
+
+    def test_special_tokens(self):
+        tokenizer_p = UdopTokenizer.from_pretrained("microsoft/udop-large")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("microsoft/udop-large")
+
+        # encode
+        text = "paragraph<loc_58>. Hey"
+        encoding_p = tokenizer_p.encode(text)
+        encoding_r = tokenizer_r.encode(text)
+
+        assert encoding_p == encoding_r == [8986, 32942, 3, 5, 9459, 1]
+
+        # decode
+        # this is different between slow/fast tokenizer
+        # due tothe former having  `spaces_between_special_tokens=True` by default
+        ids = [0, 8986, 32942, 32966, 32554, 32551, 1]
+
+        # test slow tokenizer
+        decoding = tokenizer_p.decode(ids, spaces_between_special_tokens=False)
+
+        excepted_decoding = "<pad>paragraph<loc_58><loc_34><loc_446><loc_449></s>"
+        assert decoding == excepted_decoding
+
+        # test fast tokenizer
+        decoding = tokenizer_r.decode(ids)
+
+        excepted_decoding = "<pad> paragraph<loc_58><loc_34><loc_446><loc_449></s>"
+        assert decoding == excepted_decoding

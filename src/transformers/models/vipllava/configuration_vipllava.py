@@ -13,6 +13,8 @@
 # limitations under the License.
 """ VipLlava model configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -20,9 +22,8 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
-}
+
+from ..deprecated._archive_maps import VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class VipLlavaConfig(PretrainedConfig):
@@ -51,9 +52,6 @@ class VipLlavaConfig(PretrainedConfig):
             The layer norm epsilon of the projector layernorm
         vision_feature_layers (`List[int]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
             The list of layers to select the vision features from.
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the VipLlava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~VipLlavaForConditionalGeneration`]
 
     Example:
 
@@ -88,7 +86,6 @@ class VipLlavaConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         projector_layernorm_eps=1e-5,
         vision_feature_layers=[-2, -5, -8, -11, 6],
-        vocab_size=32000,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -96,7 +93,12 @@ class VipLlavaConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.projector_layernorm_eps = projector_layernorm_eps
         self.vision_feature_layers = vision_feature_layers
-        self.vocab_size = vocab_size
+
+        if "vocab_size" in kwargs:
+            warnings.warn(
+                "The `vocab_size` argument is deprecated and will be removed in v4.42, since it can be inferred from the `text_config`. Passing this argument has no effect",
+                FutureWarning,
+            )
 
         self.vision_config = vision_config
 
@@ -116,15 +118,27 @@ class VipLlavaConfig(PretrainedConfig):
                 vocab_size=32000,
                 projection_dim=768,
             )
-        self.vocab_size = self.vocab_size
+
+        if isinstance(text_config, dict):
+            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
-
-        if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-            self.vocab_size = self.text_config.vocab_size
-        elif text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+        self._vocab_size = self.text_config.vocab_size
 
         super().__init__(**kwargs)
+
+        @property
+        def vocab_size(self):
+            warnings.warn(
+                "The `vocab_size` attribute is deprecated and will be removed in v4.42, Please use `text_config.vocab_size` instead.",
+                FutureWarning,
+            )
+            return self._vocab_size
+
+        def to_dict(self):
+            output = super().to_dict()
+            output.pop("_vocab_size", None)
+            return output

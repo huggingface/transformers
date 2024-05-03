@@ -34,15 +34,6 @@ VOCAB_FILES_NAMES = {
     "normalizer_file": "normalizer.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
-    },
-    "merges_file": {"openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"},
-    "normalizer_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/normalizer.json"
-    },
-}
 
 MAX_MODEL_INPUT_SIZES = {
     "openai/whisper-base": 448,
@@ -257,8 +248,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -826,12 +815,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):

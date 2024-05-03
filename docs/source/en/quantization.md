@@ -26,6 +26,59 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
+## Quanto
+
+<Tip>
+
+Try Quanto + transformers with this [notebook](https://colab.research.google.com/drive/16CXfVmtdQvciSh9BopZUDYcmXCDpvgrT?usp=sharing)!
+
+</Tip>
+
+
+[🤗 Quanto](https://github.com/huggingface/quanto) library is a versatile pytorch quantization toolkit. The quantization method used is the linear quantization. Quanto provides several unique features such as:
+
+- weights quantization (`float8`,`int8`,`int4`,`int2`)
+- activation quantization (`float8`,`int8`)
+- modality agnostic (e.g CV,LLM)
+- device agnostic (e.g CUDA,MPS,CPU)
+- compatibility with `torch.compile`
+- easy to add custom kernel for specific device
+- supports quantization aware training
+<!-- Add link to the blogpost -->
+
+Before you begin, make sure the following libraries are installed:
+
+```bash
+pip install quanto
+pip install git+https://github.com/huggingface/accelerate.git
+pip install git+https://github.com/huggingface/transformers.git
+```
+
+Now you can quantize a model by passing [`QuantoConfig`] object in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it contains `torch.nn.Linear` layers. 
+
+The integration with transformers only supports weights quantization. For the more complex use case such as activation quantization, calibration and quantization aware training, you should use [quanto](https://github.com/huggingface/quanto) library instead. 
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+
+model_id = "facebook/opt-125m"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+quantization_config = QuantoConfig(weights="int8")
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0", quantization_config=quantization_config)
+```
+
+Note that serialization is not supported yet with transformers but it is coming soon! If you want to save the model, you can use quanto library instead.
+
+Quanto library uses linear quantization algorithm for quantization. Even though this is a basic quantization technique, we get very good results! Have a look at the following becnhmark (llama-2-7b on perplexity metric). You can find more benchamarks [here](https://github.com/huggingface/quanto/tree/main/bench/generation)
+
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/NousResearch-Llama-2-7b-hf_Perplexity.png" alt="llama-2-7b-quanto-perplexity" />
+  </div>
+</div>
+
+The library is versatible enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).
+
 ## AQLM
 
 
@@ -589,6 +642,37 @@ double_quant_config = BitsAndBytesConfig(
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
 
+## EETQ
+The [EETQ](https://github.com/NetEase-FuXi/EETQ) library supports int8 per-channel weight-only quantization for NVIDIA GPUS. The high-performance GEMM and GEMV kernels are from FasterTransformer and TensorRT-LLM. It requires no calibration dataset and does not need to pre-quantize your model. Moreover, the accuracy degradation is negligible owing to the per-channel quantization. 
+
+Make sure you have eetq installed from the [relase page](https://github.com/NetEase-FuXi/EETQ/releases)
+```
+pip install --no-cache-dir https://github.com/NetEase-FuXi/EETQ/releases/download/v1.0.0/EETQ-1.0.0+cu121+torch2.1.2-cp310-cp310-linux_x86_64.whl
+```
+or via the source code https://github.com/NetEase-FuXi/EETQ. EETQ requires CUDA capability <= 8.9 and >= 7.0
+```
+git clone https://github.com/NetEase-FuXi/EETQ.git
+cd EETQ/
+git submodule update --init --recursive
+pip install .
+```
+
+An unquantized model can be quantized via "from_pretrained".
+```py
+from transformers import AutoModelForCausalLM, EetqConfig
+path = "/path/to/model"
+quantization_config = EetqConfig("int8")
+model = AutoModelForCausalLM.from_pretrained(path, device_map="auto", quantization_config=quantization_config)
+```
+
+A quantized model can be saved via "saved_pretrained" and be reused again via the "from_pretrained".
+
+```py
+quant_path = "/path/to/save/quantized/model"
+model.save_pretrained(quant_path)
+model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
+```
+
 ## Optimum
 
 The [Optimum](https://huggingface.co/docs/optimum/index) library supports quantization for Intel, Furiosa, ONNX Runtime, GPTQ, and lower-level PyTorch quantization functions. Consider using Optimum for quantization if you're using specific and optimized hardware like Intel CPUs, Furiosa NPUs or a model accelerator like ONNX Runtime.
@@ -661,3 +745,53 @@ The speed and throughput of fused and unfused modules were also tested with the 
     <figcaption class="mt-2 text-center text-sm text-gray-500">generate throughput/batch size</figcaption>
   </div>
 </div>
+
+## HQQ 
+Half-Quadratic Quantization (HQQ) implements on-the-fly quantization via fast robust optimization. It doesn't require calibration data and can be used to quantize any model.  
+Please refer to the <a href="https://github.com/mobiusml/hqq/">official package</a> for more details.
+
+For installation, we recommend you use the following approach to get the latest version and build its corresponding CUDA kernels:
+```
+pip install hqq
+```
+
+To quantize a model, you need to create an [`HqqConfig`]. There are two ways of doing it:
+``` Python
+from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
+
+# Method 1: all linear layers will use the same quantization config
+quant_config  = HqqConfig(nbits=8, group_size=64, quant_zero=False, quant_scale=False, axis=0) #axis=0 is used by default
+```
+
+``` Python
+# Method 2: each linear layer with the same tag will use a dedicated quantization config
+q4_config = {'nbits':4, 'group_size':64, 'quant_zero':False, 'quant_scale':False}
+q3_config = {'nbits':3, 'group_size':32, 'quant_zero':False, 'quant_scale':False}
+quant_config  = HqqConfig(dynamic_config={
+  'self_attn.q_proj':q4_config,
+  'self_attn.k_proj':q4_config,
+  'self_attn.v_proj':q4_config,
+  'self_attn.o_proj':q4_config,
+
+  'mlp.gate_proj':q3_config,
+  'mlp.up_proj'  :q3_config,
+  'mlp.down_proj':q3_config,
+})
+```
+
+The second approach is especially interesting for quantizing Mixture-of-Experts (MoEs) because the experts are less affected by lower quantization settings.
+
+
+Then you simply quantize the model as follows
+``` Python
+model = transformers.AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    torch_dtype=torch.float16, 
+    device_map="cuda", 
+    quantization_config=quant_config
+)
+```
+### Optimized Runtime
+HQQ supports various backends, including pure Pytorch and custom dequantization CUDA kernels. These backends are suitable for older gpus and peft/QLoRA training.
+For faster inference, HQQ supports 4-bit fused kernels (TorchAO and Marlin), reaching up to 200 tokens/sec on a single 4090.
+For more details on how to use the backends, please refer to https://github.com/mobiusml/hqq/?tab=readme-ov-file#backend

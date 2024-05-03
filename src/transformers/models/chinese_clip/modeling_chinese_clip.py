@@ -48,10 +48,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
 
-CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "OFA-Sys/chinese-clip-vit-base-patch16",
-    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chinese_clip
-]
+
+from ..deprecated._archive_maps import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
@@ -356,11 +354,18 @@ class ChineseCLIPTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ChineseCLIPText
+CHINESE_CLIP_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": ChineseCLIPTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ChineseCLIPText,BERT->CHINESE_CLIP_TEXT
 class ChineseCLIPTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ChineseCLIPTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = CHINESE_CLIP_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ChineseCLIPTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1108,6 +1113,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config_class = ChineseCLIPTextConfig
+    _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1279,6 +1285,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
+    _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
     def __init__(self, config: ChineseCLIPVisionConfig):
         super().__init__(config)

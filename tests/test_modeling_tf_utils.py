@@ -25,7 +25,6 @@ import unittest
 import unittest.mock as mock
 
 from huggingface_hub import HfFolder, Repository, delete_repo, snapshot_download
-from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
 from transformers import is_tf_available, is_torch_available
@@ -42,7 +41,13 @@ from transformers.testing_utils import (  # noqa: F401
     require_torch,
     slow,
 )
-from transformers.utils import SAFE_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, TF2_WEIGHTS_NAME, logging
+from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    TF2_WEIGHTS_INDEX_NAME,
+    TF2_WEIGHTS_NAME,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -58,6 +63,7 @@ if is_tf_available():
         PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
+        TFAutoModel,
         TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
@@ -105,24 +111,6 @@ class TFModelUtilsTest(unittest.TestCase):
             _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
-
-    def test_load_from_one_file(self):
-        try:
-            tmp_file = tempfile.mktemp()
-            with open(tmp_file, "wb") as f:
-                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", f)
-
-            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-            _ = TFBertModel.from_pretrained(tmp_file, config=config)
-        finally:
-            os.remove(tmp_file)
-
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-        _ = TFBertModel.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", config=config
-        )
 
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
@@ -359,6 +347,7 @@ class TFModelUtilsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, ref_model.weights):
                     assert np.allclose(p1.numpy(), p2.numpy())
 
+    @require_safetensors
     def test_checkpoint_sharding_local(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -408,6 +397,55 @@ class TFModelUtilsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    def test_safetensors_checkpoint_sharding_local(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
+            for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
+                model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=True)
+
+                # Get each shard file and its size
+                shard_to_size = {}
+                for shard in os.listdir(tmp_dir):
+                    if shard.endswith(".h5"):
+                        shard_file = os.path.join(tmp_dir, shard)
+                        shard_to_size[shard_file] = os.path.getsize(shard_file)
+
+                index_file = os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)
+                # Check there is an index but no regular weight file
+                self.assertTrue(os.path.isfile(index_file))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
+
+                # Check the index and the shard files found match
+                with open(index_file, "r", encoding="utf-8") as f:
+                    index = json.loads(f.read())
+
+                all_shards = set(index["weight_map"].values())
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".safetensors")}
+                self.assertSetEqual(all_shards, shards_found)
+
+                # Finally, check the model can be reloaded
+                new_model = TFBertModel.from_pretrained(tmp_dir)
+
+                model.build_in_name_scope()
+                new_model.build_in_name_scope()
+
+                for p1, p2 in zip(model.weights, new_model.weights):
+                    self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @is_pt_tf_cross_test
+    @require_safetensors
+    def test_bfloat16_torch_loading(self):
+        # Assert that neither of these raise an error - both repos contain bfloat16 tensors
+        model1 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16-pt", from_pt=True)
+        model2 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16")  # PT-format safetensors
+        # Check that PT and safetensors loading paths end up with the same values
+        for weight1, weight2 in zip(model1.weights, model2.weights):
+            self.assertTrue(tf.reduce_all(weight1 == weight2))
+
     @slow
     def test_save_pretrained_signatures(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -456,7 +494,26 @@ class TFModelUtilsTest(unittest.TestCase):
             model.save_pretrained(tmp_dir, safe_serialization=True)
             # No tf_model.h5 file, only a model.safetensors
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @require_safetensors
+    def test_safetensors_sharded_save_and_load(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
+            # No tf weights or index file, only a safetensors index
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_INDEX_NAME)))
 
             new_model = TFBertModel.from_pretrained(tmp_dir)
 
@@ -472,6 +529,21 @@ class TFModelUtilsTest(unittest.TestCase):
             pt_model.save_pretrained(tmp_dir, safe_serialization=True)
             # Check we have a model.safetensors file
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @is_pt_tf_cross_test
+    def test_sharded_safetensors_save_and_load_pt_to_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pt_model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
+            # Check we have a safetensors shard index file
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
 
             new_model = TFBertModel.from_pretrained(tmp_dir)
 
@@ -531,9 +603,10 @@ class TFModelUtilsTest(unittest.TestCase):
 
     @require_safetensors
     def test_safetensors_tf_from_sharded_h5_with_sharded_safetensors_hub(self):
-        # This should not raise even if there are two types of sharded weights
-        # This should discard the safetensors weights in favor of the .h5 sharded weights
-        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded")
+        # Confirm that we can correctly load the safetensors weights from a sharded hub repo even when TF weights present
+        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", use_safetensors=True)
+        # Confirm that we can access the TF weights too
+        TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-safetensors-h5-sharded", use_safetensors=False)
 
     @require_safetensors
     def test_safetensors_load_from_local(self):

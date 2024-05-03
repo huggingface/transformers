@@ -28,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SqueezeBertForMaskedLM,
         SqueezeBertForMultipleChoice,
         SqueezeBertForQuestionAnswering,
@@ -277,9 +276,9 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SqueezeBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "squeezebert/squeezebert-uncased"
+        model = SqueezeBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_sentencepiece

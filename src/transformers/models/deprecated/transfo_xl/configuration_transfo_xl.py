@@ -21,9 +21,8 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "transfo-xl/transfo-xl-wt103": "https://huggingface.co/transfo-xl/transfo-xl-wt103/resolve/main/config.json",
-}
+
+from .._archive_maps import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TransfoXLConfig(PretrainedConfig):

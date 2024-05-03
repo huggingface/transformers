@@ -88,9 +88,29 @@ def load_cuda_kernels():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+
+if is_timm_available():
+    from timm import create_model
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "DeformableDetrConfig"
+_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
+
+DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "sensetime/deformable-detr",
+    # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
+]
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -139,23 +159,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-if is_timm_available():
-    from timm import create_model
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DeformableDetrConfig"
-_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
-
-DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sensetime/deformable-detr",
-    # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
-]
 
 
 @dataclass
@@ -422,17 +425,23 @@ class DeformableDetrConvEncoder(nn.Module):
 
         self.config = config
 
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
-            kwargs = {}
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
-                kwargs["output_stride"] = 16
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
+                out_indices=out_indices,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:
@@ -712,13 +721,14 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2
-        if reference_points.shape[-1] == 2:
+        num_coordinates = reference_points.shape[-1]
+        if num_coordinates == 2:
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
                 reference_points[:, :, None, :, None, :]
                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
-        elif reference_points.shape[-1] == 4:
+        elif num_coordinates == 4:
             sampling_locations = (
                 reference_points[:, :, None, :, None, :2]
                 + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
@@ -1403,14 +1413,15 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         intermediate_reference_points = ()
 
         for idx, decoder_layer in enumerate(self.layers):
-            if reference_points.shape[-1] == 4:
+            num_coordinates = reference_points.shape[-1]
+            if num_coordinates == 4:
                 reference_points_input = (
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
-            else:
-                if reference_points.shape[-1] != 2:
-                    raise ValueError("Reference points' last dimension must be of size 2")
+            elif reference_points.shape[-1] == 2:
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+            else:
+                raise ValueError("Reference points' last dimension must be of size 2")
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1444,17 +1455,18 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
-                if reference_points.shape[-1] == 4:
+                num_coordinates = reference_points.shape[-1]
+                if num_coordinates == 4:
                     new_reference_points = tmp + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
-                else:
-                    if reference_points.shape[-1] != 2:
-                        raise ValueError(
-                            f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
-                        )
+                elif num_coordinates == 2:
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
+                else:
+                    raise ValueError(
+                        f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}"
+                    )
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)

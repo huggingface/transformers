@@ -30,9 +30,16 @@ NOT_DEVICE_TESTS = {
     "test_tokenization",
     "test_processor",
     "test_processing",
+    "test_beam_constraints",
+    "test_configuration_utils",
+    "test_data_collator",
+    "test_trainer_callback",
+    "test_trainer_utils",
     "test_feature_extraction",
     "test_image_processing",
     "test_image_processor",
+    "test_image_transforms",
+    "test_optimization",
     "test_retrieval",
     "test_config",
     "test_from_pretrained_no_checkpoint",
@@ -62,6 +69,9 @@ NOT_DEVICE_TESTS = {
     "test_flax_from_pt_safetensors",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
+    "/repo_utils/",
+    "/utils/",
+    "/tools/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun

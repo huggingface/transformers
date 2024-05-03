@@ -50,7 +50,6 @@ if is_torch_available():
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
         MODEL_MAPPING_NAMES,
     )
-    from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -367,9 +366,9 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DeiTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/deit-base-distilled-patch16-224"
+        model = DeiTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

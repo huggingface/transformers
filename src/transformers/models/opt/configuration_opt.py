@@ -19,15 +19,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/opt-125m": "https://huggingface.co/facebook/opt-125m/blob/main/config.json",
-    "facebook/opt-350m": "https://huggingface.co/facebook/opt-350m/blob/main/config.json",
-    "facebook/opt-1.3b": "https://huggingface.co/facebook/opt-1.3b/blob/main/config.json",
-    "facebook/opt-2.7b": "https://huggingface.co/facebook/opt-2.7b/blob/main/config.json",
-    "facebook/opt-6.7b": "https://huggingface.co/facebook/opt-6.7b/blob/main/config.json",
-    "facebook/opt-13b": "https://huggingface.co/facebook/opt-13b/blob/main/config.json",
-}
-
 
 class OPTConfig(PretrainedConfig):
     r"""
