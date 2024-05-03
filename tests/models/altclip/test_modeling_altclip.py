@@ -594,3 +594,40 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         expected_probs = torch.tensor([[9.9942e-01, 5.7805e-04]], device=torch_device)
 
         self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
+
+    # check that the model can be loaded with different image sizes with interpolate_pos_encoding=True
+    @slow
+    def test_interpolate_pos_encoding(self):
+        model_name = "BAAI/AltCLIP"
+        model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
+        processor = AltCLIPProcessor.from_pretrained(model_name, do_resize=False, do_center_crop=False)
+
+        image = prepare_img()  # 480x640
+        inputs = processor(text=["一张猫的照片", "一张狗的照片"], images=image, padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the shapes
+        self.assertEqual(
+            outputs.logits_per_image.shape,
+            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+        )
+
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+        )
+
+        self.assertEqual(
+            outputs.vision_output.last_hidden_state.shape,
+            torch.Size((inputs.pixel_values.shape[0], 1531, 1024)),
+        )
+
+        probs = outputs.logits_per_image.softmax(dim=1)
+        expected_probs = torch.tensor([[9.9962e-01, 3.7761e-04]], device=torch_device)
+
+        self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
