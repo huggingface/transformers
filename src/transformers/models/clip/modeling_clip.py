@@ -1027,16 +1027,14 @@ class CLIPModel(CLIPPreTrainedModel):
             )
 
         text_config = config.text_config
-        text_config._attn_implementation = config._attn_implementation
         vision_config = config.vision_config
-        vision_config._attn_implementation = config._attn_implementation
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = CLIPTextTransformer(text_config)
-        self.vision_model = CLIPVisionTransformer(vision_config)
+        self.text_model = CLIPTextTransformer(text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = CLIPVisionTransformer(vision_config, attn_implementation=config._attn_implementation)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1408,8 +1406,9 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        config.vision_config._attn_implementation = config._attn_implementation
-        self.vision_model = CLIPVisionTransformer(config.vision_config)
+        self.vision_model = CLIPVisionTransformer(
+            config.vision_config, attn_implementation=config._attn_implementation
+        )
 
         # Classifier head
         self.classifier = (
