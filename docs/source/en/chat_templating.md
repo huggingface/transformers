@@ -287,14 +287,12 @@ JSON schemas permit highly detailed parameter specifications, so you can pass in
 arguments. Be careful, however - we find that in practice this can degrade performance, even for state-of-the-art 
 models. We recommend trying to keep your tool schemas simple and flat where possible.
 
-### Automated function conversion
+### Automated function conversion for tool use
 
 Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
 that writing them can be annoying. Don't panic, though, we have a solution!
 
-TODO Should descriptions come from the docstrings or the type hints? 
-
-TODO Do we need to define a special format for args in the docstrings?
+TODO Explain function conversion with examples
 
 ### Arguments for retrieval-augmented generation (RAG)
 
