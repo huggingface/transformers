@@ -13,17 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import unittest
 from pathlib import Path
-from PIL import Image
-import torch
 
-from transformers import load_tool
-from transformers.testing_utils import get_tests_dir
-from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentType
+import numpy as np
+from PIL import Image
+
+from transformers import is_torch_available, load_tool
+from transformers.agents.agent_types import AGENT_TYPE_MAPPING
+from transformers.testing_utils import get_tests_dir, require_torch
 
 from .test_tools_common import ToolTesterMixin
+
+
+if is_torch_available():
+    import torch
+
 
 class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
@@ -41,16 +46,15 @@ class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
 
     def create_inputs(self):
         inputs_text = {"answer": "Text input"}
-        inputs_image = {"answer": Image.open(
-            Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"
-        ).resize((512, 512))}
-        inputs_audio = {"answer": torch.Tensor(np.ones(3000))}
-        return {
-            "text": inputs_text,
-            "image": inputs_image,
-            "audio": inputs_audio
+        inputs_image = {
+            "answer": Image.open(Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png").resize(
+                (512, 512)
+            )
         }
+        inputs_audio = {"answer": torch.Tensor(np.ones(3000))}
+        return {"text": inputs_text, "image": inputs_image, "audio": inputs_audio}
 
+    @require_torch
     def test_agent_type_output(self):
         inputs = self.create_inputs()
         for input_type, input in inputs.items():
@@ -58,6 +62,7 @@ class FinalAnswerToolTester(unittest.TestCase, ToolTesterMixin):
             agent_type = AGENT_TYPE_MAPPING[input_type]
             self.assertTrue(isinstance(output, agent_type))
 
+    @require_torch
     def test_agent_types_inputs(self):
         inputs = self.create_inputs()
         for input_type, input in inputs.items():
