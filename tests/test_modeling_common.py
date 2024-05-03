@@ -3795,18 +3795,10 @@ class ModelTesterMixin:
                                     logits_sdpa = torch.cat(
                                         [outputs_sdpa.image_embeds, outputs_sdpa.text_embeds], dim=0
                                     )
+                                elif is_encoder_decoder:
+                                    logits_sdpa = outputs_sdpa.decoder_hidden_states[-1]
                                 else:
-                                    logits_sdpa = (
-                                        outputs_sdpa.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_sdpa.decoder_hidden_states[-1]
-                                    )
-
-                                if enable_kernels:
-                                    atol = atols[torch_device, enable_kernels, torch_dtype]
-                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                                    if not torch.allclose(logits_eager, logits_sdpa, atol=atol, rtol=rtol):
-                                        print(f"{failcase=}")
+                                    logits_sdpa = outputs_sdpa.hidden_states[-1]
 
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
