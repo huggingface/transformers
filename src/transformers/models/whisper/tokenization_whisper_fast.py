@@ -21,6 +21,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
+
 from tokenizers import AddedToken, pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
