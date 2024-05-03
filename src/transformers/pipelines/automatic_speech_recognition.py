@@ -446,7 +446,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed = self.feature_extractor(
                     inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
                 )
-                extra["segment_size"] = len(inputs)
+                if stride is None:
+                    extra["segment_size"] = len(inputs)
 
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
