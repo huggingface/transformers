@@ -37,9 +37,6 @@ _CONFIG_FOR_DOC = "TimesformerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/timesformer"
 
 
-from ..deprecated._archive_maps import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
 class TimesformerPatchEmbeddings(nn.Module):
     """Image to Patch Embedding"""

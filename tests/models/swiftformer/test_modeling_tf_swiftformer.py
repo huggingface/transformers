@@ -36,7 +36,6 @@ if is_tf_available():
 
     from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
     from transformers.modeling_tf_utils import keras
-    from transformers.models.swiftformer.modeling_tf_swiftformer import TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -194,9 +193,8 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwiftFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = TFSwiftFormerModel.from_pretrained("MBZUAI/swiftformer-xs")
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="TFSwiftFormer does not output attentions")
     def test_attention_outputs(self):

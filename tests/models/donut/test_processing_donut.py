@@ -19,12 +19,9 @@ import unittest
 from transformers import DonutProcessor
 
 
-DONUT_PRETRAINED_MODEL_NAME = "naver-clova-ix/donut-base"
-
-
 class DonutProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.processor = DonutProcessor.from_pretrained(DONUT_PRETRAINED_MODEL_NAME)
+        self.processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base")
 
     def test_token2json(self):
         expected_json = {

@@ -53,9 +53,6 @@ _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
 
-from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling, dropout and head mask.

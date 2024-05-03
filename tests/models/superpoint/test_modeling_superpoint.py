@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SuperPointForKeypointDetection,
     )
 
@@ -222,9 +221,8 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SuperPointForKeypointDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+        self.assertIsNotNone(model)
 
     def test_forward_labels_should_be_none(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

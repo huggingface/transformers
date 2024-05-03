@@ -27,9 +27,6 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class BigBirdPegasusConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BigBirdPegasusModel`]. It is used to instantiate
