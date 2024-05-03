@@ -171,7 +171,7 @@ class Toolbox:
         """Get all tools currently in the toolbox"""
         return self._tools
 
-    def show_tool_descriptions(self, tool_description_template=None):
+    def show_tool_descriptions(self, tool_description_template=None) -> str:
         """Returns the description of all tools in the toolbox"""
         return "\n".join(
             [get_tool_description_with_args(tool, tool_description_template) for tool in self._tools.values()]
@@ -484,7 +484,7 @@ class CodeAgent(Agent):
         """
         return parse_code_blob(result)
 
-    def run(self, task, return_generated_code: bool = False, **kwargs):
+    def run(self, task: str, return_generated_code: bool = False, **kwargs):
         """
         Runs the agent for the given task.
 
@@ -496,11 +496,10 @@ class CodeAgent(Agent):
         Example:
 
         ```py
-        from transformers import CodeAgent
-        from transformers.agents import CalculatorTool
+        from transformers.agents import CodeAgent, PythonInterpreterTool
 
-        calculator = CalculatorTool()
-        agent = CodeAgent(tools=[calculator])
+        python_interpreter = PythonInterpreterTool()
+        agent = CodeAgent(tools=[python_interpreter])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
@@ -594,7 +593,7 @@ class ReactAgent(Agent):
         )
         return DEFAULT_TOOL_DESCRIPTION_TEMPLATE
 
-    def run(self, task, **kwargs):
+    def run(self, task: str, **kwargs):
         """
         Runs the agent for the given task.
 
@@ -604,11 +603,10 @@ class ReactAgent(Agent):
         Example:
 
         ```py
-        from transformers import ReactJsonAgent
-        from transformers.agents import CalculatorTool
+        from transformers.agents import ReactJsonAgent, PythonInterpreterTool
 
-        calculator = CalculatorTool()
-        agent = ReactJsonAgent(tools=[calculator])
+        python_interpreter = PythonInterpreterTool()
+        agent = ReactJsonAgent(tools=[python_interpreter])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
