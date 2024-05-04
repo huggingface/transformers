@@ -1154,6 +1154,122 @@ class TokenizerTesterMixin:
                 )  # Check that no error raised
 
     @require_jinja
+    def test_chat_template_return_assistant_tokens_mask(self):
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|im_start|>' + message['role'] + '\n'}}"
+            "{% generation %}"
+            "{{message['content'] + '<|im_end|>'}}"
+            "{% endgeneration %}"
+            "{{'\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        conversations = [
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {"role": "assistant", "content": "<start> assistant message 5"},
+                {"role": "user", "content": "user message 2"},
+                {"role": "assistant", "content": "<start2> assistant message 6"},
+            ],
+            [
+                {"role": "system", "content": "system message 3"},
+                {"role": "user", "content": "user message 3"},
+                {"role": "assistant", "content": "<start3> assistant message 3 7"},
+                {"role": "user", "content": "user message 4"},
+                {"role": "assistant", "content": "<start4> assistant message 4 8"},
+            ],
+        ]
+        assistant_wrappers = [
+            [("<start>", "5<|im_end|>"), ("<start2>", "6<|im_end|>")],
+            [("<start3>", "7<|im_end|>"), ("<start4>", "8<|im_end|>")],
+        ]
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                if not self.test_rust_tokenizer:
+                    self.skipTest(reason="No fast tokenizer defined")
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+
+                # check batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations,
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                )
+                for i, conv in enumerate(conversations):
+                    chat_string = tokenizer_r.apply_chat_template(
+                        conversations[i], tokenize=False, chat_template=dummy_template
+                    )
+                    assistant_start = output.char_to_token(i, chat_string.index(assistant_wrappers[i][0][0]))
+                    assistant_end = output.char_to_token(
+                        i, chat_string.index(assistant_wrappers[i][0][1]) + len(assistant_wrappers[i][0][1]) - 1
+                    )
+
+                    assistant_start2 = output.char_to_token(i, chat_string.index(assistant_wrappers[i][1][0]))
+                    assistant_end2 = output.char_to_token(
+                        i, chat_string.index(assistant_wrappers[i][1][1]) + len(assistant_wrappers[i][1][1]) - 1
+                    )
+                    # assert labels in assistant indices
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_start : assistant_end + 1],
+                        [1] * (assistant_end - assistant_start + 1),
+                    )
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_start2 : assistant_end2 + 1],
+                        [1] * (assistant_end2 - assistant_start2 + 1),
+                    )
+                    # assert 0 in user/system indices
+                    self.assertEqual(all(l == 0 for l in output["assistant_masks"][i][:assistant_start]), True)
+                    self.assertEqual(
+                        all(l == 0 for l in output["assistant_masks"][i][assistant_end + 1 : assistant_start2]),
+                        True,
+                    )
+
+                # check not batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                )
+
+                chat_string = tokenizer_r.apply_chat_template(
+                    conversations[0], tokenize=False, chat_template=dummy_template
+                )
+                assistant_start = output.char_to_token(0, chat_string.index(assistant_wrappers[0][0][0]))
+                assistant_end = output.char_to_token(
+                    0, chat_string.index(assistant_wrappers[0][0][1]) + len(assistant_wrappers[0][0][1]) - 1
+                )
+                assistant_start2 = output.char_to_token(0, chat_string.index(assistant_wrappers[0][1][0]))
+                assistant_end2 = output.char_to_token(
+                    0, chat_string.index(assistant_wrappers[0][1][1]) + len(assistant_wrappers[0][1][1]) - 1
+                )
+
+                # assert labels in assistant indices
+                self.assertEqual(
+                    output["assistant_masks"][assistant_start : assistant_end + 1],
+                    [1] * (assistant_end - assistant_start + 1),
+                )
+                self.assertEqual(
+                    output["assistant_masks"][assistant_start2 : assistant_end2 + 1],
+                    [1] * (assistant_end2 - assistant_start2 + 1),
+                )
+
+                # assert -100 in user/system indices
+                self.assertEqual(all(l == 0 for l in output["assistant_masks"][:assistant_start]), True)
+                self.assertEqual(
+                    all(l == 0 for l in output["assistant_masks"][assistant_end + 1 : assistant_start2]), True
+                )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
