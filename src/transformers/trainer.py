@@ -3724,44 +3724,48 @@ class Trainer:
             if inputs_decode is not None:
                 inputs_decode = self.accelerator.pad_across_processes(inputs_decode, dim=1, pad_index=-100)
                 inputs_decode = self.gather_function((inputs_decode))
-                all_inputs.add(inputs_decode)
+                if not self.args.batch_eval_metrics or description == "Prediction":
+                    all_inputs.add(inputs_decode)
             if logits is not None:
                 logits = self.accelerator.pad_across_processes(logits, dim=1, pad_index=-100)
                 if self.preprocess_logits_for_metrics is not None:
                     logits = self.preprocess_logits_for_metrics(logits, labels)
                 logits = self.gather_function((logits))
-                all_preds.add(logits)
+                if not self.args.batch_eval_metrics or description == "Prediction":
+                    all_preds.add(logits)
             if labels is not None:
                 labels = self.accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
                 labels = self.gather_function((labels))
-                all_labels.add(labels)
+                if not self.args.batch_eval_metrics or description == "Prediction":
+                    all_labels.add(labels)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
             if self.args.batch_eval_metrics:
-                if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
+                if self.compute_metrics is not None and logits is not None and labels is not None:
                     is_last_step = self.accelerator.gradient_state.end_of_dataloader
                     if args.include_inputs_for_metrics:
                         metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),
+                            EvalPrediction(predictions=logits, label_ids=labels, inputs=inputs),
                             compute_result=is_last_step,
                         )
                     else:
                         metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host),
+                            EvalPrediction(predictions=logits, label_ids=labels),
                             compute_result=is_last_step,
                         )
-                del losses_host, preds_host, inputs_host, labels_host
+
+                del losses, logits, labels, inputs
                 torch.cuda.empty_cache()
-                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
+            elif args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
                 all_losses.to_cpu_and_numpy()
                 all_preds.to_cpu_and_numpy()
                 all_labels.to_cpu_and_numpy()
                 all_inputs.to_cpu_and_numpy()
 
+                del losses, logits, labels, inputs
                 torch.cuda.empty_cache()
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
@@ -3792,7 +3796,12 @@ class Trainer:
             num_samples = observed_num_examples
 
         # Metrics!
-        if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
+        if (
+                self.compute_metrics is not None
+                and all_preds is not None
+                and all_labels is not None
+                and not self.args.batch_eval_metrics
+        ):
             if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(
                     EvalPrediction(predictions=all_preds, label_ids=all_labels, inputs=all_inputs)
@@ -4310,11 +4319,10 @@ class Trainer:
                             EvalPrediction(predictions=preds_host, label_ids=labels_host),
                             compute_result=is_last_step,
                         )
-                del losses_host, preds_host, inputs_host, labels_host
-                torch.cuda.empty_cache()
-                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
-            elif args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
+            if self.args.batch_eval_metrics or (
+                    args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0
+            ):
                 # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
                 if not prediction_loss_only:
@@ -4343,7 +4351,12 @@ class Trainer:
         label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
         inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
 
-        if self.compute_metrics is not None and preds is not None and label_ids is not None:
+        if (
+                self.compute_metrics is not None
+                and preds is not None
+                and label_ids is not None
+                and not self.args.batch_eval_metrics
+        ):
             if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(
                     EvalPrediction(predictions=preds, label_ids=label_ids, inputs=inputs_ids)
