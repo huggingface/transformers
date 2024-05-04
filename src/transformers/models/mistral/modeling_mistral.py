@@ -1094,16 +1094,10 @@ class MistralModel(MistralPreTrainedModel):
             )
 
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-
 
         exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-
         if self.config.sliding_window is not None and (attention_mask is None or attention_mask.dim() != 4):
-            # assume signed int tensor for cache_position
-            exclude_mask |= torch.arange(target_length, device=device) <= (cache_position.reshape(-1,1) - self.config.sliding_window)
-
+            exclude_mask |= torch.arange(target_length, device=device) < (cache_position.reshape(-1,1) - self.config.sliding_window)
         causal_mask *= exclude_mask
 
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
