@@ -46,6 +46,15 @@ logger = logging.get_logger(__name__)
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
+def _add_variant(config_name: str, variant: Optional[str] = None) -> str:
+    if variant is not None:
+        splits = config_name.split(".")
+        splits = splits[:-1] + [variant] + splits[-1:]
+        config_name = ".".join(splits)
+
+    return config_name
+
+
 class PretrainedConfig(PushToHubMixin):
     # no-format
     r"""
@@ -419,7 +428,13 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        push_to_hub: bool = False,
+        variant: Optional[str] = None,
+        **kwargs,
+    ):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~PretrainedConfig.from_pretrained`] class method.
@@ -465,7 +480,7 @@ class PretrainedConfig(PushToHubMixin):
             custom_object_save(self, save_directory, config=self)
 
         # If we save using the predefined names, we can load using `from_pretrained`
-        output_config_file = os.path.join(save_directory, CONFIG_NAME)
+        output_config_file = os.path.join(save_directory, _add_variant(CONFIG_NAME, variant=variant))
 
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
@@ -628,6 +643,11 @@ class PretrainedConfig(PushToHubMixin):
 
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
+        variant = kwargs.pop("variant", None)
+        if variant is not None:
+            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+            pretrained_model_name_or_path = _add_variant(pretrained_model_name_or_path, variant=variant)
+
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "_commit_hash" in config_dict:
             original_kwargs["_commit_hash"] = config_dict["_commit_hash"]

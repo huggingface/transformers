@@ -2429,7 +2429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
-                model_to_save.config.save_pretrained(save_directory)
+                model_to_save.config.save_pretrained(save_directory, variant=variant)
             if self.can_generate():
                 # generation config built from the model config + the model config holds generation kwargs -> generate
                 # may revert to legacy behavior if the two don't match
@@ -2449,7 +2449,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             "removing any generation kwargs from the model config. This warning will be raised to an "
                             "exception in v4.41."
                         )
-                model_to_save.generation_config.save_pretrained(save_directory)
+                model_to_save.generation_config.save_pretrained(save_directory, variant=variant)
 
             if _hf_peft_config_loaded:
                 logger.info(
@@ -2476,7 +2476,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 active_adapter = active_adapter[0]
 
                 current_peft_config = self.peft_config[active_adapter]
-                current_peft_config.save_pretrained(save_directory)
+                current_peft_config.save_pretrained(save_directory, variant=variant)
 
         # Save the model
         if state_dict is None:

@@ -60,6 +60,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    CONFIG_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -631,9 +632,12 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir, variant="v2", safe_serialization=False)
 
             weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+            config_name = ".".join(CONFIG_NAME.split(".")[:-1] + ["v2"] + ["json"])
 
             weights_file = os.path.join(tmp_dir, weights_name)
+            config_file = os.path.join(tmp_dir, config_name)
             self.assertTrue(os.path.isfile(weights_file))
+            self.assertTrue(os.path.isfile(config_file))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
 
             with self.assertRaises(EnvironmentError):
