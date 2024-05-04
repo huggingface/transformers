@@ -2186,6 +2186,18 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
+                    if isinstance(outputs['past_key_values'][0][0], list):
+                        # Remove past K-V from output since we don't need to stack later
+                        outputs['past_key_values'] = None
+
+                        # Remove last token from past K-V since we don't want to append it at this point
+                        model_kwargs['past_key_values'] = tuple(
+                            tuple(
+                                x[:-1] if x[-1].shape[-2] == 1 else x[:-1] + [x[-1][..., :-1, :]] for x in inner_tuple
+                                ) for inner_tuple in model_kwargs['past_key_values']
+                        )
+                        next_model_inputs['past_key_values'] = model_kwargs['past_key_values']
+
                     all_outputs.append(outputs)
                 outputs = stack_model_outputs(all_outputs)
 
@@ -2262,11 +2274,11 @@ class GenerationMixin:
                         if isinstance(item, list):
                             # This is equivalent to the old torch.stack(torch.split(x, top_k, dim=0))[range(batch_size), selected_idx, ...]
                             # but much more efficient
-                            item = [x[augmented_idx, :, :, :] for x in item]
+                            item = [x[augmented_idx, ...] for x in item]
                         else:
                             # item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
                             # item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                            item = item[augmented_idx, :, :, :]
+                            item = item[augmented_idx, ...]
                         items += [item]
                     new_key_values += [items]
 
