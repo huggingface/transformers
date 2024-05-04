@@ -95,7 +95,7 @@ class Qwen2MoeConfig(PretrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
-        mlp_only_layers ([`int`], *optional*, defaults to []):
+        mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen2MoeMLP rather than Qwen2MoeSparseMoeBlock
             integers in list is layer index, from 0 to 23 if we have 24 layers
             when mlp_only_layers is empty, decoder_sparse_step decides Qwen2MoeMLP or Qwen2MoeSparseMoeBlock

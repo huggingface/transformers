@@ -434,7 +434,6 @@ OBJECTS_TO_IGNORE = [
     "QDQBertConfig",
     "QDQBertModel",
     "QuestionAnsweringPipeline",
-    "Qwen2MoeConfig",
     "RagConfig",
     "RagModel",
     "RagRetriever",
