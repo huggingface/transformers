@@ -866,7 +866,7 @@ class Qwen2MoeDecoderLayer(nn.Module):
 
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        if layer_idx not in config.mlp_only_layers and (config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0):
+        if (layer_idx not in config.mlp_only_layers) and (config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0):
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
