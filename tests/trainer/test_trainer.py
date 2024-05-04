@@ -237,7 +237,11 @@ class AlmostAccuracyBatched:
 
     def __call__(self, eval_pred, compute_result):
         predictions, labels = eval_pred
-        batch_size = predictions.shape[0]
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
+        if isinstance(labels, tuple):
+            labels = labels[0]
+        batch_size = len(predictions)
         true = torch.abs(predictions - labels) <= self.thresh
         acc = true.type(torch.FloatTensor).mean().item()
         self.batch_acc.extend([acc] * batch_size)
@@ -1673,7 +1677,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
         expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
-        self.assertAlmostEqual(results["test_accuracy"], expected_acc)
+        self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
 
         # With more than one output of the model
         trainer = get_regression_trainer(
