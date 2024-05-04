@@ -1659,7 +1659,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_predict_with_batch_eval_metrics(self):
-        trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True)
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
         results = trainer.predict(trainer.eval_dataset)
         preds = results.predictions
         x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -1696,7 +1698,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             double_output=True,
             label_names=["labels", "labels_2"],
             compute_metrics=AlmostAccuracyBatched(),
-            batch_eval_metrics=True
+            batch_eval_metrics=True,
         )
         outputs = trainer.predict(trainer.eval_dataset)
         preds = outputs.predictions

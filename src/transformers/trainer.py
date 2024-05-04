@@ -3797,10 +3797,10 @@ class Trainer:
 
         # Metrics!
         if (
-                self.compute_metrics is not None
-                and all_preds is not None
-                and all_labels is not None
-                and not self.args.batch_eval_metrics
+            self.compute_metrics is not None
+            and all_preds is not None
+            and all_labels is not None
+            and not self.args.batch_eval_metrics
         ):
             if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(
@@ -4321,7 +4321,7 @@ class Trainer:
                         )
 
             if self.args.batch_eval_metrics or (
-                    args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0
+                args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0
             ):
                 # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
@@ -4352,10 +4352,10 @@ class Trainer:
         inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
 
         if (
-                self.compute_metrics is not None
-                and preds is not None
-                and label_ids is not None
-                and not self.args.batch_eval_metrics
+            self.compute_metrics is not None
+            and preds is not None
+            and label_ids is not None
+            and not self.args.batch_eval_metrics
         ):
             if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(
