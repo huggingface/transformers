@@ -515,6 +515,34 @@ class GitModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[-0.8805, -0.8803, -0.8799]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.scores[-1][0, :3], expected_slice, atol=1e-4))
 
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # Git models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = GitVisionModel.from_pretrained("microsoft/git-base").to(torch_device)
+
+        processor = GitProcessor.from_pretrained("microsoft/git-base", size=480)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 197, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.4470, 0.6103, -0.0545], [1.5626, -0.6084, 0.7645], [0.5742, -1.7315, 0.2598]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
     def test_visual_question_answering(self):
         processor = GitProcessor.from_pretrained("microsoft/git-base-textvqa")
         model = GitForCausalLM.from_pretrained("microsoft/git-base-textvqa")

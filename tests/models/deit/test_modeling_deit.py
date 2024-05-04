@@ -411,6 +411,33 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # DeiT models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = DeiTModel.from_pretrained("facebook/deit-base-distilled-patch16-224").to(torch_device)
+
+        image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224", size=224)
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 198, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.3839, 0.3517, -0.7710], [1.1385, -0.0578, -1.1196], [-0.9688, 1.2078, 0.5965]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
     @require_accelerate
     @require_torch_accelerator
     @require_torch_fp16
