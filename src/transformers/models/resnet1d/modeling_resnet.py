@@ -403,8 +403,6 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-        print(pooled_output.shape)
-        print(outputs.pooler_output.shape)
 
         logits = self.classifier(pooled_output)
 
