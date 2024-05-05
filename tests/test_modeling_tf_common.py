@@ -180,6 +180,8 @@ class TFModelTesterMixin:
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
 
         for model_class in self.all_model_classes:
             model = model_class(config)
