@@ -16,11 +16,27 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Any
+from typing import Optional, Tuple, Union, Any, Dict, List
+from collections import OrderedDict, namedtuple
+import hashlib
+import os
+from pathlib import Path
+import requests
+import numpy as np
+from PIL import Image
+import sys
+
+
+import torchvision
+from torchvision import models
+from tqdm import tqdm
 
 import torch
+from torch.distributions.categorical import Categorical
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import functional as F
+
 from torch.cuda.amp import autocast
 
 # from ...activations import ACT2FN
@@ -35,6 +51,7 @@ from ...utils import (
 )
 from .configuration_iris import IrisConfig
 
+Batch = Dict[str, torch.Tensor]
 
 logger = logging.get_logger(__name__)
 
@@ -124,9 +141,7 @@ IRIS_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-#actor_critic :> inputs: torch.FloatTensor()(B, T, C, H, W), mask_padding: Optional[torch.BoolTensor](same size as inp) = None
-#world model:> tokens: torch.LongTensor((B, L(K+1)))(B: batch size, L: timesteps, K: number of tokens), past_keys_values: Optional[KeysValues] = None((n_layers,batch_size, num_heads, max_tokens, head_dim))
-#tokenizer:> x(B, T, C, H, W)(main): torch.Tensor, should_preprocess(main): bool = False, should_postprocess(main): bool = False
+
 IRIS_INPUTS_DOCSTRING = r"""
     Args:
         observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
@@ -156,80 +171,55 @@ IRIS_INPUTS_DOCSTRING = r"""
         
 """
 
-#CODE BLOCKS REQUIRED FOR THE IRIS MODELS(WIP)
-#utils:###################
 
-def configure_optimizer(model, learning_rate, weight_decay, *blacklist_module_names):
-    """Credits to https://github.com/karpathy/minGPT"""
-    # separate out all parameters to those that will and won't experience regularizing weight decay
-    decay = set()
-    no_decay = set()
-    whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv1d)
-    blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
-    for mn, m in model.named_modules():
-        for pn, p in m.named_parameters():
-            fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
-            if any([fpn.startswith(module_name) for module_name in blacklist_module_names]):
-                no_decay.add(fpn)
-            elif 'bias' in pn:
-                # all biases will not be decayed
-                no_decay.add(fpn)
-            elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
-                # weights of whitelist modules will be weight decayed
-                decay.add(fpn)
-            elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
-                # weights of blacklist modules will NOT be weight decayed
-                no_decay.add(fpn)
 
-    # validate that we considered every parameter
-    param_dict = {pn: p for pn, p in model.named_parameters()}
-    inter_params = decay & no_decay
-    union_params = decay | no_decay
-    assert len(inter_params) == 0, f"parameters {str(inter_params)} made it into both decay/no_decay sets!"
-    assert len(param_dict.keys() - union_params) == 0, f"parameters {str(param_dict.keys() - union_params)} were not separated into either decay/no_decay set!"
+# def configure_optimizer(model, learning_rate, weight_decay, *blacklist_module_names):
+#     """Credits to https://github.com/karpathy/minGPT"""
+#     # separate out all parameters to those that will and won't experience regularizing weight decay
+#     decay = set()
+#     no_decay = set()
+#     whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv1d)
+#     blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+#     for mn, m in model.named_modules():
+#         for pn, p in m.named_parameters():
+#             fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+#             if any([fpn.startswith(module_name) for module_name in blacklist_module_names]):
+#                 no_decay.add(fpn)
+#             elif 'bias' in pn:
+#                 # all biases will not be decayed
+#                 no_decay.add(fpn)
+#             elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+#                 # weights of whitelist modules will be weight decayed
+#                 decay.add(fpn)
+#             elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+#                 # weights of blacklist modules will NOT be weight decayed
+#                 no_decay.add(fpn)
 
-    # create the pytorch optimizer object
-    optim_groups = [
-        {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
-        {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
-    ]
-    optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate)
-    return optimizer
+#     # validate that we considered every parameter
+#     param_dict = {pn: p for pn, p in model.named_parameters()}
+#     inter_params = decay & no_decay
+#     union_params = decay | no_decay
+#     assert len(inter_params) == 0, f"parameters {str(inter_params)} made it into both decay/no_decay sets!"
+#     assert len(param_dict.keys() - union_params) == 0, f"parameters {str(param_dict.keys() - union_params)} were not separated into either decay/no_decay set!"
+
+#     # create the pytorch optimizer object
+#     optim_groups = [
+#         {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
+#         {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+#     ]
+#     optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate)
+#     return optimizer
 
 #init weights same as in pRetrained model's __init__()
-def init_weights(module):
-    if isinstance(module, (nn.Linear, nn.Embedding)):
-        module.weight.data.normal_(mean=0.0, std=0.02)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-    elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+# def init_weights(module):
+#     if isinstance(module, (nn.Linear, nn.Embedding)):
+#         module.weight.data.normal_(mean=0.0, std=0.02)
+#         if isinstance(module, nn.Linear) and module.bias is not None:
+#             module.bias.data.zero_()
+#     elif isinstance(module, nn.LayerNorm):
+#         module.bias.data.zero_()
+#         module.weight.data.fill_(1.0)
 
-
-def extract_state_dict(state_dict, module_name):
-    return OrderedDict({k.split('.', 1)[1]: v for k, v in state_dict.items() if k.startswith(module_name)})
-
-
-
-
-
-
-
-def compute_lambda_returns(rewards, values, ends, gamma, lambda_):
-    assert rewards.ndim == 2 or (rewards.ndim == 3 and rewards.size(2) == 1)
-    assert rewards.shape == ends.shape == values.shape, f"{rewards.shape}, {values.shape}, {ends.shape}"  # (B, T, 1)
-    t = rewards.size(1)
-    lambda_returns = torch.empty_like(values)
-    lambda_returns[:, -1] = values[:, -1]
-    lambda_returns[:, :-1] = rewards[:, :-1] + ends[:, :-1].logical_not() * gamma * (1 - lambda_) * values[:, 1:]
-
-    last = values[:, -1]
-    for i in list(range(t - 1))[::-1]:
-        lambda_returns[:, i] += ends[:, i].logical_not() * gamma * lambda_ * last
-        last = lambda_returns[:, i]
-
-    return lambda_returns
 
 
 class LossWithIntermediateLosses:
@@ -244,269 +234,269 @@ class LossWithIntermediateLosses:
         return self
 
 
-class EpisodeDirManager:
-    def __init__(self, episode_dir: Path, max_num_episodes: int) -> None:
-        self.episode_dir = episode_dir
-        self.episode_dir.mkdir(parents=False, exist_ok=True)
-        self.max_num_episodes = max_num_episodes
-        self.best_return = float('-inf')
+# class EpisodeDirManager:
+#     def __init__(self, episode_dir: Path, max_num_episodes: int) -> None:
+#         self.episode_dir = episode_dir
+#         self.episode_dir.mkdir(parents=False, exist_ok=True)
+#         self.max_num_episodes = max_num_episodes
+#         self.best_return = float('-inf')
 
-    def save(self, episode: Episode, episode_id: int, epoch: int) -> None:
-        if self.max_num_episodes is not None and self.max_num_episodes > 0:
-            self._save(episode, episode_id, epoch)
+#     def save(self, episode: Episode, episode_id: int, epoch: int) -> None:
+#         if self.max_num_episodes is not None and self.max_num_episodes > 0:
+#             self._save(episode, episode_id, epoch)
 
-    def _save(self, episode: Episode, episode_id: int, epoch: int) -> None:
-        ep_paths = [p for p in self.episode_dir.iterdir() if p.stem.startswith('episode_')]
-        assert len(ep_paths) <= self.max_num_episodes
-        if len(ep_paths) == self.max_num_episodes:
-            to_remove = min(ep_paths, key=lambda ep_path: int(ep_path.stem.split('_')[1]))
-            to_remove.unlink()
-        episode.save(self.episode_dir / f'episode_{episode_id}_epoch_{epoch}.pt')
+#     def _save(self, episode: Episode, episode_id: int, epoch: int) -> None:
+#         ep_paths = [p for p in self.episode_dir.iterdir() if p.stem.startswith('episode_')]
+#         assert len(ep_paths) <= self.max_num_episodes
+#         if len(ep_paths) == self.max_num_episodes:
+#             to_remove = min(ep_paths, key=lambda ep_path: int(ep_path.stem.split('_')[1]))
+#             to_remove.unlink()
+#         episode.save(self.episode_dir / f'episode_{episode_id}_epoch_{epoch}.pt')
 
-        ep_return = episode.compute_metrics().episode_return
-        if ep_return > self.best_return:
-            self.best_return = ep_return
-            path_best_ep = [p for p in self.episode_dir.iterdir() if p.stem.startswith('best_')]
-            assert len(path_best_ep) in (0, 1)
-            if len(path_best_ep) == 1:
-                path_best_ep[0].unlink()
-            episode.save(self.episode_dir / f'best_episode_{episode_id}_epoch_{epoch}.pt')
+#         ep_return = episode.compute_metrics().episode_return
+#         if ep_return > self.best_return:
+#             self.best_return = ep_return
+#             path_best_ep = [p for p in self.episode_dir.iterdir() if p.stem.startswith('best_')]
+#             assert len(path_best_ep) in (0, 1)
+#             if len(path_best_ep) == 1:
+#                 path_best_ep[0].unlink()
+#             episode.save(self.episode_dir / f'best_episode_{episode_id}_epoch_{epoch}.pt')
 
 
-class RandomHeuristic:
-    def __init__(self, num_actions):
-        self.num_actions = num_actions
+# class RandomHeuristic:
+#     def __init__(self, num_actions):
+#         self.num_actions = num_actions
 
-    def act(self, obs):
-        assert obs.ndim == 4  # (N, H, W, C)
-        n = obs.size(0)
-        return torch.randint(low=0, high=self.num_actions, size=(n,))
+#     def act(self, obs):
+#         assert obs.ndim == 4  # (N, H, W, C)
+#         n = obs.size(0)
+#         return torch.randint(low=0, high=self.num_actions, size=(n,))
 ###############################################################################################
 #env:
 
 
-class MessageType(Enum):
-    RESET = 0
-    RESET_RETURN = 1
-    STEP = 2
-    STEP_RETURN = 3
-    CLOSE = 4
+# class MessageType(Enum):
+#     RESET = 0
+#     RESET_RETURN = 1
+#     STEP = 2
+#     STEP_RETURN = 3
+#     CLOSE = 4
 
 
-@dataclass
-class Message:
-    type: MessageType
-    content: Optional[Any] = None
+# @dataclass
+# class Message:
+#     type: MessageType
+#     content: Optional[Any] = None
 
-    def __iter__(self) -> Iterator:
-        return iter(astuple(self))
-
-
-def child_env(child_id: int, env_fn: Callable, child_conn: Connection) -> None:
-    np.random.seed(child_id + np.random.randint(0, 2 ** 31 - 1))
-    env = env_fn()
-    while True:
-        message_type, content = child_conn.recv()
-        if message_type == MessageType.RESET:
-            obs = env.reset()
-            child_conn.send(Message(MessageType.RESET_RETURN, obs))
-        elif message_type == MessageType.STEP:
-            obs, rew, done, _ = env.step(content)
-            if done:
-                obs = env.reset()
-            child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, None)))
-        elif message_type == MessageType.CLOSE:
-            child_conn.close()
-            return
-        else:
-            raise NotImplementedError
+#     def __iter__(self) -> Iterator:
+#         return iter(astuple(self))
 
 
-class MultiProcessEnv(DoneTrackerEnv):
-    def __init__(self, env_fn: Callable, num_envs: int, should_wait_num_envs_ratio: float) -> None:
-        super().__init__(num_envs)
-        self.num_actions = env_fn().env.action_space.n
-        self.should_wait_num_envs_ratio = should_wait_num_envs_ratio
-        self.processes, self.parent_conns = [], []
-        for child_id in range(num_envs):
-            parent_conn, child_conn = Pipe()
-            self.parent_conns.append(parent_conn)
-            p = Process(target=child_env, args=(child_id, env_fn, child_conn), daemon=True)
-            self.processes.append(p)
-        for p in self.processes:
-            p.start()
-
-    def should_reset(self) -> bool:
-        return (self.num_envs_done / self.num_envs) >= self.should_wait_num_envs_ratio
-
-    def _receive(self, check_type: Optional[MessageType] = None) -> List[Any]:
-        messages = [parent_conn.recv() for parent_conn in self.parent_conns]
-        if check_type is not None:
-            assert all([m.type == check_type for m in messages])
-        return [m.content for m in messages]
-
-    def reset(self) -> np.ndarray:
-        self.reset_done_tracker()
-        for parent_conn in self.parent_conns:
-            parent_conn.send(Message(MessageType.RESET))
-        content = self._receive(check_type=MessageType.RESET_RETURN)
-        return np.stack(content)
-
-    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
-        for parent_conn, action in zip(self.parent_conns, actions):
-            parent_conn.send(Message(MessageType.STEP, action))
-        content = self._receive(check_type=MessageType.STEP_RETURN)
-        obs, rew, done, _ = zip(*content)
-        done = np.stack(done)
-        self.update_done_tracker(done)
-        return np.stack(obs), np.stack(rew), done, None
-
-    def close(self) -> None:
-        for parent_conn in self.parent_conns:
-            parent_conn.send(Message(MessageType.CLOSE))
-        for p in self.processes:
-            p.join()
-        for parent_conn in self.parent_conns:
-            parent_conn.close()
+# def child_env(child_id: int, env_fn: Callable, child_conn: Connection) -> None:
+#     np.random.seed(child_id + np.random.randint(0, 2 ** 31 - 1))
+#     env = env_fn()
+#     while True:
+#         message_type, content = child_conn.recv()
+#         if message_type == MessageType.RESET:
+#             obs = env.reset()
+#             child_conn.send(Message(MessageType.RESET_RETURN, obs))
+#         elif message_type == MessageType.STEP:
+#             obs, rew, done, _ = env.step(content)
+#             if done:
+#                 obs = env.reset()
+#             child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, None)))
+#         elif message_type == MessageType.CLOSE:
+#             child_conn.close()
+#             return
+#         else:
+#             raise NotImplementedError
 
 
+# class MultiProcessEnv(DoneTrackerEnv):
+#     def __init__(self, env_fn: Callable, num_envs: int, should_wait_num_envs_ratio: float) -> None:
+#         super().__init__(num_envs)
+#         self.num_actions = env_fn().env.action_space.n
+#         self.should_wait_num_envs_ratio = should_wait_num_envs_ratio
+#         self.processes, self.parent_conns = [], []
+#         for child_id in range(num_envs):
+#             parent_conn, child_conn = Pipe()
+#             self.parent_conns.append(parent_conn)
+#             p = Process(target=child_env, args=(child_id, env_fn, child_conn), daemon=True)
+#             self.processes.append(p)
+#         for p in self.processes:
+#             p.start()
 
-class SingleProcessEnv(DoneTrackerEnv):
-    def __init__(self, env_fn):
-        super().__init__(num_envs=1)
-        self.env = env_fn()
-        self.num_actions = self.env.action_space.n
+#     def should_reset(self) -> bool:
+#         return (self.num_envs_done / self.num_envs) >= self.should_wait_num_envs_ratio
 
-    def should_reset(self) -> bool:
-        return self.num_envs_done == 1
+#     def _receive(self, check_type: Optional[MessageType] = None) -> List[Any]:
+#         messages = [parent_conn.recv() for parent_conn in self.parent_conns]
+#         if check_type is not None:
+#             assert all([m.type == check_type for m in messages])
+#         return [m.content for m in messages]
 
-    def reset(self) -> np.ndarray:
-        self.reset_done_tracker()
-        obs = self.env.reset()
-        return obs[None, ...]
+#     def reset(self) -> np.ndarray:
+#         self.reset_done_tracker()
+#         for parent_conn in self.parent_conns:
+#             parent_conn.send(Message(MessageType.RESET))
+#         content = self._receive(check_type=MessageType.RESET_RETURN)
+#         return np.stack(content)
 
-    def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
-        obs, reward, done, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
-        done = np.array([done])
-        self.update_done_tracker(done)
-        return obs[None, ...], np.array([reward]), done, None
+#     def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
+#         for parent_conn, action in zip(self.parent_conns, actions):
+#             parent_conn.send(Message(MessageType.STEP, action))
+#         content = self._receive(check_type=MessageType.STEP_RETURN)
+#         obs, rew, done, _ = zip(*content)
+#         done = np.stack(done)
+#         self.update_done_tracker(done)
+#         return np.stack(obs), np.stack(rew), done, None
 
-    def render(self) -> None:
-        self.env.render()
+#     def close(self) -> None:
+#         for parent_conn in self.parent_conns:
+#             parent_conn.send(Message(MessageType.CLOSE))
+#         for p in self.processes:
+#             p.join()
+#         for parent_conn in self.parent_conns:
+#             parent_conn.close()
 
-    def close(self) -> None:
-        self.env.close()
+
+
+# class SingleProcessEnv(DoneTrackerEnv):
+#     def __init__(self, env_fn):
+#         super().__init__(num_envs=1)
+#         self.env = env_fn()
+#         self.num_actions = self.env.action_space.n
+
+#     def should_reset(self) -> bool:
+#         return self.num_envs_done == 1
+
+#     def reset(self) -> np.ndarray:
+#         self.reset_done_tracker()
+#         obs = self.env.reset()
+#         return obs[None, ...]
+
+#     def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
+#         obs, reward, done, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
+#         done = np.array([done])
+#         self.update_done_tracker(done)
+#         return obs[None, ...], np.array([reward]), done, None
+
+#     def render(self) -> None:
+#         self.env.render()
+
+#     def close(self) -> None:
+#         self.env.close()
 ###############################################################################
 #collector
 
-class Collector:
-    def __init__(self, env: Union[SingleProcessEnv, MultiProcessEnv], dataset: EpisodesDataset, episode_dir_manager: EpisodeDirManager) -> None:
-        self.env = env
-        self.dataset = dataset
-        self.episode_dir_manager = episode_dir_manager
-        self.obs = self.env.reset()
-        self.episode_ids = [None] * self.env.num_envs
-        self.heuristic = RandomHeuristic(self.env.num_actions)
+# class Collector:
+#     def __init__(self, env: Union[SingleProcessEnv, MultiProcessEnv], dataset: EpisodesDataset, episode_dir_manager: EpisodeDirManager) -> None:
+#         self.env = env
+#         self.dataset = dataset
+#         self.episode_dir_manager = episode_dir_manager
+#         self.obs = self.env.reset()
+#         self.episode_ids = [None] * self.env.num_envs
+#         self.heuristic = RandomHeuristic(self.env.num_actions)
 
-    @torch.no_grad()
-    def collect(self, agent: Agent, epoch: int, epsilon: float, should_sample: bool, temperature: float, burn_in: int, *, num_steps: Optional[int] = None, num_episodes: Optional[int] = None):
-        assert self.env.num_actions == agent.world_model.act_vocab_size
-        assert 0 <= epsilon <= 1
+#     @torch.no_grad()
+#     def collect(self, agent: Agent, epoch: int, epsilon: float, should_sample: bool, temperature: float, burn_in: int, *, num_steps: Optional[int] = None, num_episodes: Optional[int] = None):
+#         assert self.env.num_actions == agent.world_model.act_vocab_size
+#         assert 0 <= epsilon <= 1
 
-        assert (num_steps is None) != (num_episodes is None)
-        should_stop = lambda steps, episodes: steps >= num_steps if num_steps is not None else episodes >= num_episodes
+#         assert (num_steps is None) != (num_episodes is None)
+#         should_stop = lambda steps, episodes: steps >= num_steps if num_steps is not None else episodes >= num_episodes
 
-        to_log = []
-        steps, episodes = 0, 0
-        returns = []
-        observations, actions, rewards, dones = [], [], [], []
+#         to_log = []
+#         steps, episodes = 0, 0
+#         returns = []
+#         observations, actions, rewards, dones = [], [], [], []
 
-        burnin_obs_rec, mask_padding = None, None
-        if set(self.episode_ids) != {None} and burn_in > 0:
-            current_episodes = [self.dataset.get_episode(episode_id) for episode_id in self.episode_ids]
-            segmented_episodes = [episode.segment(start=len(episode) - burn_in, stop=len(episode), should_pad=True) for episode in current_episodes]
-            mask_padding = torch.stack([episode.mask_padding for episode in segmented_episodes], dim=0).to(agent.device)
-            burnin_obs = torch.stack([episode.observations for episode in segmented_episodes], dim=0).float().div(255).to(agent.device)
-            burnin_obs_rec = torch.clamp(agent.tokenizer.encode_decode(burnin_obs, should_preprocess=True, should_postprocess=True)[0], 0, 1)
+#         burnin_obs_rec, mask_padding = None, None
+#         if set(self.episode_ids) != {None} and burn_in > 0:
+#             current_episodes = [self.dataset.get_episode(episode_id) for episode_id in self.episode_ids]
+#             segmented_episodes = [episode.segment(start=len(episode) - burn_in, stop=len(episode), should_pad=True) for episode in current_episodes]
+#             mask_padding = torch.stack([episode.mask_padding for episode in segmented_episodes], dim=0).to(agent.device)
+#             burnin_obs = torch.stack([episode.observations for episode in segmented_episodes], dim=0).float().div(255).to(agent.device)
+#             burnin_obs_rec = torch.clamp(agent.tokenizer.encode_decode(burnin_obs, should_preprocess=True, should_postprocess=True)[0], 0, 1)
 
-        agent.actor_critic.reset(n=self.env.num_envs, burnin_observations=burnin_obs_rec, mask_padding=mask_padding)
-        pbar = tqdm(total=num_steps if num_steps is not None else num_episodes, desc=f'Experience collection ({self.dataset.name})', file=sys.stdout)
+#         agent.actor_critic.reset(n=self.env.num_envs, burnin_observations=burnin_obs_rec, mask_padding=mask_padding)
+#         pbar = tqdm(total=num_steps if num_steps is not None else num_episodes, desc=f'Experience collection ({self.dataset.name})', file=sys.stdout)
 
-        while not should_stop(steps, episodes):
+#         while not should_stop(steps, episodes):
 
-            observations.append(self.obs)
-            obs = rearrange(torch.FloatTensor(self.obs).div(255), 'n h w c -> n c h w').to(agent.device)
-            act = agent.act(obs, should_sample=should_sample, temperature=temperature).cpu().numpy()
+#             observations.append(self.obs)
+#             obs = rearrange(torch.FloatTensor(self.obs).div(255), 'n h w c -> n c h w').to(agent.device)
+#             act = agent.act(obs, should_sample=should_sample, temperature=temperature).cpu().numpy()
 
-            if random.random() < epsilon:
-                act = self.heuristic.act(obs).cpu().numpy()
+#             if random.random() < epsilon:
+#                 act = self.heuristic.act(obs).cpu().numpy()
 
-            self.obs, reward, done, _ = self.env.step(act)
+#             self.obs, reward, done, _ = self.env.step(act)
 
-            actions.append(act)
-            rewards.append(reward)
-            dones.append(done)
+#             actions.append(act)
+#             rewards.append(reward)
+#             dones.append(done)
 
-            new_steps = len(self.env.mask_new_dones)
-            steps += new_steps
-            pbar.update(new_steps if num_steps is not None else 0)
+#             new_steps = len(self.env.mask_new_dones)
+#             steps += new_steps
+#             pbar.update(new_steps if num_steps is not None else 0)
 
-            # Warning: with EpisodicLifeEnv + MultiProcessEnv, reset is ignored if not a real done.
-            # Thus, segments of experience following a life loss and preceding a general done are discarded.
-            # Not a problem with a SingleProcessEnv.
+#             # Warning: with EpisodicLifeEnv + MultiProcessEnv, reset is ignored if not a real done.
+#             # Thus, segments of experience following a life loss and preceding a general done are discarded.
+#             # Not a problem with a SingleProcessEnv.
 
-            if self.env.should_reset():
-                self.add_experience_to_dataset(observations, actions, rewards, dones)
+#             if self.env.should_reset():
+#                 self.add_experience_to_dataset(observations, actions, rewards, dones)
 
-                new_episodes = self.env.num_envs
-                episodes += new_episodes
-                pbar.update(new_episodes if num_episodes is not None else 0)
+#                 new_episodes = self.env.num_envs
+#                 episodes += new_episodes
+#                 pbar.update(new_episodes if num_episodes is not None else 0)
 
-                for episode_id in self.episode_ids:
-                    episode = self.dataset.get_episode(episode_id)
-                    self.episode_dir_manager.save(episode, episode_id, epoch)
-                    metrics_episode = {k: v for k, v in episode.compute_metrics().__dict__.items()}
-                    metrics_episode['episode_num'] = episode_id
-                    metrics_episode['action_histogram'] = wandb.Histogram(np_histogram=np.histogram(episode.actions.numpy(), bins=np.arange(0, self.env.num_actions + 1) - 0.5, density=True))
-                    to_log.append({f'{self.dataset.name}/{k}': v for k, v in metrics_episode.items()})
-                    returns.append(metrics_episode['episode_return'])
+#                 for episode_id in self.episode_ids:
+#                     episode = self.dataset.get_episode(episode_id)
+#                     self.episode_dir_manager.save(episode, episode_id, epoch)
+#                     metrics_episode = {k: v for k, v in episode.compute_metrics().__dict__.items()}
+#                     metrics_episode['episode_num'] = episode_id
+#                     metrics_episode['action_histogram'] = wandb.Histogram(np_histogram=np.histogram(episode.actions.numpy(), bins=np.arange(0, self.env.num_actions + 1) - 0.5, density=True))
+#                     to_log.append({f'{self.dataset.name}/{k}': v for k, v in metrics_episode.items()})
+#                     returns.append(metrics_episode['episode_return'])
 
-                self.obs = self.env.reset()
-                self.episode_ids = [None] * self.env.num_envs
-                agent.actor_critic.reset(n=self.env.num_envs)
-                observations, actions, rewards, dones = [], [], [], []
+#                 self.obs = self.env.reset()
+#                 self.episode_ids = [None] * self.env.num_envs
+#                 agent.actor_critic.reset(n=self.env.num_envs)
+#                 observations, actions, rewards, dones = [], [], [], []
 
-        # Add incomplete episodes to dataset, and complete them later.
-        if len(observations) > 0:
-            self.add_experience_to_dataset(observations, actions, rewards, dones)
+#         # Add incomplete episodes to dataset, and complete them later.
+#         if len(observations) > 0:
+#             self.add_experience_to_dataset(observations, actions, rewards, dones)
 
-        agent.actor_critic.clear()
+#         agent.actor_critic.clear()
 
-        metrics_collect = {
-            '#episodes': len(self.dataset),
-            '#steps': sum(map(len, self.dataset.episodes)),
-        }
-        if len(returns) > 0:
-            metrics_collect['return'] = np.mean(returns)
-        metrics_collect = {f'{self.dataset.name}/{k}': v for k, v in metrics_collect.items()}
-        to_log.append(metrics_collect)
+#         metrics_collect = {
+#             '#episodes': len(self.dataset),
+#             '#steps': sum(map(len, self.dataset.episodes)),
+#         }
+#         if len(returns) > 0:
+#             metrics_collect['return'] = np.mean(returns)
+#         metrics_collect = {f'{self.dataset.name}/{k}': v for k, v in metrics_collect.items()}
+#         to_log.append(metrics_collect)
 
-        return to_log
+#         return to_log
 
-    def add_experience_to_dataset(self, observations: List[np.ndarray], actions: List[np.ndarray], rewards: List[np.ndarray], dones: List[np.ndarray]) -> None:
-        assert len(observations) == len(actions) == len(rewards) == len(dones)
-        for i, (o, a, r, d) in enumerate(zip(*map(lambda arr: np.swapaxes(arr, 0, 1), [observations, actions, rewards, dones]))):  # Make everything (N, T, ...) instead of (T, N, ...)
-            episode = Episode(
-                observations=torch.ByteTensor(o).permute(0, 3, 1, 2).contiguous(),  # channel-first
-                actions=torch.LongTensor(a),
-                rewards=torch.FloatTensor(r),
-                ends=torch.LongTensor(d),
-                mask_padding=torch.ones(d.shape[0], dtype=torch.bool),
-            )
-            if self.episode_ids[i] is None:
-                self.episode_ids[i] = self.dataset.add_episode(episode)
-            else:
-                self.dataset.update_episode(self.episode_ids[i], episode)
+#     def add_experience_to_dataset(self, observations: List[np.ndarray], actions: List[np.ndarray], rewards: List[np.ndarray], dones: List[np.ndarray]) -> None:
+#         assert len(observations) == len(actions) == len(rewards) == len(dones)
+#         for i, (o, a, r, d) in enumerate(zip(*map(lambda arr: np.swapaxes(arr, 0, 1), [observations, actions, rewards, dones]))):  # Make everything (N, T, ...) instead of (T, N, ...)
+#             episode = Episode(
+#                 observations=torch.ByteTensor(o).permute(0, 3, 1, 2).contiguous(),  # channel-first
+#                 actions=torch.LongTensor(a),
+#                 rewards=torch.FloatTensor(r),
+#                 ends=torch.LongTensor(d),
+#                 mask_padding=torch.ones(d.shape[0], dtype=torch.bool),
+#             )
+#             if self.episode_ids[i] is None:
+#                 self.episode_ids[i] = self.dataset.add_episode(episode)
+#             else:
+#                 self.dataset.update_episode(self.episode_ids[i], episode)
 
 
 ###############################################################################################################
@@ -567,6 +557,17 @@ class Embedder(nn.Module):
         return output
 
 #NETSSS
+@dataclass
+class EncoderDecoderConfig:
+    resolution: int
+    in_channels: int
+    z_channels: int
+    ch: int
+    ch_mult: List[int]
+    num_res_blocks: int
+    attn_resolutions: List[int]
+    out_ch: int
+    dropout: float
 class Encoder(nn.Module):
     def __init__(self, config: EncoderDecoderConfig) -> None:
         super().__init__()
@@ -776,16 +777,12 @@ class Decoder(nn.Module):
         h = self.conv_out(h)
         return h, hidden_states, attentions
 
-
-
 def nonlinearity(x: torch.Tensor) -> torch.Tensor:
     # swish
     return x * torch.sigmoid(x)
 
-
 def Normalize(in_channels: int) -> nn.Module:
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-
 
 class Upsample(nn.Module):
     def __init__(self, in_channels: int, with_conv: bool) -> None:
@@ -825,7 +822,6 @@ class Downsample(nn.Module):
         else:
             x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
         return x
-
 
 class ResnetBlock(nn.Module):
     def __init__(self, *, in_channels: int, out_channels: int = None, conv_shortcut: bool = False,
@@ -888,7 +884,6 @@ class ResnetBlock(nn.Module):
 
         return x + h
 
-
 class AttnBlock(nn.Module):
     def __init__(self, in_channels: int) -> None:
         super().__init__()
@@ -943,8 +938,160 @@ class AttnBlock(nn.Module):
         h_ = self.proj_out(h_)
 
         return (x + h_, attention_weights)
-################################################################
-########################3TOKENIZER
+
+
+class LPIPS(nn.Module):
+    # Learned perceptual metric
+    def __init__(self, use_dropout: bool = True):
+        super().__init__()
+        self.scaling_layer = ScalingLayer()
+        self.chns = [64, 128, 256, 512, 512]  # vg16 features
+        self.net = vgg16(pretrained=True, requires_grad=False)
+        self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
+        self.lin1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
+        self.lin2 = NetLinLayer(self.chns[2], use_dropout=use_dropout)
+        self.lin3 = NetLinLayer(self.chns[3], use_dropout=use_dropout)
+        self.lin4 = NetLinLayer(self.chns[4], use_dropout=use_dropout)
+        self.load_from_pretrained()
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def load_from_pretrained(self) -> None:
+        ckpt = get_ckpt_path(name="vgg_lpips", root=Path.home() / ".cache/iris/tokenizer_pretrained_vgg")  # Download VGG if necessary
+        self.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")), strict=False)
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        in0_input, in1_input = (self.scaling_layer(input), self.scaling_layer(target))
+        outs0, outs1 = self.net(in0_input), self.net(in1_input)
+        feats0, feats1, diffs = {}, {}, {}
+        lins = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
+        for kk in range(len(self.chns)):
+            feats0[kk], feats1[kk] = normalize_tensor(outs0[kk]), normalize_tensor(outs1[kk])
+            diffs[kk] = (feats0[kk] - feats1[kk]) ** 2
+
+        res = [spatial_average(lins[kk].model(diffs[kk]), keepdim=True) for kk in range(len(self.chns))]
+        val = res[0]
+        for i in range(1, len(self.chns)):
+            val += res[i]
+        return val
+
+
+class ScalingLayer(nn.Module):
+    def __init__(self) -> None:
+        super(ScalingLayer, self).__init__()
+        self.register_buffer('shift', torch.Tensor([-.030, -.088, -.188])[None, :, None, None])
+        self.register_buffer('scale', torch.Tensor([.458, .448, .450])[None, :, None, None])
+
+    def forward(self, inp: torch.Tensor) -> torch.Tensor:
+        return (inp - self.shift) / self.scale
+
+
+class NetLinLayer(nn.Module):
+    """ A single linear layer which does a 1x1 conv """
+    def __init__(self, chn_in: int, chn_out: int = 1, use_dropout: bool = False) -> None:
+        super(NetLinLayer, self).__init__()
+        layers = [nn.Dropout(), ] if (use_dropout) else []
+        layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False), ]
+        self.model = nn.Sequential(*layers)
+
+
+class vgg16(torch.nn.Module):
+    def __init__(self, requires_grad: bool = False, pretrained: bool = True) -> None:
+        super(vgg16, self).__init__()
+        vgg_pretrained_features = models.vgg16(pretrained=pretrained).features
+        self.slice1 = torch.nn.Sequential()
+        self.slice2 = torch.nn.Sequential()
+        self.slice3 = torch.nn.Sequential()
+        self.slice4 = torch.nn.Sequential()
+        self.slice5 = torch.nn.Sequential()
+        self.N_slices = 5
+        for x in range(4):
+            self.slice1.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(4, 9):
+            self.slice2.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(9, 16):
+            self.slice3.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(16, 23):
+            self.slice4.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(23, 30):
+            self.slice5.add_module(str(x), vgg_pretrained_features[x])
+        if not requires_grad:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        h = self.slice1(X)
+        h_relu1_2 = h
+        h = self.slice2(h)
+        h_relu2_2 = h
+        h = self.slice3(h)
+        h_relu3_3 = h
+        h = self.slice4(h)
+        h_relu4_3 = h
+        h = self.slice5(h)
+        h_relu5_3 = h
+        vgg_outputs = namedtuple("VggOutputs", ['relu1_2', 'relu2_2', 'relu3_3', 'relu4_3', 'relu5_3'])
+        return vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
+
+
+def normalize_tensor(x: torch.Tensor, eps: float = 1e-10) -> torch.Tensor:
+    norm_factor = torch.sqrt(torch.sum(x ** 2, dim=1, keepdim=True))
+    return x / (norm_factor + eps)
+
+
+def spatial_average(x: torch.Tensor, keepdim: bool = True) -> torch.Tensor:
+    return x.mean([2, 3], keepdim=keepdim)
+
+
+# ********************************************************************
+# *************** Utilities to download pretrained vgg ***************
+# ********************************************************************
+
+
+URL_MAP = {
+    "vgg_lpips": "https://heibox.uni-heidelberg.de/f/607503859c864bc1b30b/?dl=1"
+}
+
+
+CKPT_MAP = {
+    "vgg_lpips": "vgg.pth"
+}
+
+
+MD5_MAP = {
+    "vgg_lpips": "d507d7349b931f0638a25a48a722f98a"
+}
+
+
+def download(url: str, local_path: str, chunk_size: int = 1024) -> None:
+    os.makedirs(os.path.split(local_path)[0], exist_ok=True)
+    with requests.get(url, stream=True) as r:
+        total_size = int(r.headers.get("content-length", 0))
+        with tqdm(total=total_size, unit="B", unit_scale=True) as pbar:
+            with open(local_path, "wb") as f:
+                for data in r.iter_content(chunk_size=chunk_size):
+                    if data:
+                        f.write(data)
+                        pbar.update(chunk_size)
+
+
+def md5_hash(path: str) -> str:
+    with open(path, "rb") as f:
+        content = f.read()
+    return hashlib.md5(content).hexdigest()
+
+
+def get_ckpt_path(name: str, root: str, check: bool = False) -> str:
+    assert name in URL_MAP
+    path = os.path.join(root, CKPT_MAP[name])
+    if not os.path.exists(path) or (check and not md5_hash(path) == MD5_MAP[name]):
+        print("Downloading {} model from {} to {}".format(name, URL_MAP[name], path))
+        download(URL_MAP[name], path)
+        md5 = md5_hash(path)
+        assert md5 == MD5_MAP[name], md5
+    return path
+
+
 class Tokenizer(nn.Module):
     def __init__(self, vocab_size: int, embed_dim: int, encoder: Encoder, decoder: Decoder, with_lpips: bool = True) -> None:
         super().__init__()
@@ -968,7 +1115,9 @@ class Tokenizer(nn.Module):
 
     def compute_loss(self, batch: Batch, **kwargs: Any) -> LossWithIntermediateLosses:
         assert self.lpips is not None
-        observations = self.preprocess_input(rearrange(batch['observations'], 'b t c h w -> (b t) c h w'))
+        
+        observations = self.preprocess_input(batch['observations'].view(-1, batch['observations'].shape[2], batch['observations'].shape[3], batch['observations'].shape[4]).permute(0, 1, 2, 3))
+        # observations = self.preprocess_input(rearrange(batch['observations'], 'b t c h w -> (b t) c h w'))
         z, z_quantized, reconstructions = self(observations, should_preprocess=False, should_postprocess=False)[0]
 
         # Codebook loss. Notes:
@@ -990,11 +1139,13 @@ class Tokenizer(nn.Module):
         z, all_hidden_states,attentions = self.encoder(x, output_hidden_states, output_attentions)
         z = self.pre_quant_conv(z)
         b, e, h, w = z.shape
-        z_flattened = rearrange(z, 'b e h w -> (b h w) e')
+        # z_flattened = rearrange(z, 'b e h w -> (b h w) e')
+        z_flattened = z.view(-1, z.shape[1])
         dist_to_embeddings = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + torch.sum(self.embedding.weight**2, dim=1) - 2 * torch.matmul(z_flattened, self.embedding.weight.t())
 
         tokens = dist_to_embeddings.argmin(dim=-1)
-        z_q = rearrange(self.embedding(tokens), '(b h w) e -> b e h w', b=b, e=e, h=h, w=w).contiguous()
+        # z_q = rearrange(self.embedding(tokens), '(b h w) e -> b e h w', b=b, e=e, h=h, w=w).contiguous()
+        z_q = self.embedding(tokens).view(b,h,w,e).permute(0,3,1,2).contiguous()
 
         # Reshape to original
         z = z.reshape(*shape[:-3], *z.shape[1:])
@@ -1025,6 +1176,125 @@ class Tokenizer(nn.Module):
     def postprocess_output(self, y: torch.Tensor) -> torch.Tensor:
         """y is supposed to be channels first and in [-1, 1]"""
         return y.add(1).div(2)
+
+@dataclass
+class TransformerConfig:
+    tokens_per_block: int
+    max_blocks: int
+    attention: str
+
+    num_layers: int
+    num_heads: int
+    embed_dim: int
+
+    embed_pdrop: float
+    resid_pdrop: float
+    attn_pdrop: float
+
+    @property
+    def max_tokens(self):
+        return self.tokens_per_block * self.max_blocks
+
+
+class Cache:
+    def __init__(self, num_samples: int, num_heads: int, max_tokens: int, embed_dim: int, device: torch.device) -> None:
+        assert embed_dim % num_heads == 0
+        self._n, self._cache, self._size = num_samples, None, None
+        self._reset = lambda n: torch.empty(n, num_heads, max_tokens, embed_dim // num_heads, device=device)  # (B, nh, T, hs)
+        self.reset()
+
+    @property
+    def shape(self) -> Tuple[int, int, int, int]:
+        n, num_heads, _, head_dim = self._cache.shape
+        return n, num_heads, self._size, head_dim
+
+    def reset(self) -> None:
+        self._cache = self._reset(self._n)
+        self._size = 0
+
+    def prune(self, mask: np.ndarray) -> None:
+        assert mask.ndim == 1 and mask.shape[0] == self.shape[0]
+        self._cache = self._cache[mask]
+        self._n = self._cache.shape[0]
+
+    def get(self) -> torch.Tensor:
+        return self._cache[:, :, :self._size, :]
+
+    def update(self, x: torch.Tensor) -> None:
+        assert (x.ndim == self._cache.ndim) and all([x.size(i) == self._cache.size(i) for i in (0, 1, 3)])
+        assert self._size + x.size(2) <= self._cache.shape[2]
+        self._cache = AssignWithoutInplaceCheck.apply(self._cache, x, 2, self._size, self._size + x.size(2))
+        self._size += x.size(2)
+
+
+class KVCache:
+    def __init__(self, n: int, num_heads: int, max_tokens: int, embed_dim: int, device: torch.device) -> None:
+        self._k_cache = Cache(n, num_heads, max_tokens, embed_dim, device)
+        self._v_cache = Cache(n, num_heads, max_tokens, embed_dim, device)
+
+    @property
+    def shape(self) -> Tuple[int, int, int, int]:
+        return self._k_cache.shape
+
+    def reset(self) -> None:
+        self._k_cache.reset()
+        self._v_cache.reset()
+
+    def prune(self, mask: np.ndarray) -> None:
+        self._k_cache.prune(mask)
+        self._v_cache.prune(mask)
+
+    def get(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        return self._k_cache.get(), self._v_cache.get()
+
+    def update(self, k: torch.Tensor, v: torch.Tensor):
+        self._k_cache.update(k)
+        self._v_cache.update(v)
+
+
+class KeysValues:
+    def __init__(self, n: int, num_heads: int, max_tokens: int, embed_dim: int, num_layers: int, device: torch.device) -> None:
+        self._keys_values = tuple([KVCache(n, num_heads, max_tokens, embed_dim, device) for _ in range(num_layers)])
+
+    def __getitem__(self, key: int) -> KVCache:
+        return self._keys_values[key]
+
+    def __len__(self):
+        return len(self._keys_values)
+
+    @property
+    def size(self):
+        return self._keys_values[0].shape[2]
+
+    def reset(self) -> None:
+        for kv_cache in self._keys_values:
+            kv_cache.reset()
+
+    def prune(self, mask: np.ndarray) -> None:
+        for kv_cache in self._keys_values:
+            kv_cache.prune(mask)
+
+class AssignWithoutInplaceCheck(torch.autograd.Function):
+    """
+    Inspired from : https://discuss.pytorch.org/t/disable-in-place-correctness-version-check-any-other-workaround/90738/4
+    Warning : do not use it to overwrite a slice twice.
+    """
+
+    @staticmethod
+    def get_slice(dim: int, start: int, stop: int) -> Tuple[slice]:
+        return tuple([slice(None), ] * dim + [slice(start, stop)])
+
+    @staticmethod
+    def forward(ctx, input: torch.Tensor, value: torch.Tensor, dim: int, start: int, stop: int) -> torch.Tensor:
+        ctx.dim = dim
+        ctx.start = start
+        ctx.stop = stop
+        input.data[AssignWithoutInplaceCheck.get_slice(dim, start, stop)] = value
+        return input
+
+    @staticmethod
+    def backward(ctx, grad_out: torch.Tensor) -> Tuple[torch.Tensor]:
+        return grad_out, grad_out[AssignWithoutInplaceCheck.get_slice(ctx.dim, ctx.start, ctx.stop)], None, None, None
 
 
 class Transformer(nn.Module):
@@ -1116,7 +1386,9 @@ class SelfAttention(nn.Module):
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v
-        y = rearrange(y, 'b h t e -> b t (h e)')
+
+        y = y.permute(0, 2, 1, 3).contiguous().view(y.shape[0], y.shape[2], y.shape[1] * y.shape[3])
+        # y = rearrange(y, 'b h t e -> b t (h e)')
 
         y = self.resid_drop(self.proj(y))
 
@@ -1200,13 +1472,17 @@ class WorldModelEnv:
     @torch.no_grad()
     def render_batch(self) -> List[Image.Image]:
         frames = self.decode_obs_tokens().detach().cpu()
-        frames = rearrange(frames, 'b c h w -> b h w c').mul(255).numpy().astype(np.uint8)
+        # frames = rearrange(frames, 'b c h w -> b h w c').mul(255).numpy().astype(np.uint8)
+        frames = frames.permute(0,2,3,1).mul(255).numpy().astype(np.uint8)
         return [Image.fromarray(frame) for frame in frames]
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
         embedded_tokens = self.tokenizer.embedding(self.obs_tokens)     # (B, K, E)
-        z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
+        # z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
+        h = int(np.sqrt(self.num_observations_tokens))
+        z = embedded_tokens.view(embedded_tokens.shape[0], h, -1, embedded_tokens.shape[-1]).permute(0, 3, 1, 2)
+
         rec = self.tokenizer.decode(z, should_postprocess=True)         # (B, C, H, W)
         return torch.clamp(rec, 0, 1)
 
@@ -1276,7 +1552,7 @@ class WorldModel(nn.Module):
             )
         )
 
-        self.apply(init_weights)
+        # self.apply(init_weights)
 
     def __repr__(self) -> str:
         return "world_model"
@@ -1302,24 +1578,32 @@ class WorldModel(nn.Module):
         with torch.no_grad():
             obs_tokens, _, _ = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
 
-        act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
-        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+        # act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
+        act_tokens = batch['actions'].unsqueeze(-1)
+        
+        # tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  
+        tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
+
 
         outputs = self(tokens)[0]
 
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_tokens, batch['rewards'], batch['ends'], batch['mask_padding'])
 
-        logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
+        # logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
+        logits_observations = outputs.logits_observations[:, :-1].reshape(-1, outputs.logits_observations[:, :-1].shape[-1])
         loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        loss_rewards = F.cross_entropy(rearrange(outputs.logits_rewards, 'b t e -> (b t) e'), labels_rewards)
-        loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
+        # loss_rewards = F.cross_entropy(rearrange(outputs.logits_rewards, 'b t e -> (b t) e'), labels_rewards)
+        loss_rewards = F.cross_entropy((outputs.logits_rewards.reshape(-1, outputs.logits_rewards.shape[-1])),labels_rewards)
+        # loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
+        loss_ends = F.cross_entropy((outputs.logits_ends.reshape(-1, outputs.logits_ends.shape[-1])),labels_ends)
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends)
 
     def compute_labels_world_model(self, obs_tokens: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor, mask_padding: torch.BoolTensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         assert torch.all(ends.sum(dim=1) <= 1)  # at most 1 done
         mask_fill = torch.logical_not(mask_padding)
-        labels_observations = rearrange(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100), 'b t k -> b (t k)')[:, 1:]
+        # labels_observations = rearrange(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100), 'b t k -> b (t k)')[:, 1:]
+        labels_observations = obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).view(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).shape[0],-1)[:, 1:]
         labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1}
         labels_ends = ends.masked_fill(mask_fill, -100)
         return labels_observations.reshape(-1), labels_rewards.reshape(-1), labels_ends.reshape(-1)
@@ -1327,7 +1611,19 @@ class WorldModel(nn.Module):
 ##########################################################
 
 #acTOR CRITIC
+@dataclass
+class ActorCriticOutput:
+    logits_actions: torch.FloatTensor
+    means_values: torch.FloatTensor
 
+@dataclass
+class ImagineOutput:
+    observations: torch.ByteTensor
+    actions: torch.LongTensor
+    logits_actions: torch.FloatTensor
+    values: torch.FloatTensor
+    rewards: torch.FloatTensor
+    ends: torch.BoolTensor
 class ActorCritic(nn.Module):
     def __init__(self, act_vocab_size, use_original_obs: bool = False) -> None:
         super().__init__()
@@ -1368,6 +1664,21 @@ class ActorCritic(nn.Module):
     def prune(self, mask: np.ndarray) -> None:
         self.hx = self.hx[mask]
         self.cx = self.cx[mask]
+    
+    def compute_lambda_returns(self, rewards, values, ends, gamma, lambda_):
+        assert rewards.ndim == 2 or (rewards.ndim == 3 and rewards.size(2) == 1)
+        assert rewards.shape == ends.shape == values.shape, f"{rewards.shape}, {values.shape}, {ends.shape}"  # (B, T, 1)
+        t = rewards.size(1)
+        lambda_returns = torch.empty_like(values)
+        lambda_returns[:, -1] = values[:, -1]
+        lambda_returns[:, :-1] = rewards[:, :-1] + ends[:, :-1].logical_not() * gamma * (1 - lambda_) * values[:, 1:]
+
+        last = values[:, -1]
+        for i in list(range(t - 1))[::-1]:
+            lambda_returns[:, i] += ends[:, i].logical_not() * gamma * lambda_ * last
+            last = lambda_returns[:, i]
+
+        return lambda_returns
 
     def forward(self, inputs: torch.FloatTensor, output_hidden_states: bool = False, output_attentions: bool = False, mask_padding: Optional[torch.BoolTensor] = None) -> ActorCriticOutput:
         assert inputs.ndim == 4 and inputs.shape[1:] == (3, 64, 64)
@@ -1394,8 +1705,10 @@ class ActorCritic(nn.Module):
         
         hidden_states = hidden_states + (self.hx,) if output_hidden_states else None
 
-        logits_actions = rearrange(self.actor_linear(self.hx), 'b a -> b 1 a')
-        means_values = rearrange(self.critic_linear(self.hx), 'b 1 -> b 1 1')
+        # logits_actions = rearrange(self.actor_linear(self.hx), 'b a -> b 1 a')
+        logits_actions = self.actor_linear(self.hx).unsqueeze(1)
+        # means_values = rearrange(self.critic_linear(self.hx), 'b 1 -> b 1 1')
+        means_values = self.critic_linear(self.hx).unsqueeze(1)
 
         return ActorCriticOutput(logits_actions, means_values), hidden_states
 
@@ -1404,7 +1717,7 @@ class ActorCritic(nn.Module):
         outputs = self.imagine(batch, tokenizer, world_model, horizon=imagine_horizon)
 
         with torch.no_grad():
-            lambda_returns = compute_lambda_returns(
+            lambda_returns = self.compute_lambda_returns(
                 rewards=outputs.rewards,
                 values=outputs.values,
                 ends=outputs.ends,
@@ -1462,7 +1775,8 @@ class ActorCritic(nn.Module):
             observations=torch.stack(all_observations, dim=1).mul(255).byte(),      # (B, T, C, H, W) in [0, 255]
             actions=torch.cat(all_actions, dim=1),                                  # (B, T)
             logits_actions=torch.cat(all_logits_actions, dim=1),                    # (B, T, #actions)
-            values=rearrange(torch.cat(all_values, dim=1), 'b t 1 -> b t'),         # (B, T)
+            # values=rearrange(torch.cat(all_values, dim=1), 'b t 1 -> b t'), 
+            values=torch.cat(all_values, dim=1).squeeze(dim =2),                    # (B, T)
             rewards=torch.cat(all_rewards, dim=1).to(device),                       # (B, T)
             ends=torch.cat(all_ends, dim=1).to(device),                             # (B, T)
         )
@@ -1483,11 +1797,11 @@ class Agent(nn.Module):
     def load(self, path_to_checkpoint: Path, device: torch.device, load_tokenizer: bool = True, load_world_model: bool = True, load_actor_critic: bool = True) -> None:
         agent_state_dict = torch.load(path_to_checkpoint, map_location=device)
         if load_tokenizer:
-            self.tokenizer.load_state_dict(extract_state_dict(agent_state_dict, 'tokenizer'))
+            self.tokenizer.load_state_dict(OrderedDict({k.split('.', 1)[1]: v for k, v in agent_state_dict.items() if k.startswith('tokenizer')}))
         if load_world_model:
-            self.world_model.load_state_dict(extract_state_dict(agent_state_dict, 'world_model'))
+            self.world_model.load_state_dict(OrderedDict({k.split('.', 1)[1]: v for k, v in agent_state_dict.items() if k.startswith('world_model')}))
         if load_actor_critic:
-            self.actor_critic.load_state_dict(extract_state_dict(agent_state_dict, 'actor_critic'))
+            self.actor_critic.load_state_dict(OrderedDict({k.split('.', 1)[1]: v for k, v in agent_state_dict.items() if k.startswith('actor_critic')}))
 
     def act(self, obs: torch.FloatTensor, should_sample: bool = True, temperature: float = 1.0) -> torch.LongTensor:
         input_ac = obs if self.actor_critic.use_original_obs else torch.clamp(self.tokenizer.encode_decode(obs, should_preprocess=True, should_postprocess=True)[0], 0, 1)
@@ -1520,47 +1834,7 @@ class IrisModel(IrisPreTrainedModel):
         super().__init__(config)
         
         self.cfg = config
-        self.start_epoch = 1
         self.device = torch.device(self.cfg.common.device)
-
-        self.ckpt_dir = Path('checkpoints')
-        self.media_dir = Path('media')
-        self.episode_dir = self.media_dir / 'episodes'
-        self.reconstructions_dir = self.media_dir / 'reconstructions'
-
-        if not self.cfg.common.resume:
-            config_dir = Path('config')
-            config_path = config_dir / 'trainer.yaml'
-            config_dir.mkdir(exist_ok=False, parents=False)
-            shutil.copy('.hydra/config.yaml', config_path)
-            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "src"), dst="./src")
-            shutil.copytree(src=(Path(hydra.utils.get_original_cwd()) / "scripts"), dst="./scripts")
-            self.ckpt_dir.mkdir(exist_ok=False, parents=False)
-            self.media_dir.mkdir(exist_ok=False, parents=False)
-            self.episode_dir.mkdir(exist_ok=False, parents=False)
-            self.reconstructions_dir.mkdir(exist_ok=False, parents=False)
-
-        episode_manager_train = EpisodeDirManager(self.episode_dir / 'train', max_num_episodes=self.cfg.collection.train.num_episodes_to_save)
-        episode_manager_test = EpisodeDirManager(self.episode_dir / 'test', max_num_episodes=self.cfg.collection.test.num_episodes_to_save)
-        self.episode_manager_imagination = EpisodeDirManager(self.episode_dir / 'imagination', max_num_episodes=self.cfg.evaluation.actor_critic.num_episodes_to_save)
-
-        def create_env(cfg_env, num_envs):
-            env_fn = partial(instantiate, config=cfg_env)
-            return MultiProcessEnv(env_fn, num_envs, should_wait_num_envs_ratio=1.0) if num_envs > 1 else SingleProcessEnv(env_fn)
-
-        if self.cfg.training.should:
-            train_env = create_env(self.cfg.env.train, self.cfg.collection.train.num_envs)
-            self.train_dataset = instantiate(self.cfg.datasets.train)
-            self.train_collector = Collector(train_env, self.train_dataset, episode_manager_train)
-
-        if self.cfg.evaluation.should:
-            test_env = create_env(self.cfg.env.test, self.cfg.collection.test.num_envs)
-            self.test_dataset = instantiate(cfg.datasets.test)
-            self.test_collector = Collector(test_env, self.test_dataset, episode_manager_test)
-
-        assert self.cfg.training.should or self.cfg.evaluation.should
-        env = train_env if self.cfg.training.should else test_env
-
         tokenizer = instantiate(self.cfg.tokenizer)
         world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=env.num_actions, config=instantiate(self.cfg.world_model))
         actor_critic = ActorCritic(**self.cfg.actor_critic, act_vocab_size=env.num_actions)
@@ -1569,9 +1843,9 @@ class IrisModel(IrisPreTrainedModel):
         print(f'{sum(p.numel() for p in self.agent.world_model.parameters())} parameters in agent.world_model')
         print(f'{sum(p.numel() for p in self.agent.actor_critic.parameters())} parameters in agent.actor_critic')
 
-        self.optimizer_tokenizer = torch.optim.Adam(self.agent.tokenizer.parameters(), lr=self.cfg.training.learning_rate)
-        self.optimizer_world_model = configure_optimizer(self.agent.world_model, self.cfg.training.learning_rate, self.cfg.training.world_model.weight_decay)
-        self.optimizer_actor_critic = torch.optim.Adam(self.agent.actor_critic.parameters(), lr=self.cfg.training.learning_rate)
+        # self.optimizer_tokenizer = torch.optim.Adam(self.agent.tokenizer.parameters(), lr=self.cfg.training.learning_rate)
+        # self.optimizer_world_model = configure_optimizer(self.agent.world_model, self.cfg.training.learning_rate, self.cfg.training.world_model.weight_decay)
+        # self.optimizer_actor_critic = torch.optim.Adam(self.agent.actor_critic.parameters(), lr=self.cfg.training.learning_rate)
 
         if self.cfg.initialization.path_to_checkpoint is not None:
             self.agent.load(**self.cfg.initialization, device=self.device)
@@ -1664,21 +1938,20 @@ class IrisModel(IrisPreTrainedModel):
         losses = dict(tokenizer_losses = losses_tokenizer, world_model_losses = losses_world_model, actor_critic_losses = losses_actor_critic)
 
         if should_preprocess == True:
-            # preprocess observations
             observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
         #tokenizer outputs = (outputs.z, outputs.z_quantized, reconstructions)
         tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, output_attentions, observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
             obs_tokens, _, _ = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
-        act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
-        tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
-        #world_model_outputs = WorldModelOutput() instance
+        # act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
+        act_tokens = self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature).unsqueeze(-1)
+        # tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
+        tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
         world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = self.forward_component(self.agent.world_model, output_hidden_states, output_attentions, tokens)
 
         wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, self.cfg.common.device)
         obs = wm_env.reset_from_initial_observations(observations[:, -1])
-        #actor_critic_outputs = ActorCriticOutput() instance
         actor_critic_outputs, all_hidden_states_actor_critic, all_attentions_actor_critic = self.forward_component(self.agent.actor_critic, output_hidden_states, output_attentions, obs)
 
         all_hidden_states = (all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic) if output_hidden_states else None
