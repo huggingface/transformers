@@ -465,17 +465,18 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            repo_id = "a8nova/test_save_load_1"
+
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(repo_id, saved_model=False, push_to_hub=True, token="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")
+                model.save_pretrained(tmpdirname, saved_model=False,
+                                      repo_id="a8nova/test_save_load_CI_TFIdeficsModelTest", push_to_hub=True, token="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")
 
                 # the config file (and the generation config file, if it can generate) should be saved
-                #self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-                #self.assertEqual(
-                #    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
-                #)
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
 
-                model = model_class.from_pretrained(repo_id)
+                model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
@@ -536,21 +537,21 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            repo_id = "a8nova/test_save_load_0"
+
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(save_directory=repo_id, saved_model=False, push_to_hub=True, token="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")
+                model.save_pretrained(tmpdirname, saved_model=False,
+                                      repo_id="a8nova/test_save_load_CI_TFIdeficsForVisionText2TextTest", push_to_hub=True, token="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")
 
                 # the config file (and the generation config file, if it can generate) should be saved
-                #self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-                #self.assertEqual(
-                #    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
-                #)
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
 
-                model = model_class.from_pretrained(repo_id)
+                model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
-
 
 # Below is the expected output for the integration test TFIdeficsModelIntegrationTest.
 # Since we are using tiny-random to be able to fit it on the CI GPU,it is better to assert on the
