@@ -171,57 +171,6 @@ IRIS_INPUTS_DOCSTRING = r"""
         
 """
 
-
-
-# def configure_optimizer(model, learning_rate, weight_decay, *blacklist_module_names):
-#     """Credits to https://github.com/karpathy/minGPT"""
-#     # separate out all parameters to those that will and won't experience regularizing weight decay
-#     decay = set()
-#     no_decay = set()
-#     whitelist_weight_modules = (torch.nn.Linear, torch.nn.Conv1d)
-#     blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
-#     for mn, m in model.named_modules():
-#         for pn, p in m.named_parameters():
-#             fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
-#             if any([fpn.startswith(module_name) for module_name in blacklist_module_names]):
-#                 no_decay.add(fpn)
-#             elif 'bias' in pn:
-#                 # all biases will not be decayed
-#                 no_decay.add(fpn)
-#             elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
-#                 # weights of whitelist modules will be weight decayed
-#                 decay.add(fpn)
-#             elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
-#                 # weights of blacklist modules will NOT be weight decayed
-#                 no_decay.add(fpn)
-
-#     # validate that we considered every parameter
-#     param_dict = {pn: p for pn, p in model.named_parameters()}
-#     inter_params = decay & no_decay
-#     union_params = decay | no_decay
-#     assert len(inter_params) == 0, f"parameters {str(inter_params)} made it into both decay/no_decay sets!"
-#     assert len(param_dict.keys() - union_params) == 0, f"parameters {str(param_dict.keys() - union_params)} were not separated into either decay/no_decay set!"
-
-#     # create the pytorch optimizer object
-#     optim_groups = [
-#         {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": weight_decay},
-#         {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
-#     ]
-#     optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate)
-#     return optimizer
-
-#init weights same as in pRetrained model's __init__()
-# def init_weights(module):
-#     if isinstance(module, (nn.Linear, nn.Embedding)):
-#         module.weight.data.normal_(mean=0.0, std=0.02)
-#         if isinstance(module, nn.Linear) and module.bias is not None:
-#             module.bias.data.zero_()
-#     elif isinstance(module, nn.LayerNorm):
-#         module.bias.data.zero_()
-#         module.weight.data.fill_(1.0)
-
-
-
 class LossWithIntermediateLosses:
     def __init__(self, **kwargs):
         self.loss_total = sum(kwargs.values())
@@ -233,274 +182,12 @@ class LossWithIntermediateLosses:
         self.loss_total = self.loss_total / value
         return self
 
-
-# class EpisodeDirManager:
-#     def __init__(self, episode_dir: Path, max_num_episodes: int) -> None:
-#         self.episode_dir = episode_dir
-#         self.episode_dir.mkdir(parents=False, exist_ok=True)
-#         self.max_num_episodes = max_num_episodes
-#         self.best_return = float('-inf')
-
-#     def save(self, episode: Episode, episode_id: int, epoch: int) -> None:
-#         if self.max_num_episodes is not None and self.max_num_episodes > 0:
-#             self._save(episode, episode_id, epoch)
-
-#     def _save(self, episode: Episode, episode_id: int, epoch: int) -> None:
-#         ep_paths = [p for p in self.episode_dir.iterdir() if p.stem.startswith('episode_')]
-#         assert len(ep_paths) <= self.max_num_episodes
-#         if len(ep_paths) == self.max_num_episodes:
-#             to_remove = min(ep_paths, key=lambda ep_path: int(ep_path.stem.split('_')[1]))
-#             to_remove.unlink()
-#         episode.save(self.episode_dir / f'episode_{episode_id}_epoch_{epoch}.pt')
-
-#         ep_return = episode.compute_metrics().episode_return
-#         if ep_return > self.best_return:
-#             self.best_return = ep_return
-#             path_best_ep = [p for p in self.episode_dir.iterdir() if p.stem.startswith('best_')]
-#             assert len(path_best_ep) in (0, 1)
-#             if len(path_best_ep) == 1:
-#                 path_best_ep[0].unlink()
-#             episode.save(self.episode_dir / f'best_episode_{episode_id}_epoch_{epoch}.pt')
+class TokenizerEncoderOutput:
+    z: torch.FloatTensor
+    z_quantized: torch.FloatTensor
+    tokens: torch.LongTensor
 
 
-# class RandomHeuristic:
-#     def __init__(self, num_actions):
-#         self.num_actions = num_actions
-
-#     def act(self, obs):
-#         assert obs.ndim == 4  # (N, H, W, C)
-#         n = obs.size(0)
-#         return torch.randint(low=0, high=self.num_actions, size=(n,))
-###############################################################################################
-#env:
-
-
-# class MessageType(Enum):
-#     RESET = 0
-#     RESET_RETURN = 1
-#     STEP = 2
-#     STEP_RETURN = 3
-#     CLOSE = 4
-
-
-# @dataclass
-# class Message:
-#     type: MessageType
-#     content: Optional[Any] = None
-
-#     def __iter__(self) -> Iterator:
-#         return iter(astuple(self))
-
-
-# def child_env(child_id: int, env_fn: Callable, child_conn: Connection) -> None:
-#     np.random.seed(child_id + np.random.randint(0, 2 ** 31 - 1))
-#     env = env_fn()
-#     while True:
-#         message_type, content = child_conn.recv()
-#         if message_type == MessageType.RESET:
-#             obs = env.reset()
-#             child_conn.send(Message(MessageType.RESET_RETURN, obs))
-#         elif message_type == MessageType.STEP:
-#             obs, rew, done, _ = env.step(content)
-#             if done:
-#                 obs = env.reset()
-#             child_conn.send(Message(MessageType.STEP_RETURN, (obs, rew, done, None)))
-#         elif message_type == MessageType.CLOSE:
-#             child_conn.close()
-#             return
-#         else:
-#             raise NotImplementedError
-
-
-# class MultiProcessEnv(DoneTrackerEnv):
-#     def __init__(self, env_fn: Callable, num_envs: int, should_wait_num_envs_ratio: float) -> None:
-#         super().__init__(num_envs)
-#         self.num_actions = env_fn().env.action_space.n
-#         self.should_wait_num_envs_ratio = should_wait_num_envs_ratio
-#         self.processes, self.parent_conns = [], []
-#         for child_id in range(num_envs):
-#             parent_conn, child_conn = Pipe()
-#             self.parent_conns.append(parent_conn)
-#             p = Process(target=child_env, args=(child_id, env_fn, child_conn), daemon=True)
-#             self.processes.append(p)
-#         for p in self.processes:
-#             p.start()
-
-#     def should_reset(self) -> bool:
-#         return (self.num_envs_done / self.num_envs) >= self.should_wait_num_envs_ratio
-
-#     def _receive(self, check_type: Optional[MessageType] = None) -> List[Any]:
-#         messages = [parent_conn.recv() for parent_conn in self.parent_conns]
-#         if check_type is not None:
-#             assert all([m.type == check_type for m in messages])
-#         return [m.content for m in messages]
-
-#     def reset(self) -> np.ndarray:
-#         self.reset_done_tracker()
-#         for parent_conn in self.parent_conns:
-#             parent_conn.send(Message(MessageType.RESET))
-#         content = self._receive(check_type=MessageType.RESET_RETURN)
-#         return np.stack(content)
-
-#     def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
-#         for parent_conn, action in zip(self.parent_conns, actions):
-#             parent_conn.send(Message(MessageType.STEP, action))
-#         content = self._receive(check_type=MessageType.STEP_RETURN)
-#         obs, rew, done, _ = zip(*content)
-#         done = np.stack(done)
-#         self.update_done_tracker(done)
-#         return np.stack(obs), np.stack(rew), done, None
-
-#     def close(self) -> None:
-#         for parent_conn in self.parent_conns:
-#             parent_conn.send(Message(MessageType.CLOSE))
-#         for p in self.processes:
-#             p.join()
-#         for parent_conn in self.parent_conns:
-#             parent_conn.close()
-
-
-
-# class SingleProcessEnv(DoneTrackerEnv):
-#     def __init__(self, env_fn):
-#         super().__init__(num_envs=1)
-#         self.env = env_fn()
-#         self.num_actions = self.env.action_space.n
-
-#     def should_reset(self) -> bool:
-#         return self.num_envs_done == 1
-
-#     def reset(self) -> np.ndarray:
-#         self.reset_done_tracker()
-#         obs = self.env.reset()
-#         return obs[None, ...]
-
-#     def step(self, action) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
-#         obs, reward, done, _ = self.env.step(action[0])  # action is supposed to be ndarray (1,)
-#         done = np.array([done])
-#         self.update_done_tracker(done)
-#         return obs[None, ...], np.array([reward]), done, None
-
-#     def render(self) -> None:
-#         self.env.render()
-
-#     def close(self) -> None:
-#         self.env.close()
-###############################################################################
-#collector
-
-# class Collector:
-#     def __init__(self, env: Union[SingleProcessEnv, MultiProcessEnv], dataset: EpisodesDataset, episode_dir_manager: EpisodeDirManager) -> None:
-#         self.env = env
-#         self.dataset = dataset
-#         self.episode_dir_manager = episode_dir_manager
-#         self.obs = self.env.reset()
-#         self.episode_ids = [None] * self.env.num_envs
-#         self.heuristic = RandomHeuristic(self.env.num_actions)
-
-#     @torch.no_grad()
-#     def collect(self, agent: Agent, epoch: int, epsilon: float, should_sample: bool, temperature: float, burn_in: int, *, num_steps: Optional[int] = None, num_episodes: Optional[int] = None):
-#         assert self.env.num_actions == agent.world_model.act_vocab_size
-#         assert 0 <= epsilon <= 1
-
-#         assert (num_steps is None) != (num_episodes is None)
-#         should_stop = lambda steps, episodes: steps >= num_steps if num_steps is not None else episodes >= num_episodes
-
-#         to_log = []
-#         steps, episodes = 0, 0
-#         returns = []
-#         observations, actions, rewards, dones = [], [], [], []
-
-#         burnin_obs_rec, mask_padding = None, None
-#         if set(self.episode_ids) != {None} and burn_in > 0:
-#             current_episodes = [self.dataset.get_episode(episode_id) for episode_id in self.episode_ids]
-#             segmented_episodes = [episode.segment(start=len(episode) - burn_in, stop=len(episode), should_pad=True) for episode in current_episodes]
-#             mask_padding = torch.stack([episode.mask_padding for episode in segmented_episodes], dim=0).to(agent.device)
-#             burnin_obs = torch.stack([episode.observations for episode in segmented_episodes], dim=0).float().div(255).to(agent.device)
-#             burnin_obs_rec = torch.clamp(agent.tokenizer.encode_decode(burnin_obs, should_preprocess=True, should_postprocess=True)[0], 0, 1)
-
-#         agent.actor_critic.reset(n=self.env.num_envs, burnin_observations=burnin_obs_rec, mask_padding=mask_padding)
-#         pbar = tqdm(total=num_steps if num_steps is not None else num_episodes, desc=f'Experience collection ({self.dataset.name})', file=sys.stdout)
-
-#         while not should_stop(steps, episodes):
-
-#             observations.append(self.obs)
-#             obs = rearrange(torch.FloatTensor(self.obs).div(255), 'n h w c -> n c h w').to(agent.device)
-#             act = agent.act(obs, should_sample=should_sample, temperature=temperature).cpu().numpy()
-
-#             if random.random() < epsilon:
-#                 act = self.heuristic.act(obs).cpu().numpy()
-
-#             self.obs, reward, done, _ = self.env.step(act)
-
-#             actions.append(act)
-#             rewards.append(reward)
-#             dones.append(done)
-
-#             new_steps = len(self.env.mask_new_dones)
-#             steps += new_steps
-#             pbar.update(new_steps if num_steps is not None else 0)
-
-#             # Warning: with EpisodicLifeEnv + MultiProcessEnv, reset is ignored if not a real done.
-#             # Thus, segments of experience following a life loss and preceding a general done are discarded.
-#             # Not a problem with a SingleProcessEnv.
-
-#             if self.env.should_reset():
-#                 self.add_experience_to_dataset(observations, actions, rewards, dones)
-
-#                 new_episodes = self.env.num_envs
-#                 episodes += new_episodes
-#                 pbar.update(new_episodes if num_episodes is not None else 0)
-
-#                 for episode_id in self.episode_ids:
-#                     episode = self.dataset.get_episode(episode_id)
-#                     self.episode_dir_manager.save(episode, episode_id, epoch)
-#                     metrics_episode = {k: v for k, v in episode.compute_metrics().__dict__.items()}
-#                     metrics_episode['episode_num'] = episode_id
-#                     metrics_episode['action_histogram'] = wandb.Histogram(np_histogram=np.histogram(episode.actions.numpy(), bins=np.arange(0, self.env.num_actions + 1) - 0.5, density=True))
-#                     to_log.append({f'{self.dataset.name}/{k}': v for k, v in metrics_episode.items()})
-#                     returns.append(metrics_episode['episode_return'])
-
-#                 self.obs = self.env.reset()
-#                 self.episode_ids = [None] * self.env.num_envs
-#                 agent.actor_critic.reset(n=self.env.num_envs)
-#                 observations, actions, rewards, dones = [], [], [], []
-
-#         # Add incomplete episodes to dataset, and complete them later.
-#         if len(observations) > 0:
-#             self.add_experience_to_dataset(observations, actions, rewards, dones)
-
-#         agent.actor_critic.clear()
-
-#         metrics_collect = {
-#             '#episodes': len(self.dataset),
-#             '#steps': sum(map(len, self.dataset.episodes)),
-#         }
-#         if len(returns) > 0:
-#             metrics_collect['return'] = np.mean(returns)
-#         metrics_collect = {f'{self.dataset.name}/{k}': v for k, v in metrics_collect.items()}
-#         to_log.append(metrics_collect)
-
-#         return to_log
-
-#     def add_experience_to_dataset(self, observations: List[np.ndarray], actions: List[np.ndarray], rewards: List[np.ndarray], dones: List[np.ndarray]) -> None:
-#         assert len(observations) == len(actions) == len(rewards) == len(dones)
-#         for i, (o, a, r, d) in enumerate(zip(*map(lambda arr: np.swapaxes(arr, 0, 1), [observations, actions, rewards, dones]))):  # Make everything (N, T, ...) instead of (T, N, ...)
-#             episode = Episode(
-#                 observations=torch.ByteTensor(o).permute(0, 3, 1, 2).contiguous(),  # channel-first
-#                 actions=torch.LongTensor(a),
-#                 rewards=torch.FloatTensor(r),
-#                 ends=torch.LongTensor(d),
-#                 mask_padding=torch.ones(d.shape[0], dtype=torch.bool),
-#             )
-#             if self.episode_ids[i] is None:
-#                 self.episode_ids[i] = self.dataset.add_episode(episode)
-#             else:
-#                 self.dataset.update_episode(self.episode_ids[i], episode)
-
-
-###############################################################################################################
-#WORLD MODEL
 
 class Slicer(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
@@ -556,7 +243,6 @@ class Embedder(nn.Module):
             output[:, s] = emb(tokens[:, s])
         return output
 
-#NETSSS
 @dataclass
 class EncoderDecoderConfig:
     resolution: int
@@ -1117,7 +803,6 @@ class Tokenizer(nn.Module):
         assert self.lpips is not None
         
         observations = self.preprocess_input(batch['observations'].view(-1, batch['observations'].shape[2], batch['observations'].shape[3], batch['observations'].shape[4]).permute(0, 1, 2, 3))
-        # observations = self.preprocess_input(rearrange(batch['observations'], 'b t c h w -> (b t) c h w'))
         z, z_quantized, reconstructions = self(observations, should_preprocess=False, should_postprocess=False)[0]
 
         # Codebook loss. Notes:
@@ -1139,12 +824,10 @@ class Tokenizer(nn.Module):
         z, all_hidden_states,attentions = self.encoder(x, output_hidden_states, output_attentions)
         z = self.pre_quant_conv(z)
         b, e, h, w = z.shape
-        # z_flattened = rearrange(z, 'b e h w -> (b h w) e')
         z_flattened = z.view(-1, z.shape[1])
         dist_to_embeddings = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + torch.sum(self.embedding.weight**2, dim=1) - 2 * torch.matmul(z_flattened, self.embedding.weight.t())
 
         tokens = dist_to_embeddings.argmin(dim=-1)
-        # z_q = rearrange(self.embedding(tokens), '(b h w) e -> b e h w', b=b, e=e, h=h, w=w).contiguous()
         z_q = self.embedding(tokens).view(b,h,w,e).permute(0,3,1,2).contiguous()
 
         # Reshape to original
@@ -1388,7 +1071,6 @@ class SelfAttention(nn.Module):
         y = att @ v
 
         y = y.permute(0, 2, 1, 3).contiguous().view(y.shape[0], y.shape[2], y.shape[1] * y.shape[3])
-        # y = rearrange(y, 'b h t e -> b t (h e)')
 
         y = self.resid_drop(self.proj(y))
 
@@ -1472,14 +1154,12 @@ class WorldModelEnv:
     @torch.no_grad()
     def render_batch(self) -> List[Image.Image]:
         frames = self.decode_obs_tokens().detach().cpu()
-        # frames = rearrange(frames, 'b c h w -> b h w c').mul(255).numpy().astype(np.uint8)
         frames = frames.permute(0,2,3,1).mul(255).numpy().astype(np.uint8)
         return [Image.fromarray(frame) for frame in frames]
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
         embedded_tokens = self.tokenizer.embedding(self.obs_tokens)     # (B, K, E)
-        # z = rearrange(embedded_tokens, 'b (h w) e -> b e h w', h=int(np.sqrt(self.num_observations_tokens)))
         h = int(np.sqrt(self.num_observations_tokens))
         z = embedded_tokens.view(embedded_tokens.shape[0], h, -1, embedded_tokens.shape[-1]).permute(0, 3, 1, 2)
 
@@ -1552,7 +1232,6 @@ class WorldModel(nn.Module):
             )
         )
 
-        # self.apply(init_weights)
 
     def __repr__(self) -> str:
         return "world_model"
@@ -1578,10 +1257,8 @@ class WorldModel(nn.Module):
         with torch.no_grad():
             obs_tokens, _, _ = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
 
-        # act_tokens = rearrange(batch['actions'], 'b l -> b l 1')
         act_tokens = batch['actions'].unsqueeze(-1)
         
-        # tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  
         tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
 
 
@@ -1589,12 +1266,9 @@ class WorldModel(nn.Module):
 
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_tokens, batch['rewards'], batch['ends'], batch['mask_padding'])
 
-        # logits_observations = rearrange(outputs.logits_observations[:, :-1], 'b t o -> (b t) o')
         logits_observations = outputs.logits_observations[:, :-1].reshape(-1, outputs.logits_observations[:, :-1].shape[-1])
         loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        # loss_rewards = F.cross_entropy(rearrange(outputs.logits_rewards, 'b t e -> (b t) e'), labels_rewards)
         loss_rewards = F.cross_entropy((outputs.logits_rewards.reshape(-1, outputs.logits_rewards.shape[-1])),labels_rewards)
-        # loss_ends = F.cross_entropy(rearrange(outputs.logits_ends, 'b t e -> (b t) e'), labels_ends)
         loss_ends = F.cross_entropy((outputs.logits_ends.reshape(-1, outputs.logits_ends.shape[-1])),labels_ends)
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends)
@@ -1602,15 +1276,12 @@ class WorldModel(nn.Module):
     def compute_labels_world_model(self, obs_tokens: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor, mask_padding: torch.BoolTensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         assert torch.all(ends.sum(dim=1) <= 1)  # at most 1 done
         mask_fill = torch.logical_not(mask_padding)
-        # labels_observations = rearrange(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100), 'b t k -> b (t k)')[:, 1:]
         labels_observations = obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).view(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).shape[0],-1)[:, 1:]
         labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1}
         labels_ends = ends.masked_fill(mask_fill, -100)
         return labels_observations.reshape(-1), labels_rewards.reshape(-1), labels_ends.reshape(-1)
 
-##########################################################
 
-#acTOR CRITIC
 @dataclass
 class ActorCriticOutput:
     logits_actions: torch.FloatTensor
@@ -1705,9 +1376,7 @@ class ActorCritic(nn.Module):
         
         hidden_states = hidden_states + (self.hx,) if output_hidden_states else None
 
-        # logits_actions = rearrange(self.actor_linear(self.hx), 'b a -> b 1 a')
         logits_actions = self.actor_linear(self.hx).unsqueeze(1)
-        # means_values = rearrange(self.critic_linear(self.hx), 'b 1 -> b 1 1')
         means_values = self.critic_linear(self.hx).unsqueeze(1)
 
         return ActorCriticOutput(logits_actions, means_values), hidden_states
@@ -1775,14 +1444,12 @@ class ActorCritic(nn.Module):
             observations=torch.stack(all_observations, dim=1).mul(255).byte(),      # (B, T, C, H, W) in [0, 255]
             actions=torch.cat(all_actions, dim=1),                                  # (B, T)
             logits_actions=torch.cat(all_logits_actions, dim=1),                    # (B, T, #actions)
-            # values=rearrange(torch.cat(all_values, dim=1), 'b t 1 -> b t'), 
             values=torch.cat(all_values, dim=1).squeeze(dim =2),                    # (B, T)
             rewards=torch.cat(all_rewards, dim=1).to(device),                       # (B, T)
             ends=torch.cat(all_ends, dim=1).to(device),                             # (B, T)
         )
 
-######################################################################
-#AGENT
+
 class Agent(nn.Module):
     def __init__(self, tokenizer: Tokenizer, world_model: WorldModel, actor_critic: ActorCritic):
         super().__init__()
@@ -1809,17 +1476,8 @@ class Agent(nn.Module):
         act_token = Categorical(logits=logits_actions).sample() if should_sample else logits_actions.argmax(dim=-1)
         return act_token
 
-#########################################################################################################################
 
-###########################################################################################################
-
-
-
-
-
-################################################################################################
 @add_start_docstrings("The IRIS Model", IRIS_START_DOCSTRING)
-# Copied from transformers.models.decision_transformer.modeling_decision_transformer.DecisionTransformerModel with DecisionTransformer->Iris,edbeeching/decision-transformer-gym-hopper-medium->ruffy369/iris-breakout
 class IrisModel(IrisPreTrainedModel):
     """
 
@@ -1828,30 +1486,22 @@ class IrisModel(IrisPreTrainedModel):
 
     """
 
-    #MAKE SURE TO SUPPORT OUTPUT HIDDEN STATES AND OUTPUT ATTENTIONS###################
     
     def __init__(self, config):
         super().__init__(config)
         
         self.cfg = config
         self.device = torch.device(self.cfg.common.device)
-        tokenizer = instantiate(self.cfg.tokenizer)
-        world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=env.num_actions, config=instantiate(self.cfg.world_model))
-        actor_critic = ActorCritic(**self.cfg.actor_critic, act_vocab_size=env.num_actions)
+        config_enc_dec = EncoderDecoderConfig(self.cfg.resolution, self.cfg.in_channels, self.cfg.z_channels, self.cfg.ch,self.cfg.ch_mult, self.cfg.num_res_blocks,
+                             self.cfg.attn_resolutions,self.cfg.out_ch, self.cfg.dropout)
+        encoder = Encoder(config_enc_dec)
+        decoder = Decoder(config_enc_dec)
+        tokenizer = Tokenizer(self.cfg.vocab_size,self.cfg.embed_dim,encoder,decoder)
+        transformer_config = TransformerConfig(self.cfg.tokens_per_block,self.cfg.max_blocks,self.cfg.attentions,self.cfg.num_layers,self.cfg.num_heads,
+                                               self.cfg.embed_dim_world_model,self.cfg.embed_pdrop, self.cfg.resid_pdrop,self.cfg.attn_pdrop)
+        world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=self.cfg.num_actions, config=transformer_config)
+        actor_critic = ActorCritic(**self.cfg.actor_critic, act_vocab_size=self.cfg.num_actions)
         self.agent = Agent(tokenizer, world_model, actor_critic).to(self.device)
-        print(f'{sum(p.numel() for p in self.agent.tokenizer.parameters())} parameters in agent.tokenizer')
-        print(f'{sum(p.numel() for p in self.agent.world_model.parameters())} parameters in agent.world_model')
-        print(f'{sum(p.numel() for p in self.agent.actor_critic.parameters())} parameters in agent.actor_critic')
-
-        # self.optimizer_tokenizer = torch.optim.Adam(self.agent.tokenizer.parameters(), lr=self.cfg.training.learning_rate)
-        # self.optimizer_world_model = configure_optimizer(self.agent.world_model, self.cfg.training.learning_rate, self.cfg.training.world_model.weight_decay)
-        # self.optimizer_actor_critic = torch.optim.Adam(self.agent.actor_critic.parameters(), lr=self.cfg.training.learning_rate)
-
-        if self.cfg.initialization.path_to_checkpoint is not None:
-            self.agent.load(**self.cfg.initialization, device=self.device)
-
-        if self.cfg.common.resume:
-            self.load_checkpoint()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1939,14 +1589,12 @@ class IrisModel(IrisPreTrainedModel):
 
         if should_preprocess == True:
             observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
-        #tokenizer outputs = (outputs.z, outputs.z_quantized, reconstructions)
+        #tokenizer outputs : (outputs.z, outputs.z_quantized, reconstructions)
         tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, output_attentions, observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
             obs_tokens, _, _ = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
-        # act_tokens = rearrange(self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature), 'b l -> b l 1')
         act_tokens = self.agent.act(observations, should_sample=self.cfg.should_sample, temperature=self.cfg.temperature).unsqueeze(-1)
-        # tokens = rearrange(torch.cat((obs_tokens, act_tokens), dim=2), 'b l k1 -> b (l k1)')  # (B, L(K+1))
         tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
         world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = self.forward_component(self.agent.world_model, output_hidden_states, output_attentions, tokens)
 
