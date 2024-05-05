@@ -2475,7 +2475,6 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         output_model_file = os.path.join(save_directory, weights_name)
 
         shards, index = tf_shard_checkpoint(self.weights, max_shard_size, weights_name=weights_name)
-        logger.info(f"shards {shards}\nindex {index}")
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
@@ -2494,6 +2493,9 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 state_dict = {strip_model_name_and_prefix(w.name): w.value() for w in self.weights}
                 safe_save_file(state_dict, output_model_file, metadata={"format": "tf"})
             else:
+                import shutil
+                total, used, free = shutil.disk_usage(output_model_file)
+                logger.info(f"Before save: Disk total: {total / (1024**3)} GB, Used: {used / (1024**3)} GB, Free: {free / (1024**3)} GB")
                 self.save_weights(output_model_file)
             logger.info(f"Model weights saved in {output_model_file}")
         else:
