@@ -21,7 +21,7 @@ from importlib import import_module
 
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
 from transformers.testing_utils import TestCasePlus, is_pt_tf_cross_test, require_tf, require_vision, slow
-from transformers.utils import cached_property
+from transformers.utils import cached_property, CONFIG_NAME, GENERATION_CONFIG_NAME
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -459,6 +459,27 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False, push_to_hub=True)
+
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+
+                model = model_class.from_pretrained(tmpdirname)
+                after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+                self.assert_outputs_same(after_outputs, outputs)
+
     @unittest.skip(reason="IDEFICS test_keras_fit testing done in TFIdeficsForVisionText2TextTest")
     def test_keras_fit(self):
         pass
@@ -475,7 +496,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="""IDEFICS loss computation not implemented yet""")
     def test_loss_computation(self):
         pass
-
 
 
 @require_tf
@@ -509,6 +529,27 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     @slow
     def test_keras_fit(self):
         super().test_keras_fit()
+
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False, push_to_hub=True)
+
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+
+                model = model_class.from_pretrained(tmpdirname)
+                after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+                self.assert_outputs_same(after_outputs, outputs)
 
 
 # Below is the expected output for the integration test TFIdeficsModelIntegrationTest.
