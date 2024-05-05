@@ -1006,14 +1006,6 @@ class CohereModel(CoherePreTrainedModel):
                 raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
-            if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
-                target_length = self.config.max_position_embeddings
-            else:  # dynamic cache
-                target_length = (
-                    attention_mask.shape[-1]
-                    if isinstance(attention_mask, torch.Tensor)
-                    else past_seen_tokens + sequence_length + 1
-                )
             causal_mask = torch.full(
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
             )
@@ -1023,26 +1015,29 @@ class CohereModel(CoherePreTrainedModel):
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-            elif attention_mask.dim() == 4:
-                # we can pass both the full 4D mask (i.e. [..., full_len, full_len]) and a 4D mask with the same shape
-                # as the causal mask (i.e. [..., seq_len, full_len])
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    logger.warning_once(
-                        "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
-                        "transformers v4.42.0"
+                if attention_mask.dim() == 2:
+                    mask_length = attention_mask.shape[-1]
+                    padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                    padding_mask = padding_mask == 0
+                    causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                        padding_mask, min_dtype
                     )
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                mask_slice = mask_slice[..., offset : offset + sequence_length, :]
-                causal_mask = mask_slice
+                elif attention_mask.dim() == 4:
+                    # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+                    # cache. In that case, the 4D attention mask attends to the newest tokens only.
+                    if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                        logger.warning_once(
+                            "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
+                            "transformers v4.42.0"
+                        )
+                        offset = cache_position[0]
+                    else:
+                        offset = 0
+                    mask_shape = attention_mask.shape
+                    mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                    causal_mask[
+                        : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                    ] = mask_slice
 
         if (
             self.config._attn_implementation == "sdpa"
