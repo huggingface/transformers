@@ -465,9 +465,9 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            repo_id = "https://huggingface.co/a8nova/test_save_load_1"
+            repo_id = "a8nova/test_save_load_1"
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(repo_id, saved_model=False, push_to_hub=True)
+                model.save_pretrained(repo_id, saved_model=False, push_to_hub=True, token="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")
 
                 # the config file (and the generation config file, if it can generate) should be saved
                 #self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
@@ -536,9 +536,9 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            repo_id = "https://huggingface.co/a8nova/test_save_load_0"
+            repo_id = "a8nova/test_save_load_0"
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(save_directory=repo_id, saved_model=False, push_to_hub=True)
+                model.save_pretrained(save_directory=repo_id, saved_model=False, push_to_hub=True, token="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")
 
                 # the config file (and the generation config file, if it can generate) should be saved
                 #self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
