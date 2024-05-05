@@ -1032,8 +1032,6 @@ class GemmaModel(GemmaPreTrainedModel):
                     offset = cache_position[0]
                 else:
                     offset = 0
-                else:
-                    offset = cache_position[0]
                 mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
                 mask_slice = mask_slice[..., offset : offset + sequence_length, :]
                 causal_mask = mask_slice
