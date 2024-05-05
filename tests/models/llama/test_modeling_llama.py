@@ -22,7 +22,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, is_torch_available, set_seed
+from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -964,7 +964,13 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        self.model._setup_cache(StaticCache, 1, max_cache_len=max_cache_len)
+        past_key_values = StaticCache(
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=max_cache_len,
+            device=torch_device,
+            dtype=self.model.dtype,
+        )
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -979,6 +985,7 @@ class Mask4DTestHard(unittest.TestCase):
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
             cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
+            past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -1005,7 +1012,13 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        self.model._setup_cache(StaticCache, 1, max_cache_len=max_cache_len)
+        past_key_values = StaticCache(
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=max_cache_len,
+            device=torch_device,
+            dtype=self.model.dtype,
+        )
 
         # forward run for the first part of input
         part_a = 3  # split point
@@ -1026,6 +1039,7 @@ class Mask4DTestHard(unittest.TestCase):
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
             cache_position=torch.arange(part_a, device=torch_device),
+            past_key_values=past_key_values,
         )
 
         # forward run for the second part of input
@@ -1042,6 +1056,7 @@ class Mask4DTestHard(unittest.TestCase):
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
             cache_position=torch.arange(part_a, input_ids_shared_prefix.shape[-1], device=torch_device),
+            past_key_values=past_key_values,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
