@@ -497,14 +497,14 @@ class SwinModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         # ViT models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. 
+        # the model on higher resolutions.
         model = SwinModel.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
 
         image_processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224", size=480)
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
-    
+
         # forward pass
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
@@ -514,7 +514,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.3269,  0.2602, -0.3718], [-0.6080, -1.2802, -0.4047], [0.0146, -0.0850,  0.0518]]
+            [[0.3269, 0.2602, -0.3718], [-0.6080, -1.2802, -0.4047], [0.0146, -0.0850, 0.0518]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

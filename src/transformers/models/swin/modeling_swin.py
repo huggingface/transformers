@@ -289,13 +289,15 @@ class SwinEmbeddings(nn.Module):
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(
-        self, 
-        pixel_values: Optional[torch.FloatTensor], 
+        self,
+        pixel_values: Optional[torch.FloatTensor],
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Tuple[torch.Tensor]:
         _, num_channels, height, width = pixel_values.shape
-        embeddings, output_dimensions = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings, output_dimensions = self.patch_embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         embeddings = self.norm(embeddings)
         batch_size, seq_len, _ = embeddings.size()
 
@@ -347,7 +349,9 @@ class SwinPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor], interpolate_pos_encoding: bool = False) -> Tuple[torch.Tensor, Tuple[int]]:
+    def forward(
+        self, pixel_values: Optional[torch.FloatTensor], interpolate_pos_encoding: bool = False
+    ) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
