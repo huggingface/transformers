@@ -2475,7 +2475,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         output_model_file = os.path.join(save_directory, weights_name)
 
         shards, index = tf_shard_checkpoint(self.weights, max_shard_size, weights_name=weights_name)
-        logger.info(f"shards {shards}\nindex {index}")
+
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
             full_filename = os.path.join(save_directory, filename)
