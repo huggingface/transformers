@@ -597,7 +597,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
 
     # check that the model can be loaded with different image sizes with interpolate_pos_encoding=True
     @slow
-    def test_interpolate_pos_encoding(self):
+    def test_inference_interpolate_pos_encoding(self):
         model_name = "BAAI/AltCLIP"
         model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
         processor = AltCLIPProcessor.from_pretrained(model_name, do_resize=False, do_center_crop=False)
