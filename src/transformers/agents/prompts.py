@@ -126,7 +126,7 @@ Above example were using tools that might not exist for you. You only have acces
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
-Be sure to provide a 'Code:' sequence before the code, else you will get an error.
+Be sure to provide a 'Code:\n```' sequence before the code and '```<end_code>' after, else you will get an error.
 DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
 Now Begin!
