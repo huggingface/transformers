@@ -455,7 +455,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         """
         Args:
             images (`List[np.ndarray]`): List of each images to be padded
-            image_sizes (`List[Tuple[int, int]]`): image sizes (height, weidt)
+            image_sizes (`List[Tuple[int, int]]`): image sizes (height, width)
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
