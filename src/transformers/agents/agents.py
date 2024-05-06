@@ -459,7 +459,7 @@ class Agent:
                 f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
                 f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
             )
-        
+
     def log_code_action(self, code_action: str) -> None:
         self.logger.warning("====Agent is executing the code below:")
         if is_pygments_available():
@@ -467,7 +467,6 @@ class Agent:
         else:
             self.logger.log(31, code_action)
         self.logger.warning("====")
-
 
     def run(self, **kwargs):
         """To be implemented in the child class"""
@@ -503,14 +502,12 @@ class CodeAgent(Agent):
 
         self.python_evaluator = evaluate_python_code
 
-
     def parse_code_blob(self, result: str) -> str:
         """
         Override this method if you want to change the way the code is
         cleaned in the `run` method.
         """
         return parse_code_blob(result)
-    
 
     def run(self, task: str, return_generated_code: bool = False, **kwargs):
         """
@@ -596,7 +593,6 @@ class ReactAgent(Agent):
         )
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
-
 
     def run(self, task: str, **kwargs):
         """

@@ -24,7 +24,7 @@ from typing import Dict
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode
-from .python_interpreter import evaluate_python_code
+from .python_interpreter import evaluate_python_code, LIST_SAFE_MODULES
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
 
 
@@ -72,6 +72,8 @@ BASE_PYTHON_TOOLS = {
     "any": any,
     "map": map,
     "filter": filter,
+    "ord": ord,
+    "chr": chr,
 }
 
 
@@ -137,12 +139,15 @@ def setup_default_tools(logger):
 
 class PythonInterpreterTool(Tool):
     name = "python_interpreter"
-    description = "This is a tool that evaluates python code. It can be used to perform calculations. It can only import base python libraries like math and random."
+    description = "This is a tool that evaluates python code. It can be used to perform calculations."
 
     inputs = {
         "code": {
             "type": "text",
-            "description": "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, else you will get an error.",
+            "description": (
+                "The code snippet to evaluate. All variables used in this snippet must be defined in this same snippet, "
+                f"else you will get an error. This code can only import the following python libraries: {LIST_SAFE_MODULES}."
+            ),
         }
     }
     output_type = "text"

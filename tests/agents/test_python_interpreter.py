@@ -341,3 +341,8 @@ if char.isalpha():
         code = "import unicodedata\nunicodedata.name('A')"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "LATIN CAPITAL LETTER A"
+
+    def test_multiple_comparators(self):
+        code="0x30A0 <= ord('a') <= 0x30FF"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result
