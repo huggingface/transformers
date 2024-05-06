@@ -366,7 +366,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     def padding_side(self):
         return self._padding_side
 
-    def set_padding_side(self, padding_side: str):
+    @padding_side.setter
+    def padding_size(self, padding_side: str):
         print("WHY SET")
         if padding_side not in ["left", "right"]:
             raise ValueError(f"{padding_side} is not `left` or `right`.")
