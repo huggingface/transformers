@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Mixtral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Mixtral model."""
+""" Some of the code has been (messily) adapted based on modeling_llama.py's Attention, Rotary Embeddings, RMSNorm, etc functions.
+    MLP evaluation, routing/load balancing is as it was before, but the rest of the implementation should properly match Llama/Mistral, and the loss curves seem accurate"""
 import inspect
 import math
 import warnings
@@ -30,7 +32,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -41,6 +44,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
@@ -58,21 +62,21 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-
-# This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
-# It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
-    if not is_torch_greater_or_equal_than_1_13:
-        import torch.fx
-
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
-
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MixtralConfig"
 
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 def load_balancing_loss_func(
     gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2, attention_mask: Optional[torch.Tensor] = None
@@ -149,21 +153,7 @@ def load_balancing_loss_func(
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
 
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
+# Copied from transformers.models.Mixtral.modeling_Mixtral.MixtralRMSNorm with Mixtral->Mixtral
 class MixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -180,8 +170,8 @@ class MixtralRMSNorm(nn.Module):
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
+ALL_LAYERNORM_LAYERS.append(MixtralRMSNorm)
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mixtral
 class MixtralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
@@ -233,7 +223,6 @@ class MixtralRotaryEmbedding(nn.Module):
             sin = emb.sin()
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Mixtral
 class MixtralLinearScalingRotaryEmbedding(MixtralRotaryEmbedding):
     """MixtralRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -243,7 +232,7 @@ class MixtralLinearScalingRotaryEmbedding(MixtralRotaryEmbedding):
         cos, sin = super().forward(x, position_ids)
         return cos, sin
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Mixtral
+
 class MixtralDynamicNTKScalingRotaryEmbedding(MixtralRotaryEmbedding):
     """MixtralRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
@@ -262,14 +251,14 @@ class MixtralDynamicNTKScalingRotaryEmbedding(MixtralRotaryEmbedding):
         cos, sin = super().forward(x, position_ids)
         return cos, sin
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
+# Copied from transformers.models.Mixtral.modeling_Mixtral.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+# Copied from transformers.models.Mixtral.modeling_Mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -297,7 +286,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.repeat_kv
+# Copied from transformers.models.Mixtral.modeling_Mixtral.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -309,13 +298,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-
-# Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 class MixtralAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: MixtralConfig, layer_idx: Optional[int] = None):
         super().__init__()
@@ -328,6 +312,7 @@ class MixtralAttention(nn.Module):
                 "when creating this class."
             )
 
+        self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -336,49 +321,25 @@ class MixtralAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.attention_dropout = config.attention_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
+
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self._init_rope()
 
     def _init_rope(self):
-        if self.config.rope_scaling is None:
-            self.rotary_emb = MixtralRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            if scaling_type == "linear":
-                self.rotary_emb = MixtralLinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = MixtralDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        self.rotary_emb = MixtralRotaryEmbedding(
+            self.head_dim,
+            max_position_embeddings=self.max_position_embeddings,
+            base=self.rope_theta,
+        )
 
     def forward(
         self,
@@ -388,12 +349,9 @@ class MixtralAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -404,41 +362,23 @@ class MixtralAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-
-            attn_weights = attn_weights + attention_mask
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -462,7 +402,6 @@ class MixtralAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
 class MixtralFlashAttention2(MixtralAttention):
     """
     Mixtral flash attention module. This module inherits from `MixtralAttention` as the weights of the module stays
@@ -470,7 +409,6 @@ class MixtralFlashAttention2(MixtralAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -482,95 +420,53 @@ class MixtralFlashAttention2(MixtralAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
 
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
         cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
-        use_sliding_windows = (
-            _flash_supports_window_size
-            and getattr(self.config, "sliding_window", None) is not None
-            and kv_seq_len > self.config.sliding_window
-        )
-
-        if not _flash_supports_window_size:
-            logger.warning_once(
-                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
-                " make sure to upgrade flash-attn library."
-            )
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            # Activate slicing cache only if the config has a value `sliding_windows` attribute
-            cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if (
-                getattr(self.config, "sliding_window", None) is not None
-                and kv_seq_len > self.config.sliding_window
-                and cache_has_contents
-            ):
-                slicing_tokens = 1 - self.config.sliding_window
-
-                past_key = past_key_value[self.layer_idx][0]
-                past_value = past_key_value[self.layer_idx][1]
-
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-
-                if past_key.shape[-2] != self.config.sliding_window - 1:
-                    raise ValueError(
-                        f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
-                        f" {past_key.shape}"
-                    )
-
-                if attention_mask is not None:
-                    attention_mask = attention_mask[:, slicing_tokens:]
-                    attention_mask = torch.cat([attention_mask, torch.ones_like(attention_mask[:, -1:])], dim=-1)
-
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (MixtralRMSNorm handles it correctly)
+
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
@@ -591,19 +487,8 @@ class MixtralFlashAttention2(MixtralAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        # Reashape to the expected shape for Flash Attention
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
         attn_output = self._flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            dropout=dropout_rate,
-            use_sliding_windows=use_sliding_windows,
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -615,15 +500,7 @@ class MixtralFlashAttention2(MixtralAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
-        use_sliding_windows=False,
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -643,13 +520,11 @@ class MixtralFlashAttention2(MixtralAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
-                Whether to activate sliding window attention.
         """
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in MixtralFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -662,75 +537,40 @@ class MixtralFlashAttention2(MixtralAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-            if not use_sliding_windows:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output_unpad = flash_attn_varlen_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_k=cu_seqlens_k,
-                    max_seqlen_q=max_seqlen_in_batch_q,
-                    max_seqlen_k=max_seqlen_in_batch_k,
-                    dropout_p=dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
+            )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            if not use_sliding_windows:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                )
-            else:
-                attn_output = flash_attn_func(
-                    query_states,
-                    key_states,
-                    value_states,
-                    dropout,
-                    softmax_scale=softmax_scale,
-                    causal=causal,
-                    window_size=(self.config.sliding_window, self.config.sliding_window),
-                )
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            )
 
         return attn_output
 
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
-
-        # On the first iteration we need to properly re-create the padding mask
-        # by slicing it on the proper place
-        if kv_seq_len != attention_mask.shape[-1]:
-            attention_mask_num_tokens = attention_mask.shape[-1]
-            attention_mask = attention_mask[:, attention_mask_num_tokens - kv_seq_len :]
-
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -757,7 +597,6 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
 class MixtralSdpaAttention(MixtralAttention):
     """
     Mixtral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -774,6 +613,7 @@ class MixtralSdpaAttention(MixtralAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -788,6 +628,7 @@ class MixtralSdpaAttention(MixtralAttention):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                cache_position=cache_position,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -800,29 +641,28 @@ class MixtralSdpaAttention(MixtralAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        # In case static cache is used, it is an instance attribute.
+        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        causal_mask = attention_mask
+        # if attention_mask is not None and cache_position is not None:
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
+        if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
@@ -831,10 +671,8 @@ class MixtralSdpaAttention(MixtralAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -844,13 +682,11 @@ class MixtralSdpaAttention(MixtralAttention):
 
         return attn_output, None, past_key_value
 
-
 MIXTRAL_ATTENTION_CLASSES = {
     "eager": MixtralAttention,
     "flash_attention_2": MixtralFlashAttention2,
     "sdpa": MixtralSdpaAttention,
 }
-
 
 class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: MixtralConfig):
@@ -933,11 +769,18 @@ class MixtralSparseMoeBlock(nn.Module):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
 
+            if top_x.shape[0] == 0:
+                continue
+
+            # in torch it is faster to index using lists than torch tensors
+            top_x_list = top_x.tolist()
+            idx_list = idx.tolist()
+
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+            current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
@@ -966,6 +809,7 @@ class MixtralDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if "padding_mask" in kwargs:
@@ -1001,6 +845,8 @@ class MixtralDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -1045,13 +891,13 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Mixtral
+# Copied from transformers.models.Mixtral.modeling_Mixtral.MixtralPreTrainedModel with Mixtral->Mixtral
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MixtralDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
@@ -1066,6 +912,27 @@ class MixtralPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
+        if self.config._attn_implementation == "flash_attention_2" and cache_cls == StaticCache:
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
+            )
+
+        for layer in self.model.layers:
+            device = layer.input_layernorm.weight.device
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                dtype = self.config._pre_quantization_dtype
+            else:
+                dtype = layer.self_attn.o_proj.weight.dtype
+            layer.self_attn.past_key_value = cache_cls(
+                self.config, max_batch_size, max_cache_len, device=device, dtype=dtype
+            )
+
+    def _reset_cache(self):
+        for layer in self.model.layers:
+            layer.self_attn.past_key_value = None
 
 
 MIXTRAL_INPUTS_DOCSTRING = r"""
@@ -1139,7 +1006,7 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
+# Copied from transformers.models.Mixtral.modeling_Mixtral.MixtralModel with Mixtral->MIXTRAL,Mixtral->Mixtral
 class MixtralModel(MixtralPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
@@ -1184,6 +1051,7 @@ class MixtralModel(MixtralPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1196,75 +1064,39 @@ class MixtralModel(MixtralPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        past_key_values_length = 0
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
-
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-        else:
-            position_ids = position_ids.view(-1, seq_length).long()
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
-            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
-            if is_padding_right:
-                raise ValueError(
-                    "You are attempting to perform batched generation with padding_side='right'"
-                    " this may lead to unexpected behaviour for Flash Attention version of Mixtral. Make sure to "
-                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
-                )
+        past_seen_tokens = 0
+        if use_cache:  # kept for BC (cache positions)
+            if not isinstance(past_key_values, StaticCache):
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                past_seen_tokens = past_key_values.get_seq_length()
 
-        if self._attn_implementation == "flash_attention_2":
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_implementation == "sdpa" and not output_attentions:
-            # output_attentions=True can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-                sliding_window=self.config.sliding_window,
-            )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-                sliding_window=self.config.sliding_window,
+        if cache_position is None:
+            if isinstance(past_key_values, StaticCache):
+                raise ValueError("cache_position is a required argument when using StaticCache.")
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+
+        # embed positions
         hidden_states = inputs_embeds
 
         # decoder layers
@@ -1287,6 +1119,7 @@ class MixtralModel(MixtralPreTrainedModel):
                     output_attentions,
                     output_router_logits,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1297,6 +1130,7 @@ class MixtralModel(MixtralPreTrainedModel):
                     output_attentions=output_attentions,
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1318,14 +1152,11 @@ class MixtralModel(MixtralPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
-                if v is not None
+            next_cache = (
+                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
             )
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1333,6 +1164,62 @@ class MixtralModel(MixtralPreTrainedModel):
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
+
+    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if hasattr(self.layers[0].self_attn, "past_key_value"):  # static cache
+            target_length = self.config.max_position_embeddings
+        else:  # dynamic cache
+            target_length = (
+                attention_mask.shape[-1] if isinstance(attention_mask, torch.Tensor) else cache_position[-1] + 1
+            )
+
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+            elif attention_mask.dim() == 4:
+                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
+                # cache. In that case, the 4D attention mask attends to the newest tokens only.
+                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                    offset = cache_position[0]
+                else:
+                    offset = 0
+                mask_shape = attention_mask.shape
+                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
+                causal_mask[
+                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
+                ] = mask_slice
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
 
 class MixtralForCausalLM(MixtralPreTrainedModel):
@@ -1383,6 +1270,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1398,8 +1286,8 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MixtralForCausalLM
 
-        >>> model = MixtralForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
+        >>> model = MixtralForCausalLM.from_pretrained("Mixtralai/Mixtral-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Mixtralai/Mixtral-8x7B-v0.1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1432,6 +1320,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1484,15 +1373,28 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
+        cache_position=None,
         output_router_logits=False,
         **kwargs,
     ):
-        # Omit tokens covered by past_key_values
+        # With static cache, the `past_key_values` is None
+        # TODO joao: standardize interface for the different Cache classes and remove of this if
+        has_static_cache = False
+        if past_key_values is None:
+            past_key_values = getattr(getattr(self.model.layers[0], "self_attn", {}), "past_key_value", None)
+            has_static_cache = past_key_values is not None
+
+        past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1529,11 +1431,24 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
+            # TODO: use `next_tokens` directly instead.
+            model_inputs = {"input_ids": input_ids.contiguous()}
+
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        else:
+            cache_position = cache_position[-input_length:]
+
+        if has_static_cache:
+            past_key_values = None
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
@@ -1567,7 +1482,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
     """,
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mixtral, LLAMA->MIXTRAL
+# Copied from transformers.models.Mixtral.modeling_Mixtral.MixtralForSequenceClassification with Mixtral->Mixtral, Mixtral->MIXTRAL
 class MixtralForSequenceClassification(MixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1590,7 +1505,7 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
