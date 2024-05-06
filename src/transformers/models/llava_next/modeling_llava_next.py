@@ -759,7 +759,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     )
                     for imsize in image_sizes
                 ]
-                # figure out if pixel_values is concatenate or stacking
+                # figure out if pixel_values is concatenated or stacked
                 if pixel_values.dim() == 5:
                     # stacking: e.g [2, 5, 3, 336, 336], convert to concat
                     _pixel_values_list = [
