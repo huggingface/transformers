@@ -496,8 +496,9 @@ class CodeAgent(Agent):
 
         if not is_pygments_available():
             transformers_logging.warning_once(
+                logger,
                 "pygments isn't installed. Installing pygments will enable color syntax highlighting in the "
-                "CodeAgent."
+                "CodeAgent.",
             )
 
         self.python_evaluator = evaluate_python_code
@@ -766,8 +767,9 @@ class ReactCodeAgent(ReactAgent):
 
         if not is_pygments_available():
             transformers_logging.warning_once(
+                logger,
                 "pygments isn't installed. Installing pygments will enable color syntax highlighting in the "
-                "ReactCodeAgent."
+                "ReactCodeAgent.",
             )
 
         self.python_evaluator = evaluate_python_code
