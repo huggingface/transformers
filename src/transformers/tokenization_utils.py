@@ -1102,11 +1102,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 current_sub_text.append(token)
         if current_sub_text:
             sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        if spaces_between_special_tokens:
-            text = " ".join(sub_texts)
-        else:
-            text = "".join(sub_texts)
+        
+        # we do not add spaces between special tokens. If you want some, add them yourself.. .
+        text = "".join(sub_texts)
 
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
