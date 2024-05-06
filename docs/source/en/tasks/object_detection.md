@@ -174,6 +174,18 @@ To get an even better understanding of the data, visualize an example in the dat
 ```
 ![png](https://i.imgur.com/oVQb9SF.png)
 
+
+To visualize the bounding boxes with associated labels, you can get the labels from the dataset's metadata, specifically
+the `category` field.
+You'll also want to create dictionaries that map a label id to a label class (`id2label`) and the other way around (`label2id`).
+You can use them later when setting up the model. Including these maps will make your model reusable by others if you share
+it on the Hugging Face Hub.
+
+As a final step of getting familiar with the data, explore it for potential issues. One common problem with datasets for
+object detection is bounding boxes that "stretch" beyond the edge of the image. Such "runaway" bounding boxes can raise
+errors during training and should be addressed. There are a few examples with this issue in this dataset.
+To keep things simple in this guide, we will set `clip=True` for `BboxParams` in transformations below.
+
 ## Preprocess the data
 
 To finetune a model, you must preprocess the data you plan to use to match precisely the approach used for the pre-trained model.
@@ -197,7 +209,7 @@ Instantiate the image processor from the same checkpoint as the model you want t
 ...     # It`s faster and yields much better results for object-detection models.
 ...     do_pad=False,
 ...     do_resize=False,
->>> )
+... )
 ```
 
 Before passing the images to the `image_processor`, apply two preprocessing transformations to the dataset:
@@ -221,7 +233,7 @@ flip it horizontally, and brighten it:
 >>> basic_transforms = [
 ...     A.LongestMaxSize(max_size=max_size),
 ...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
->>> ]
+... ]
 
 >>> train_augment_and_transform = A.Compose(
 ...     [
@@ -232,12 +244,12 @@ flip it horizontally, and brighten it:
 ...         *basic_transforms,
 ...     ],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
->>> )
+... )
 
 >>> validation_transform = A.Compose(
 ...     basic_transforms,
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
->>> )
+... )
 ```
 
 The `image_processor` expects the annotations to be in the following format: `{'image_id': int, 'annotations': List[Dict]}`,
@@ -317,10 +329,10 @@ with `pixel_values`, a tensor with `pixel_mask`, and `labels`.
 >>> # Make transform functions for batch and apply for dataset splits
 >>> train_transform_batch = partial(
 ...     augment_and_transform_batch, transform=train_augment_and_transform, image_processor=image_processor
->>> )
+... )
 >>> validation_transform_batch = partial(
 ...     augment_and_transform_batch, transform=validation_transform, image_processor=image_processor
->>> )
+... )
 
 >>> cppe5["train"] = cppe5["train"].with_transform(train_transform_batch)
 >>> cppe5["validation"] = cppe5["validation"].with_transform(validation_transform_batch)
@@ -489,7 +501,7 @@ Then, in `compute_metrics` function we collect `predicted` and `target` bounding
 
 >>> eval_compute_metrics_fn = partial(
 ...     compute_metrics, image_processor=image_processor, id2label=id2label, threshold=0.0
->>> )
+... )
 ```
 
 ## Training the detection model
@@ -499,10 +511,10 @@ The images in this dataset are still quite large, even after resizing. This mean
 require at least one GPU.
 
 Training involves the following steps:
-1. Load the model with [AutoModelForObjectDetection](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForObjectDetection) using the same checkpoint as in the preprocessing.
-2. Define your training hyperparameters in [TrainingArguments](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments).
-3. Pass the training arguments to [Trainer](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Trainer) along with the model, dataset, image processor, and data collator.
-4. Call [train()](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Trainer.train) to finetune your model.
+1. Load the model with [`AutoModelForObjectDetection`] using the same checkpoint as in the preprocessing.
+2. Define your training hyperparameters in [`TrainingArguments`].
+3. Pass the training arguments to [`Trainer`] along with the model, dataset, image processor, and data collator.
+4. Call [`~Trainer.train`] to finetune your model.
 
 When loading the model from the same checkpoint that you used for the preprocessing, remember to pass the `label2id`
 and `id2label` maps that you created earlier from the dataset's metadata. Additionally, we specify `ignore_mismatched_sizes=True` to replace the existing classification head with a new one.
@@ -515,7 +527,7 @@ and `id2label` maps that you created earlier from the dataset's metadata. Additi
 ...     id2label=id2label,
 ...     label2id=label2id,
 ...     ignore_mismatched_sizes=True,
->>> )
+... )
 ```
 
 In the [`TrainingArguments`] use `output_dir` to specify where to save your model, then configure hyperparameters as you see fit. For `num_train_epochs=30` training will take about 35 minutes in Google Colab T4 GPU, increase the number of epoch to get better results.
@@ -550,7 +562,7 @@ Face to upload your model).
 ...     remove_unused_columns=False,
 ...     eval_do_concat_batches=False,
 ...     push_to_hub=True,
->>> )
+... )
 ```
 
 Finally, bring everything together, and call [`~transformers.Trainer.train`]:
@@ -566,7 +578,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 ...     tokenizer=image_processor,
 ...     data_collator=collate_fn,
 ...     compute_metrics=eval_compute_metrics_fn,
->>> )
+... )
 
 >>> trainer.train()
 ```
@@ -1485,12 +1497,12 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 >>> resize_and_pad = A.Compose([
 ...     A.LongestMaxSize(max_size=max_size),
 ...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
->>> ])
+... ])
 
 >>> # This one is for visualization with no padding
 >>> resize_only = A.Compose([
 ...     A.LongestMaxSize(max_size=max_size),
->>> ])
+... ])
 ```
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
