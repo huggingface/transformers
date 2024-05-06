@@ -8721,13 +8721,14 @@ class UdopForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class UdopModel(metaclass=DummyObject):
+class UdopForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-class UdopForTokenClassification(metaclass=DummyObject):
+
+class UdopModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

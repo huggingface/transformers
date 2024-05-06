@@ -122,13 +122,12 @@ class UdopConfig(PretrainedConfig):
         classifier_dropout=None,
         **kwargs,
     ):
-        
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.hidden_dropout_prob =  hidden_dropout_prob
+        self.hidden_dropout_prob = hidden_dropout_prob
         self.num_decoder_layers = (
             num_decoder_layers if num_decoder_layers is not None else self.num_layers
         )  # default = symmetry
@@ -141,7 +140,6 @@ class UdopConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings

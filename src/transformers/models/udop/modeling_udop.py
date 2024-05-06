@@ -1960,7 +1960,8 @@ class UdopClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
-    
+
+
 @add_start_docstrings(
     "The bare UDOP Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     UDOP_START_DOCSTRING,
@@ -2070,7 +2071,8 @@ class UdopEncoderModel(UdopPreTrainedModel):
         )
 
         return encoder_outputs
-    
+
+
 @add_start_docstrings(
     """
     Udop Model with a token classification head on top (a linear layer on top of the final hidden states) e.g.
@@ -2087,11 +2089,10 @@ class UdopForTokenClassification(UdopPreTrainedModel):
 
         self.udop = UdopEncoderModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-    
+
         self.classifier = UdopClassificationHead(config, pool_feature=False)
 
         self.init_weights()
-
 
     def forward(
         self,
@@ -2101,8 +2102,6 @@ class UdopForTokenClassification(UdopPreTrainedModel):
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
         use_cache=True,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2145,8 +2144,6 @@ class UdopForTokenClassification(UdopPreTrainedModel):
             input_ids,
             bbox=bbox,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

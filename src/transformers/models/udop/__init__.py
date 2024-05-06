@@ -53,8 +53,8 @@ else:
     _import_structure["modeling_udop"] = [
         "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "UdopForConditionalGeneration",
-        "UdopPreTrainedModel",      
-        "UdopModel",    
+        "UdopPreTrainedModel",
+        "UdopModel",
         "UdopEncoderModel",
         "UdopForTokenClassification",
     ]
@@ -88,11 +88,10 @@ if TYPE_CHECKING:
         from .modeling_udop import (
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
             UdopEncoderModel,
-            UdopForConditionalGeneration,            
+            UdopForConditionalGeneration,
+            UdopForTokenClassification,
             UdopModel,
             UdopPreTrainedModel,
-            UdopForTokenClassification,
-
         )
 
 else:

@@ -3572,10 +3572,10 @@ else:
     _import_structure["models.udop"].extend(
         [
             "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "UdopEncoderModel",   
-            "UdopForConditionalGeneration",            
-            "UdopModel",
+            "UdopEncoderModel",
+            "UdopForConditionalGeneration",
             "UdopForTokenClassification",
+            "UdopModel",
             "UdopPreTrainedModel",
         ],
     )
@@ -8148,8 +8148,8 @@ if TYPE_CHECKING:
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
             UdopEncoderModel,
             UdopForConditionalGeneration,
-            UdopModel,
             UdopForTokenClassification,
+            UdopModel,
             UdopPreTrainedModel,
         )
         from .models.umt5 import (
