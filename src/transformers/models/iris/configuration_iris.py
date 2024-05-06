@@ -21,17 +21,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
+# from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
-#Common attributes present in all config classes are: hidden_size, num_attention_heads, and num_hidden_layers. Text models further implement: vocab_size.
 
 class IrisConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IrisModel`]. It is used to
     instantiate a IRIS model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the standard
-    Iris architecture. Many of the config options are used to instatiate the GPT2 model that is used as
-    part of the architecture.
+    Iris architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -96,131 +94,205 @@ class IrisConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
+    
     model_type = "iris"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
-        "max_position_embeddings": "n_positions",
-        "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer",
+        "hidden_size": "embed_dim_world_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "vocab_size": "vocab_size",
     }
-    #TO DO
-    # vocab_size: 512
-    # embed_dim_tokenizer: 512
-    #     resolution: 64
-    #     in_channels: 3
-    #     z_channels: 512
-    #     ch: 64
-    #     ch_mult: [1, 1, 1, 1, 1]
-    #     num_res_blocks: 2
-    #     attn_resolutions: [8, 16]
-    #     out_ch: 3
-    #     dropout: 0.0
-
-    # use_original_obs: False
-    # max_ram_usage: 30G
-    # name: train_dataset
-    # max_num_episodes: null
-    # name: test_dataset
-
-
-
-    # tokens_per_block: 17
-    # max_blocks: 20
-    # attention: 'causal'
-    # num_layers: 10
-    # num_heads: 4
-    # embed_dim_world_models: 256
-    # embed_pdrop: 0.1
-    # resid_pdrop: 0.1
-    # attn_pdrop: 0.1
-
-
-
-
-    # epochs: 600
-    # device: cuda:0
-    # do_checkpoint: True
-    # seed: 0
-    # resume: False # set by resume.sh script only.
-
-
-    # should: True
-    # learning_rate: 0.0001
-    #     batch_num_samples_tokenizer: 128
-    #     grad_acc_steps_tokenizer: 1
-    #     max_grad_norm_tokenizer: 10.0
-    #     start_after_epochs_tokenizer: 25
-    #     steps_per_epoch_tokenizer: 200
-        
-    #     batch_num_samples_world_model: 32
-    #     grad_acc_steps_world_model: 1
-    #     max_grad_norm_world_model: 10.0
-    #     weight_decay: 0.01
-    #     start_after_epochs_world_model: 25
-    #     steps_per_epoch_world_model: 200
-    
-    #     batch_num_samples_actor_critic: 32
-    #     grad_acc_steps_actor_critic: 1
-    #     max_grad_norm_actor_critic: 10.0
-    #     start_after_epochs_actor_critic: 50
-    #     steps_per_epoch_actor_critc: 200
-    #     burn_in: 20
-    #     gamma: 0.995
-    #     lambda_: 0.95
-    #     entropy_weight: 0.001
-
-    #     save_reconstructions: True
-
-    # action dim as keyword arg for different envs
+      
     def __init__(
         self,
-        state_dim=17,
-        act_dim=4,
-        hidden_size=128,
-        max_ep_len=4096,
-        action_tanh=True,
-        vocab_size=1,
-        n_positions=1024,
-        n_layer=3,
-        n_head=1,
-        n_inner=None,
-        activation_function="relu",
+        num_actions=4,
+        vocab_size=512,
+        embed_dim_tokenizer=512,
+        resolution=64,
+        in_channels=3,
+        z_channels=512,
+        ch=64,
+        ch_mult=[1, 1, 1, 1, 1],
+        num_res_blocks=2,
+        attn_resolutions=[8, 16],
+        out_ch=3,
+        dropout=0.0,
+        use_original_obs_actor_critic=False,
+        max_ram_usage='30G',
+        name_train='train_dataset',
+        max_num_episodes=None,
+        name_test='test_dataset',
+        env_train_id = None,
+        env_test_id = None,
+        env_train_size= 64,
+        env_train_max_episode_steps= 20000,
+        env_train_noop_max= 30,
+        env_train_frame_skip= 4,
+        env_train_done_on_life_loss= True,
+        env_train_clip_reward= False,
+        env_test_size= 64,
+        env_test_max_episode_steps= 108000,
+        env_test_noop_max= 1,
+        env_test_frame_skip= 4,
+        env_test_done_on_life_loss= False,
+        env_test_clip_reward= False,
+        tokens_per_block=17,
+        max_blocks=20,
+        attention='causal',
+        num_layers=10,
+        num_heads=4,
+        embed_dim_world_model=256,
+        embed_pdrop=0.1,
         resid_pdrop=0.1,
-        embd_pdrop=0.1,
         attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        scale_attn_weights=True,
-        use_cache=True,
+        epochs=600,
+        device='cuda:0',
+        do_checkpoint=True,
+        seed=0,
+        resume=False, # set by resume.sh script only.
+        num_envs_collect_train=1,
+        stop_after_epochs_collect_train=500,
+        num_episodes_to_save_collect_train=10,
+        epsilon_collect_train=0.01,
+        should_sample_collect_train=True,
+        temperature_collect_train=1.0,
+        num_steps_collect_train=200,
+        num_envs_collect_test=8,
+        epsilon_collect_test=0.0,
+        should_sample_collect_test=True,
+        temperature_collect_test=0.5,
+        num_episodes_test=16,
+        should_train=True,
+        learning_rate=0.0001,
+        batch_num_samples_tokenizer_train=128,
+        grad_acc_steps_tokenizer=1,
+        max_grad_norm_tokenizer=10.0,
+        start_after_epochs_tokenizer_train=25,
+        steps_per_epoch_tokenizer=200,
+        batch_num_samples_world_model_train=32,
+        grad_acc_steps_world_model=1,
+        max_grad_norm_world_model=10.0,
+        weight_decay=0.01,
+        start_after_epochs_world_model_train=25,
+        steps_per_epoch_world_model=200,
+        batch_num_samples_actor_critic_train=32,
+        grad_acc_steps_actor_critic=1,
+        max_grad_norm_actor_critic=10.0,
+        start_after_epochs_actor_critic_train=50,
+        steps_per_epoch_actor_critc=200,
+        burn_in_actor_critic=20,
+        gamma=0.995,
+        lambda_=0.95,
+        entropy_weight=0.001,
+        should_eval = True,
+        every = 5,
+        save_reconstructions_eval=True,
+        
+        pad_token_id=1,
         bos_token_id=50256,
         eos_token_id=50256,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False,
         **kwargs,
+        
     ):
-        self.state_dim = state_dim
-        self.num_actions = act_dim
-        self.hidden_size = hidden_size
-        self.max_ep_len = max_ep_len
-        self.action_tanh = action_tanh
-        self.vocab_size = vocab_size
-        self.n_positions = n_positions
-        self.n_layer = n_layer
-        self.n_head = n_head
-        self.n_inner = n_inner
-        self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.scale_attn_weights = scale_attn_weights
-        self.use_cache = use_cache
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
-
+        self.num_actions=num_actions,
+        self.vocab_size=vocab_size,
+        self.embed_dim_tokenizer=embed_dim_tokenizer,
+        self.resolution=resolution,
+        self.in_channels=in_channels,
+        self.z_channels=z_channels,
+        self.ch=ch,
+        self.ch_mult=ch_mult,
+        self.num_res_blocks=num_res_blocks,
+        self.attn_resolutions=attn_resolutions,
+        self.out_ch=out_ch,
+        self.dropout=dropout,
+        self.use_original_obs_actor_critic=use_original_obs_actor_critic,
+        self.max_ram_usage=max_ram_usage,
+        self.name_train=name_train,
+        self.max_num_episodes=max_num_episodes,
+        self.name_test=name_test,
+        self.env_train_id = env_train_id,
+        self.env_test_id = env_test_id,
+        self.env_train_size= env_train_size,
+        self.env_train_max_episode_steps= env_train_max_episode_steps,
+        self.env_train_noop_max= env_train_noop_max,
+        self.env_train_frame_skip= env_train_frame_skip,
+        self.env_train_done_on_life_loss= env_train_done_on_life_loss,
+        self.env_train_clip_reward= env_train_clip_reward,
+        self.env_test_size= env_test_size,
+        self.env_test_max_episode_steps= env_test_max_episode_steps,
+        self.env_test_noop_max= env_test_noop_max,
+        self.env_test_frame_skip= env_test_frame_skip,
+        self.env_test_done_on_life_loss= env_test_done_on_life_loss,
+        self.env_test_clip_reward= env_test_clip_reward,
+        self.tokens_per_block=tokens_per_block,
+        self.max_blocks=max_blocks,
+        self.attention=attention,
+        self.num_layers=num_layers,
+        self.num_heads=num_heads,
+        self.embed_dim_world_model=embed_dim_world_model,
+        self.embed_pdrop=embed_pdrop,
+        self.resid_pdrop=resid_pdrop,
+        self.attn_pdrop=attn_pdrop,
+        self.epochs=epochs,
+        self.device=device,
+        self.do_checkpoint=do_checkpoint,
+        self.seed=seed,
+        self.sequence_length = self.max_blocks,
+        self.resume=resume, # set by resume.sh script only.
+        self.burn_in_actor_critic=burn_in_actor_critic,
+        self.num_envs_collect_train=num_envs_collect_train,
+        self.stop_after_epochs_collect_train=stop_after_epochs_collect_train,
+        self.num_episodes_to_save_collect_train=num_episodes_to_save_collect_train,
+        self.epsilon_collect_train=epsilon_collect_train,
+        self.should_sample_collect_train=should_sample_collect_train,
+        self.temperature_collect_train=temperature_collect_train,
+        self.num_steps_collect_train=num_steps_collect_train,
+        self.burn_in_collect_train=self.burn_in_actor_critic,
+        self.num_envs_collect_test=num_envs_collect_test,
+        self.num_episodes_to_save__collect_test=self.num_episodes_to_save_collect_train,
+        self.epsilon_collect_train=epsilon_collect_train,
+        self.should_sample_collect_test=should_sample_collect_test,
+        self.temperature_collect_test=temperature_collect_test,
+        self.num_episodes_test=num_episodes_test,
+        self.burn_in_collect_test=self.burn_in_actor_critic,
+        self.should_train=should_train,
+        self.learning_rate=learning_rate,
+        self.batch_num_samples_tokenizer_train=batch_num_samples_tokenizer_train,
+        self.grad_acc_steps_tokenizer=grad_acc_steps_tokenizer,
+        self.max_grad_norm_tokenizer=max_grad_norm_tokenizer,
+        self.start_after_epochs_tokenizer_train=start_after_epochs_tokenizer_train,
+        self.steps_per_epoch_tokenizer=steps_per_epoch_tokenizer,
+        self.batch_num_samples_world_model_train=batch_num_samples_world_model_train,
+        self.grad_acc_steps_world_model=grad_acc_steps_world_model,
+        self.max_grad_norm_world_model=max_grad_norm_world_model,
+        self.weight_decay=weight_decay,
+        self.start_after_epochs_world_model_train=start_after_epochs_world_model_train,
+        self.steps_per_epoch_world_model=steps_per_epoch_world_model,
+        self.batch_num_samples_actor_critic_train=batch_num_samples_actor_critic_train,
+        self.grad_acc_steps_actor_critic=grad_acc_steps_actor_critic,
+        self.max_grad_norm_actor_critic=max_grad_norm_actor_critic,
+        self.start_after_epochs_actor_critic_train=start_after_epochs_actor_critic_train,
+        self.steps_per_epoch_actor_critc=steps_per_epoch_actor_critc,
+        self.imagine_horizon_train = self.sequence_length,
+        self.gamma=gamma,
+        self.lambda_=lambda_,
+        self.entropy_weight=entropy_weight,
+        self.should_eval =should_eval,
+        self.every = every,
+        self.batch_num_samples_tokenizer_eval=self.batch_num_samples_tokenizer_train,
+        self.batch_num_samples_world_model_eval=self.batch_num_samples_world_model_train,
+        self.batch_num_samples_actor_critic_eval=self.batch_num_samples_actor_critic_train,
+        self.save_reconstructions_eval=save_reconstructions_eval,
+        self.start_after_epochs_tokenizer_eval=self.start_after_epochs_tokenizer_train,
+        self.start_after_epochs_world_model_eval=self.start_after_epochs_world_model_train,
+        self.start_after_epochs_actor_critic_eval=self.start_after_epochs_actor_critic_train,
+        self.num_episodes_to_save__eval=self.batch_num_samples_actor_critic_train,
+        self.horizon_eval = self.imagine_horizon_train,
+        
+        self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
