@@ -84,12 +84,12 @@ if is_torch_neuroncore_available(check_device=False):
     if os.environ.get("TORCHELASTIC_RUN_ID"):
         if is_optimum_neuron_available():
             logger.info(
-                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "Make sure that you are performing the training with the NeuronTrainer from optimum[neuron], this "
                 "will fail otherwise."
             )
         else:
             logger.warning(
-                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "Please use the NeuronTrainer from optimum[neuron] instead of the Transformers library to perform "
                 "training on AWS Trainium instances. More information here: "
                 "https://github.com/huggingface/optimum-neuron"
             )
@@ -420,9 +420,9 @@ class TrainingArguments:
             the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
-        run_name (`str`, *optional*):
+        run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
-            [mlflow](https://www.mlflow.org/) logging.
+            [mlflow](https://www.mlflow.org/) logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -756,6 +756,12 @@ class TrainingArguments:
             See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
             optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
             only.
+
+        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+            If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
+            rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
+            that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
+            summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
     """
 
     framework = "pt"
@@ -1434,6 +1440,11 @@ class TrainingArguments:
         },
     )
 
+    batch_eval_metrics: bool = field(
+        default=False,
+        metadata={"help": "Break eval metrics calculation into batches to save memory."},
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1840,12 +1851,12 @@ class TrainingArguments:
                         )
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
 
-            sync_module_states = self.fsdp_config.get("sync_module_states", "true")
-            cpu_ram_efficient_loading = self.fsdp_config.get("cpu_ram_efficient_loading", "false")
+            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
+            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
 
-            if str(sync_module_states).lower() == "false" and str(cpu_ram_efficient_loading).lower() == "true":
+            if sync_module_states == "false" and cpu_ram_efficient_loading == "true":
                 # In this case, all the processes except the main process would have random weights leading
                 # to unexpected behaviour during training, thus throwing error here to prevent it.
                 raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
@@ -1853,7 +1864,7 @@ class TrainingArguments:
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
             os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
