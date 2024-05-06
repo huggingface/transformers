@@ -149,7 +149,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(
+            config.text_config, attn_implementation=config._attn_implementation
+        )
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size

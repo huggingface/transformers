@@ -284,8 +284,14 @@ class Idefics2Processor(ProcessorMixin):
             if self.chat_template is not None:
                 chat_template = self.chat_template
             else:
+                logger.warning_once(
+                    "No chat template is set for this processor, falling back to a default class-level template. This is "
+                    "very error-prone, because models are often trained with templates different from the class default! "
+                    "Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
+                    "point any code depending on them will stop working. We recommend setting a valid chat template before "
+                    "then to ensure that this model continues working without issues."
+                )
                 chat_template = self.default_chat_template
-
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
