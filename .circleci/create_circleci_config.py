@@ -146,6 +146,9 @@ class CircleCIJob:
                 elif test == "tests/models":
                     if "tokenization" in self.name:
                         expanded_tests.extend(glob.glob("tests/models/**/test_tokenization*.py", recursive=True))
+                    elif self.name in ["flax","torch","tf"]:
+                        name = self.name if self.name != "torch" else ""
+                        expanded_tests.extend(glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True))
                     else:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
