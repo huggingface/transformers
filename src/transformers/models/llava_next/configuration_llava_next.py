@@ -56,7 +56,7 @@ class LlavaNextConfig(PretrainedConfig):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
