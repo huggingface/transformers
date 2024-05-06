@@ -24,7 +24,7 @@ from typing import Dict
 from huggingface_hub import hf_hub_download, list_spaces
 
 from ..utils import is_offline_mode
-from .python_interpreter import evaluate_python_code, LIST_SAFE_MODULES
+from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import TASK_MAPPING, TOOL_CONFIG_FILE, Tool
 
 
