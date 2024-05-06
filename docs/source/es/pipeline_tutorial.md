@@ -40,22 +40,22 @@ Si bien cada tarea tiene un [`pipeline`] asociado, es más sencillo usar la abst
 >>> transcriber = pipeline(task="automatic-speech-recognition")
 ```
 
-2. Pass your input to the [`pipeline`]. In the case of speech recognition, this is an audio input file:
+2. Pasa tu entrada a la [`pipeline`]. En el caso del reconocimiento del habla, esto es un archivo de entrada de audio:
 
 ```py
 >>> transcriber("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
-on the Hub to see if you can get a better transcription.
+¿No es el resultado que tenías en mente? Echa un vistazo a algunos de los [modelos de reconocimiento automático del habla más descargados](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
+en el Hub para ver si puedes obtener una transcripción mejor.
 
-Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI. Whisper was released 
-2 years later than Wav2Vec2, and was trained on close to 10x more data. As such, it beats Wav2Vec2 on most downstream 
-benchmarks. It also has the added benefit of predicting punctuation and casing, neither of which are possible with  
+Intentemos con el modelo [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper se lanzó 
+2 años después que Wav2Vec2, y se entrenó con cerca de 10 veces más datos. Como tal, supera a Wav2Vec2 en la mayoría de las pruebas 
+downstream. También tiene el beneficio adicional de predecir puntuación y mayúsculas, ninguno de los cuales es posible con  
 Wav2Vec2.
 
-Let's give it a try here to see how it performs:
+Vamos a probarlo aquí para ver cómo se desempeña:
 
 ```py
 >>> transcriber = pipeline(model="openai/whisper-large-v2")
@@ -63,13 +63,13 @@ Let's give it a try here to see how it performs:
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-Now this result looks more accurate! For a deep-dive comparison on Wav2Vec2 vs Whisper, refer to the [Audio Transformers Course](https://huggingface.co/learn/audio-course/chapter5/asr_models).
-We really encourage you to check out the Hub for models in different languages, models specialized in your field, and more.
-You can check out and compare model results directly from your browser on the Hub to see if it fits or 
-handles corner cases better than other ones.
-And if you don't find a model for your use case, you can always start [training](training) your own!
+¡Ahora este resultado parece más preciso! Para una comparación detallada de Wav2Vec2 vs Whisper, consulta el [Curso de Transformers de Audio](https://huggingface.co/learn/audio-course/chapter5/asr_models).
+Realmente te animamos a que eches un vistazo al Hub para modelos en diferentes idiomas, modelos especializados en tu campo, y más.
+Puedes comparar directamente los resultados de los modelos desde tu navegador en el Hub para ver si se adapta o 
+maneja casos de borde mejor que otros.
+Y si no encuentras un modelo para tu caso de uso, siempre puedes empezar a [entrenar](training) el tuyo propio.
 
-If you have several inputs, you can pass your input as a list:
+Si tienes varias entradas, puedes pasar tu entrada como una lista:
 
 ```py
 transcriber(
@@ -80,15 +80,15 @@ transcriber(
 )
 ```
 
-Pipelines are great for experimentation as switching from one model to another is trivial; however, there are some ways to optimize them for larger workloads than experimentation. See the following guides that dive into iterating over whole datasets or using pipelines in a webserver:
-of the docs:
-* [Using pipelines on a dataset](#using-pipelines-on-a-dataset)
-* [Using pipelines for a webserver](./pipeline_webserver)
+Las pipelines son ideales para la experimentación, ya que cambiar de un modelo a otro es trivial; sin embargo, hay algunas formas de optimizarlas para cargas de trabajo más grandes que la experimentación. Consulta las siguientes guías que profundizan en iterar sobre conjuntos de datos completos o utilizar pipelines en un servidor web:
+de la documentación:
+* [Uso de pipelines en un conjunto de datos](#uso-de-pipelines-en-un-conjunto-de-datos)
+* [Uso de pipelines para un servidor web](./pipeline_webserver)
 
-## Parameters
+## Parámetros
 
-[`pipeline`] supports many parameters; some are task specific, and some are general to all pipelines.
-In general, you can specify parameters anywhere you want:
+La [`pipeline`] admite muchos parámetros; algunos son específicos de la tarea y algunos son generales para todas las pipelines.
+En general, puedes especificar parámetros en cualquier lugar que desees:
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", my_parameter=1)
@@ -98,38 +98,36 @@ out = transcriber(..., my_parameter=2)  # This will override and use `my_paramet
 out = transcriber(...)  # This will go back to using `my_parameter=1`.
 ```
 
-Let's check out 3 important ones:
+Vamos a echar un vistazo a tres importantes:
 
 ### Device
 
-If you use `device=n`, the pipeline automatically puts the model on the specified device.
-This will work regardless of whether you are using PyTorch or Tensorflow.
+Si usas `device=n`, la pipeline automáticamente coloca el modelo en el dispositivo especificado.
+Esto funcionará independientemente de si estás utilizando PyTorch o Tensorflow.
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-If the model is too large for a single GPU and you are using PyTorch, you can set `device_map="auto"` to automatically 
-determine how to load and store the model weights. Using the `device_map` argument requires the 🤗 [Accelerate](https://huggingface.co/docs/accelerate)
-package:
+Si el modelo es demasiado grande para una sola GPU y estás utilizando PyTorch, puedes establecer `device_map="auto"` para determinar automáticamente cómo cargar y almacenar los pesos del modelo. Utilizar el argumento `device_map` requiere el paquete 🤗 [Accelerate](https://huggingface.co/docs/accelerate):
 
 ```bash
 pip install --upgrade accelerate
 ```
 
-The following code automatically loads and stores model weights across devices:
+El siguiente código carga y almacena automáticamente los pesos del modelo en varios dispositivos:
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", device_map="auto")
 ```
 
-Note that if  `device_map="auto"` is passed, there is no need to add the argument `device=device` when instantiating your `pipeline` as you may encounter some unexpected behavior!
+Tenga en cuenta que si se pasa `device_map="auto"`, no es necesario agregar el argumento `device=device` al instanciar tu `pipeline`, ¡ya que podrías encontrar algún comportamiento inesperado!
 
 ### Batch size
 
-By default, pipelines will not batch inference for reasons explained in detail [here](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). The reason is that batching is not necessarily faster, and can actually be quite slower in some cases.
+Por defecto, los pipelines no realizarán inferencia por lotes por razones explicadas en detalle [aquí](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-batching). La razón es que la agrupación en lotes no es necesariamente más rápida y, de hecho, puede ser bastante más lenta en algunos casos.
 
-But if it works in your use case, you can use:
+Pero si funciona en tu caso de uso, puedes utilizar:
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", device=0, batch_size=2)
@@ -137,16 +135,13 @@ audio_filenames = [f"https://huggingface.co/datasets/Narsil/asr_dummy/resolve/ma
 texts = transcriber(audio_filenames)
 ```
 
-This runs the pipeline on the 4 provided audio files, but it will pass them in batches of 2
-to the model (which is on a GPU, where batching is more likely to help) without requiring any further code from you. 
-The output should always match what you would have received without batching. It is only meant as a way to help you get more speed out of a pipeline.
+Esto ejecuta el pipeline en los 4 archivos de audio proporcionados, pero los pasará en lotes de 2 al modelo (que está en una GPU, donde la agrupación en lotes es más probable que ayude) sin requerir ningún código adicional de tu parte. La salida siempre debería coincidir con lo que habrías recibido sin agrupación en lotes. Solo se pretende como una forma de ayudarte a obtener más velocidad de una pipeline.
 
-Pipelines can also alleviate some of the complexities of batching because, for some pipelines, a single item (like a long audio file) needs to be chunked into multiple parts to be processed by a model. The pipeline performs this [*chunk batching*](./main_classes/pipelines#pipeline-chunk-batching) for you.
+Los pipelines también pueden aliviar algunas de las complejidades de la agrupación en lotes porque, para algunos pipelines, un solo elemento (como un archivo de audio largo) necesita ser dividido en varias partes para ser procesado por un modelo. El pipeline realiza esta [*agrupación en lotes de fragmentos*](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-chunk-batching) por ti.
 
 ### Task specific parameters
 
-All tasks provide task specific parameters which allow for additional flexibility and options to help you get your job done.
-For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] method has a `return_timestamps` parameter which sounds promising for subtitling videos:
+Todas las tareas proporcionan parámetros específicos de la tarea que permiten flexibilidad adicional y opciones para ayudarte a completar tu trabajo. Por ejemplo, el método [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] tiene un parámetro `return_timestamps` que suena prometedor para subtítulos de videos:
 
 
 ```py
@@ -155,12 +150,10 @@ For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] m
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.', 'chunks': [{'timestamp': (0.0, 11.88), 'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its'}, {'timestamp': (11.88, 12.38), 'text': ' creed.'}]}
 ```
 
-As you can see, the model inferred the text and also outputted **when** the various sentences were pronounced.
+Como puedes ver, el modelo infirió el texto y también salió **cuándo** se pronunciaron las various oraciones.
 
-There are many parameters available for each task, so check out each task's API reference to see what you can tinker with!
-For instance, the [`~transformers.AutomaticSpeechRecognitionPipeline`] has a `chunk_length_s` parameter which is helpful 
-for working on really long audio files (for example, subtitling entire movies or hour-long videos) that a model typically 
-cannot handle on its own:
+Hay muchos parámetros disponibles para cada tarea, así que echa un vistazo a la referencia de la API de cada tarea para ver qué puedes ajustar.
+Por ejemplo, el [`~transformers.AutomaticSpeechRecognitionPipeline`] tiene un parámetro `chunk_length_s` que es útil para trabajar con archivos de audio realmente largos (por ejemplo, subtítulos de películas completas o videos de una hora de duración) que un modelo típicamente no puede manejar solo:
 
 ```python
 >>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30)
@@ -168,12 +161,11 @@ cannot handle on its own:
 {'text': " So in college, I was a government major, which means I had to write a lot of papers. Now, when a normal student writes a paper, they might spread the work out a little like this. So, you know. You get started maybe a little slowly, but you get enough done in the first week that with some heavier days later on, everything gets done and things stay civil. And I would want to do that like that. That would be the plan. I would have it all ready to go, but then actually the paper would come along, and then I would kind of do this. And that would happen every single paper. But then came my 90-page senior thesis, a paper you're supposed to spend a year on. I knew for a paper like that, my normal workflow was not an option, it was way too big a project. So I planned things out and I decided I kind of had to go something like this. This is how the year would go. So I'd start off light and I'd bump it up"}
 ```
 
-If you can't find a parameter that would really help you out, feel free to [request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
+¡Si no puedes encontrar un parámetro que te ayude, no dudes en [solicitarlo](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
 
+## Uso de pipelines en un conjunto de datos
 
-## Using pipelines on a dataset
-
-The pipeline can also run inference on a large dataset. The easiest way we recommend doing this is by using an iterator:
+Los pipeline también puede ejecutar inferencia en un conjunto de datos grande. La forma más fácil que recomendamos parahacer esto es utilizando un iterador:
 
 ```py
 def data():
