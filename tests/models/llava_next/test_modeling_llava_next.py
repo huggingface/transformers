@@ -114,7 +114,7 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 342
+        self.encoder_seq_length = 341
         self.image_grid_pinpoints = [[32, 32]]
 
     def get_config(self):
@@ -147,8 +147,9 @@ class LlavaNextVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
-        # attention mask is full
+        # make attention mask left-padded to avoid issues with "model has no attribute padding_side"
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        attention_mask[:, :1] = 0
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
@@ -509,6 +510,9 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         pixel_values = inputs["pixel_values"]
 
+        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
+        model.padding_side = "left"
+
         # verify pixel values are padded correctly with 0 when one image has more num_patches than the other
         image_num_patches = [
             image_size_to_num_patches(
@@ -561,6 +565,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
 
+        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
+        model.padding_side = "left"
         inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
             torch_device
         )
@@ -568,10 +574,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # verify generation
         output_batched = model.generate(**inputs_batched, max_new_tokens=50)
         output_single = model.generate(**inputs_single, max_new_tokens=50)
-        print(
-            self.processor.decode(output_batched[0], skip_special_tokens=True),
-            self.processor.decode(output_single[0], skip_special_tokens=True),
-        )
         self.assertEqual(
             self.processor.decode(output_batched[0], skip_special_tokens=True),
             self.processor.decode(output_single[0], skip_special_tokens=True),

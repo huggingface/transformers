@@ -15,7 +15,7 @@
 """Image processor class for LLaVa-NeXT."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -446,23 +446,12 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         return image_patches
 
-    def pad(
-        self,
-        pixel_values: List[np.ndarray],
-        image_sizes: List[Tuple[int, int]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-    ):
+    def _pad_for_batching(self, pixel_values: List[np.ndarray]):
         """
+        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
+
         Args:
-            images (`List[np.ndarray]`): List of each images to be padded
-            image_sizes (`List[Tuple[int, int]]`): image sizes (height, width)
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            pixel_values (`List[np.ndarray]`): array of pixel values of each images of shape (bs, num_patches, 3d_image)
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [
@@ -471,9 +460,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             else x
             for x in pixel_values
         ]
-        data = {"pixel_values": pixel_values, "image_sizes": image_sizes}
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return pixel_values
 
     def preprocess(
         self,
@@ -633,4 +621,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
-        return self.pad(pixel_values=new_images, image_sizes=image_sizes, return_tensors=return_tensors)
+        padded_images = self._pad_for_batching(new_images)
+        return BatchFeature(
+            data={"pixel_values": padded_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+        )

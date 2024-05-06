@@ -361,14 +361,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
-        self._padding_side = "left"
 
+    @property
     def padding_side(self):
         return self._padding_side
 
     @padding_side.setter
-    def padding_size(self, padding_side: str):
-        print("WHY SET")
+    def padding_side(self, padding_side: str):
         if padding_side not in ["left", "right"]:
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
@@ -438,6 +437,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
                 labels need to be recalculated to support training (if provided)
+            image_token_index (`int`, *optional*)
+                Token id used to indicate the special "image" token. Defaults to `config.image_token_index`
+            ignore_index (`int`, *optional*)
+                Value that is used to pad `labels` and will be ignored when calculated loss. Default: -100.
         Returns:
             final_embedding, final_attention_mask, position_ids, final_labels
 
@@ -512,7 +515,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             num_image_features, embed_dim = image_features.shape
             if feature_lens.sum() != num_image_features:
                 raise ValueError(f"{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}")
-            batch_size, sequence_length = input_ids.shape
+            batch_size = input_ids.shape[0]
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
@@ -522,7 +525,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 left_padding = False
             elif not _left_padding and not _right_padding:
                 # both side is 1, so cannot tell
-                left_padding = self.padding_side() == "left"
+                left_padding = self.padding_side == "left"
             else:
                 # invalid attention_mask
                 raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
@@ -556,9 +559,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
             # ! instead of special_image_token_mask * (num_image_patches - 1)
             #   special_image_token_mask * (num_feature_len - 1)
-            special_image_len_mask = special_image_token_mask.clone().long()
-            special_image_len_mask[special_image_len_mask == 1] = feature_lens - 1
-            new_token_positions = torch.cumsum((special_image_len_mask + 1), -1) - 1
+            special_image_token_mask = special_image_token_mask.long()
+            special_image_token_mask[special_image_token_mask == 1] = feature_lens - 1
+            new_token_positions = torch.cumsum((special_image_token_mask + 1), -1) - 1
             if left_padding:
                 # shift right token positions so that they are ending at the same number
                 # the below here was incorrect? new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
@@ -631,13 +634,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         Args:
             image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
                 List of image feature tensor, each contains all the visual feature of all patches.
-            image_sizes (`torch.Tensor`) of shape `(num_images, 2)`
-                Actual image size of each images (height, width).
-            image_newline (`torch.Tensor`) of shape `(embed_dim)`
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+            image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
         Returns:
             image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (List[int])
+            feature_lens (`List[int]`)
                 token length of each image in image_features
         """
         new_image_features = []
@@ -762,13 +765,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 ]
                 # figure out if pixel_values is concatenated or stacked
                 if pixel_values.dim() == 5:
-                    # stacking: e.g [2, 5, 3, 336, 336], convert to concat
+                    # stacking when input is (batch_size, num_patches, num_channels, height, width)
                     _pixel_values_list = [
                         pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)
                     ]
                     pixel_values = torch.cat(_pixel_values_list, dim=0)
                 elif pixel_values.dim() != 4:
-                    # concat:   e.g: [8, 3, 336, 336]
+                    # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
                     raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
                 image_features = self.vision_tower(pixel_values, output_hidden_states=True)
