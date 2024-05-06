@@ -41,7 +41,6 @@ class EmptyJob:
 
     def to_dict(self):
         return {
-            "working_directory": "",
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
             "steps":["checkout"],
         }
@@ -61,7 +60,6 @@ class CircleCIJob:
     pytest_options: Dict[str, Any] = None
     resource_class: Optional[str] = "2xlarge"
     tests_to_run: Optional[List[str]] = None
-    working_directory: str = ""
     # This should be only used for doctest job!
     command_timeout: Optional[int] = None
 

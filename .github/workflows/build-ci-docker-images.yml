@@ -11,7 +11,7 @@ on:
         required: true
         type: string
   schedule:
-    - cron: "17 0 * * *"
+    - cron: "6 0 * * *"
 
 
 concurrency:
