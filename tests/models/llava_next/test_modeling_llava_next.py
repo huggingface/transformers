@@ -460,6 +460,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
+        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
+        model.padding_side = "left"
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -533,16 +535,16 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-4.7695, -4.5664, -0.2786], [-10.6250, -10.8906, -2.5234], [-6.7383, -7.2422, -0.6699]],
+            [[-0.0308, -0.0313, -0.0314], [-0.3064, -0.3013, -0.2986], [-0.1226, -0.1246, -0.1210]],
             dtype=torch.float32,
             device=torch_device,
         )
-        assert torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3)
-        assert torch.allclose(output.loss, torch.tensor(6.5171, device=torch_device))
+        assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
+        assert torch.allclose(output.loss, torch.tensor(6.8619, device=torch_device))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST]\nThe image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few small plants or flowers. In the background, there are trees and what appears to be a deer'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few deer grazing. The deer are partially obscured by the fog, and the trees in the background'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

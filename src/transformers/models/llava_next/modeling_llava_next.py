@@ -519,16 +519,18 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             _left_padding = torch.any(attention_mask[:, 0] == 0)
             _right_padding = torch.any(attention_mask[:, -1] == 0)
 
-            if _left_padding and not _right_padding:
-                left_padding = True
-            elif not _left_padding and _right_padding:
-                left_padding = False
-            elif not _left_padding and not _right_padding:
-                # both side is 1, so cannot tell
-                left_padding = self.padding_side == "left"
-            else:
-                # invalid attention_mask
-                raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
+            left_padding = True
+            if batch_size > 1:
+                if _left_padding and not _right_padding:
+                    left_padding = True
+                elif not _left_padding and _right_padding:
+                    left_padding = False
+                elif not _left_padding and not _right_padding:
+                    # both side is 1, so cannot tell
+                    left_padding = self.padding_side == "left"
+                else:
+                    # invalid attention_mask
+                    raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
 
             # Whether to turn off right padding
             # 1. Create a mask to know where special image tokens are
