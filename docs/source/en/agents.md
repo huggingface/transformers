@@ -113,17 +113,14 @@ login("<YOUR_HUGGINGFACEHUB_API_TOKEN>")
 client = InferenceClient(model="meta-llama/Meta-Llama-3-70B-Instruct")
 
 def llm_engine(messages, stop=["Task"]) -> str:
-    response = client.chat_completion(messages, stop_sequences=stop, return_full_text=False, max_new_tokens=1000)
+    response = client.chat_completion(messages, stop=stop, max_tokens=1000)
     answer = response.choices[0].message.content
-    for stop_seq in stop:
-        if answer[-len(stop_seq) :] == stop_seq:
-            answer = answer[: -len(stop_seq)]
     return answer
 ```
 
 You could use any `llm_engine` method as long as:
 1. it follows the [messages format](./chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a `str`
-2. it stops generating outputs *before* the sequences passed in the argument `stop`
+2. it stops generating outputs at the sequences passed in the argument `stop`
 
 You also need a `tools` argument which accepts a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
 
@@ -155,6 +152,19 @@ agent.run(
 )
 ```
 
+Note that we set up an additional `sentence` argument: you can pass text as additional arguments to the model.
+
+You can also use this to indicate the path to local or remote files for the model to use:
+
+```py
+from transformers import ReactCodeAgent
+
+agent = ReactCodeAgent(tools=[], llm_engine=llm_engine, add_base_tools=True)
+
+agent.run("Why does Mike not know many people in New York?", audio="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/recording.mp3")
+```
+
+
 The prompt and output parser were automatically defined, but you can easily inspect them by calling the `system_prompt_template` on your agent.
 
 ```python
@@ -163,7 +173,7 @@ agent.system_prompt_template
 
 It's important to explain as clearly as possible the task you want to perform.
 Every [`~Agent.run`] operation is independent, and since an agent is powered by an LLM, minor variations in your prompt might yield completely different results.
-You can also run an agent consecutively for different tasks.
+You can also run an agent consecutively for different tasks: each time the attributes `agent.task` and `agent.logs` will be re-initialized.
 
 
 #### Code execution
@@ -261,6 +271,7 @@ from transformers import load_tool
 tool = load_tool("text-to-speech")
 audio = tool("This is a text to speech tool")
 ```
+
 
 ### Create a new tool
 
@@ -462,9 +473,10 @@ Before finally generating the image:
 
 ### Use LangChain tools
 
+We love Langchain and think it has a very compelling suite of tools.
 To import a tool from LangChain, use the `from_langchain()` method.
 
-here is how to recreate the intro's search result using LangChain tool.
+Here is how you can use it to recreate the intro's search result using a LangChain web search tool.
 
 ```python
 from langchain.agents import load_tools

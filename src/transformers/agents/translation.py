@@ -238,14 +238,15 @@ class TranslationTool(PipelineTool):
     ```
     """
 
+    lang_to_code = LANGUAGE_CODES
     default_checkpoint = "facebook/nllb-200-distilled-600M"
     description = (
-        "This is a tool that translates text from a language to another. It returns the text translated in `tgt_lang`."
+        "This is a tool that translates text from a language to another."
+        f"Both `src_lang`and `tgt_lang` should belong to this list of languages: {list(lang_to_code.keys())}."
     )
     name = "translator"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
-    lang_to_code = LANGUAGE_CODES
 
     inputs = {
         "text": {"type": "text", "description": "The text to translate"},

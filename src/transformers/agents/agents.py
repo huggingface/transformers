@@ -541,7 +541,7 @@ class CodeAgent(Agent):
         self.prompt = [prompt_message, task_message]
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
-        llm_output = self.llm_engine(self.prompt, stop=["<end_code>"])
+        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_code>"])
 
         if return_generated_code:
             return llm_output
@@ -643,7 +643,7 @@ class ReactAgent(Agent):
                 }
             ]
             try:
-                final_answer = self.llm_engine(self.prompt, stop=["Observation:"])
+                final_answer = self.llm_engine(self.prompt, stop_sequences=["Observation:"])
             except Exception as e:
                 final_answer = f"Error in generating final llm output: {e}."
 
@@ -690,7 +690,7 @@ class ReactJsonAgent(ReactAgent):
         self.logger.info(self.prompt[-1])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop=["Observation:"])
+            llm_output = self.llm_engine(self.prompt, stop_sequences=["Observation:"])
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("=====Output message of the LLM:=====")
@@ -791,7 +791,7 @@ class ReactCodeAgent(ReactAgent):
         self.logger.info(self.prompt[-2:])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop=["<end_code>", "Observation:"])
+            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_code>", "Observation:"])
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 

@@ -71,22 +71,22 @@ class HfEngine:
         self.model = model
         self.client = InferenceClient(model=self.model, timeout=120)
 
-    def __call__(self, messages: List[Dict[str, str]], stop=[]) -> str:
+    def __call__(self, messages: List[Dict[str, str]], stop_sequences=[]) -> str:
         if "Meta-Llama-3" in self.model:
-            if "<|eot_id|>" not in stop:
-                stop.append("<|eot_id|>")
-            if "!!!!!" not in stop:
-                stop.append("!!!!!")
+            if "<|eot_id|>" not in stop_sequences:
+                stop_sequences.append("<|eot_id|>")
+            if "!!!!!" not in stop_sequences:
+                stop_sequences.append("!!!!!")
 
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
         # Get answer
-        response = self.client.chat_completion(messages, stop=stop, max_tokens=1500)
+        response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
         response = response.choices[0].message.content
 
         # Remove stop sequences from the answer
-        for stop_seq in stop:
+        for stop_seq in stop_sequences:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]
         return response

@@ -438,35 +438,36 @@ def evaluate_name(name, state, tools):
 
 
 def evaluate_condition(condition, state, tools):
-    if len(condition.ops) > 1:
-        raise InterpretorError("Cannot evaluate conditions with multiple operators")
-
     left = evaluate_ast(condition.left, state, tools)
-    comparator = condition.ops[0]
-    right = evaluate_ast(condition.comparators[0], state, tools)
+    comparators = [evaluate_ast(c, state, tools) for c in condition.comparators]
+    ops = [type(op) for op in condition.ops]
 
-    if isinstance(comparator, ast.Eq):
-        return left == right
-    elif isinstance(comparator, ast.NotEq):
-        return left != right
-    elif isinstance(comparator, ast.Lt):
-        return left < right
-    elif isinstance(comparator, ast.LtE):
-        return left <= right
-    elif isinstance(comparator, ast.Gt):
-        return left > right
-    elif isinstance(comparator, ast.GtE):
-        return left >= right
-    elif isinstance(comparator, ast.Is):
-        return left is right
-    elif isinstance(comparator, ast.IsNot):
-        return left is not right
-    elif isinstance(comparator, ast.In):
-        return left in right
-    elif isinstance(comparator, ast.NotIn):
-        return left not in right
-    else:
-        raise InterpretorError(f"Operator not supported: {comparator}")
+    result = left
+    for op, comparator in zip(ops, comparators):
+        if op == ast.Eq:
+            result = result == comparator
+        elif op == ast.NotEq:
+            result = result!= comparator
+        elif op == ast.Lt:
+            result = result < comparator
+        elif op == ast.LtE:
+            result = result <= comparator
+        elif op == ast.Gt:
+            result = result > comparator
+        elif op == ast.GtE:
+            result = result >= comparator
+        elif op == ast.Is:
+            result = result is comparator
+        elif op == ast.IsNot:
+            result = result is not comparator
+        elif op == ast.In:
+            result = result in comparator
+        elif op == ast.NotIn:
+            result = result not in comparator
+        else:
+            raise InterpretorError(f"Operator not supported: {op}")
+
+    return result
 
 
 def evaluate_if(if_statement, state, tools):
