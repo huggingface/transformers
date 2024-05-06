@@ -406,7 +406,7 @@ class Tool:
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
                 super().__init__()
-                self.name = _langchain_tool.name
+                self.name = _langchain_tool.name.lower()
                 self.description = _langchain_tool.description
                 self.inputs = parse_langchain_args(_langchain_tool.args)
                 self.output_type = "text"

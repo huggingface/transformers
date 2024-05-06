@@ -34,6 +34,9 @@ We provide two types of agents, based on the main [`Agent`] class:
   - [`ReactJsonAgent`] writes its tool calls in JSON.
   - [`ReactCodeAgent`] writes its tool calls in Python code.
 
+### Agent
+
+[[autodoc]] Agent
 
 ### CodeAgent
 
@@ -46,10 +49,6 @@ We provide two types of agents, based on the main [`Agent`] class:
 [[autodoc]] ReactJsonAgent
 
 [[autodoc]] ReactCodeAgent
-
-### Agent
-
-[[autodoc]] Agent
 
 ## Tools
 

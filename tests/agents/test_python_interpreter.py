@@ -343,6 +343,6 @@ if char.isalpha():
         assert result == "LATIN CAPITAL LETTER A"
 
     def test_multiple_comparators(self):
-        code="0x30A0 <= ord('a') <= 0x30FF"
+        code = "0x30A0 <= ord('a') <= 0x30FF"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result

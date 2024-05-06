@@ -53,39 +53,37 @@ We implement two versions of ReactJsonAgent:
 For example, here is how a ReAct agent would work its way through the following question.
 
 ```
-Task: How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
+>>> agent.run(
+...     "How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?",
+... )
+=====New task=====
+How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?
+====Agent is executing the code below:
+bert_blocks = search(query="number of blocks in BERT base encoder")
+print("BERT blocks:", bert_blocks)
+====
+Print outputs:
+BERT blocks: twelve encoder blocks
 
-Thought: To begin, I need to find the number of layers in the encoder of BERT base and the architecture proposed in Attention is All You Need. I will start by searching for the number of layers in BERT base.
-Action:
-{
-    "action": "search",
-    "action_input": "number of layers in BERT base encoder"
-}
-Observation: 12 layers
+====Agent is executing the code below:
+attention_layer = search(query="number of layers in Attention is All You Need")
+print("Attention layers:", attention_layer)
+====
+Print outputs:
+Attention layers: Encoder: The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers. The first is a multi-head self-attention mechanism, and the second is a simple, position- 2 Page 3 Figure 1: The Transformer - model architecture.
 
-Thought: I need to search for the number of layers in the encoder of the architecture proposed in Attention is All You Need.
-Action:
-{
-    "action": "search",
-    "action_input": "number of layers in the encoder of the architecture proposed in Attention is All You Need"
-}
-Observation: Encoder: The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers.
+====Agent is executing the code below:
+bert_blocks = 12
+attention_layers = 6
+diff = bert_blocks - attention_layers
+print("Difference in blocks:", diff)
+final_answer(diff)
+====
 
-Thought: Now that I have the number of layers for both BERT base and the architecture proposed in Attention is All You Need, I can calculate the difference.
-Action:
-{
-    "action": "calculator",
-    "action_input": "12 - 6"
-}
-Observation: 6
+Print outputs:
+Difference in blocks: 6
 
-Thought: Now that I have the calculated difference, I need to provide the final answer.
-Action:
-{
-    "action": "final_answer",
-    "action_input": "BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need"
-}
-Observation: BERT base encoder has 6 more layers than the encoder from the architecture proposed in Attention is All You Need
+Final answer: 6
 ```
 
 ### How can I build an agent?
@@ -179,7 +177,7 @@ The execution will stop at any code trying to perform an illegal operation or if
 
 ### The system prompt
 
-An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check out this part of the system prompt for the `ReactCodeAgent`.
+An agent, or rather the LLM that drives the agent, generates an output based on the system prompt. The system prompt can be customized and tailored to the intended task. For example, check the system prompt for the `ReactCodeAgent` (below version is slightly simplified).
 
 ```text
 You will be given a task to solve as best you can.
@@ -209,7 +207,6 @@ Remember to not perform too many operations in a single code block! You should s
 Print results at the end of each step to save the intermediate results. Then use final_answer() to return the final result.
 
 Remember to make sure that variables you use are all defined.
-DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
 Now Begin!
 ```
@@ -467,21 +464,15 @@ Before finally generating the image:
 
 To import a tool from LangChain, use the `from_langchain()` method.
 
+here is how to recreate the intro's search result using LangChain tool.
+
 ```python
-# Load langchain tool
 from langchain.agents import load_tools
-from transformers import Tool
+from transformers import Tool, ReactCodeAgent
 
-wikipedia_tool_langchain = load_tools(["wikipedia"])[0]
-wikipedia_tool = Tool.from_langchain(wikipedia_tool_langchain)
-```
+search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 
-Then you can use it normally:
+agent = ReactCodeAgent(tools=[search_tool])
 
-```python
-from transformers import ReactCodeAgent
-
-agent = ReactCodeAgent(tools=[wikipedia_tool])
-
-agent.run("Who is the president of Nicaragua?")
+agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
 ```
