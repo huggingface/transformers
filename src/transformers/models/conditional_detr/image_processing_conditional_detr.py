@@ -484,7 +484,7 @@ def post_process_panoptic_sample(
         masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
         boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            The predicted bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
             width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
         processed_size (`Tuple[int, int]`):
             The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
@@ -503,11 +503,6 @@ def post_process_panoptic_sample(
 
     cur_scores = scores[keep]
     cur_classes = labels[keep]
-    cur_boxes = center_to_corners_format(boxes[keep])
-
-    if len(cur_boxes) != len(cur_classes):
-        raise ValueError("Not as many boxes as there are classes")
-
     cur_masks = masks[keep]
     cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
     cur_masks = safe_squeeze(cur_masks, 1)

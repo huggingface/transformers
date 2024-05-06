@@ -472,7 +472,7 @@ def post_process_panoptic_sample(
         masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
         boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            The predicted bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
             width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
         processed_size (`Tuple[int, int]`):
             The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
@@ -491,11 +491,6 @@ def post_process_panoptic_sample(
 
     cur_scores = scores[keep]
     cur_classes = labels[keep]
-    cur_boxes = center_to_corners_format(boxes[keep])
-
-    if len(cur_boxes) != len(cur_classes):
-        raise ValueError("Not as many boxes as there are classes")
-
     cur_masks = masks[keep]
     cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
     cur_masks = safe_squeeze(cur_masks, 1)
@@ -1588,7 +1583,7 @@ class DetrImageProcessor(BaseImageProcessor):
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
 
-        out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
+        out_logits, raw_masks = outputs.logits, outputs.pred_masks
         if not len(out_logits) == len(raw_masks) == len(target_sizes):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
@@ -1601,9 +1596,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 return tup
             return tuple(tup.cpu().tolist())
 
-        for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
-            out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
-        ):
+        for cur_logits, cur_masks, size, target_size in zip(out_logits, raw_masks, processed_sizes, target_sizes):
             # we filter empty queries and detection below threshold
             cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
             keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
@@ -1611,11 +1604,8 @@ class DetrImageProcessor(BaseImageProcessor):
             cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            if len(cur_boxes) != len(cur_labels):
-                raise ValueError("Not as many boxes as there are classes")
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
