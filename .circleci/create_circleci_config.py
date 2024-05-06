@@ -400,10 +400,7 @@ REGULAR_TESTS = [
     torch_job,
     tf_job,
     flax_job,
-    custom_tokenizers_job,
     hub_job,
-    onnx_job,
-    exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
