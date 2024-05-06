@@ -373,7 +373,7 @@ def is_torch_mps_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available()
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
     return False
 
 
