@@ -313,7 +313,7 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         (
             UdopModel,
             UdopForConditionalGeneration,
-            #UdopForTokenClassification,
+            # UdopForTokenClassification,
         )
         if is_torch_available()
         else ()
