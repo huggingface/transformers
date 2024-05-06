@@ -275,7 +275,7 @@ class IrisConfig(PretrainedConfig):
         self.max_grad_norm_actor_critic=max_grad_norm_actor_critic,
         self.start_after_epochs_actor_critic_train=start_after_epochs_actor_critic_train,
         self.steps_per_epoch_actor_critc=steps_per_epoch_actor_critc,
-        self.imagine_horizon_train = self.sequence_length,
+        self.imagine_horizon_train_actor_critic = self.sequence_length,
         self.gamma=gamma,
         self.lambda_=lambda_,
         self.entropy_weight=entropy_weight,
@@ -289,7 +289,7 @@ class IrisConfig(PretrainedConfig):
         self.start_after_epochs_world_model_eval=self.start_after_epochs_world_model_train,
         self.start_after_epochs_actor_critic_eval=self.start_after_epochs_actor_critic_train,
         self.num_episodes_to_save__eval=self.batch_num_samples_actor_critic_train,
-        self.horizon_eval = self.imagine_horizon_train,
+        self.horizon_eval_actor_critic = self.imagine_horizon_train_actor_critic,
         
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
