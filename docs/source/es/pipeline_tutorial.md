@@ -165,7 +165,7 @@ Por ejemplo, el [`~transformers.AutomaticSpeechRecognitionPipeline`] tiene un pa
 
 ## Uso de pipelines en un conjunto de datos
 
-Los pipeline también puede ejecutar inferencia en un conjunto de datos grande. La forma más fácil que recomendamos parahacer esto es utilizando un iterador:
+Los pipeline también puede ejecutar inferencia en un conjunto de datos grande. La forma más fácil que recomendamos para hacer esto es utilizando un iterador:
 
 ```py
 def data():
@@ -179,15 +179,13 @@ for out in pipe(data()):
     generated_characters += len(out[0]["generated_text"])
 ```
 
-The iterator `data()` yields each result, and the pipeline automatically
-recognizes the input is iterable and will start fetching the data while
-it continues to process it on the GPU (this uses [DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) under the hood).
-This is important because you don't have to allocate memory for the whole dataset
-and you can feed the GPU as fast as possible.
+El iterador `data()` produce cada resultado, y el pipeline automáticamente
+reconoce que la entrada es iterable y comenzará a buscar los datos mientras
+continúa procesándolos en la GPU (dicho proceso utiliza [DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader)). Esto es importante porque no tienes que asignar memoria para todo el conjunto de datos y puedes alimentar la GPU lo más rápido posible.
 
-Since batching could speed things up, it may be useful to try tuning the `batch_size` parameter here.
+Dado que la agrupación en lotes podría acelerar las cosas, puede ser útil intentar ajustar el parámetro `batch_size` aquí.
 
-The simplest way to iterate over a dataset is to just load one from 🤗 [Datasets](https://github.com/huggingface/datasets/):
+La forma más sencilla de iterar sobre un conjunto de datos es cargandolo desde 🤗 [Datasets](https://github.com/huggingface/datasets/):
 
 ```py
 # KeyDataset is a util that will just output the item we're interested in.
@@ -201,21 +199,19 @@ for out in pipe(KeyDataset(dataset, "audio")):
     print(out)
 ```
 
-
-## Using pipelines for a webserver
+## Uso de pipelines para un servidor web
 
 <Tip>
-Creating an inference engine is a complex topic which deserves it's own
-page.
+Crear un motor de inferencia es un tema complejo que merece su propia página.
 </Tip>
 
 [Link](./pipeline_webserver)
 
-## Vision pipeline
+## Pipeline de visión
 
-Using a [`pipeline`] for vision tasks is practically identical.
+Usar un [`pipeline`] para tareas de visión es prácticamente idéntico.
 
-Specify your task and pass your image to the classifier. The image can be a link, a local path or a base64-encoded image. For example, what species of cat is shown below?
+Especifica tu tarea y pasa tu imagen al clasificador. La imagen puede ser un enlace, una ruta local o una imagen codificada en base64. Por ejemplo, ¿qué especie de gato se muestra a continuación?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
 
@@ -231,9 +227,9 @@ Specify your task and pass your image to the classifier. The image can be a link
 [{'score': 0.4335, 'label': 'lynx, catamount'}, {'score': 0.0348, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}, {'score': 0.0324, 'label': 'snow leopard, ounce, Panthera uncia'}, {'score': 0.0239, 'label': 'Egyptian cat'}, {'score': 0.0229, 'label': 'tiger cat'}]
 ```
 
-## Text pipeline
+## Pipeline de texto
 
-Using a [`pipeline`] for NLP tasks is practically identical.
+Usar un [`pipeline`] para tareas de PLN es prácticamente idéntico.
 
 ```py
 >>> from transformers import pipeline
@@ -248,11 +244,11 @@ Using a [`pipeline`] for NLP tasks is practically identical.
 {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'], 'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}
 ```
 
-## Multimodal pipeline
+## Pipeline multimodal
 
-The [`pipeline`] supports more than one modality. For example, a visual question answering (VQA) task combines text and image. Feel free to use any image link you like and a question you want to ask about the image. The image can be a URL or a local path to the image.
+La [`pipeline`] admite más de una modalidad. Por ejemplo, una tarea de respuesta a preguntas visuales (VQA) combina texto e imagen. No dudes en usar cualquier enlace de imagen que desees y una pregunta que quieras hacer sobre la imagen. La imagen puede ser una URL o una ruta local a la imagen.
 
-For example, if you use this [invoice image](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
+Por ejemplo, si usas esta [imagen de factura](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
 
 ```py
 >>> from transformers import pipeline
@@ -269,7 +265,7 @@ For example, if you use this [invoice image](https://huggingface.co/spaces/impir
 
 <Tip>
 
-To run the example above you need to have [`pytesseract`](https://pypi.org/project/pytesseract/) installed in addition to 🤗 Transformers:
+Para ejecutar el ejemplo anterior, debe tener instalado [`pytesseract`](https://pypi.org/project/pytesseract/) además de 🤗 Transformers:
 
 ```bash
 sudo apt install -y tesseract-ocr
@@ -278,11 +274,11 @@ pip install pytesseract
 
 </Tip>
 
-## Using `pipeline` on large models with 🤗 `accelerate`:
+## Uso de `pipeline` en modelos grandes con 🤗 `accelerate`:
 
-You can easily run `pipeline` on large models using 🤗 `accelerate`! First make sure you have installed `accelerate` with `pip install accelerate`. 
+¡Puedes ejecutar fácilmente `pipeline` en modelos grandes utilizando 🤗 `accelerate`! Primero asegúrate de haber instalado `accelerate` con `pip install accelerate`. 
 
-First load your model using `device_map="auto"`! We will use `facebook/opt-1.3b` for our example.
+¡Luego carga tu modelo utilizando `device_map="auto"`! Utilizaremos `facebook/opt-1.3b` para nuestro ejemplo.
 
 ```py
 # pip install accelerate
@@ -293,7 +289,7 @@ pipe = pipeline(model="facebook/opt-1.3b", torch_dtype=torch.bfloat16, device_ma
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-You can also pass 8-bit loaded models if you install `bitsandbytes` and add the argument `load_in_8bit=True`
+También puedes pasar modelos cargados de 8 bits sí instalas `bitsandbytes` y agregas el argumento `load_in_8bit=True`
 
 ```py
 # pip install accelerate bitsandbytes
@@ -304,17 +300,17 @@ pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"loa
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
-Note that you can replace the checkpoint with any Hugging Face model that supports large model loading, such as BLOOM.
+Nota que puedes reemplazar el punto de control con cualquier modelo de Hugging Face que admita la carga de modelos grandes, como BLOOM.
 
-## Creating web demos from pipelines with `gradio`
+## Crear demos web desde pipelines con `gradio`
 
-Pipelines are automatically supported in [Gradio](https://github.com/gradio-app/gradio/), a library that makes creating beautiful and user-friendly machine learning apps on the web a breeze. First, make sure you have Gradio installed:
+Los pipelines están automáticamente soportadas en [Gradio](https://github.com/gradio-app/gradio/), una biblioteca que hace que crear aplicaciones de aprendizaje automático hermosas y fáciles de usar en la web sea un proceso sencillo. Primero, asegúrate de tener Gradio instalado:
 
 ```
 pip install gradio
 ```
 
-Then, you can create a web demo around an image classification pipeline (or any other pipeline) in a single line of code by calling Gradio's [`Interface.from_pipeline`](https://www.gradio.app/docs/interface#interface-from-pipeline) function to launch the pipeline. This creates an intuitive drag-and-drop interface in your browser:
+Luego, puedes crear una demo web alrededor de una pipeline de clasificación de imágenes (o cualquier otra pipeline) en una sola línea de código llamando a la función `Interface.from_pipeline` de Gradio para lanzar la pipeline. Esto crea una interfaz intuitiva *drag-and-drop* en tu navegador:
 
 ```py
 from transformers import pipeline
@@ -328,5 +324,4 @@ gr.Interface.from_pipeline(pipe).launch()
 
 ![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/panda-classification.png)
 
-By default, the web demo runs on a local server. If you'd like to share it with others, you can generate a temporary public
-link by setting `share=True` in `launch()`. You can also host your demo on [Hugging Face Spaces](https://huggingface.co/spaces) for a permanent link. 
+De forma predeterminada, la demo web se ejecuta en un servidor local. Si deseas compartirlo con otros, puedes generar un enlace público temporal estableciendo `share=True` en `launch()`. También puedes hospedar tu demo en [Hugging Face Spaces](https://huggingface.co/spaces) para un enlace permanente.
