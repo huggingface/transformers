@@ -117,7 +117,7 @@ class IrisPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range) #self.config.initializer_range=0.02 (in original code)
+            module.weight.data.normal_(mean=0.0, std=self.cfg.initializer_range) #self.config.initializer_range=0.02 (in original code)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -1491,7 +1491,6 @@ class IrisModel(IrisPreTrainedModel):
         super().__init__(config)
         
         self.cfg = config
-        self.device = torch.device(self.cfg.device)
         config_enc_dec = EncoderDecoderConfig(self.cfg.resolution, self.cfg.in_channels, self.cfg.z_channels, self.cfg.ch,self.cfg.ch_mult, self.cfg.num_res_blocks,
                              self.cfg.attn_resolutions,self.cfg.out_ch, self.cfg.dropout)
         encoder = Encoder(config_enc_dec)
@@ -1500,12 +1499,11 @@ class IrisModel(IrisPreTrainedModel):
         transformer_config = TransformerConfig(self.cfg.tokens_per_block,self.cfg.max_blocks,self.cfg.attention,self.cfg.num_layers,self.cfg.num_heads,
                                                self.cfg.embed_dim_world_model,self.cfg.embed_pdrop, self.cfg.resid_pdrop,self.cfg.attn_pdrop)
         world_model = WorldModel(obs_vocab_size=tokenizer.vocab_size, act_vocab_size=self.cfg.num_actions, config=transformer_config)
-        actor_critic = ActorCritic(self.cfg.use_original_obs_actor_critic, act_vocab_size=self.cfg.num_actions)
-        self.agent = Agent(tokenizer, world_model, actor_critic).to(self.device)
+        actor_critic = ActorCritic(act_vocab_size=self.cfg.num_actions, use_original_obs=self.cfg.use_original_obs_actor_critic)
+        self.agent = Agent(tokenizer, world_model, actor_critic)
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def forward_component(self, component: nn.Module, output_hidden_states: bool, output_attentions: bool, inputs, **kwargs :Any):
         outputs, all_hidden_states, all_attentions = component.forward(inputs, output_hidden_states = output_hidden_states, output_attentions = output_attentions, **kwargs)
@@ -1580,7 +1578,6 @@ class IrisModel(IrisPreTrainedModel):
                             'gamma':self.cfg.gamma,'lambda_':self.cfg.lambda_,'entropy_weight':self.cfg.entropy_weight}
 
         batch = dict(observations = observations, actions = actions, rewards = rewards, ends = ends, mask_padding = mask_padding)
-        batch = batch.to(self.device)
                
         losses_tokenizer = self.component_losses(self.agent.tokenizer, batch, **cfg_tokenizer)
         losses_world_model = self.component_losses(self.agent.world_model, batch, **cfg_world_model)
@@ -1590,7 +1587,9 @@ class IrisModel(IrisPreTrainedModel):
         if should_preprocess == True:
             observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
         #tokenizer outputs : (outputs.z, outputs.z_quantized, reconstructions)
-        tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, output_attentions, observations_for_tokenizer, should_preprocess= should_preprocess, should_postprocess= should_postprocess)
+        tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, 
+                                                                                                         output_attentions, observations_for_tokenizer, 
+                                                                                                         should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
             obs_tokens, _, _ = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
@@ -1598,7 +1597,7 @@ class IrisModel(IrisPreTrainedModel):
         tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
         world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = self.forward_component(self.agent.world_model, output_hidden_states, output_attentions, tokens)
 
-        wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, self.cfg.device)
+        wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, observations.device)
         obs = wm_env.reset_from_initial_observations(observations[:, -1])
         actor_critic_outputs, all_hidden_states_actor_critic, all_attentions_actor_critic = self.forward_component(self.agent.actor_critic, output_hidden_states, output_attentions, obs)
 
