@@ -80,13 +80,12 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 You're free to create and use your own engines to be usable by the Agents framework.
 These engines have the following specification:
-1. It follows the [messages format](../chat_templating.md) for its input (`List[Dict[str, str]]`) and returns a string.
-2. It stops generating outputs *before* the sequences passed in the argument `stop`
-3. It accepts a `tools` argument, which is a list of `Tools`. You can provide an empty list for `tools`, but use the default toolbox with the optional argument `add_base_tools=True`.
+1. Follow the [messages format](../chat_templating.md) for its input (`List[Dict[str, str]]`) and return a string.
+2. Stop generating outputs *before* the sequences passed in the argument `stop_sequences`
 
 ### HfEngine
 
-For convenience, we have added a `HfEngine` that implements this and uses an inference endpoint for the execution of the LLM.
+For convenience, we have added a `HfEngine` that implements the points above and uses an inference endpoint for the execution of the LLM.
 
 ```python
 >>> from transformers import HfEngine
@@ -94,12 +93,12 @@ For convenience, we have added a `HfEngine` that implements this and uses an inf
 >>> messages = [
 ...   {"role": "user", "content": "Hello, how are you?"},
 ...   {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
-...   {"role": "user", "content": "I'd like to show off how chat templating works!"},
+...   {"role": "user", "content": "No need to help, take it easy."},
 ... ]
 
->>> HfEngine()(messages)
+>>> HfEngine()(messages, stop_sequences=["conversation"])
 
-"That sounds like a lot of fun! I'd be happy to help you demonstrate chat templating. Please go ahead and show me how it works."
+"That's very kind of you to say! It's always nice to have a relaxed "
 ```
 
 [[autodoc]] HfEngine
