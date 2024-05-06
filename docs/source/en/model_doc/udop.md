@@ -111,3 +111,9 @@ to fine-tune UDOP on a custom dataset as well as inference. 🌎
 
 [[autodoc]] UdopEncoderModel
     - forward
+    
+    
+## UdopForTokenClassification
+
+[[autodoc]] UdopForTokenClassification
+    - forward

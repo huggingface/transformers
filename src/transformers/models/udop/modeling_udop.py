@@ -31,6 +31,7 @@ from transformers import UdopConfig
 from transformers.modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
+    TokenClassifierOutput,
 )
 
 from ...activations import ACT2FN
@@ -1933,6 +1934,33 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         return reordered_decoder_past
 
 
+# Copied from transformers.models.layoutlmv3.modeling_layoutlmv3.LayoutLMv3ClassificationHead  with LayoutLMv3-> Udop
+class UdopClassificationHead(nn.Module):
+    """
+    Head for sentence-level classification tasks. Reference: RobertaClassificationHead
+    """
+
+    def __init__(self, config, pool_feature=False):
+        super().__init__()
+        self.pool_feature = pool_feature
+        if pool_feature:
+            self.dense = nn.Linear(config.hidden_size * 3, config.hidden_size)
+        else:
+            self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, x):
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+    
 @add_start_docstrings(
     "The bare UDOP Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     UDOP_START_DOCSTRING,
@@ -2042,3 +2070,113 @@ class UdopEncoderModel(UdopPreTrainedModel):
         )
 
         return encoder_outputs
+    
+@add_start_docstrings(
+    """
+    Udop Model with a token classification head on top (a linear layer on top of the final hidden states) e.g.
+    for sequence labeling (information extraction) tasks such as [FUNSD](https://guillaumejaume.github.io/FUNSD/),
+    [SROIE](https://rrc.cvc.uab.es/?ch=13), [CORD](https://github.com/clovaai/cord) and
+    [Kleister-NDA](https://github.com/applicaai/kleister-nda).
+    """,
+    UDOP_START_DOCSTRING,
+)
+class UdopForTokenClassification(UdopPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.udop = UdopEncoderModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+    
+        self.classifier = UdopClassificationHead(config, pool_feature=False)
+
+        self.init_weights()
+
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        bbox: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[Tensor] = None,
+        decoder_attention_mask: Optional[Tensor] = None,
+        use_cache=True,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForTokenClassification
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/udop-large", apply_ocr=False)
+        >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/udop-large", num_labels=7)
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+        >>> word_labels = example["ner_tags"]
+
+        >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.udop(
+            input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            pixel_values=pixel_values,
+        )
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+        # only take the text part of the output representations
+        sequence_output = outputs[0][:, :seq_length]
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

@@ -48,6 +48,8 @@ class UdopConfig(PretrainedConfig):
             Size of the intermediate feed forward layer in each `UdopBlock`.
         num_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder and decoder.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         num_decoder_layers (`int`, *optional*):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
         num_heads (`int`, *optional*, defaults to 16):
@@ -84,6 +86,8 @@ class UdopConfig(PretrainedConfig):
             The patch size used by the vision encoder.
         num_channels (`int`, *optional*, defaults to 3):
             The number of channels in the input images.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
     """
 
     model_type = "udop"
@@ -97,6 +101,7 @@ class UdopConfig(PretrainedConfig):
         d_kv=64,
         d_ff=4096,
         num_layers=24,
+        hidden_dropout_prob=0.1,
         num_decoder_layers=None,
         num_heads=16,
         relative_attention_num_buckets=32,
@@ -114,13 +119,16 @@ class UdopConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        classifier_dropout=None,
         **kwargs,
     ):
+        
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
+        self.hidden_dropout_prob =  hidden_dropout_prob
         self.num_decoder_layers = (
             num_decoder_layers if num_decoder_layers is not None else self.num_layers
         )  # default = symmetry
@@ -132,6 +140,8 @@ class UdopConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
+        
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings

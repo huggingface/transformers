@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopProcessor
+    from transformers import UdopEncoderModel, UdopForConditionalGeneration,UdopForTokenClassification, UdopModel, UdopProcessor
 
 
 if is_vision_available():
@@ -205,6 +205,25 @@ class UdopModelTester:
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
+ 
+    def create_and_check_for_token_classification(
+        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+    ):
+        config.num_labels = self.num_labels
+        model = UdopForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
+
+
     def create_and_check_generate_with_past_key_values(
         self,
         config,
@@ -269,6 +288,7 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         (
             UdopModel,
             UdopForConditionalGeneration,
+            UdopForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -466,6 +486,7 @@ class UdopEncoderOnlyModelTester:
             bbox,
             attention_mask,
         )
+    
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
