@@ -24,7 +24,6 @@ from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    corners_to_center_format,
     id_to_rgb,
     pad,
     rescale,
@@ -203,17 +202,16 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 
 # Copied from transformers.models.detr.image_processing_detr.normalize_annotation
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
-    image_height, image_width = image_size
-    norm_annotation = {}
-    for key, value in annotation.items():
-        if key == "boxes":
-            boxes = value
-            boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
-            norm_annotation[key] = boxes
-        else:
-            norm_annotation[key] = value
-    return norm_annotation
+    """Convert annotation boxes from absolute xyxy (pascal voc) to relative xcycwh (yolo) format."""
+    if "boxes" in annotation:
+        annotation = dict(**annotation)  # shallow copy
+        annotation["boxes"] = convert_boxes(
+            annotation["boxes"],
+            input_format="absolute_xyxy",
+            output_format="relative_xcycwh",
+            image_size=image_size,
+        )
+    return annotation
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices

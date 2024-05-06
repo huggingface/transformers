@@ -27,8 +27,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] image_transforms.center_to_corners_format
 
-[[autodoc]] image_transforms.corners_to_center_format
-
 [[autodoc]] image_transforms.id_to_rgb
 
 [[autodoc]] image_transforms.normalize
