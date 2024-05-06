@@ -21,10 +21,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
     pad,
@@ -1447,12 +1447,9 @@ class DetrImageProcessor(BaseImageProcessor):
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
+        boxes = convert_boxes(
+            out_bbox, input_format="relative_xcycwh", output_format="absolute_xyxy", image_size=target_sizes
+        )
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
         return results
@@ -1682,7 +1679,11 @@ class DetrImageProcessor(BaseImageProcessor):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -1696,6 +1697,11 @@ class DetrImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -1708,23 +1714,19 @@ class DetrImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
+        # Post process boxes
+        boxes = convert_boxes(
+            out_bbox, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes
         results = []
         for s, l, b in zip(scores, labels, boxes):
             score = s[s > threshold]

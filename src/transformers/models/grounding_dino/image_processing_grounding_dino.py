@@ -22,10 +22,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
     pad,
@@ -1451,7 +1451,11 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection with OwlViT->GroundingDino
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.1,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -1465,6 +1469,11 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -1478,24 +1487,20 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
         labels = probs.indices
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
+        # Post process boxes
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes
         results = []
         for s, l, b in zip(scores, labels, boxes):
             score = s[s > threshold]
