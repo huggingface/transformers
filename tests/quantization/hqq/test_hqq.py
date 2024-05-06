@@ -118,7 +118,7 @@ class HQQTest(unittest.TestCase):
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
-    def test_fp16_quantized_model_with_offloading(self):
+    def test_bfp16_quantized_model_with_offloading(self):
         """
         Simple LLM model testing bfp16 with meta-data offloading
         """
