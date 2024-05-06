@@ -446,7 +446,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             task: fill each <image> with the correct number of visual embeddings
             Example:
                 X (5 patches), Y (3 patches), Z (8)
-                X, Y is on the same sequence (in-context learning)
+                X, Y are in the same sequence (in-context learning)
             if right padding
                 input_ids: [
                     a b c d e f X g h i j k Y l m
