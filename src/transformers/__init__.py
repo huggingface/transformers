@@ -1135,6 +1135,7 @@ _import_structure = {
         "BitsAndBytesConfig",
         "EetqConfig",
         "GPTQConfig",
+        "HqqConfig",
         "QuantoConfig",
     ],
 }
@@ -1422,6 +1423,7 @@ else:
             "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
+            "EosTokenCriteria",
             "EpsilonLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
@@ -1447,6 +1449,7 @@ else:
             "SequenceBiasLogitsProcessor",
             "StoppingCriteria",
             "StoppingCriteriaList",
+            "StopStringCriteria",
             "SuppressTokensAtBeginLogitsProcessor",
             "SuppressTokensLogitsProcessor",
             "TemperatureLogitsWarper",
@@ -6114,6 +6117,7 @@ if TYPE_CHECKING:
         BitsAndBytesConfig,
         EetqConfig,
         GPTQConfig,
+        HqqConfig,
         QuantoConfig,
     )
 
@@ -6390,6 +6394,7 @@ if TYPE_CHECKING:
             DisjunctiveConstraint,
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,
+            EosTokenCriteria,
             EpsilonLogitsWarper,
             EtaLogitsWarper,
             ExponentialDecayLengthPenalty,
@@ -6415,6 +6420,7 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             SuppressTokensAtBeginLogitsProcessor,
             SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
