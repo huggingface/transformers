@@ -411,8 +411,6 @@ class Tool:
                 self.inputs = parse_langchain_args(_langchain_tool.args)
                 self.output_type = "text"
                 self.langchain_tool = _langchain_tool
-                print(list(inspect.signature(_langchain_tool.run).parameters.keys()))
-                print(self.inputs)
 
             def forward(self, *args, **kwargs):
                 tool_input = kwargs.copy()

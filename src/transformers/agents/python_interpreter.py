@@ -401,7 +401,8 @@ def evaluate_call(call, state, tools):
 
         # store logs of print statements
         if func_name == "print":
-            state["print_outputs"] += "\n" + output
+            print(output)
+            state["print_outputs"] += output + "\n"
 
         return output
     else:

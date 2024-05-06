@@ -355,7 +355,7 @@ class Agent:
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
         self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
-        self.logger.warn("=====New task=====")
+        self.logger.warn("======== New task ========")
         self.logger.log(33, self.task)
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
@@ -461,9 +461,9 @@ class Agent:
             )
 
     def log_code_action(self, code_action: str) -> None:
-        self.logger.warning("====Agent is executing the code below:")
+        self.logger.warning("==== Agent is executing the code below:")
         if is_pygments_available():
-            self.logger.log(31, highlight(code_action, PythonLexer(), Terminal256Formatter()))
+            self.logger.log(31, highlight(code_action, PythonLexer(ensurenl=False), Terminal256Formatter()))
         else:
             self.logger.log(31, code_action)
         self.logger.warning("====")
@@ -682,23 +682,23 @@ class ReactJsonAgent(ReactAgent):
 
         self.logs[-1]["agent_memory"] = agent_memory.copy()
         self.prompt = agent_memory
-        self.logger.debug("=====New step=====")
+        self.logger.debug("===== New step =====")
 
         # Add new step in logs
         self.logs.append({})
-        self.logger.info("=====Calling LLM with this last message:=====")
+        self.logger.info("===== Calling LLM with this last message: =====")
         self.logger.info(self.prompt[-1])
 
         try:
             llm_output = self.llm_engine(self.prompt, stop_sequences=["Observation:"])
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
-        self.logger.debug("=====Output message of the LLM:=====")
+        self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
 
         # Parse
-        self.logger.debug("=====Extracting action=====")
+        self.logger.debug("===== Extracting action =====")
         rationale, action = self.extract_action(llm_output=llm_output, split_token="Action:")
 
         try:
@@ -782,12 +782,12 @@ class ReactCodeAgent(ReactAgent):
 
         self.prompt = agent_memory.copy()
 
-        self.logger.debug("=====New step=====")
+        self.logger.debug("===== New step =====")
 
         # Add new step in logs
         self.logs.append({})
 
-        self.logger.info("=====Calling LLM with these last messages:=====")
+        self.logger.info("===== Calling LLM with these last messages: =====")
         self.logger.info(self.prompt[-2:])
 
         try:
@@ -795,12 +795,12 @@ class ReactCodeAgent(ReactAgent):
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
-        self.logger.debug("=====Output message of the LLM:=====")
+        self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
         self.logs[-1]["llm_output"] = llm_output
 
         # Parse
-        self.logger.debug("=====Extracting action=====")
+        self.logger.debug("===== Extracting action =====")
         rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
 
         try:
@@ -828,7 +828,7 @@ class ReactCodeAgent(ReactAgent):
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
-                self.logger.warning("Final answer:")
+                self.logger.warning(">>> Final answer:")
                 self.logger.log(32, result)
                 return result
         return None

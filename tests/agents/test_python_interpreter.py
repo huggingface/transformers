@@ -346,3 +346,10 @@ if char.isalpha():
         code = "0x30A0 <= ord('a') <= 0x30FF"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result
+
+    def test_print_output(self):
+        code = "print('Hello world!')\nprint('Ok no one cares')"
+        state = {}
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
+        assert result == "Ok no one cares"
+        assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
