@@ -501,8 +501,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         a b c d X X X g h _ _
                         i j Y Y Y Y Y k l m n
                     ]
-
-
         """
         image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
         ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
