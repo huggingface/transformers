@@ -478,17 +478,14 @@ def convert_boxes(
     """
     Convert boxes from one format to another.
 
-    Supported boxes formats:
-        A single box of shape (B,), where B is 4 or more elements, and the first 4 elements are the
-        coordinates of the box. The box can be represented as
-            - torch.Tensor | np.ndarray | List[float, ...]
-
-        Boxes from one image, a set of boxes (N, B) where N is the number of boxes. The boxes can be represented as
-            - torch.Tensor | np.ndarray | List[List[float, ...]]
-
-        Boxes from multiple images, a set of images with their boxes (I, N, B), where I is number of images.
-        May be represented as a single 3d array/tensor or most likely as a list of arrays/tensors
-            - torch.Tensor | np.ndarray | List[torch.Tensor | np.ndarray] | List[List[List[float, ...]]]
+    Bounding boxes can be provided as:
+        - A single box (torch.Tensor | np.ndarray | List[float, ...]): Box of shape (B,), where B is 4 or more elements, 
+        and the first 4 elements are the coordinates of the box. 
+        - Boxes from one image (torch.Tensor | np.ndarray | List[List[float, ...]]): A set of boxes (N, B) where N is 
+        the number of boxes.
+        - Boxes from multiple images (torch.Tensor | np.ndarray | List[torch.Tensor | np.ndarray] | List[List[List[float, ...]]]):
+        A set of images with their boxes (I, N, B), where I is number of images. Can be represented as a single 3D array/tensor 
+        or most likely as a list of 2D arrays/tensors. 
 
     Supported input/output bounding box formats:
         - `absolute_xyxy` (aliases: `pascal_voc`, `xyxy`): [x_min, y_min, x_max, y_max]
@@ -499,11 +496,15 @@ def convert_boxes(
         - `relative_xcycwh` (aliases: `yolo`, `xcycwh`): [center_x, center_y, width, height] normalized to [0, 1] by image size
 
     Args:
-        boxes: A single box / boxes from one image / boxes from multiple images
-        input_format: format of the input boxes
-        output_format: format of the output boxes
-        image_size: (height, width) of the image if boxes are from one image, or list of (height, width) for each image
-        check: warn/raise/None
+        boxes: A single box / boxes from one image / boxes from multiple images.
+        input_format (str): Format of the input boxes.
+        output_format (str): Format of the output boxes.
+        image_size (Optional[torch.tensor | List | Tuple]): (height, width) of the image if boxes are from one image, or list of (height, width) tuples 
+            if provided boxes from multiple images.
+        check (Optional[str]): Whether to check bounding boxes or not.
+            - `"warn"` raise warning if bounding boxes are outside image borders or have negative width/height.
+            - `"raise"` raise error if bounding boxes are outside image borders or have negative width/height.
+            - `None` no checks are performed.
 
     Returns:
         boxes: Boxes converted to output format with the same shape and data type as the input boxes
