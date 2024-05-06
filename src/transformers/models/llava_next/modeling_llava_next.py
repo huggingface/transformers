@@ -424,18 +424,18 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         Merge input_ids with with image features into final embeddings
 
         Args:
-            image_features (`torch.Tensor` of shape `(all_feature_lens, embed_dim)`)
+            image_features (`torch.Tensor` of shape `(all_feature_lens, embed_dim)`):
                 All vision vectors of all images in the batch
-            feature_lens (`torch.LongTensor` of shape `(num_images)`)
+            feature_lens (`torch.LongTensor` of shape `(num_images)`):
                 The length of visual embeddings of each image as stacked in `image_features`
-            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`)
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
                 token embeddings before merging with visual embeddings
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 input_ids of tokens, possibly filled with image token
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 attention_mask for input_ids
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
-            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*, defaults to None)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
                 labels need to be recalculated to support training (if provided)
         Returns:
             final_embedding, final_attention_mask, position_ids, final_labels
