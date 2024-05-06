@@ -19,7 +19,7 @@ import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING, AgentAudio, AgentImage, AgentText
-from transformers.testing_utils import get_tests_dir, is_tool_test
+from transformers.testing_utils import get_tests_dir, is_agent_test
 
 
 if is_torch_available():
@@ -63,7 +63,7 @@ def output_type(output):
         raise ValueError(f"Invalid output: {output}")
 
 
-@is_tool_test
+@is_agent_test
 class ToolTesterMixin:
     def test_inputs_output(self):
         self.assertTrue(hasattr(self.tool, "inputs"))
