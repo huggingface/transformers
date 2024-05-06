@@ -52,7 +52,7 @@ We implement two versions of ReactJsonAgent:
 
 For example, here is how a ReAct agent would work its way through the following question.
 
-```
+```py3
 >>> agent.run(
 ...     "How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?",
 ... )
