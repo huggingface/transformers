@@ -486,6 +486,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     "Seq2Seq speech recognition model requires either a "
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
+            if "assistant_model" in generate_kwargs:
+                generate_kwargs["input_features"] = inputs
 
             # custom processing for Whisper timestamps and word-level timestamps
             if return_timestamps and self.type == "seq2seq_whisper":
@@ -507,9 +509,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 generate_kwargs["input_features"] = inputs
             else:
                 generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
-
-            if "assistant_model" in generate_kwargs:
-                generate_kwargs["input_features"] = inputs
 
             tokens = self.model.generate(
                 attention_mask=attention_mask,
