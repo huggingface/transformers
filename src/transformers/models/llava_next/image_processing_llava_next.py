@@ -454,7 +454,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
     ):
         """
         Args:
-            pixel_values (`List[np.ndarray]`): array of pixel values of each images
+            images (`List[np.ndarray]`): List of each images to be padded
             image_sizes (`List[Tuple[int, int]]`): image sizes (height, weidt)
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
