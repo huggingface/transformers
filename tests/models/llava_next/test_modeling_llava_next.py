@@ -458,7 +458,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             [self.prompt, self.prompt], images=[self.image, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
 
-        # it should not matter now whether two image is same size or not
+        # it should not matter whether two images are the same size or not
 
         output = model.generate(**inputs, max_new_tokens=20)
 
