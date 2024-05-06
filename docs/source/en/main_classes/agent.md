@@ -88,6 +88,20 @@ These engines have the following specification:
 
 For convenience, we have added a `HfEngine` that implements this and uses an inference endpoint for the execution of the LLM.
 
+```python
+>>> from transformers import HfEngine
+
+>>> messages = [
+...   {"role": "user", "content": "Hello, how are you?"},
+...   {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
+...   {"role": "user", "content": "I'd like to show off how chat templating works!"},
+... ]
+
+>>> HfEngine()(messages)
+
+"That sounds like a lot of fun! I'd be happy to help you demonstrate chat templating. Please go ahead and show me how it works."
+```
+
 [[autodoc]] HfEngine
 
 

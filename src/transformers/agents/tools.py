@@ -401,6 +401,7 @@ class Tool:
         """
         Creates a [`Tool`] from a langchain tool.
         """
+
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
                 super().__init__()
