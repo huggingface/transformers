@@ -151,7 +151,7 @@ class CircleCIJob:
                         if self.name == "torch":
                             all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True) 
                             filtered = [k for k in all_tests if ("_tf_") not in k and "_flax_" not in k]
-                            expanded_tests.expand(filtered)
+                            expanded_tests.extend(filtered)
                         else:
                             expanded_tests.extend(glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True))
                     else:
