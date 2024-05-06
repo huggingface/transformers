@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import to_channel_dimension_format
+from ...image_transforms import coco_to_pascal_voc, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -46,25 +46,8 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-def _xywh2xyxy(bbox_xywh):
-    """Transform the bbox format from xywh to x1y1x2y2.
-
-    Args:
-        bbox_xywh (ndarray): Bounding boxes (with scores),
-            shaped (n, 4) or (n, 5). (left, top, width, height, [score])
-    Returns:
-        np.ndarray: Bounding boxes (with scores), shaped (n, 4) or
-          (n, 5). (left, top, right, bottom, [score])
-    """
-    bbox_xyxy = bbox_xywh.copy()
-    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
-    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
-
-    return bbox_xyxy
-
-
 def box_to_center_and_scale(box, width, height):
-    """This encodes bbox(x,y,w,h) into (center, scale)
+    """This encodes bbox in COCO format (top, left, width, height) into (center, scale).
 
     Args:
         x, y, w, h
@@ -396,7 +379,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
             boxes (`List[List[float]]`):
                 List of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
-                box coordinates (x, y, w, h).
+                box coordinates in COCO format (x, y, w, h).
 
             do_affine_transform (`bool`, *optional*, defaults to `self.do_affine_transform`):
                 Whether to apply an affine transformation to the input images.
@@ -599,7 +582,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         poses = all_preds
 
         bboxes = np.array(boxes)
-        bboxes_xyxy = _xywh2xyxy(bboxes)
+        bboxes_xyxy = coco_to_pascal_voc(bboxes)
 
         pose_results = []
         for pose, bbox_xyxy in zip(poses, bboxes_xyxy):

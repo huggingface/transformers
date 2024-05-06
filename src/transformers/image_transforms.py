@@ -533,6 +533,27 @@ def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
     return bboxes_corners
 
 
+def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from the COCO format to the Pascal VOC format.
+
+    In other words, converts from (top_left_x, top_left_y, width, height) format
+    to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+
+    Args:
+        bboxes (`ndarray` of shape `(batch_size, 4)):
+            Bounding boxes in COCO format.
+
+    Returns:
+        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
+    """
+    bbox_xyxy = bboxes.copy()
+    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
+    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+
+    return bbox_xyxy
+
+
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """

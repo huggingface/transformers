@@ -28,23 +28,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import ViTPoseBackboneConfig, ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
-
-
-def _xywh2xyxy(bbox_xywh):
-    """Transform the bbox format from xywh to x1y1x2y2.
-
-    Args:
-        bbox_xywh (ndarray): Bounding boxes (with scores),
-            shaped (n, 4) or (n, 5). (left, top, width, height, [score])
-    Returns:
-        np.ndarray: Bounding boxes (with scores), shaped (n, 4) or
-          (n, 5). (left, top, right, bottom, [score])
-    """
-    bbox_xyxy = bbox_xywh.copy()
-    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
-    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
-
-    return bbox_xyxy
+from transformers.image_transforms import coco_to_pascal_voc
 
 
 def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor):
@@ -74,7 +58,7 @@ def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_pro
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
     person_results = torch.load(filepath, map_location="cpu")
     bboxes = np.array([box["bbox"] for box in person_results])
-    bboxes_xyxy = _xywh2xyxy(bboxes)
+    bboxes_xyxy = coco_to_pascal_voc(bboxes)
 
     pose_results = []
     for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
