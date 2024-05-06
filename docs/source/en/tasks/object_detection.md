@@ -172,7 +172,9 @@ To get an even better understanding of the data, visualize an example in the dat
 
 >>> image
 ```
-![png](https://i.imgur.com/oVQb9SF.png)
+<div class="flex justify-center">
+    <img src="https://i.imgur.com/oVQb9SF.png" alt="CPPE-5 Image Example"/>
+</div>
 
 
 To visualize the bounding boxes with associated labels, you can get the labels from the dataset's metadata, specifically
@@ -1433,7 +1435,7 @@ Finally, bring everything together, and call [`~transformers.Trainer.train`]:
 </table><p>
 
 If you have set `push_to_hub` to `True` in the `training_args`, the training checkpoints are pushed to the
-Hugging Face Hub. Upon training completion, push the final model to the Hub as well by calling the [push_to_hub()](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Trainer.push_to_hub) method.
+Hugging Face Hub. Upon training completion, push the final model to the Hub as well by calling the [`~transformers.Trainer.push_to_hub`] method.
 
 ```py
 >>> trainer.push_to_hub()
@@ -1551,4 +1553,7 @@ Let's plot the result:
 
 >>> resized_image
 ```
-![png](https://i.imgur.com/oDUqD0K.png)
+
+<div class="flex justify-center">
+    <img src="https://i.imgur.com/oDUqD0K.png" alt="Object detection result on a new image"/>
+</div>
