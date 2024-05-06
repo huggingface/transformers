@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import coco_to_pascal_voc, to_channel_dimension_format
+from ...image_transforms import box_to_center_and_scale, coco_to_pascal_voc, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -44,36 +44,6 @@ if is_cv2_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def box_to_center_and_scale(box, width, height):
-    """This encodes bbox in COCO format (top, left, width, height) into (center, scale).
-
-    Args:
-        x, y, w, h
-
-    Returns:
-        tuple: A tuple containing center and scale.
-
-        - np.ndarray[float32](2,): Center of the bbox (x, y).
-        - np.ndarray[float32](2,): Scale of the bbox w & h.
-    """
-
-    x, y, w, h = box[:4]
-    input_size = (width, height)
-    aspect_ratio = input_size[0] / input_size[1]
-    center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
-
-    if w > aspect_ratio * h:
-        h = w * 1.0 / aspect_ratio
-    elif w < aspect_ratio * h:
-        w = h * aspect_ratio
-
-    # pixel std is 200.0
-    scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
-    scale = scale * 1.25
-
-    return center, scale
 
 
 def _get_max_preds(heatmaps):
@@ -444,7 +414,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         if self.do_affine_transform:
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
-                    center, scale = box_to_center_and_scale(box, size["width"], size["height"])
+                    center, scale = box_to_center_and_scale(
+                        box, image_width=size["width"], image_height=size["height"]
+                    )
                     transformed_image = self.affine_transform(
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
                     )
@@ -563,7 +535,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         scales = np.zeros((batch_size, 2), dtype=np.float32)
         for i in range(batch_size):
             width, height = self.size["width"], self.size["height"]
-            center, scale = box_to_center_and_scale(boxes[i], width=width, height=height)
+            center, scale = box_to_center_and_scale(boxes[i], image_width=width, image_height=height)
             centers[i, :] = center
             scales[i, :] = scale
 

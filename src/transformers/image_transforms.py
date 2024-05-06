@@ -554,6 +554,41 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bbox_xyxy
 
 
+def box_to_center_and_scale(box: Union[Tuple, List], image_width: int, image_height: int):
+    """
+    Encodes a bounding box in COCO format into (center, scale).
+
+    Args:
+        box (`Tuple` or `List`):
+            Bounding box in COCO format (top_left_x, top_left_y, width, height).
+        image_width (`int`):
+            Image width.
+        image_height (`int`):
+            Image height.
+
+    Returns:
+        tuple: A tuple containing center and scale.
+
+        - `np.ndarray` [float32](2,): Center of the bbox (x, y).
+        - `np.ndarray` [float32](2,): Scale of the bbox width & height.
+    """
+
+    top_left_x, top_left_y, width, height = box[:4]
+    aspect_ratio = image_width / image_height
+    center = np.array([top_left_x + width * 0.5, top_left_y + height * 0.5], dtype=np.float32)
+
+    if width > aspect_ratio * height:
+        height = width * 1.0 / aspect_ratio
+    elif width < aspect_ratio * height:
+        width = height * aspect_ratio
+
+    # pixel std is 200.0
+    scale = np.array([width / 200.0, height / 200.0], dtype=np.float32)
+    scale = scale * 1.25
+
+    return center, scale
+
+
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
