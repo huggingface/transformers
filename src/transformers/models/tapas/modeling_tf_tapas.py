@@ -61,7 +61,7 @@ if is_tensorflow_probability_available():
     try:
         import tensorflow_probability as tfp
 
-        # On the first call, check whether a compatible version of TensorFlow is instalTFTapasMainLayerled
+        # On the first call, check whether a compatible version of TensorFlow is installed
         # TensorFlow Probability depends on a recent stable release of TensorFlow
         n = tfp.distributions.Normal(loc=0.0, scale=1.0)
     except ImportError:
