@@ -192,7 +192,6 @@ if __name__ == "__main__":
         all,
         model_types,
         models_to_skip,
-        no_check,
         upload,
         organization,
         token=os.environ.get("TOKEN", None),
