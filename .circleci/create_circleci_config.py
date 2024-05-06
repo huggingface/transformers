@@ -152,7 +152,7 @@ class CircleCIJob:
                     else:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
-                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True)) 
                 else:
                     expanded_tests.append(test)
             tests = " ".join(expanded_tests)
