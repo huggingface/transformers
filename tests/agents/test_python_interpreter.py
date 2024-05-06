@@ -17,13 +17,13 @@ import unittest
 
 import pytest
 
+from transformers import load_tool
 from transformers.agents.agent_types import AGENT_TYPE_MAPPING
 from transformers.agents.default_tools import BASE_PYTHON_TOOLS
 from transformers.agents.python_interpreter import InterpretorError, evaluate_python_code
 
-from transformers import load_tool
-
 from .test_tools_common import ToolTesterMixin
+
 
 # Fake function we will use as tool
 def add_two(x):
@@ -332,7 +332,7 @@ if char.isalpha():
 
         code = "import stat\nstat.S_ISREG(0o100644)"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
-        assert result == True
+        assert result
 
         code = "import statistics\nstatistics.mean([1, 2, 3, 4, 4])"
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})

@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_torch_available, load_tool
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
 
