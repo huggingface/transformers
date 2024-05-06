@@ -2104,7 +2104,7 @@ class UdopForTokenClassification(UdopPreTrainedModel):
         use_cache=True,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2165,7 +2165,8 @@ class UdopForTokenClassification(UdopPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+            loss = loss_fct(logits.view(-1), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]

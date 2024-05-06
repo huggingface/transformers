@@ -48,7 +48,7 @@ class UdopConfig(PretrainedConfig):
             Size of the intermediate feed forward layer in each `UdopBlock`.
         num_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder and decoder.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         num_decoder_layers (`int`, *optional*):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
@@ -101,7 +101,7 @@ class UdopConfig(PretrainedConfig):
         d_kv=64,
         d_ff=4096,
         num_layers=24,
-        hidden_dropout_prob=0.1,
+        hidden_dropout_prob=0.0,
         num_decoder_layers=None,
         num_heads=16,
         relative_attention_num_buckets=32,
