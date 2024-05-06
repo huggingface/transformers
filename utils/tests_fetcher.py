@@ -1153,6 +1153,31 @@ def infer_tests_to_run(
         with open(example_file, "w", encoding="utf-8") as f:
             f.write(" ".join(examples_tests_to_run))
 
+
+    exotic_models=["layoutlmv", "nat", "deta", "udop", "nougat"]
+    pattern = re.compile(r"(?=("+'|'.join(exotic_models)+r"))")
+    exotic_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
+    print(f"\n### EXOTIC MODEL TEST TO RUN ###\n{_print_list(exotic_tests_to_run)}")
+    if len(exotic_tests_to_run) > 0:
+        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
+        if exotic_tests_to_run == ["exotic"]:
+            exotic_tests_to_run = ["all"]
+        exotic_file = Path(output_file).parent / "exotic_test_list.txt"
+        with open(exotic_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(exotic_tests_to_run))
+
+    custom_models = ["tokenization_bert_japanese", "test_tokenization_openai","test_tokenization_clip"]
+    pattern = re.compile(r"(?=("+'|'.join(custom_models)+r"))")
+    custom_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
+    print(f"\n### CUSTOM TEST TO RUN ###\n{_print_list(custom_tests_to_run)}")
+    if len(custom_tests_to_run) > 0:
+        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
+        if custom_tests_to_run == ["custom"]:
+            custom_tests_to_run = ["all"]
+        custom_file = Path(output_file).parent / "custom_test_list.txt"
+        with open(custom_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(custom_tests_to_run))
+
     doctest_list = get_doctest_files()
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
