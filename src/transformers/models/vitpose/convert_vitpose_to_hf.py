@@ -47,6 +47,45 @@ def _xywh2xyxy(bbox_xywh):
     return bbox_xyxy
 
 
+def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor):
+    batch_size = pixel_values.shape[0]
+
+    centers = np.zeros((batch_size, 2), dtype=np.float32)
+    scales = np.zeros((batch_size, 2), dtype=np.float32)
+    for i in range(batch_size):
+        centers[i, :] = img_metas[i]["center"]
+        scales[i, :] = img_metas[i]["scale"]
+
+    preds, maxvals = image_processor.keypoints_from_heatmaps(
+        output_heatmap, center=centers, scale=scales, use_udp=True
+    )
+
+    all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+    all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+    all_preds[:, :, 0:2] = preds[:, :, 0:2]
+    all_preds[:, :, 2:3] = maxvals
+    all_boxes[:, 0:2] = centers[:, 0:2]
+    all_boxes[:, 2:4] = scales[:, 0:2]
+    all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
+
+    poses = all_preds
+
+    # create final results by adding person bbox information
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
+    person_results = torch.load(filepath, map_location="cpu")
+    bboxes = np.array([box["bbox"] for box in person_results])
+    bboxes_xyxy = _xywh2xyxy(bboxes)
+
+    pose_results = []
+    for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+        pose_result = person_result.copy()
+        pose_result["keypoints"] = pose
+        pose_result["bbox"] = bbox_xyxy
+        pose_results.append(pose_result)
+
+    return pose_results
+
+
 def get_config(model_name):
     num_experts = 6 if "+" in model_name else 1
     part_features = 192 if "+" in model_name else 0
@@ -229,52 +268,8 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     output_heatmap = (output_heatmap + output_flipped_heatmap) * 0.5
 
-    # TODO verify postprocessing
-    batch_size = pixel_values.shape[0]
-
-    centers = np.zeros((batch_size, 2), dtype=np.float32)
-    scales = np.zeros((batch_size, 2), dtype=np.float32)
-    score = np.ones(batch_size)
-    for i in range(batch_size):
-        centers[i, :] = img_metas[i]["center"]
-        scales[i, :] = img_metas[i]["scale"]
-
-        if "bbox_score" in img_metas[i]:
-            score[i] = np.array(img_metas[i]["bbox_score"]).reshape(-1)
-
-    preds, maxvals = image_processor.keypoints_from_heatmaps(
-        output_heatmap, center=centers, scale=scales, use_udp=True
-    )
-
-    all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-    all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-    all_preds[:, :, 0:2] = preds[:, :, 0:2]
-    all_preds[:, :, 2:3] = maxvals
-    all_boxes[:, 0:2] = centers[:, 0:2]
-    all_boxes[:, 2:4] = scales[:, 0:2]
-    all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
-    all_boxes[:, 5] = score
-
-    poses = all_preds
-
-    # create final results by adding person bbox information
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
-    person_results = torch.load(filepath, map_location="cpu")
-    bboxes = np.array([box["bbox"] for box in person_results])
-    bboxes_xyxy = _xywh2xyxy(bboxes)
-
-    pose_results = []
-    for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
-        pose_result = person_result.copy()
-        pose_result["keypoints"] = pose
-        pose_result["bbox"] = bbox_xyxy
-        pose_results.append(pose_result)
-
-    print("Original pose results:")
-    for pose_result in pose_results:
-        print(pose_result)
-
     # Verify pose_results
+    pose_results = get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor)
     # This is a list of dictionaries, containing the bounding box and keypoints per detected person
     assert torch.allclose(
         torch.from_numpy(pose_results[0]["bbox"]).float(), torch.tensor([412.8, 157.61, 464.85, 294.62])
@@ -282,8 +277,6 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     assert torch.allclose(
         torch.from_numpy(pose_results[1]["bbox"]).float(), torch.tensor([384.43, 172.21, 398.55, 206.95])
     )
-    assert pose_results[0]["keypoints"].shape == (17, 3)
-    assert pose_results[1]["keypoints"].shape == (17, 3)
 
     if model_name == "vitpose-base-simple":
         assert torch.allclose(
@@ -317,9 +310,8 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             torch.tensor(hf_pose_results[1]["keypoints"][0, :3]),
             torch.tensor([3.9813846e02, 1.8180725e02, 8.7446749e-01]),
         )
-    print("Pose results:")
-    for pose_result in hf_pose_results:
-        print(pose_result)
+        assert hf_pose_results[0]["keypoints"].shape == (17, 3)
+        assert hf_pose_results[1]["keypoints"].shape == (17, 3)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
