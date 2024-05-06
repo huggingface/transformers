@@ -447,7 +447,7 @@ def evaluate_condition(condition, state, tools):
         if op == ast.Eq:
             result = result == comparator
         elif op == ast.NotEq:
-            result = result!= comparator
+            result = result != comparator
         elif op == ast.Lt:
             result = result < comparator
         elif op == ast.LtE:
