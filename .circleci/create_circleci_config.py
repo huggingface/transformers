@@ -152,7 +152,7 @@ class CircleCIJob:
             tests = " ".join(expanded_tests)
 
             # Each executor to run ~10 tests
-            n_executors = max(len(tests) // 10, 1)
+            n_executors = max(len(expanded_tests) // 10, 1)
             # Avoid empty test list on some executor(s) or launching too many executors
             if n_executors > self.parallelism:
                 n_executors = self.parallelism
