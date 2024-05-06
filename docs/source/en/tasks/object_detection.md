@@ -1477,7 +1477,7 @@ Hugging Face Hub. Upon training completion, push the final model to the Hub as w
   'test_steps_per_second': 2.42}
 ```
 
-These results can be further improved by adjusting the hyperparameters in [`TrainingArguments``]. Give it a go!
+These results can be further improved by adjusting the hyperparameters in [`TrainingArguments`]. Give it a go!
 
 ## Inference
 
