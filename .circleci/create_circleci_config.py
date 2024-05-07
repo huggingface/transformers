@@ -77,10 +77,11 @@ class CircleCIJob:
             self.tests_to_run = [self.tests_to_run]
         else:
             test_file = os.path.join("test_preparation" , f"{self.name}_test_list.txt")
+            print("Looking for ", test_file)
             if os.path.exists(test_file):
                 with open(test_file) as f:
                     expanded_tests = f.read().split(" ")
-            self.tests_to_run = expanded_tests
+                self.tests_to_run = expanded_tests
         if self.parallelism is None:
             self.parallelism = 1
         else:
