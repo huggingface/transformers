@@ -193,28 +193,6 @@ boxes have the correct coordinates relative to the original image:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_4.png" alt="Beach photo with detected objects"/>
 </div>
 
-Note that for OWLv2, if the image is not square, the coorindates in the lesser dimension are off by a ratio of the lesser dimension to the greater dimension. This is a workaround to correct the coordinates:
-
-```py
->>> width, height = im.size
->>> width_ratio = 1
->>> height_ratio = 1
-
->>> if width < height:
-...     width_ratio = width / height
-... elif height < width:
-...     height_ratio = height / width
-
->>> for box, score, label in zip(boxes, scores, labels):
-...     xmin, ymin, xmax, ymax = box
-...     xmin /= width_ratio
-...     ymin /= height_ratio
-...     xmax /= width_ratio
-...     ymax /= height_ratio
-...     draw.rectangle((xmin, ymin, xmax, ymax), outline="red", width=1)
-...     draw.text((xmin, ymin), f"{text_queries[label]}: {round(score,2)}", fill="white")
-
->>> im
 ```
 ## Batch processing
 
