@@ -237,6 +237,7 @@ if is_accelerate_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
 if is_accelerate_available("0.28.0"):
+    from accelerate.optimizer import AcceleratedOptimizer
     from accelerate.utils import DataLoaderConfiguration
 
 
@@ -254,6 +255,12 @@ def _is_peft_model(model):
             classes_to_check = (*classes_to_check, PeftMixedModel)
         return isinstance(model, classes_to_check)
     return False
+
+
+def _unwrap_optimizer(optimizer):
+    if isinstance(optimizer, AcceleratedOptimizer):
+        optimizer = optimizer.optimizer
+    return optimizer
 
 
 def _get_fsdp_ckpt_kwargs():
@@ -1075,6 +1082,12 @@ class Trainer:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+
+            # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
+            self._is_lomo_optimizer = is_lomo_available() and isinstance(
+                _unwrap_optimizer(self.optimizer), (Lomo, AdaLomo)
+            )
+
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
 
@@ -2075,6 +2088,9 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
+        elif self._is_lomo_optimizer:
+            # In this case we are in DDP + LOMO, which should be supported
+            self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -2173,12 +2189,6 @@ class Trainer:
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
         grad_norm: Optional[float] = None
-        # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
-        if use_accelerator_prepare:
-            self._is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
-        else:
-            self._is_lomo_optimizer = is_lomo_available() and isinstance(self.optimizer, (Lomo, AdaLomo))
-
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         total_batched_samples = 0
@@ -3249,7 +3259,7 @@ class Trainer:
         if is_lomo_available():
             from lomo_optim import AdaLomo, Lomo
 
-            _is_lomo = isinstance(self.optimizer.optimizer, (Lomo, AdaLomo))
+            _is_lomo = isinstance(_unwrap_optimizer(self.optimizer), (Lomo, AdaLomo))
 
         # For LOMO optimizers you need to explicitly use the learnign rate
         if _is_lomo:
