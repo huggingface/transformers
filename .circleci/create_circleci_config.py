@@ -317,20 +317,9 @@ doc_test_job = CircleCIJob(
     install_steps=[
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
-        {
-            "name": "Get files to test",
-            "command": command,
-        },
-        {
-            "name": "Show information in `Get files to test`",
-            "command":
-                "cat pr_documentation_tests_temp.txt"
-        },
-        {
-            "name": "Get the last line in `pr_documentation_tests.txt`",
-            "command":
-                "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
-        },
+        command,
+        "cat pr_documentation_tests_temp.txt"
+        "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
