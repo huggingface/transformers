@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, PILImageResampling
+from .image_utils import ChannelDimension
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -92,7 +92,6 @@ class ImagesKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
-    pad_and_return_pixel_mask: Optional[bool]
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -109,7 +108,6 @@ class VideosKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
-    pad_and_return_pixel_mask: Optional[bool]
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
@@ -117,7 +115,14 @@ class VideosKwargs(TypedDict, total=False):
 
 class AudioKwargs(TypedDict, total=False):
     sampling_rate: Optional[int]
-    # raw_speech: Optional[List[List[float]]]
+    raw_speech: Optional[Union["np.ndarray", List[float], List["np.ndarray"], List[List[float]]]]
+    padding: Optional[Union[bool, str, PaddingStrategy]]
+    max_length: Optional[int]
+    truncation: Optional[bool]
+    pad_to_multiple_of: Optional[int]
+    return_attention_mask: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
+    sampling_rate: Optional[int]
 
 
 class CommonKwargs(TypedDict, total=False):
