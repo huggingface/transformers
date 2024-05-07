@@ -1190,14 +1190,17 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 JOB_TO_TEST_FILE = {
     "torch_and_tf_job":r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
     "torch_and_flax_job":r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
-    "tf": r"tests/models/.*/test_modeling_[^(flax_|tf_)].*",
-    "pt": r"tests/models/.*/test_modeling_tf_.*",
+    "tf": r"tests/models/.*/test_modeling_tf_.*",
+    "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "tokenization": r"tests/models/.*/test_tokenization.*",
     "examples_torch": r"examples/pytorch/.*",
     "examples_tf": r"examples/tensorflow/.*",
     "examples_flax": r"examples/flax/.*",
     "exotic_models":r"tests/models/*(layoutlmv | nat | deta | udop | nougat)*",
     "custom_models":r"tests/models/.*/test_tokenization_(bert_japanese | open_ai | clip).*",
-    "repo_utils": r"tests/repo_utils.*"
+    "repo_utils":  r"tests/repo_utils.*",
+    "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
+    "pipeline_torch": r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
 
 }
 def create_test_list_from_filter(full_test_list):
