@@ -45,7 +45,7 @@ def create_inputs(tool_inputs: Dict[str, Dict[Union[str, type], str]]):
                 Path(get_tests_dir("fixtures/tests_samples/COCO")) / "000000039769.png"
             ).resize((512, 512))
         elif input_type == "audio":
-            inputs[input_name] = np.ones(3000).tobytes()
+            inputs[input_name] = np.ones(3000)
         else:
             raise ValueError(f"Invalid type requested: {input_type}")
 

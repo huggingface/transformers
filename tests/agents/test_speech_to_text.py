@@ -28,9 +28,9 @@ class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool(np.ones(3000).tobytes())
-        self.assertEqual(result, " M.")
+        result = self.tool(np.ones(3000))
+        self.assertEqual(result, " Thank you.")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(audio=np.ones(3000).tobytes())
-        self.assertEqual(result, " M.")
+        result = self.tool(audio=np.ones(3000))
+        self.assertEqual(result, " Thank you.")
