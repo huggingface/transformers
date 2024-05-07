@@ -1095,12 +1095,15 @@ def infer_tests_to_run(
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
+        all_tests = True
+
     elif not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
         print(
             f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
         )
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
+        all_tests = True
     else:
         # All modified tests need to be run.
         test_files_to_run = [
@@ -1129,20 +1132,7 @@ def infer_tests_to_run(
             f.write("tests/repo_utils")
 
     examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
-    test_files_to_run = [f for f in test_files_to_run if not f.startswith("examples")]
-    print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
-    if len(test_files_to_run) > 0:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(test_files_to_run))
 
-        # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
-
-        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
-        # contains `tests` (i.e. when `setup.py` is changed).
-        if "tests" in test_files_to_run:
-            test_files_to_run = get_all_tests()
-
-        create_json_map(test_files_to_run, json_output_file)
 
     print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
     if len(examples_tests_to_run) > 0:
@@ -1156,26 +1146,41 @@ def infer_tests_to_run(
     exotic_models = ["layoutlmv", "nat", "deta", "udop", "nougat"]
     pattern = re.compile(r"(?=(" + "|".join(exotic_models) + r"))")
     exotic_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
-    print(f"\n### EXOTIC MODEL TEST TO RUN ###\n{_print_list(exotic_tests_to_run)}")
-    if len(exotic_tests_to_run) > 0:
+    if len(exotic_tests_to_run) > 0 or all_tests:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if exotic_tests_to_run == ["exotic"]:
+        if all_tests:
             exotic_tests_to_run = ["all"]
         exotic_file = Path(output_file).parent / "exotic_test_list.txt"
         with open(exotic_file, "w", encoding="utf-8") as f:
             f.write(" ".join(exotic_tests_to_run))
+    print(f"\n### EXOTIC MODEL TEST TO RUN ###\n{_print_list(exotic_tests_to_run)}")
 
     custom_models = ["tokenization_bert_japanese", "test_tokenization_openai", "test_tokenization_clip"]
     pattern = re.compile(r"(?=(" + "|".join(custom_models) + r"))")
     custom_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
-    print(f"\n### CUSTOM TEST TO RUN ###\n{_print_list(custom_tests_to_run)}")
-    if len(custom_tests_to_run) > 0:
+    if len(custom_tests_to_run) > 0 or all_tests:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if custom_tests_to_run == ["custom"]:
+        if all_tests:
             custom_tests_to_run = ["all"]
         custom_file = Path(output_file).parent / "custom_test_list.txt"
         with open(custom_file, "w", encoding="utf-8") as f:
             f.write(" ".join(custom_tests_to_run))
+    print(f"\n### CUSTOM TEST TO RUN ###\n{_print_list(custom_tests_to_run)}")
+
+    test_files_to_run = set(test_files_to_run) - set(custom_tests_to_run) - set(exotic_tests_to_run) - set(examples_tests_to_run)
+    if len(test_files_to_run) > 0:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(" ".join(test_files_to_run))
+
+        # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
+
+        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
+        # contains `tests` (i.e. when `setup.py` is changed).
+        if "tests" in test_files_to_run:
+            test_files_to_run = get_all_tests()
+
+        create_json_map(test_files_to_run, json_output_file)
+    print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
     doctest_list = get_doctest_files()
 
