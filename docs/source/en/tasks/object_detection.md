@@ -180,7 +180,7 @@ To visualize the bounding boxes with associated labels, you can get the labels f
 the `category` field.
 You'll also want to create dictionaries that map a label id to a label class (`id2label`) and the other way around (`label2id`).
 You can use them later when setting up the model. Including these maps will make your model reusable by others if you share
-it on the Hugging Face Hub.
+it on the Hugging Face Hub. Please note that, the part of above code that draws the bounding boxes assume that it is in `COCO` format `(x_min, y_min, width, height)`. It has to be adjusted to work for other formats like `(x_min, y_min, x_max, y_max)`.
 
 As a final step of getting familiar with the data, explore it for potential issues. One common problem with datasets for
 object detection is bounding boxes that "stretch" beyond the edge of the image. Such "runaway" bounding boxes can raise
