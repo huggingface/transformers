@@ -1121,10 +1121,8 @@ def infer_tests_to_run(
 
         repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
 
-    if repo_utils_launch:
-        repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
-        with open(repo_util_file, "w", encoding="utf-8") as f:
-            f.write("tests/repo_utils")
+
+
 
     if len(test_files_to_run) > 0:
         with open(output_file, "w", encoding="utf-8") as f:
@@ -1140,6 +1138,8 @@ def infer_tests_to_run(
         create_json_map(test_files_to_run, json_output_file)
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
+    create_test_list_from_filter(test_files_to_run)
+
     doctest_list = get_doctest_files()
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
@@ -1148,7 +1148,6 @@ def infer_tests_to_run(
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))
 
-    create_test_list_from_filter(test_files_to_run)
 
 def filter_tests(output_file: str, filters: List[str]):
     """
