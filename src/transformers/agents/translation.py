@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 LANGUAGE_CODES = {
@@ -231,27 +231,35 @@ class TranslationTool(PipelineTool):
     Example:
 
     ```py
-    from transformers.tools import TranslationTool
+    from transformers.agents import TranslationTool
 
     translator = TranslationTool()
     translator("This is a super nice API!", src_lang="English", tgt_lang="French")
     ```
     """
 
+    lang_to_code = LANGUAGE_CODES
     default_checkpoint = "facebook/nllb-200-distilled-600M"
     description = (
-        "This is a tool that translates text from a language to another. It takes three inputs: `text`, which should "
-        "be the text to translate, `src_lang`, which should be the language of the text to translate and `tgt_lang`, "
-        "which should be the language for the desired ouput language. Both `src_lang` and `tgt_lang` are written in "
-        "plain English, such as 'Romanian', or 'Albanian'. It returns the text translated in `tgt_lang`."
+        "This is a tool that translates text from a language to another."
+        f"Both `src_lang`and `tgt_lang` should belong to this list of languages: {list(lang_to_code.keys())}."
     )
     name = "translator"
     pre_processor_class = AutoTokenizer
     model_class = AutoModelForSeq2SeqLM
-    lang_to_code = LANGUAGE_CODES
 
-    inputs = ["text", "text", "text"]
-    outputs = ["text"]
+    inputs = {
+        "text": {"type": "text", "description": "The text to translate"},
+        "src_lang": {
+            "type": "text",
+            "description": "The language of the text to translate. Written in plain English, such as 'Romanian', or 'Albanian'",
+        },
+        "tgt_lang": {
+            "type": "text",
+            "description": "The language for the desired ouput language. Written in plain English, such as 'Romanian', or 'Albanian'",
+        },
+    }
+    output_type = "text"
 
     def encode(self, text, src_lang, tgt_lang):
         if src_lang not in self.lang_to_code:

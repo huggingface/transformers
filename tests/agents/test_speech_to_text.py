@@ -15,13 +15,11 @@
 
 import unittest
 
-from transformers import is_torch_available, load_tool
+import numpy as np
+
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
-
-
-if is_torch_available():
-    import torch
 
 
 class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
@@ -30,9 +28,9 @@ class SpeechToTextToolTester(unittest.TestCase, ToolTesterMixin):
         self.tool.setup()
 
     def test_exact_match_arg(self):
-        result = self.tool(torch.ones(3000))
-        self.assertEqual(result, " you")
+        result = self.tool(np.ones(3000))
+        self.assertEqual(result, " Thank you.")
 
     def test_exact_match_kwarg(self):
-        result = self.tool(audio=torch.ones(3000))
-        self.assertEqual(result, " you")
+        result = self.tool(audio=np.ones(3000))
+        self.assertEqual(result, " Thank you.")

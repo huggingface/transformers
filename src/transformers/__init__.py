@@ -54,6 +54,20 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "agents": [
+        "Agent",
+        "CodeAgent",
+        "HfEngine",
+        "PipelineTool",
+        "ReactAgent",
+        "ReactCodeAgent",
+        "ReactJsonAgent",
+        "Tool",
+        "Toolbox",
+        "ToolCollection",
+        "launch_gradio_demo",
+        "load_tool",
+    ],
     "audio_utils": [],
     "benchmark": [],
     "commands": [],
@@ -129,8 +143,8 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    "models": [],
     # Models
+    "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1049,18 +1063,6 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
         "TokenSpan",
-    ],
-    "tools": [
-        "Agent",
-        "AzureOpenAiAgent",
-        "HfAgent",
-        "LocalAgent",
-        "OpenAiAgent",
-        "PipelineTool",
-        "RemoteTool",
-        "Tool",
-        "launch_gradio_demo",
-        "load_tool",
     ],
     "trainer_callback": [
         "DefaultFlowCallback",
@@ -5039,6 +5041,21 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
+    # Agents
+    from .agents import (
+        Agent,
+        CodeAgent,
+        HfEngine,
+        PipelineTool,
+        ReactAgent,
+        ReactCodeAgent,
+        ReactJsonAgent,
+        Tool,
+        Toolbox,
+        ToolCollection,
+        launch_gradio_demo,
+        load_tool,
+    )
     from .configuration_utils import PretrainedConfig
 
     # Data
@@ -6008,20 +6025,6 @@ if TYPE_CHECKING:
         PreTrainedTokenizerBase,
         SpecialTokensMixin,
         TokenSpan,
-    )
-
-    # Tools
-    from .tools import (
-        Agent,
-        AzureOpenAiAgent,
-        HfAgent,
-        LocalAgent,
-        OpenAiAgent,
-        PipelineTool,
-        RemoteTool,
-        Tool,
-        launch_gradio_demo,
-        load_tool,
     )
 
     # Trainer
