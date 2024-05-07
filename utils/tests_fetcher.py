@@ -1175,7 +1175,7 @@ JOB_TO_TEST_FILE = {
     "examples_tf":       r"examples/tensorflow/.*",
     "examples_flax":      r"examples/flax/.*",
     "exotic_models":     r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
-    "custom_models":     r"tests/models/.*/test_tokenization_(?=bert_japanese|open_ai|clip).*",
+    "custom_models":     r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "repo_utils":        r"tests/repo_utils.*",
     "pipeline_tf":       r"tests/models/.*/test_modeling_tf_.*",
     "pipeline_torch":    r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
@@ -1189,7 +1189,6 @@ def create_test_list_from_filter(full_test_list):
         print(job_name, " -- ".join(files_to_test))
         with open(file_name,"w") as f:
             f.write("\n".join(files_to_test))
-    exit(0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1253,15 +1252,4 @@ if __name__ == "__main__":
             json_output_file=args.json_output_file,
             filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
         )
-
-        if not commit_flags["test_all"]:
-            try:
-                infer_tests_to_run(
-                    args.output_file,
-                    diff_with_last_commit=diff_with_last_commit,
-                    json_output_file=args.json_output_file,
-                    filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
-                )
-                filter_tests(args.output_file, ["repo_utils"])
-            except Exception as e:
-                print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
+        filter_tests(args.output_file, ["repo_utils"])
