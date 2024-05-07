@@ -312,7 +312,7 @@ doc_test_job = CircleCIJob(
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         command,
-        "cat pr_documentation_tests_temp.txt"
+        "cat pr_documentation_tests_temp.txt",
         "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
