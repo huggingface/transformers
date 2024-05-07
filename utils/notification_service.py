@@ -643,7 +643,10 @@ class Message:
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}
-        if f"ci_results_{job_name}" in self.prev_ci_artifacts and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]:
+        if (
+            f"ci_results_{job_name}" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
+        ):
             prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
 
         all_failure_lines = {}
