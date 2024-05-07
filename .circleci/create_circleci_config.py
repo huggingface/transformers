@@ -76,7 +76,7 @@ class CircleCIJob:
         if isinstance(self.tests_to_run, str):
             self.tests_to_run = [self.tests_to_run]
         else:
-            test_file = os.path.join(os.environ["test_preparation_dir"] , f"{self.name}_test_list.txt")
+            test_file = os.path.join("test_preparation" , f"{self.name}_test_list.txt")
             if os.path.exists(test_file):
                 with open(test_file) as f:
                     expanded_tests = f.read().split(" ")
