@@ -24,8 +24,9 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "AzureOpenAiAgent", "HfAgent", "LocalAgent", "OpenAiAgent"],
-    "base": ["PipelineTool", "RemoteTool", "Tool", "launch_gradio_demo", "load_tool"],
+    "agents": ["Agent", "CodeAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
+    "llm_engine": ["HfEngine"],
+    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
 }
 
 try:
@@ -34,20 +35,17 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    _import_structure["default_tools"] = ["FinalAnswerTool", "PythonInterpreterTool"]
     _import_structure["document_question_answering"] = ["DocumentQuestionAnsweringTool"]
-    _import_structure["image_captioning"] = ["ImageCaptioningTool"]
     _import_structure["image_question_answering"] = ["ImageQuestionAnsweringTool"]
-    _import_structure["image_segmentation"] = ["ImageSegmentationTool"]
     _import_structure["speech_to_text"] = ["SpeechToTextTool"]
-    _import_structure["text_classification"] = ["TextClassificationTool"]
-    _import_structure["text_question_answering"] = ["TextQuestionAnsweringTool"]
-    _import_structure["text_summarization"] = ["TextSummarizationTool"]
     _import_structure["text_to_speech"] = ["TextToSpeechTool"]
     _import_structure["translation"] = ["TranslationTool"]
 
 if TYPE_CHECKING:
-    from .agents import Agent, AzureOpenAiAgent, HfAgent, LocalAgent, OpenAiAgent
-    from .base import PipelineTool, RemoteTool, Tool, launch_gradio_demo, load_tool
+    from .agents import Agent, CodeAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
+    from .llm_engine import HfEngine
+    from .tools import PipelineTool, Tool, ToolCollection, launch_gradio_demo, load_tool
 
     try:
         if not is_torch_available():
@@ -55,14 +53,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .default_tools import FinalAnswerTool, PythonInterpreterTool
         from .document_question_answering import DocumentQuestionAnsweringTool
-        from .image_captioning import ImageCaptioningTool
         from .image_question_answering import ImageQuestionAnsweringTool
-        from .image_segmentation import ImageSegmentationTool
         from .speech_to_text import SpeechToTextTool
-        from .text_classification import TextClassificationTool
-        from .text_question_answering import TextQuestionAnsweringTool
-        from .text_summarization import TextSummarizationTool
         from .text_to_speech import TextToSpeechTool
         from .translation import TranslationTool
 else:

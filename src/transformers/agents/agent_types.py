@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 HuggingFace Inc.
+# Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ from ..utils import is_soundfile_availble, is_torch_available, is_vision_availab
 logger = logging.get_logger(__name__)
 
 if is_vision_available():
-    import PIL.Image
     from PIL import Image
     from PIL.Image import Image as ImageType
 else:
@@ -33,6 +32,9 @@ else:
 
 if is_torch_available():
     import torch
+    from torch import Tensor
+else:
+    Tensor = object
 
 if is_soundfile_availble():
     import soundfile as sf
@@ -77,7 +79,7 @@ class AgentText(AgentType, str):
         return self._value
 
     def to_string(self):
-        return self._value
+        return str(self._value)
 
 
 class AgentImage(AgentType, ImageType):
@@ -211,10 +213,7 @@ class AgentAudio(AgentType):
 
 
 AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
-INSTANCE_TYPE_MAPPING = {str: AgentText}
-
-if is_vision_available():
-    INSTANCE_TYPE_MAPPING[PIL.Image] = AgentImage
+INSTANCE_TYPE_MAPPING = {str: AgentText, float: AgentText, int: AgentText, Tensor: AgentAudio, ImageType: AgentImage}
 
 
 def handle_agent_inputs(*args, **kwargs):
@@ -223,55 +222,14 @@ def handle_agent_inputs(*args, **kwargs):
     return args, kwargs
 
 
-def handle_agent_outputs(outputs, output_types=None):
-    if isinstance(outputs, dict):
-        decoded_outputs = {}
-        for i, (k, v) in enumerate(outputs.items()):
-            if output_types is not None:
-                # If the class has defined outputs, we can map directly according to the class definition
-                if output_types[i] in AGENT_TYPE_MAPPING:
-                    decoded_outputs[k] = AGENT_TYPE_MAPPING[output_types[i]](v)
-                else:
-                    decoded_outputs[k] = AgentType(v)
-
-            else:
-                # If the class does not have defined output, then we map according to the type
-                for _k, _v in INSTANCE_TYPE_MAPPING.items():
-                    if isinstance(v, _k):
-                        decoded_outputs[k] = _v(v)
-                if k not in decoded_outputs:
-                    decoded_outputs[k] = AgentType[v]
-
-    elif isinstance(outputs, (list, tuple)):
-        decoded_outputs = type(outputs)()
-        for i, v in enumerate(outputs):
-            if output_types is not None:
-                # If the class has defined outputs, we can map directly according to the class definition
-                if output_types[i] in AGENT_TYPE_MAPPING:
-                    decoded_outputs.append(AGENT_TYPE_MAPPING[output_types[i]](v))
-                else:
-                    decoded_outputs.append(AgentType(v))
-            else:
-                # If the class does not have defined output, then we map according to the type
-                found = False
-                for _k, _v in INSTANCE_TYPE_MAPPING.items():
-                    if isinstance(v, _k):
-                        decoded_outputs.append(_v(v))
-                        found = True
-
-                if not found:
-                    decoded_outputs.append(AgentType(v))
-
+def handle_agent_outputs(output, output_type=None):
+    if output_type in AGENT_TYPE_MAPPING:
+        # If the class has defined outputs, we can map directly according to the class definition
+        decoded_outputs = AGENT_TYPE_MAPPING[output_type](output)
+        return decoded_outputs
     else:
-        if output_types[0] in AGENT_TYPE_MAPPING:
-            # If the class has defined outputs, we can map directly according to the class definition
-            decoded_outputs = AGENT_TYPE_MAPPING[output_types[0]](outputs)
-
-        else:
-            # If the class does not have defined output, then we map according to the type
-            for _k, _v in INSTANCE_TYPE_MAPPING.items():
-                if isinstance(outputs, _k):
-                    return _v(outputs)
-            return AgentType(outputs)
-
-    return decoded_outputs
+        # If the class does not have defined output, then we map according to the type
+        for _k, _v in INSTANCE_TYPE_MAPPING.items():
+            if isinstance(output, _k):
+                return _v(output)
+        return AgentType(output)
