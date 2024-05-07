@@ -416,7 +416,7 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "ci_results/model_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -426,18 +426,18 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "ci_results/module_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
-            # if the last run produces artifact named `prev_ci_results`
+            # if the last run produces artifact named `ci_results`
             if (
-                "prev_ci_results" in self.prev_ci_artifacts
-                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
+                "ci_results" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts["ci_results"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
+                prev_model_failures = self.prev_ci_artifacts["ci_results"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
                 if len(entries_changed) > 0:
                     # Save the complete difference
@@ -447,7 +447,7 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
+                    file_path = os.path.join(os.getcwd(), "ci_results/changed_model_failures_report.txt")
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -643,11 +643,8 @@ class Message:
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}
-        if (
-            "prev_ci_results" in self.prev_ci_artifacts
-            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
-        ):
-            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+        if "ci_results" in self.prev_ci_artifacts and "model_results.json" in self.prev_ci_artifacts["ci_results"]:
+            prev_model_results = json.loads(self.prev_ci_artifacts["ci_results"]["model_results.json"])
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -1142,20 +1139,20 @@ if __name__ == "__main__":
             with open(os.path.join(directory, "selected_warnings.json")) as fp:
                 selected_warnings = json.load(fp)
 
-    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
-        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+    if not os.path.isdir(os.path.join(os.getcwd(), "ci_results")):
+        os.makedirs(os.path.join(os.getcwd(), "ci_results"))
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
     if job_name == "run_models_gpu":
-        with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+        with open("ci_results/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
     prev_ci_artifacts = None
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
     if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
         # Get the last previously completed CI's failure tables
-        artifact_names = ["prev_ci_results"]
+        artifact_names = ["ci_results"]
         output_dir = os.path.join(os.getcwd(), "previous_reports")
         os.makedirs(output_dir, exist_ok=True)
         prev_ci_artifacts = get_last_daily_ci_reports(
