@@ -173,6 +173,7 @@ class TFMistralMLP(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
+        self.built = True
         if getattr(self, "gate_proj", None) is not None:
             with tf.name_scope(self.gate_proj.name):
                 self.gate_proj.build((self.hidden_size,))
@@ -332,6 +333,7 @@ class TFMistralAttention(keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
+        self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
                 self.q_proj.build((self.hidden_size,))
