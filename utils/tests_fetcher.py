@@ -970,7 +970,7 @@ def create_module_to_test_map(
     def filter_tests(tests, module=""):
         filtered_tests = []
         for t in tests:
-            if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS or  or "/".join(Path(t).parts[1:3]) in module:
+            if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS or  "/".join(Path(t).parts[1:3]) in module:
                 filtered_tests += [t]
 
     return {
