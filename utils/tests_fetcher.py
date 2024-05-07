@@ -59,7 +59,7 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-
+import glob
 from git import Repo
 
 
@@ -1092,22 +1092,17 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     all_tests = False
     # Grab the corresponding test files:
-    if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
-        test_files_to_run = ["tests", "examples"]
+    if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]) or not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+        test_files_to_run = [glob.glob("test/**/**.py", recursive=True), glob.glob("examples/**/*.py", recursive=True)]
         repo_utils_launch = True
-        all_tests = True
-
-    elif not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        print(
-            f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
-        )
-        test_files_to_run = ["tests", "examples"]
-        repo_utils_launch = True
-        all_tests = True
+        if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
+            print(
+                f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
+            )
     else:
         # All modified tests need to be run.
         test_files_to_run = [
-            f for f in modified_files if f.startswith("tests") and f.split(os.path.sep)[-1].startswith("test")
+            f for f in modified_files if f.startswith("tests") and "/test_" in f
         ]
         impacted_files = get_impacted_files_from_tiny_model_summary(diff_with_last_commit=diff_with_last_commit)
 
@@ -1131,44 +1126,6 @@ def infer_tests_to_run(
         with open(repo_util_file, "w", encoding="utf-8") as f:
             f.write("tests/repo_utils")
 
-    examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
-
-    if len(examples_tests_to_run) > 0:
-        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if examples_tests_to_run == ["examples"]:
-            examples_tests_to_run = ["all"]
-        example_file = Path(output_file).parent / "examples_test_list.txt"
-        with open(example_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(examples_tests_to_run))
-    print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
-
-    exotic_models = ["layoutlmv", "nat", "deta", "udop", "nougat"]
-    pattern = re.compile(r"(?=(" + "|".join(exotic_models) + r"))")
-    exotic_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
-    if len(exotic_tests_to_run) > 0 or all_tests:
-        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if all_tests:
-            exotic_tests_to_run = ["tests/models/*layoutlmv*", "tests/models/*nat", "tests/models/deta", "tests/models/udop", "tests/models/nougat"]
-        exotic_file = Path(output_file).parent / "exotic_test_list.txt"
-        with open(exotic_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(exotic_tests_to_run))
-    print(f"\n### EXOTIC MODEL TEST TO RUN ###\n{_print_list(exotic_tests_to_run)}")
-
-    custom_models = ["tokenization_bert_japanese", "test_tokenization_openai", "test_tokenization_clip"]
-    pattern = re.compile(r"(?=(" + "|".join(custom_models) + r"))")
-    custom_tests_to_run = [f for f in test_files_to_run if pattern.search(f)]
-    if len(custom_tests_to_run) > 0 or all_tests:
-        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
-        if all_tests:
-            custom_tests_to_run = ["tests/models/bert_japanese/test_tokenization_bert_japanese.py", "tests/models/openai/test_tokenization_openai.py", "tests/models/clip/test_tokenization_clip.py"]
-        custom_file = Path(output_file).parent / "custom_test_list.txt"
-        with open(custom_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(custom_tests_to_run))
-    print(f"\n### CUSTOM TEST TO RUN ###\n{_print_list(custom_tests_to_run)}")
-
-    test_files_to_run = (
-        set(test_files_to_run) - set(custom_tests_to_run) - set(exotic_tests_to_run) - set(examples_tests_to_run)
-    )
     if len(test_files_to_run) > 0:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(" ".join(test_files_to_run))
@@ -1190,7 +1147,6 @@ def infer_tests_to_run(
         doctest_file = Path(output_file).parent / "doctest_list.txt"
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))
-
 
 def filter_tests(output_file: str, filters: List[str]):
     """
@@ -1244,6 +1200,28 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
     else:
         return {"skip": False, "no_filter": False, "test_all": False}
 
+
+JOB_TO_TEST_FILE = {
+    "torch_and_tf_job":r"tests/models/.*/test_modeling_(tf_|[^flax]).*",
+    "torch_and_flax_job":r"tests/models/.*/test_modeling_(flax_|[^tf]).*",
+    "tf": r"tests/models/.*/test_modeling_[^(flax_|tf_)].*",
+    "pt": r"tests/models/.*/test_modeling_tf_.*",
+    "examples_torch": r"examples/pytorch/.*",
+    "examples_tf": r"examples/tensorflow/.*",
+    "examples_flax": r"examples/flax/.*",
+    "exotic_models":r"tests/models/*(layoutlmv | nat | deta | udop | nougat)*",
+    "custom_models":r"tests/models/.*/test_tokenization_(bert_japanese | open_ai | clip).*",
+    "repo_utils": r"tests/repo_utils.*"
+
+}
+def create_test_list_from_filter(full_test_list):
+    for k,v in JOB_TO_TEST_FILE.keys():
+        file_name = f"{k}_test_files.txt"
+        filter = re.compile(v)
+        files_to_test = full_test_list.search(filter)
+        with open(file_name,"w") as f:
+            f.write("\n".join(files_to_test))
+    return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1312,14 +1290,3 @@ if __name__ == "__main__":
                 filter_tests(args.output_file, ["repo_utils"])
             except Exception as e:
                 print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
-                commit_flags["test_all"] = True
-
-        if commit_flags["test_all"]:
-            with open(args.output_file, "w", encoding="utf-8") as f:
-                f.write("tests")
-            example_file = Path(args.output_file).parent / "examples_test_list.txt"
-            with open(example_file, "w", encoding="utf-8") as f:
-                f.write("all")
-
-            test_files_to_run = get_all_tests()
-            create_json_map(test_files_to_run, args.json_output_file)
