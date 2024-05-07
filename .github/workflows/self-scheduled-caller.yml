@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - trigger_upload_artifacts_3
 
 jobs:
   model-ci:
@@ -42,18 +42,18 @@ jobs:
       slack_report_channel: "#transformers-ci-daily-examples"
     secrets: inherit
 
-  deepspeed-ci:
-    name: DeepSpeed CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-deepspeed"
-    secrets: inherit
-
-  quantization-ci:
-    name: Quantization CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
-    secrets: inherit
+#  deepspeed-ci:
+#    name: DeepSpeed CI
+#    uses: ./.github/workflows/self-scheduled.yml
+#    with:
+#      job: run_torch_cuda_extensions_gpu
+#      slack_report_channel: "#transformers-ci-daily-deepspeed"
+#    secrets: inherit
+#
+#  quantization-ci:
+#    name: Quantization CI
+#    uses: ./.github/workflows/self-scheduled.yml
+#    with:
+#      job: run_quantization_torch_gpu
+#      slack_report_channel: "#transformers-ci-daily-quantization"
+#    secrets: inherit
