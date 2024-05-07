@@ -87,7 +87,7 @@ class CircleCIJob:
         if self.parallelism is None:
             self.parallelism = 1
         else:
-            self.parallelism = max(len(self.tests_to_run) // self.num_test_files_per_worker, 4)
+            self.parallelism = min(len(self.tests_to_run) // self.num_test_files_per_worker, 16)
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
