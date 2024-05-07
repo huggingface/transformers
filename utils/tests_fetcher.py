@@ -985,45 +985,6 @@ def _print_list(l) -> str:
     return "\n".join([f"- {f}" for f in l])
 
 
-def create_json_map(test_files_to_run: List[str], json_output_file: str):
-    """
-    Creates a map from a list of tests to run to easily split them by category, when running parallelism of slow tests.
-
-    Args:
-        test_files_to_run (`List[str]`): The list of tests to run.
-        json_output_file (`str`): The path where to store the built json map.
-    """
-    if json_output_file is None:
-        return
-
-    test_map = {}
-    for test_file in test_files_to_run:
-        # `test_file` is a path to a test folder/file, starting with `tests/`. For example,
-        #   - `tests/models/bert/test_modeling_bert.py` or `tests/models/bert`
-        #   - `tests/trainer/test_trainer.py` or `tests/trainer`
-        #   - `tests/test_modeling_common.py`
-        names = test_file.split(os.path.sep)
-        if names[1] == "models":
-            # take the part like `models/bert` for modeling tests
-            key = os.path.sep.join(names[1:3])
-        elif len(names) > 2 or not test_file.endswith(".py"):
-            # test folders under `tests` or python files under them
-            # take the part like tokenization, `pipeline`, etc. for other test categories
-            key = os.path.sep.join(names[1:2])
-        else:
-            # common test files directly under `tests/`
-            key = "common"
-
-        if key not in test_map:
-            test_map[key] = []
-        test_map[key].append(test_file)
-
-    # sort the keys & values
-    keys = sorted(test_map.keys())
-    test_map = {k: " ".join(sorted(test_map[k])) for k in keys}
-    with open(json_output_file, "w", encoding="UTF-8") as fp:
-        json.dump(test_map, fp, ensure_ascii=False)
-
 
 def infer_tests_to_run(
     output_file: str,
@@ -1096,9 +1057,6 @@ def infer_tests_to_run(
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-
-    if len(test_files_to_run) > 0:
-        create_json_map(test_files_to_run, json_output_file)
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
     create_test_list_from_filter(test_files_to_run)
@@ -1171,12 +1129,12 @@ JOB_TO_TEST_FILE = {
     "tf":                r"tests/models/.*/test_modeling_tf_.*",
     "torch":             r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
     "tokenization":      r"tests/models/.*/test_tokenization.*",
-    "examples_torch":    r"examples/pytorch/.*",
-    "examples_tf":       r"examples/tensorflow/.*",
-    "examples_flax":      r"examples/flax/.*",
+    "examples_torch":    r"examples/pytorch/.*test.*",
+    "examples_tf":       r"examples/tensorflow/.*test.*",
+    "examples_flax":      r"examples/flax/.*test.*",
     "exotic_models":     r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "custom_models":     r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    "repo_utils":        r"tests/repo_utils.*",
+    "repo_utils":        r"tests/repo_utils/test.*",
     "pipeline_tf":       r"tests/models/.*/test_modeling_tf_.*",
     "pipeline_torch":    r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
 
