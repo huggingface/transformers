@@ -16,18 +16,22 @@
 # limitations under the License.
 import base64
 import importlib
-import inspect
 import io
 import json
 import os
 import tempfile
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Union
 
-from huggingface_hub import create_repo, hf_hub_download, metadata_update, upload_folder
+from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
+from packaging import version
 
-from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
-from ..image_utils import is_pil_image
+from ..dynamic_module_utils import (
+    custom_object_save,
+    get_class_from_dynamic_module,
+    get_imports,
+)
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
@@ -41,6 +45,11 @@ from .agent_types import handle_agent_inputs, handle_agent_outputs
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_vision_available():
+    import PIL.Image
+    import PIL.ImageOps
 
 if is_torch_available():
     import torch
@@ -89,29 +98,45 @@ class Tool:
       returns the text contained in the file'.
     - **name** (`str`) -- A performative name that will be used for your tool in the prompt to the agent. For instance
       `"text-classifier"` or `"image_generator"`.
-    - **inputs** (`List[str]`) -- The list of modalities expected for the inputs (in the same order as in the call).
-      Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo` or to make a
-      nice space from your tool.
-    - **outputs** (`List[str]`) -- The list of modalities returned but the tool (in the same order as the return of the
-      call method). Modalitiies should be `"text"`, `"image"` or `"audio"`. This is only used by `launch_gradio_demo`
-      or to make a nice space from your tool.
+    - **inputs** (`Dict[str, Dict[str, Union[str, type]]]`) -- The dict of modalities expected for the inputs.
+      It has one `type`key and a `description`key.
+      This is used by `launch_gradio_demo` or to make a nice space from your tool, and also can be used in the generated
+      description for your tool.
+    - **output_type** (`type`) -- The type of the tool output. This is used by `launch_gradio_demo`
+      or to make a nice space from your tool, and also can be used in the generated description for your tool.
 
     You can also override the method [`~Tool.setup`] if your tool as an expensive operation to perform before being
     usable (such as loading a model). [`~Tool.setup`] will be called the first time you use your tool, but not at
     instantiation.
     """
 
-    description: str = "This is a tool that ..."
-    name: str = ""
-
-    inputs: List[str]
-    outputs: List[str]
+    name: str
+    description: str
+    inputs: Dict[str, Dict[str, Union[str, type]]]
+    output_type: type
 
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
-    def __call__(self, *args, **kwargs):
+    def validate_attributes(self):
+        required_attributes = {
+            "description": str,
+            "name": str,
+            "inputs": Dict,
+            "output_type": type,
+        }
+        for attr, expected_type in required_attributes.items():
+            attr_value = getattr(self, attr, None)
+            if not isinstance(attr_value, expected_type):
+                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
+
+    def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
+
+    def __call__(self, *args, **kwargs):
+        args, kwargs = handle_agent_inputs(*args, **kwargs)
+        outputs = self.forward(*args, **kwargs)
+        return handle_agent_outputs(outputs, self.output_type)
 
     def setup(self):
         """
@@ -156,7 +181,13 @@ class Tool:
         else:
             tool_config = {}
 
-        tool_config = {"tool_class": full_name, "description": self.description, "name": self.name}
+        tool_config = {
+            "tool_class": full_name,
+            "description": self.description,
+            "name": self.name,
+            "inputs": str(self.inputs),
+            "output_type": str(self.output_type),
+        }
         with open(config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tool_config, indent=2, sort_keys=True) + "\n")
 
@@ -180,7 +211,6 @@ class Tool:
         repo_id: str,
         model_repo_id: Optional[str] = None,
         token: Optional[str] = None,
-        remote: bool = False,
         **kwargs,
     ):
         """
@@ -203,21 +233,11 @@ class Tool:
             token (`str`, *optional*):
                 The token to identify you on hf.co. If unset, will use the token generated when running
                 `huggingface-cli login` (stored in `~/.huggingface`).
-            remote (`bool`, *optional*, defaults to `False`):
-                Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
             kwargs (additional keyword arguments, *optional*):
                 Additional keyword arguments that will be split in two: all arguments relevant to the Hub (such as
                 `cache_dir`, `revision`, `subfolder`) will be used when downloading the files for your tool, and the
                 others will be passed along to its init.
         """
-        if remote and model_repo_id is None:
-            endpoints = get_default_endpoints()
-            if repo_id not in endpoints:
-                raise ValueError(
-                    f"Could not infer a default endpoint for {repo_id}, you need to pass one using the "
-                    "`model_repo_id` argument."
-                )
-            model_repo_id = endpoints[repo_id]
         hub_kwargs_names = [
             "cache_dir",
             "force_download",
@@ -290,8 +310,11 @@ class Tool:
             )
             tool_class.description = custom_tool["description"]
 
-        if remote:
-            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
+        if tool_class.inputs != custom_tool["inputs"]:
+            tool_class.inputs = custom_tool["inputs"]
+        if tool_class.output_type != custom_tool["output_type"]:
+            tool_class.output_type = custom_tool["output_type"]
+
         return tool_class(model_repo_id, token=token, **kwargs)
 
     def push_to_hub(
@@ -304,6 +327,14 @@ class Tool:
     ) -> str:
         """
         Upload the tool to the Hub.
+
+        For this method to work properly, your tool must have been defined in a separate module (not `__main__`).
+        For instance:
+        ```
+        from my_tool_module import MyTool
+        my_tool = MyTool()
+        my_tool.push_to_hub("my-username/my-space")
+        ```
 
         Parameters:
             repo_id (`str`):
@@ -320,7 +351,12 @@ class Tool:
                 Whether or not to create a PR with the uploaded files or directly commit.
         """
         repo_url = create_repo(
-            repo_id=repo_id, token=token, private=private, exist_ok=True, repo_type="space", space_sdk="gradio"
+            repo_id=repo_id,
+            token=token,
+            private=private,
+            exist_ok=True,
+            repo_type="space",
+            space_sdk="gradio",
         )
         repo_id = repo_url.repo_id
         metadata_update(repo_id, {"tags": ["tool"]}, repo_type="space")
@@ -343,102 +379,81 @@ class Tool:
         """
         Creates a [`Tool`] from a gradio tool.
         """
+        import inspect
 
         class GradioToolWrapper(Tool):
             def __init__(self, _gradio_tool):
                 super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
+                self.output_type = "text"
+                self._gradio_tool = _gradio_tool
+                func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
+                self.inputs = {key: "" for key in func_args}
 
-        GradioToolWrapper.__call__ = gradio_tool.run
+            def forward(self, *args, **kwargs):
+                return self._gradio_tool.run(*args, **kwargs)
+
         return GradioToolWrapper(gradio_tool)
 
-
-class RemoteTool(Tool):
-    """
-    A [`Tool`] that will make requests to an inference endpoint.
-
-    Args:
-        endpoint_url (`str`, *optional*):
-            The url of the endpoint to use.
-        token (`str`, *optional*):
-            The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
-            running `huggingface-cli login` (stored in `~/.huggingface`).
-        tool_class (`type`, *optional*):
-            The corresponding `tool_class` if this is a remote version of an existing tool. Will help determine when
-            the output should be converted to another type (like images).
-    """
-
-    def __init__(self, endpoint_url=None, token=None, tool_class=None):
-        self.endpoint_url = endpoint_url
-        self.client = EndpointClient(endpoint_url, token=token)
-        self.tool_class = tool_class
-
-    def prepare_inputs(self, *args, **kwargs):
+    @staticmethod
+    def from_langchain(langchain_tool):
         """
-        Prepare the inputs received for the HTTP client sending data to the endpoint. Positional arguments will be
-        matched with the signature of the `tool_class` if it was provided at instantation. Images will be encoded into
-        bytes.
-
-        You can override this method in your custom class of [`RemoteTool`].
+        Creates a [`Tool`] from a langchain tool.
         """
-        inputs = kwargs.copy()
-        if len(args) > 0:
-            if self.tool_class is not None:
-                # Match args with the signature
-                if issubclass(self.tool_class, PipelineTool):
-                    call_method = self.tool_class.encode
-                else:
-                    call_method = self.tool_class.__call__
-                signature = inspect.signature(call_method).parameters
-                parameters = [
-                    k
-                    for k, p in signature.items()
-                    if p.kind not in [inspect._ParameterKind.VAR_POSITIONAL, inspect._ParameterKind.VAR_KEYWORD]
-                ]
-                if parameters[0] == "self":
-                    parameters = parameters[1:]
-                if len(args) > len(parameters):
-                    raise ValueError(
-                        f"{self.tool_class} only accepts {len(parameters)} arguments but {len(args)} were given."
-                    )
-                for arg, name in zip(args, parameters):
-                    inputs[name] = arg
-            elif len(args) > 1:
-                raise ValueError("A `RemoteTool` can only accept one positional input.")
-            elif len(args) == 1:
-                if is_pil_image(args[0]):
-                    return {"inputs": self.client.encode_image(args[0])}
-                return {"inputs": args[0]}
 
-        for key, value in inputs.items():
-            if is_pil_image(value):
-                inputs[key] = self.client.encode_image(value)
+        class LangChainToolWrapper(Tool):
+            def __init__(self, _langchain_tool):
+                super().__init__()
+                self.name = _langchain_tool.name.lower()
+                self.description = _langchain_tool.description
+                self.inputs = parse_langchain_args(_langchain_tool.args)
+                self.output_type = "text"
+                self.langchain_tool = _langchain_tool
 
-        return {"inputs": inputs}
+            def forward(self, *args, **kwargs):
+                tool_input = kwargs.copy()
+                for index, argument in enumerate(args):
+                    if index < len(self.inputs):
+                        input_key = next(iter(self.inputs))
+                        tool_input[input_key] = argument
+                return self.langchain_tool.run(tool_input)
 
-    def extract_outputs(self, outputs):
-        """
-        You can override this method in your custom class of [`RemoteTool`] to apply some custom post-processing of the
-        outputs of the endpoint.
-        """
-        return outputs
+        return LangChainToolWrapper(langchain_tool)
 
-    def __call__(self, *args, **kwargs):
-        args, kwargs = handle_agent_inputs(*args, **kwargs)
 
-        output_image = self.tool_class is not None and self.tool_class.outputs == ["image"]
-        inputs = self.prepare_inputs(*args, **kwargs)
-        if isinstance(inputs, dict):
-            outputs = self.client(**inputs, output_image=output_image)
-        else:
-            outputs = self.client(inputs, output_image=output_image)
-        if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
-            outputs = outputs[0]
+DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
+- {{ tool.name }}: {{ tool.description }}
+    Takes inputs: {{tool.inputs}}
+"""
 
-        outputs = handle_agent_outputs(outputs, self.tool_class.outputs if self.tool_class is not None else None)
 
-        return self.extract_outputs(outputs)
+def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
+    compiled_template = compile_jinja_template(description_template)
+    rendered = compiled_template.render(
+        tool=tool,
+    )
+    return rendered
+
+
+@lru_cache
+def compile_jinja_template(template):
+    try:
+        import jinja2
+        from jinja2.exceptions import TemplateError
+        from jinja2.sandbox import ImmutableSandboxedEnvironment
+    except ImportError:
+        raise ImportError("template requires jinja2 to be installed.")
+
+    if version.parse(jinja2.__version__) <= version.parse("3.0.0"):
+        raise ImportError("template requires jinja2>=3.0.0 to be installed. Your version is " f"{jinja2.__version__}.")
+
+    def raise_exception(message):
+        raise TemplateError(message)
+
+    jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+    jinja_env.globals["raise_exception"] = raise_exception
+    return jinja_env.from_string(template)
 
 
 class PipelineTool(Tool):
@@ -483,6 +498,10 @@ class PipelineTool(Tool):
     model_class = None
     post_processor_class = AutoProcessor
     default_checkpoint = None
+    description = "This is a pipeline tool"
+    name = "pipeline"
+    inputs = {"prompt": str}
+    output_type = str
 
     def __init__(
         self,
@@ -573,18 +592,22 @@ class PipelineTool(Tool):
             self.setup()
 
         encoded_inputs = self.encode(*args, **kwargs)
-        encoded_inputs = send_to_device(encoded_inputs, self.device)
-        outputs = self.forward(encoded_inputs)
+
+        tensor_inputs = {k: v for k, v in encoded_inputs.items() if isinstance(v, torch.Tensor)}
+        non_tensor_inputs = {k: v for k, v in encoded_inputs.items() if not isinstance(v, torch.Tensor)}
+
+        encoded_inputs = send_to_device(tensor_inputs, self.device)
+        outputs = self.forward({**encoded_inputs, **non_tensor_inputs})
         outputs = send_to_device(outputs, "cpu")
         decoded_outputs = self.decode(outputs)
 
-        return handle_agent_outputs(decoded_outputs, self.outputs)
+        return handle_agent_outputs(decoded_outputs, self.output_type)
 
 
 def launch_gradio_demo(tool_class: Tool):
     """
     Launches a gradio demo for a tool. The corresponding tool class needs to properly implement the class attributes
-    `inputs` and `outputs`.
+    `inputs` and `output_type`.
 
     Args:
         tool_class (`type`): The class of the tool for which to launch the demo.
@@ -599,10 +622,26 @@ def launch_gradio_demo(tool_class: Tool):
     def fn(*args, **kwargs):
         return tool(*args, **kwargs)
 
+    gradio_inputs = []
+    for input_type in [tool_input["type"] for tool_input in tool_class.inputs.values()]:
+        if input_type in [str, int, float]:
+            gradio_inputs += "text"
+        elif is_vision_available() and input_type == PIL.Image.Image:
+            gradio_inputs += "image"
+        else:
+            gradio_inputs += "audio"
+
+    if tool_class.output_type in [str, int, float]:
+        gradio_output = "text"
+    elif is_vision_available() and tool_class.output_type == PIL.Image.Image:
+        gradio_output = "image"
+    else:
+        gradio_output = "audio"
+
     gr.Interface(
         fn=fn,
-        inputs=tool_class.inputs,
-        outputs=tool_class.outputs,
+        inputs=gradio_inputs,
+        outputs=gradio_output,
         title=tool_class.__name__,
         article=tool.description,
     ).launch()
@@ -610,31 +649,16 @@ def launch_gradio_demo(tool_class: Tool):
 
 TASK_MAPPING = {
     "document-question-answering": "DocumentQuestionAnsweringTool",
-    "image-captioning": "ImageCaptioningTool",
     "image-question-answering": "ImageQuestionAnsweringTool",
-    "image-segmentation": "ImageSegmentationTool",
     "speech-to-text": "SpeechToTextTool",
-    "summarization": "TextSummarizationTool",
-    "text-classification": "TextClassificationTool",
-    "text-question-answering": "TextQuestionAnsweringTool",
     "text-to-speech": "TextToSpeechTool",
     "translation": "TranslationTool",
+    "python_interpreter": "PythonInterpreterTool",
+    "final_answer": "FinalAnswerTool",
 }
 
 
-def get_default_endpoints():
-    endpoints_file = cached_file("huggingface-tools/default-endpoints", "default_endpoints.json", repo_type="dataset")
-    with open(endpoints_file, "r", encoding="utf-8") as f:
-        endpoints = json.load(f)
-    return endpoints
-
-
-def supports_remote(task_or_repo_id):
-    endpoints = get_default_endpoints()
-    return task_or_repo_id in endpoints
-
-
-def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **kwargs):
+def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
     """
     Main function to quickly load a tool, be it on the Hub or in the Transformers library.
 
@@ -652,20 +676,13 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
             are:
 
             - `"document-question-answering"`
-            - `"image-captioning"`
             - `"image-question-answering"`
-            - `"image-segmentation"`
             - `"speech-to-text"`
-            - `"summarization"`
-            - `"text-classification"`
-            - `"text-question-answering"`
             - `"text-to-speech"`
             - `"translation"`
 
         model_repo_id (`str`, *optional*):
             Use this argument to use a different model than the default one for the tool you selected.
-        remote (`bool`, *optional*, defaults to `False`):
-            Whether to use your tool by downloading the model or (if it is available) with an inference endpoint.
         token (`str`, *optional*):
             The token to identify you on hf.co. If unset, will use the token generated when running `huggingface-cli
             login` (stored in `~/.huggingface`).
@@ -677,21 +694,9 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
     if task_or_repo_id in TASK_MAPPING:
         tool_class_name = TASK_MAPPING[task_or_repo_id]
         main_module = importlib.import_module("transformers")
-        tools_module = main_module.tools
+        tools_module = main_module.agents
         tool_class = getattr(tools_module, tool_class_name)
-
-        if remote:
-            if model_repo_id is None:
-                endpoints = get_default_endpoints()
-                if task_or_repo_id not in endpoints:
-                    raise ValueError(
-                        f"Could not infer a default endpoint for {task_or_repo_id}, you need to pass one using the "
-                        "`model_repo_id` argument."
-                    )
-                model_repo_id = endpoints[task_or_repo_id]
-            return RemoteTool(model_repo_id, token=token, tool_class=tool_class)
-        else:
-            return tool_class(model_repo_id, token=token, **kwargs)
+        return tool_class(model_repo_id, token=token, **kwargs)
     else:
         logger.warning_once(
             f"You're loading a tool from the Hub from {model_repo_id}. Please make sure this is a source that you "
@@ -699,7 +704,7 @@ def load_tool(task_or_repo_id, model_repo_id=None, remote=False, token=None, **k
             f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
             f"code that you have checked."
         )
-        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, remote=remote, **kwargs)
+        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, **kwargs)
 
 
 def add_description(description):
@@ -718,7 +723,10 @@ def add_description(description):
 ## Will move to the Hub
 class EndpointClient:
     def __init__(self, endpoint_url: str, token: Optional[str] = None):
-        self.headers = {**build_hf_headers(token=token), "Content-Type": "application/json"}
+        self.headers = {
+            **build_hf_headers(token=token),
+            "Content-Type": "application/json",
+        }
         self.endpoint_url = endpoint_url
 
     @staticmethod
@@ -763,3 +771,44 @@ class EndpointClient:
             return self.decode_image(response.content)
         else:
             return response.json()
+
+
+def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
+    """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
+    inputs = args.copy()
+    for arg_details in inputs.values():
+        if "title" in arg_details:
+            arg_details.pop("title")
+    return inputs
+
+
+class ToolCollection:
+    """
+    Tool collections enable loading all Spaces from a collection in order to be added to the agent's toolbox.
+
+    > [!NOTE]
+    > Only Spaces will be fetched, so you can feel free to add models and datasets to your collection if you'd
+    > like for this collection to showcase them.
+
+    Args:
+        collection_slug (str):
+            The collection slug referencing the collection.
+        token (str, *optional*):
+            The authentication token if the collection is private.
+
+    Example:
+
+    ```py
+    >>> from transformers import ToolCollection, ReactCodeAgent
+
+    >>> image_tool_collection = ToolCollection(collection_slug="huggingface-tools/diffusion-tools-6630bb19a942c2306a2cdb6f")
+    >>> agent = ReactCodeAgent(tools=[*image_tool_collection.tools], add_base_tools=True)
+
+    >>> agent.run("Please draw me a picture of rivers and lakes.")
+    ```
+    """
+
+    def __init__(self, collection_slug: str, token: Optional[str] = None):
+        self._collection = get_collection(collection_slug, token=token)
+        self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
+        self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}
