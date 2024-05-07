@@ -1059,7 +1059,7 @@ def infer_tests_to_run(
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
-    create_test_list_from_filter(test_files_to_run)
+    create_test_list_from_filter(test_files_to_run, out_path = Path(output_file).parent)
 
     doctest_list = get_doctest_files()
 
@@ -1139,10 +1139,10 @@ JOB_TO_TEST_FILE = {
     "pipeline_torch":    r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
 
 }
-def create_test_list_from_filter(full_test_list):
+def create_test_list_from_filter(full_test_list, out_path):
     all_test_files = "\n".join(full_test_list)
     for job_name, filter in JOB_TO_TEST_FILE.items():
-        file_name = f"{job_name}_test_files.txt"
+        file_name = os.path.join(out_path,f"{job_name}_test_files.txt")
         files_to_test = list(re.findall(filter, all_test_files))
         print(job_name, " -- ".join(files_to_test))
         with open(file_name,"w") as f:
