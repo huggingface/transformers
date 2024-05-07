@@ -57,8 +57,7 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-Let's define global constants, such as model name and image size. For tutorial we will take conditional DETR as it is converge faster,
-but you can choose any object detection model from `transformers`
+To get started, define global constants, such as model name and image size. For this tutorial, we'll use the conditional DETR model due to its faster convergence. Feel free to select any object detection model available in the `transformers` library.
 
 ```py
 >>> MODEL_NAME = "microsoft/conditional-detr-resnet-50"  # or "facebook/detr-resnet-50"
@@ -208,7 +207,7 @@ Instantiate the image processor from the same checkpoint as the model you want t
 >>> image_processor = AutoImageProcessor.from_pretrained(
 ...     MODEL_NAME,
 ...     # At this moment we recommend using external transform to pad and resize images.
-...     # It`s faster and yields much better results for object-detection models.
+...     # It`s faster and yields better results for object-detection models.
 ...     do_pad=False,
 ...     do_resize=False,
 ... )
@@ -222,7 +221,7 @@ First, to make sure the model does not overfit on the training data, you can app
 This library ensures that transformations affect the image and update the bounding boxes accordingly.
 The 🤗 Datasets library documentation has a detailed [guide on how to augment images for object detection](https://huggingface.co/docs/datasets/object_detection),
 and it uses the exact same dataset as an example. Apply the same approach here, resize each image to (480, 480),
-flip it horizontally, and brighten it:
+flip it horizontally, and brighten it. For additional augmentation options, explore the [Albumentations Demo Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo).
 
 ```py
 >>> import albumentations as A
@@ -391,9 +390,9 @@ to indicate which pixels are real (1) and which are padding (0).
 
 ## Preparing function to compute mAP
 
-Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` and `mAR` metrics and will wrap it to `compute_metrics` function in order to use in [`~transformers.Trainer`] for evaluation.
+Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` and `mAR` metrics and will wrap it to `compute_metrics` function in order to use in [`Trainer`] for evaluation.
 
-First, let's define a function that converts bounding boxes to Pascal VOC format:
+Intermediate format of boxes used for training is `YOLO` (normalized) but we will compute metrics for boxes in `Pascal VOC` (absolute) format in order to correctly handle box areas. Let's define a function that converts bounding boxes to `Pascal VOC` format:
 
 ```py
 >>> from transformers.image_transforms import center_to_corners_format
@@ -420,7 +419,7 @@ First, let's define a function that converts bounding boxes to Pascal VOC format
 ...     return boxes
 ```
 
-Then, in `compute_metrics` function we collect `predicted` and `target` bounding boxes, scores and labels from evaluation loop results and pass it to the metric function.
+Then, in `compute_metrics` function we collect `predicted` and `target` bounding boxes, scores and labels from evaluation loop results and pass it to the scoring function.
 
 ```py
 >>> import numpy as np
