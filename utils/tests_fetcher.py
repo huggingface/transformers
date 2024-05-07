@@ -1189,7 +1189,7 @@ def create_test_list_from_filter(full_test_list):
         print(job_name, " -- ".join(files_to_test))
         with open(file_name,"w") as f:
             f.write("\n".join(files_to_test))
-    return
+    exit(0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
