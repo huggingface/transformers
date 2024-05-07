@@ -126,7 +126,7 @@ PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
 
 # Define type aliases for text-related non-text modalities
-AudioInput =  Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], List[float]]
+AudioInput = Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], List[float]]
 
 # Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"

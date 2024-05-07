@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from typing import List, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import PreTokenizedInput, TextInput, AudioInput
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import logging
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
