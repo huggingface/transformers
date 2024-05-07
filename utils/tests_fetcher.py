@@ -1092,7 +1092,8 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]) or not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        test_files_to_run = [glob.glob("test/**/test_**.py", recursive=True), glob.glob("examples/**/*.py", recursive=True)]
+        test_files_to_run = glob.glob("test/**/test_**.py", recursive=True) + glob.glob("examples/**/*.py", recursive=True)
+        print(test_files_to_run)
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
