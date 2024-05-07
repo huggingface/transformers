@@ -968,37 +968,15 @@ def create_module_to_test_map(
     # This is to avoid them being excluded when a module has many impacted tests: the directly related test files should
     # always be included!
     def filter_tests(tests, module=""):
-        return [
-            t
-            for t in tests
-            if not t.startswith("tests/models/")
-            or Path(t).parts[2] in IMPORTANT_MODELS
-            # at this point, `t` is of the form `tests/models/my_model`, and we check if `models/my_model`
-            # (i.e. `parts[1:3]`) is in `module`.
-            or "/".join(Path(t).parts[1:3]) in module
-        ]
+        filtered_tests = []
+        for t in tests:
+            if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS or  or "/".join(Path(t).parts[1:3]) in module:
+                filtered_tests += [t]
 
     return {
         module: (filter_tests(tests, module=module) if has_many_models(tests) else tests)
         for module, tests in test_map.items()
     }
-
-
-def check_imports_all_exist():
-    """
-    Isn't used per se by the test fetcher but might be used later as a quality check. Putting this here for now so the
-    code is not lost. This checks all imports in a given file do exist.
-    """
-    cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
-    direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
-
-    for module, deps in direct_deps.items():
-        for dep in deps:
-            if not (PATH_TO_REPO / dep).is_file():
-                print(f"{module} has dependency on {dep} which does not exist.")
-
 
 def _print_list(l) -> str:
     """
@@ -1208,6 +1186,7 @@ def create_test_list_from_filter(full_test_list):
     for job_name, filter in JOB_TO_TEST_FILE.items():
         file_name = f"{job_name}_test_files.txt"
         files_to_test = list(re.findall(filter, all_test_files))
+        print(job_name, " -- ".join(files_to_test))
         with open(file_name,"w") as f:
             f.write("\n".join(files_to_test))
     return
