@@ -58,44 +58,30 @@ AWQ_FUSED_MAPPINGS = {
 }
 
 AWQ_SCALES_MAPPINGS = {
-    "starcoder2": "c_fc",
-    "RefinedWebModel": "dense_h_to_4h",
-    "falcon": "dense_h_to_4h",
-    "mpt": "up_proj",
-    "gptj": "fc_in",
-    "gpt_neox": "dense_h_to_4h",
-    "gpt_bigcode": "c_fc",
-    "bloom": "dense_h_to_4h",
+    "starcoder2": {"act": "act", "layer_before_act": "c_fc"},
+    "RefinedWebModel": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "falcon": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "mpt": {"act": "act", "layer_before_act": "up_proj"},
+    "gptj": {"act": "act", "layer_before_act": "fc_in"},
+    "gpt_neox": {"act": "act", "layer_before_act": "dense_h_to_4h"},
+    "gpt_bigcode": {"act": "act", "layer_before_act": "c_fc"},
+    "bloom": {"act": "gelu_impl", "layer_before_act": "dense_h_to_4h"},
 }
 
 
 def replace_scales(model, model_type):
     from awq.modules.act import ScaledActivation
 
-    gelu_activation_str = [
-        "gelu",
-        "gelu_10",
-        "gelu_fast",
-        "gelu_new",
-        "gelu_python",
-        "gelu_pytorch_tanh",
-        "gelu_accurate",
-        "quick_gelu",
-    ]
-    gelu_activation_list = [ACT2FN[act].__class__ for act in gelu_activation_str]
-    gelu_activation_list.append(nn.GELU)
+    if model_type not in AWQ_SCALES_MAPPINGS:
+        return model
     for name, module in model.named_children():
-        if any(isinstance(module, act) for act in gelu_activation_list):
-            if model_type in AWQ_SCALES_MAPPINGS:
-                layer_before_act = getattr(model, AWQ_SCALES_MAPPINGS[model_type])
-                size = layer_before_act.out_features
-                scale_like = torch.ones(size)
-                model._modules[name] = ScaledActivation(module, scale_like)
-            else:
-                raise ValueError(
-                    f"The model type {model_type} is not supported with AutoAWQ + transformers because we are not able to replace the scales corrrectly. "
-                    "Please submit a PR in transformers or use AutoAWQ library directly to load the model."
-                )
+        act_name = AWQ_SCALES_MAPPINGS[model_type]["act"]
+        layer_before_act_name = AWQ_SCALES_MAPPINGS[model_type]["layer_before_act"]
+        if name == act_name and hasattr(model, layer_before_act_name):
+            layer_before_act = getattr(model, AWQ_SCALES_MAPPINGS[model_type]["layer_before_act"])
+            size = layer_before_act.out_features
+            scale_like = torch.ones(size)
+            model._modules[name] = ScaledActivation(module, scale_like)
         _ = replace_scales(module, model_type)
     return model
 
