@@ -1064,7 +1064,7 @@ class Trainer:
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
-            badam_kwargs = optimizer_kwargs.pop("badam_kwargs")
+            badam_kwargs = optimizer_kwargs.pop("badam_kwargs", None)
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
