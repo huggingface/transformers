@@ -1090,11 +1090,9 @@ def infer_tests_to_run(
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
-    all_tests = False
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]) or not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        test_files_to_run = [glob.glob("test/**/**.py", recursive=True), glob.glob("examples/**/*.py", recursive=True)]
-        repo_utils_launch = True
+        test_files_to_run = [glob.glob("test/**/test_**.py", recursive=True), glob.glob("examples/**/*.py", recursive=True)]
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
@@ -1119,22 +1117,8 @@ def infer_tests_to_run(
         # Make sure we did not end up with a test file that was removed
         test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-        repo_utils_launch = any(f.split(os.path.sep)[0] == "utils" for f in modified_files)
-
-
-
 
     if len(test_files_to_run) > 0:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(" ".join(test_files_to_run))
-
-        # Create a map that maps test categories to test files, i.e. `models/bert` -> [...test_modeling_bert.py, ...]
-
-        # Get all test directories (and some common test files) under `tests` and `tests/models` if `test_files_to_run`
-        # contains `tests` (i.e. when `setup.py` is changed).
-        if "tests" in test_files_to_run:
-            test_files_to_run = get_all_tests()
-
         create_json_map(test_files_to_run, json_output_file)
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
