@@ -1,6 +1,6 @@
 import inspect
 import re
-from typing import Any, Union, get_origin, get_type_hints
+from typing import Any, Union, get_origin, get_type_hints, get_args
 
 
 BASIC_TYPES = (int, float, str, bool, Any)
@@ -52,40 +52,49 @@ def _convert_type_hints_to_json_schema(func):
 
     return schema
 
+
 def _parse_type_hint(hint):
     if (origin := get_origin(hint)) is not None:
         if origin is Union:
-            if all(t in BASIC_TYPES for t in hint.__args__):
+            # If it's a union of basic types, we can express that as a simple list in the schema
+            if all(t in BASIC_TYPES for t in get_args(hint)):
                 return_dict = {"type": [_get_json_schema_type(t)["type"] for t in hint.__args__ if t != type(None)]}
                 if len(return_dict["type"]) == 1:
                     return_dict["type"] = return_dict["type"][0]
             else:
+                # A union of more complex types requires us to recurse into each subtype
                 return_dict = {"anyOf": [_parse_type_hint(t) for t in hint.__args__ if t != type(None)],}
                 if len(return_dict["anyOf"]) == 1:
                     return_dict = return_dict["anyOf"][0]
-            if type(None) in hint.__args__:
+            if type(None) in get_args(hint):
                 return_dict["nullable"] = True
             return return_dict
         elif origin is list or origin is tuple:
-            if not hasattr(hint, "__args__"):
+            if not get_args(hint):
                 return {"type": "array"}
-            if all(t in BASIC_TYPES for t in hint.__args__):
+            if all(t in BASIC_TYPES for t in get_args(hint)):
+                # Similarly to unions, a list of basic types can be expressed as a list in the schema
                 items = {"type": [_get_json_schema_type(t)["type"] for t in hint.__args__ if t != type(None)]}
                 if len(items["type"]) == 1:
                     items["type"] = items["type"][0]
             else:
+                # And a list of more complex types requires us to recurse into each subtype again
                 items = {"anyOf": [_parse_type_hint(t) for t in hint.__args__ if t != type(None)]}
                 if len(items["anyOf"]) == 1:
                     items = items["anyOf"][0]
             return_dict = {"type": "array", "items": items}
-            if "nullable" in hint.__args__:
+            if type(None) in get_args(hint):
                 return_dict["nullable"] = True
             return return_dict
         elif origin is dict:
+            # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
+            # However, we can specify the type of the dict values with "additionalProperties"
             return {
                 "type": "object",
                 "additionalProperties": _parse_type_hint(hint.__args__[1]),
             }
+        else:
+            raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
     else:
         return _get_json_schema_type(hint)
 
