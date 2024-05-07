@@ -119,7 +119,7 @@ class CircleCIJob:
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n" >> tests.txt'}},
             {"run": {"name": "Split tests across parallel nodes",
-                     "command": "TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'" if self.parallelism else ""}
+                     "command": "TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt" if self.parallelism else ""}
             }
         ]
 
