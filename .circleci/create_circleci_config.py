@@ -484,7 +484,8 @@ def create_circleci_config(folder=None):
     if os.path.exists(custom_file) and os.path.getsize(custom_file) > 0:
         with open(custom_file, "r", encoding="utf-8") as f:
             custom_tokenizer_tests = f.read()
-        custom_tokenizers_job.tests_to_run = custom_tokenizer_tests
+        if custom_tokenizer_tests != "all":
+            custom_tokenizers_job.tests_to_run = custom_tokenizer_tests
         if len(job.tests_to_run) > 0:
             jobs.append(custom_tokenizers_job)
 
@@ -492,7 +493,8 @@ def create_circleci_config(folder=None):
     if os.path.exists(exotic_file) and os.path.getsize(exotic_file) > 0:
         with open(exotic_file, "r", encoding="utf-8") as f:
             exotic_model_tests = f.read()
-        exotic_models_job.tests_to_run = exotic_model_tests
+            if exotic_model_tests != "all":
+                exotic_models_job.tests_to_run = exotic_model_tests
         if len(job.tests_to_run) > 0:
             jobs.append(exotic_models_job)
 

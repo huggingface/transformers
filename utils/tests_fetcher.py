@@ -1134,7 +1134,6 @@ def infer_tests_to_run(
     examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
 
 
-    print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
     if len(examples_tests_to_run) > 0:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
         if examples_tests_to_run == ["examples"]:
@@ -1142,6 +1141,7 @@ def infer_tests_to_run(
         example_file = Path(output_file).parent / "examples_test_list.txt"
         with open(example_file, "w", encoding="utf-8") as f:
             f.write(" ".join(examples_tests_to_run))
+    print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
 
     exotic_models = ["layoutlmv", "nat", "deta", "udop", "nougat"]
     pattern = re.compile(r"(?=(" + "|".join(exotic_models) + r"))")
