@@ -197,4 +197,4 @@ class HqqHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True

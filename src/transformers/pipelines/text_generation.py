@@ -129,19 +129,25 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
-        add_special_tokens=False,
         truncation=None,
-        padding=False,
         max_length=None,
         **generate_kwargs,
     ):
-        preprocess_params = {
-            "add_special_tokens": add_special_tokens,
-            "truncation": truncation,
-            "padding": padding,
-            "max_length": max_length,
-        }
+        preprocess_params = {}
+
+        add_special_tokens = False
+        if "add_special_tokens" in generate_kwargs:
+            preprocess_params["add_special_tokens"] = generate_kwargs["add_special_tokens"]
+            add_special_tokens = generate_kwargs["add_special_tokens"]
+
+        if "padding" in generate_kwargs:
+            preprocess_params["padding"] = generate_kwargs["padding"]
+
+        if truncation is not None:
+            preprocess_params["truncation"] = truncation
+
         if max_length is not None:
+            preprocess_params["max_length"] = max_length
             generate_kwargs["max_length"] = max_length
 
         if prefix is not None:
