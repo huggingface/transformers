@@ -29,6 +29,7 @@ import numpy as np
 from .dynamic_module_utils import custom_object_save
 from .image_utils import ChannelDimension, is_vision_available
 
+
 if is_vision_available():
     from .image_utils import PILImageResampling
 
