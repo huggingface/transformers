@@ -1154,12 +1154,17 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         """Initalize the weights"""
 
         """initialize conv/fc bias value according to a given probability value."""
-        prior_prob = self.config.initializer_range
-        bias = float(-math.log((1 - prior_prob) / prior_prob))
-        if isinstance(module, nn.Linear):
+        if isinstance(module, nn.Linear) and hasattr(module, "class_embed"):
+            prior_prob = self.config.initializer_range
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
                 nn.init.constant_(module.bias, bias)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module)
 
