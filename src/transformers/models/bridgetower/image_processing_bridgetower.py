@@ -212,6 +212,10 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         if pad_and_return_pixel_mask:
+            logger.warning_once(
+                "`pad_and_return_pixel_mask` is deprecated and will be removed in a future version of Transformers."
+                "Use `do_pad` instead."
+            )
             do_pad = pad_and_return_pixel_mask
 
         size = size if size is not None else {"shortest_edge": 288}
