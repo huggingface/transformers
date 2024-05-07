@@ -62,6 +62,7 @@ else:
         "TFMistralModel",
         "TFMistralForCausalLM",
         "TFMistralForSequenceClassification",
+        "TFMistralPreTrainedModel",
     ]
 
 
@@ -100,6 +101,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_mistral import (
+            TFMistralPreTrainedModel,
             TFMistralForCausalLM,
             TFMistralForSequenceClassification,
             TFMistralModel,
