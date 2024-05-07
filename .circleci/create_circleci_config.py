@@ -103,7 +103,7 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
-            {"run": " || ".join(self.install_steps)},
+            {"run": " & ".join(self.install_steps)},
             {"run": {
                     "name": "Show installed libraries and their size",
                     "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}
@@ -263,6 +263,7 @@ hub_job = CircleCIJob(
     additional_env={"HUGGINGFACE_CO_STAGING": True},
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
     install_steps=[
+        'uv venv && uv pip install .'
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
     ],
@@ -275,7 +276,7 @@ onnx_job = CircleCIJob(
     "onnx",
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
     install_steps=[
-        "uv pip install --upgrade eager pip",
+        "uv venv",
         "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
