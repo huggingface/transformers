@@ -1133,7 +1133,6 @@ def infer_tests_to_run(
 
     examples_tests_to_run = [f for f in test_files_to_run if f.startswith("examples")]
 
-
     if len(examples_tests_to_run) > 0:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
         if examples_tests_to_run == ["examples"]:
@@ -1167,7 +1166,9 @@ def infer_tests_to_run(
             f.write(" ".join(custom_tests_to_run))
     print(f"\n### CUSTOM TEST TO RUN ###\n{_print_list(custom_tests_to_run)}")
 
-    test_files_to_run = set(test_files_to_run) - set(custom_tests_to_run) - set(exotic_tests_to_run) - set(examples_tests_to_run)
+    test_files_to_run = (
+        set(test_files_to_run) - set(custom_tests_to_run) - set(exotic_tests_to_run) - set(examples_tests_to_run)
+    )
     if len(test_files_to_run) > 0:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(" ".join(test_files_to_run))
