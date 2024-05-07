@@ -995,8 +995,9 @@ class PhiModel(PhiPreTrainedModel):
                     hidden_states,
                     causal_mask,
                     position_ids,
-                    past_key_values,
                     output_attentions,
+                    use_cache,
+                    past_key_values,
                     cache_position,
                 )
             else:
@@ -1004,9 +1005,9 @@ class PhiModel(PhiPreTrainedModel):
                     hidden_states,
                     attention_mask=causal_mask,
                     position_ids=position_ids,
-                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    past_key_value=past_key_values,
                     cache_position=cache_position,
                 )
 
