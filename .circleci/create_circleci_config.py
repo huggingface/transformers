@@ -87,7 +87,7 @@ class CircleCIJob:
         if self.parallelism is None:
             self.parallelism = 1
         else:
-            self.parallelism = max(len(self.tests_to_run) // self.num_test_files_per_worker, self.parallelism)
+            self.parallelism = max(len(self.tests_to_run) // self.num_test_files_per_worker, 4)
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
@@ -119,7 +119,7 @@ class CircleCIJob:
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
             {"run": {"name": "Get tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n" >> tests.txt'}},
             {"run": {"name": "Split tests across parallel nodes",
-                     "command": "TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'"}
+                     "command": "TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'" if self.parallelism else ""}
             }
         ]
 
@@ -137,11 +137,8 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
+        test_command = f"({test_command} | tee tests_output.txt)"
         if self.name == "pr_documentation_tests":
-            # can't use ` | tee tee tests_output.txt` as usual
-            test_command += " > tests_output.txt"
-            # Save the return code, so we can check if it is timeout in the next step.
-            test_command += '; touch "$?".txt'
             # Never fail the test step for the doctest job. We will check the results in the next step, and fail that
             # step instead if the actual test failures are found. This is to avoid the timeout being reported as test
             # failure.
