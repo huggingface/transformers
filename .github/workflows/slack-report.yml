@@ -60,12 +60,10 @@ jobs:
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
-        # Only the model testing job is concerned for this step
-        if: ${{ inputs.job == 'run_models_gpu' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ci_results
-          path: ci_results
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}
       
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
