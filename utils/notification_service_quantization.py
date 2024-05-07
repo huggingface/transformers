@@ -242,6 +242,10 @@ if __name__ == "__main__":
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
 
+    job_name = os.getenv("CI_TEST_JOB")
+    with open(f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8") as fp:
+        json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
+
     message = QuantizationMessage(
         title,
         results=quantization_results,
