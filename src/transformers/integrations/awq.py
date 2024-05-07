@@ -57,6 +57,48 @@ AWQ_FUSED_MAPPINGS = {
     },
 }
 
+AWQ_SCALES_MAPPINGS = {
+    "starcoder2": "c_fc",
+    "RefinedWebModel": "dense_h_to_4h",
+    "falcon": "dense_h_to_4h",
+    "mpt": "up_proj",
+    "gptj": "fc_in",
+    "gpt_neox": "dense_h_to_4h",
+    "gpt_bigcode": "c_fc",
+    "bloom": "dense_h_to_4h",
+}
+
+
+def replace_scales(model, model_type):
+    from awq.modules.act import ScaledActivation
+
+    gelu_activation_str = [
+        "gelu",
+        "gelu_10",
+        "gelu_fast",
+        "gelu_new",
+        "gelu_python",
+        "gelu_pytorch_tanh",
+        "gelu_accurate",
+        "quick_gelu",
+    ]
+    gelu_activation_list = [ACT2FN[act].__class__ for act in gelu_activation_str]
+    gelu_activation_list.append(nn.GELU)
+    for name, module in model.named_children():
+        if any(isinstance(module, act) for act in gelu_activation_list):
+            if model_type in AWQ_SCALES_MAPPINGS:
+                layer_before_act = getattr(model, AWQ_SCALES_MAPPINGS[model_type])
+                size = layer_before_act.out_features
+                scale_like = torch.ones(size)
+                model._modules[name] = ScaledActivation(module, scale_like)
+            else:
+                raise ValueError(
+                    f"The model type {model_type} is not supported with AutoAWQ + transformers because we are not able to replace the scales corrrectly."
+                    "Please submit a PR in transformers or use AutoAWQ library directly to load the model."
+                )
+        _ = replace_scales(module, model_type)
+    return model
+
 
 def replace_with_awq_linear(
     model,
@@ -95,7 +137,6 @@ def replace_with_awq_linear(
         raise ValueError(
             "AWQ (either `autoawq` or `llmawq`) is not available. Please install it with `pip install autoawq` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
-    from awq.modules.act import ScaledActivation
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         if quantization_config.version == AWQLinearVersion.GEMM:
@@ -147,17 +188,6 @@ def replace_with_awq_linear(
 
                 # Force requires grad to False to avoid unexpected errors
                 model._modules[name].requires_grad_(False)
-        if isinstance(module, nn.GELU) and name not in modules_to_not_convert:
-            # get the module just before applying act
-            # the easiest way is just checking if the mlp have these layers.
-            layers = ["fc_in", "dense_h_to_4h", "up_proj", "c_fc"]
-            layers_detected = [l for l in layers if hasattr(model, l)]
-            if len(layers_detected) > 0:
-                size = getattr(model, layers_detected[0]).out_features
-                scale_like = torch.ones(size)
-                model._modules[name] = ScaledActivation(module, scale_like)
-            elif len(layers_detected) == 0:
-                logger.info("We were not able to replace the GELU layers. The model might not perform as expected.")
         if len(list(module.children())) > 0:
             _, has_been_replaced = replace_with_awq_linear(
                 module,
