@@ -58,12 +58,12 @@ def _parse_type_hint(hint):
         if origin is Union:
             # If it's a union of basic types, we can express that as a simple list in the schema
             if all(t in BASIC_TYPES for t in get_args(hint)):
-                return_dict = {"type": [_get_json_schema_type(t)["type"] for t in hint.__args__ if t != type(None)]}
+                return_dict = {"type": [_get_json_schema_type(t)["type"] for t in get_args(hint) if t != type(None)]}
                 if len(return_dict["type"]) == 1:
                     return_dict["type"] = return_dict["type"][0]
             else:
                 # A union of more complex types requires us to recurse into each subtype
-                return_dict = {"anyOf": [_parse_type_hint(t) for t in hint.__args__ if t != type(None)],}
+                return_dict = {"anyOf": [_parse_type_hint(t) for t in get_args(hint) if t != type(None)],}
                 if len(return_dict["anyOf"]) == 1:
                     return_dict = return_dict["anyOf"][0]
             if type(None) in get_args(hint):
@@ -74,12 +74,12 @@ def _parse_type_hint(hint):
                 return {"type": "array"}
             if all(t in BASIC_TYPES for t in get_args(hint)):
                 # Similarly to unions, a list of basic types can be expressed as a list in the schema
-                items = {"type": [_get_json_schema_type(t)["type"] for t in hint.__args__ if t != type(None)]}
+                items = {"type": [_get_json_schema_type(t)["type"] for t in get_args(hint) if t != type(None)]}
                 if len(items["type"]) == 1:
                     items["type"] = items["type"][0]
             else:
                 # And a list of more complex types requires us to recurse into each subtype again
-                items = {"anyOf": [_parse_type_hint(t) for t in hint.__args__ if t != type(None)]}
+                items = {"anyOf": [_parse_type_hint(t) for t in get_args(hint) if t != type(None)]}
                 if len(items["anyOf"]) == 1:
                     items = items["anyOf"][0]
             return_dict = {"type": "array", "items": items}
@@ -91,7 +91,7 @@ def _parse_type_hint(hint):
             # However, we can specify the type of the dict values with "additionalProperties"
             return {
                 "type": "object",
-                "additionalProperties": _parse_type_hint(hint.__args__[1]),
+                "additionalProperties": _parse_type_hint(get_args(hint)[1]),
             }
         else:
             raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
