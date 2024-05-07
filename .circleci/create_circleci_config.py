@@ -420,7 +420,7 @@ REGULAR_TESTS = [
     tf_job,
     flax_job,
     hub_job,
-    onnx_job
+    onnx_job,
     tokenization_job
 ]
 EXAMPLES_TESTS = [
