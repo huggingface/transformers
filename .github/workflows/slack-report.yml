@@ -84,3 +84,10 @@ jobs:
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}" 
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}
