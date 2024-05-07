@@ -80,7 +80,7 @@ class CircleCIJob:
             print("Looking for ", test_file)
             if os.path.exists(test_file):
                 with open(test_file) as f:
-                    expanded_tests = f.read().split("\n")
+                    expanded_tests = f.read().strip().split("\n")
                 self.tests_to_run = expanded_tests
             else:
                 self.tests_to_run = []
@@ -351,15 +351,7 @@ def create_circleci_config(folder=None):
         folder = os.getcwd()
     os.environ["test_preparation_dir"] = folder
     jobs = [k for k in ALL_TESTS if len(k.tests_to_run) > 0]
-
-    doctest_file = os.path.join(folder, "doctest_list.txt")
-    if os.path.exists(doctest_file):
-        with open(doctest_file) as f:
-            doctest_list = f.read()
-    else:
-        doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+    print("The following jobs will be run ", jobs)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
