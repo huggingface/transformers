@@ -170,6 +170,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -292,6 +293,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_hqq_available():
+    return _hqq_available
+
+
 def get_torch_version():
     return _torch_version
 
@@ -368,7 +373,7 @@ def is_torch_mps_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available()
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
     return False
 
 
