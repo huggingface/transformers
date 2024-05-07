@@ -36,6 +36,7 @@ class AlignProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`BertTokenizer`, `BertTokenizerFast`]):
             The tokenizer is a required input.
+
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -108,6 +109,12 @@ class AlignProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
@@ -140,7 +147,7 @@ class AlignProcessor(ProcessorMixin):
         # BC for explicit return_tensors
         common_kwargs = {**self.processing_kwargs["common_kwargs"], **kwargs}
         if "return_tensors" in common_kwargs:
-            return_tensors = kwargs.pop("return_tensors", None)
+            return_tensors = common_kwargs.pop("return_tensors", None)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values

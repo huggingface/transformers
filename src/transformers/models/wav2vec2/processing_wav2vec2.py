@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from typing import List, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput, AudioInput
 from ...utils import logging
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
@@ -101,10 +101,10 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], List[float]] = None,
+        audio: AudioInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images=None,
-        videos=None,  # end of supported modalities in call
+        videos=None,
         **kwargs,
     ):
         """
@@ -112,6 +112,19 @@ class Wav2Vec2Processor(ProcessorMixin):
         [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
+        Args:
+            audio (`AudioInput`):
+                The audio or batch of audio to be encoded.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         """
         if "raw_speech" in kwargs:
             if audio is None:
