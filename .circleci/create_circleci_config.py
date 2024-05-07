@@ -205,7 +205,6 @@ tokenization_job = CircleCIJob(
 tf_job = CircleCIJob(
     "tf",
     docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    install_steps=["uv venv", "uv pip install -e."],
     parallelism=6,
     pytest_num_workers=16,
 )
