@@ -1188,8 +1188,8 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "torch_and_tf_job":r"tests/models/.*/test_modeling_(tf_|[^flax]).*",
-    "torch_and_flax_job":r"tests/models/.*/test_modeling_(flax_|[^tf]).*",
+    "torch_and_tf_job":r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
+    "torch_and_flax_job":r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
     "tf": r"tests/models/.*/test_modeling_[^(flax_|tf_)].*",
     "pt": r"tests/models/.*/test_modeling_tf_.*",
     "examples_torch": r"examples/pytorch/.*",
@@ -1201,7 +1201,7 @@ JOB_TO_TEST_FILE = {
 
 }
 def create_test_list_from_filter(full_test_list):
-    all_test_files = " ".join(full_test_list)
+    all_test_files = "\n".join(full_test_list)
     for k,v in JOB_TO_TEST_FILE.items():
         file_name = f"{k}_test_files.txt"
         files_to_test = list(re.match(v,full_test_list))
