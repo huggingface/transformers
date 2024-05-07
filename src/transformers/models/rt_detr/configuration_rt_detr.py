@@ -143,7 +143,7 @@ class RTDetrConfig(PretrainedConfig):
             Parameter alpha used to compute the focal loss.
         focal_loss_gamma (`float`, *optional*, defaults to 2.0):
             Parameter gamma used to compute the focal loss.
-        weight_loss_vfl (`float`, *optional*, defaults to 2.0):
+        weight_loss_vfl (`float`, *optional*, defaults to 1.0):
             Relative weight of the varifocal loss in the object detection loss.
         weight_loss_bbox (`float`, *optional*, defaults to 5.0):
             Relative weight of the L1 bounding box loss in the object detection loss.
@@ -228,7 +228,7 @@ class RTDetrConfig(PretrainedConfig):
         auxiliary_loss=True,
         focal_loss_alpha=0.75,
         focal_loss_gamma=2.0,
-        weight_loss_vfl=2.0,
+        weight_loss_vfl=1.0,
         weight_loss_bbox=5.0,
         weight_loss_giou=2.0,
         eos_coefficient=1e-4,
