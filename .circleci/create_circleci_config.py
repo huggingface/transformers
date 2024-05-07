@@ -168,8 +168,7 @@ class CircleCIJob:
             n_executors = max(len(expanded_tests) // 10, 1)
             # Avoid empty test list on some executor(s) or launching too many executors
             if n_executors > self.parallelism:
-                n_executors = self.parallelism if "example" not in self.name else self.parallelism
-            job["parallelism"] = n_executors
+                n_executors = self.parallelism if "example" not in self.name else len(expanded_tests) 
 
             # Need to be newline separated for the command `circleci tests split` below
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
