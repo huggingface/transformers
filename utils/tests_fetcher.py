@@ -1092,7 +1092,7 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]) or not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob("examples/**/*.py", recursive=True)
+        test_files_to_run = glob.glob("../tests/**/test_**.py", recursive=True) + glob.glob("../examples/**/*.py", recursive=True)
         print(test_files_to_run)
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
@@ -1201,6 +1201,7 @@ JOB_TO_TEST_FILE = {
 
 }
 def create_test_list_from_filter(full_test_list):
+    all_test_files = " ".join(full_test_list)
     for k,v in JOB_TO_TEST_FILE.items():
         file_name = f"{k}_test_files.txt"
         files_to_test = list(re.match(v,full_test_list))
