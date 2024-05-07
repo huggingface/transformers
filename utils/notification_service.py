@@ -1148,6 +1148,18 @@ if __name__ == "__main__":
         with open("ci_results/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
+    # Must have the same keys as in `additional_results`.
+    # The values are used as the file names where to save the corresponding CI job results.
+    test_to_result_name = {
+        "PyTorch pipelines": "torch_pipeline",
+        "TensorFlow pipelines": "tf_pipeline",
+        "Examples directory": "example",
+        "Torch CUDA extension tests": "deepspeed",
+    }
+    for job, job_result in additional_results.items():
+        with open(f"ci_results/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(job_result, fp, indent=4, ensure_ascii=False)
+
     prev_ci_artifacts = None
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
     if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
