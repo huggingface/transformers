@@ -2192,7 +2192,7 @@ class RTDetrLoss(nn.Module):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
+        outputs_without_aux = {k: v for k, v in outputs.items() if "auxiliary_outputs" not in k}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
@@ -2218,6 +2218,7 @@ class RTDetrLoss(nn.Module):
                         # Intermediate masks losses are too costly to compute, we ignore them.
                         continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
                     l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -2639,19 +2640,8 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                     outputs_loss["denoising_meta_values"] = denoising_meta_values
 
             loss_dict = criterion(outputs_loss, labels)
-            # Compute total loss, as a weighted sum of the various losses
-            weight_dict = {
-                "loss_vfl": self.config.weight_loss_vfl,
-                "loss_bbox": self.config.weight_loss_bbox,
-                "loss_giou": self.config.weight_loss_giou,
-            }
-            weight_loss_scaled = {k: v * loss_dict[k] for k, v in weight_dict.items()}
 
-            loss = sum(weight_loss_scaled.values())
-            loss_dict = {
-                "loss_dict": loss_dict,
-                "weight_loss_scaled": weight_loss_scaled,
-            }
+            loss = sum(loss_dict.values())
 
         if not return_dict:
             if auxiliary_outputs is not None:
