@@ -97,6 +97,7 @@ class MistralConfig(PretrainedConfig):
     ```"""
 
     model_type = "mistral"
+    fsdp_transformer_layer_cls_to_wrap = "MistralDecoderLayer"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
