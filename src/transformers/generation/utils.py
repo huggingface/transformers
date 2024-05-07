@@ -2016,10 +2016,6 @@ class GenerationMixin:
                     standardize_cache_format=True,
                 )
 
-                # This is needed to properly delete outputs.logits which may be very large for this first iteration
-                # Otherwise a reference to outputs.logits is kept all along until after the next call to self.forward()
-                del outputs
-
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
                     _, model_kwargs = self._expand_inputs_for_generation(
@@ -2070,6 +2066,9 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+            # This is needed to properly delete outputs.logits which may be very large for this first iteration
+            # Otherwise a reference to outputs.logits is kept all along until after the next call to self.forward()
+            del outputs
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
