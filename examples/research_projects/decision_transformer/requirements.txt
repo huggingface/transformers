@@ -220,7 +220,7 @@ toolz==0.11.2
 torch==1.13.1
 torchaudio==0.11.0
 torchvision==0.12.0
-tqdm==4.63.0
+tqdm==4.66.3
 traitlets==5.1.1
 -e git+git@github.com:edbeeching/transformers.git@77b90113ca0a0e4058b046796c874bdc98f1da61#egg=transformers
 typing-extensions==4.1.1
