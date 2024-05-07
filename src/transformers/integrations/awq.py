@@ -93,7 +93,7 @@ def replace_scales(model, model_type):
                 model._modules[name] = ScaledActivation(module, scale_like)
             else:
                 raise ValueError(
-                    f"The model type {model_type} is not supported with AutoAWQ + transformers because we are not able to replace the scales corrrectly."
+                    f"The model type {model_type} is not supported with AutoAWQ + transformers because we are not able to replace the scales corrrectly. "
                     "Please submit a PR in transformers or use AutoAWQ library directly to load the model."
                 )
         _ = replace_scales(module, model_type)
