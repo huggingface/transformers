@@ -1064,6 +1064,7 @@ class Trainer:
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
+            badam_kwargs = optimizer_kwargs.pop("badam_kwargs")
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
@@ -1078,6 +1079,16 @@ class Trainer:
                         manager.register_module_override(module, "weight", {"optim_bits": 32})
                         logger.debug(f"bitsandbytes: will optimize {module} in fp32")
                 logger.info(f"skipped: {skipped/2**20}M params")
+
+            if badam_kwargs is not None:
+                from badam import BlockOptimizer
+
+                self.optimizer = BlockOptimizer(
+                    base_optimizer=self.optimizer,
+                    named_parameters_list=list(opt_model.named_parameters()),
+                    block_prefix_list=None,
+                    **badam_kwargs,
+                )
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1126,13 +1137,20 @@ class Trainer:
                 The training arguments for the training session.
 
         """
+        use_badam = "badam_" in args.optim
+        if use_badam:
+            args.optim = args.optim.replace("badam_", "")
 
         # parse args.optim_args
         optim_args = {}
+        badam_optim_args = {}
         if args.optim_args:
             for mapping in args.optim_args.replace(" ", "").split(","):
                 key, value = mapping.split("=")
-                optim_args[key] = value
+                if "badam_" in key and use_badam:
+                    badam_optim_args[key.replace("badam_", "")] = value
+                else:
+                    optim_args[key] = value
 
         optimizer_kwargs = {"lr": args.learning_rate}
 
@@ -1384,6 +1402,10 @@ class Trainer:
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
+
+        if use_badam:
+            optimizer_kwargs["badam_kwargs"] = badam_optim_args
+
         return optimizer_cls, optimizer_kwargs
 
     def create_scheduler(self, num_training_steps: int, optimizer: torch.optim.Optimizer = None):

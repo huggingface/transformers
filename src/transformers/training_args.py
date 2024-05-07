@@ -1620,7 +1620,15 @@ class TrainingArguments:
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
 
+        use_badam = "badam_" in self.optim
+        if use_badam:
+            self.optim = self.optim.replace("badam_", "")
+
         self.optim = OptimizerNames(self.optim)
+
+        if use_badam:
+            self.optim = "badam_" + self.optim
+
         if self.adafactor:
             warnings.warn(
                 "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim"

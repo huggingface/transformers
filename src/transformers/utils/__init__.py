@@ -111,6 +111,7 @@ from .import_utils import (
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
+    is_badam_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,

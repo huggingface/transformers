@@ -59,6 +59,7 @@ from .utils import (
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
+    is_badam_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_cv2_available,
@@ -335,6 +336,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_badam(test_case):
+    """
+    Decorator marking a test that requires Badam. These tests are skipped when Badam package isn't installed.
+    https://github.com/Ledzy/BAdam
+    """
+    return unittest.skipUnless(is_badam_available(), "test requires Badam")(test_case)
 
 
 def require_cv2(test_case):
