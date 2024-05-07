@@ -82,6 +82,8 @@ class CircleCIJob:
                 with open(test_file) as f:
                     expanded_tests = f.read().split(" ")
                 self.tests_to_run = expanded_tests
+            else:
+                self.tests_to_run = []
         if self.parallelism is None:
             self.parallelism = 1
         else:
