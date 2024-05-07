@@ -1217,7 +1217,7 @@ JOB_TO_TEST_FILE = {
 
 }
 def create_test_list_from_filter(full_test_list):
-    for k,v in JOB_TO_TEST_FILE.keys():
+    for k,v in JOB_TO_TEST_FILE.items():
         file_name = f"{k}_test_files.txt"
         files_to_test = list(re.match(v,full_test_list))
         with open(file_name,"w") as f:
