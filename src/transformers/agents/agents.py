@@ -88,7 +88,7 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
             f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}, decoding failed at '{json_blob[place-4:place+5]}'."
         )
     except Exception as e:
-        raise ValueError("Error in parsing the JSON blob.") from e
+        raise ValueError(f"Error in parsing the JSON blob: {e}")
 
 
 def parse_code_blob(code_blob: str) -> str:
@@ -463,7 +463,9 @@ class Agent:
     def log_code_action(self, code_action: str) -> None:
         self.logger.warning("==== Agent is executing the code below:")
         if is_pygments_available():
-            self.logger.log(31, highlight(code_action, PythonLexer(ensurenl=False), Terminal256Formatter()))
+            self.logger.log(
+                31, highlight(code_action, PythonLexer(ensurenl=False), Terminal256Formatter(style="nord"))
+            )
         else:
             self.logger.log(31, code_action)
         self.logger.warning("====")
