@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Pipelines para inferencia
 
-Un [`pipeline`] simplifica el uso de cualquier modelo del [Model Hub](https://huggingface.co/models) para la inferencia en una variedad de tareas como la generación de texto, la segmentación de imágenes y la clasificación de audio. Incluso si no tienes experiencia con una modalidad específica o no comprendes el código que alimenta los modelos, ¡aún puedes usarlos con el [`pipeline`]! Este tutorial te enseñará a:
+Un [`pipeline`] simplifica el uso de cualquier modelo del [Hub](https://huggingface.co/models) para la inferencia en una variedad de tareas como la generación de texto, la segmentación de imágenes y la clasificación de audio. Incluso si no tienes experiencia con una modalidad específica o no comprendes el código que alimenta los modelos, ¡aún puedes usarlos con el [`pipeline`]! Este tutorial te enseñará a:
 
 * Utilizar un [`pipeline`] para inferencia.
 * Utilizar un tokenizador o modelo específico.
@@ -48,7 +48,7 @@ Si bien cada tarea tiene un [`pipeline`] asociado, es más sencillo usar la abst
 ```
 
 ¿No es el resultado que tenías en mente? Echa un vistazo a algunos de los [modelos de reconocimiento automático del habla más descargados](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
-en el Hub para ver si puedes obtener una transcripción mejor.
+en el Hub para ver si puedes obtener una mejor transcripción.
 
 Intentemos con el modelo [Whisper large-v2](https://huggingface.co/openai/whisper-large) de OpenAI. Whisper se lanzó 
 2 años después que Wav2Vec2, y se entrenó con cerca de 10 veces más datos. Como tal, supera a Wav2Vec2 en la mayoría de las pruebas 
@@ -80,15 +80,15 @@ transcriber(
 )
 ```
 
-Las pipelines son ideales para la experimentación, ya que cambiar de un modelo a otro es trivial; sin embargo, hay algunas formas de optimizarlas para cargas de trabajo más grandes que la experimentación. Consulta las siguientes guías que profundizan en iterar sobre conjuntos de datos completos o utilizar pipelines en un servidor web:
+Los pipelines son ideales para la experimentación, ya que cambiar de un modelo a otro es trivial; sin embargo, hay algunas formas de optimizarlas para cargas de trabajo más grandes que la experimentación. Consulta las siguientes guías que profundizan en iterar sobre conjuntos de datos completos o utilizar pipelines en un servidor web:
 de la documentación:
+
 * [Uso de pipelines en un conjunto de datos](#uso-de-pipelines-en-un-conjunto-de-datos)
 * [Uso de pipelines para un servidor web](./pipeline_webserver)
 
 ## Parámetros
 
-La [`pipeline`] admite muchos parámetros; algunos son específicos de la tarea y algunos son generales para todas las pipelines.
-En general, puedes especificar parámetros en cualquier lugar que desees:
+[`pipeline`] admite muchos parámetros; algunos son específicos de la tarea y algunos son generales para todas las pipelines. En general, puedes especificar parámetros en cualquier lugar que desees:
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", my_parameter=1)
@@ -102,8 +102,7 @@ Vamos a echar un vistazo a tres importantes:
 
 ### Device
 
-Si usas `device=n`, la pipeline automáticamente coloca el modelo en el dispositivo especificado.
-Esto funcionará independientemente de si estás utilizando PyTorch o Tensorflow.
+Si usas `device=n`, el pipeline automáticamente coloca el modelo en el dispositivo especificado. Esto funcionará independientemente de si estás utilizando PyTorch o Tensorflow.
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
@@ -135,7 +134,7 @@ audio_filenames = [f"https://huggingface.co/datasets/Narsil/asr_dummy/resolve/ma
 texts = transcriber(audio_filenames)
 ```
 
-Esto ejecuta el pipeline en los 4 archivos de audio proporcionados, pero los pasará en lotes de 2 al modelo (que está en una GPU, donde la agrupación en lotes es más probable que ayude) sin requerir ningún código adicional de tu parte. La salida siempre debería coincidir con lo que habrías recibido sin agrupación en lotes. Solo se pretende como una forma de ayudarte a obtener más velocidad de una pipeline.
+Esto ejecuta el pipeline en los 4 archivos de audio proporcionados, pero los pasará en lotes de a 2 al modelo (que está en una GPU, donde la agrupación en lotes es más probable que ayude) sin requerir ningún código adicional de tu parte. La salida siempre debería coincidir con lo que habrías recibido sin agrupación en lotes. Solo se pretende como una forma de ayudarte a obtener más velocidad de una pipeline.
 
 Los pipelines también pueden aliviar algunas de las complejidades de la agrupación en lotes porque, para algunos pipelines, un solo elemento (como un archivo de audio largo) necesita ser dividido en varias partes para ser procesado por un modelo. El pipeline realiza esta [*agrupación en lotes de fragmentos*](https://huggingface.co/docs/transformers/main_classes/pipelines#pipeline-chunk-batching) por ti.
 
@@ -143,17 +142,15 @@ Los pipelines también pueden aliviar algunas de las complejidades de la agrupac
 
 Todas las tareas proporcionan parámetros específicos de la tarea que permiten flexibilidad adicional y opciones para ayudarte a completar tu trabajo. Por ejemplo, el método [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] tiene un parámetro `return_timestamps` que suena prometedor para subtítulos de videos:
 
-
 ```py
 >>> transcriber = pipeline(model="openai/whisper-large-v2", return_timestamps=True)
 >>> transcriber("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.', 'chunks': [{'timestamp': (0.0, 11.88), 'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its'}, {'timestamp': (11.88, 12.38), 'text': ' creed.'}]}
 ```
 
-Como puedes ver, el modelo infirió el texto y también salió **cuándo** se pronunciaron las various oraciones.
+Como puedes ver, el modelo infirió el texto y también salió **cuándo** se pronunciaron las distintas oraciones.
 
-Hay muchos parámetros disponibles para cada tarea, así que echa un vistazo a la referencia de la API de cada tarea para ver qué puedes ajustar.
-Por ejemplo, el [`~transformers.AutomaticSpeechRecognitionPipeline`] tiene un parámetro `chunk_length_s` que es útil para trabajar con archivos de audio realmente largos (por ejemplo, subtítulos de películas completas o videos de una hora de duración) que un modelo típicamente no puede manejar solo:
+Hay muchos parámetros disponibles para cada tarea, así que echa un vistazo a la referencia de la API de cada tarea para ver qué puedes ajustar. Por ejemplo, el [`~transformers.AutomaticSpeechRecognitionPipeline`] tiene un parámetro `chunk_length_s` que es útil para trabajar con archivos de audio realmente largos (por ejemplo, subtítulos de películas completas o videos de una hora de duración) que un modelo típicamente no puede manejar solo:
 
 ```python
 >>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30)
@@ -246,7 +243,7 @@ Usar un [`pipeline`] para tareas de PLN es prácticamente idéntico.
 
 ## Pipeline multimodal
 
-La [`pipeline`] admite más de una modalidad. Por ejemplo, una tarea de respuesta a preguntas visuales (VQA) combina texto e imagen. No dudes en usar cualquier enlace de imagen que desees y una pregunta que quieras hacer sobre la imagen. La imagen puede ser una URL o una ruta local a la imagen.
+[`pipeline`] admite más de una modalidad. Por ejemplo, una tarea de respuesta a preguntas visuales (VQA) combina texto e imagen. No dudes en usar cualquier enlace de imagen que desees y una pregunta que quieras hacer sobre la imagen. La imagen puede ser una URL o una ruta local a la imagen.
 
 Por ejemplo, si usas esta [imagen de factura](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
 
