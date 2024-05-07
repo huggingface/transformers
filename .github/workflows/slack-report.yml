@@ -87,6 +87,7 @@ jobs:
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
         uses: actions/upload-artifact@v4
         with:
           name: ci_results_${{ inputs.job }}
