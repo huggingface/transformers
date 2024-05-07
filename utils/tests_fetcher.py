@@ -51,6 +51,7 @@ python utils/tests_fetcher.py --diff_with_last_commit
 
 import argparse
 import collections
+import glob
 import importlib.util
 import json
 import os
@@ -58,8 +59,8 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
-import glob
+from typing import Dict, List, Tuple, Union
+
 from git import Repo
 
 
@@ -970,7 +971,11 @@ def create_module_to_test_map(
     def filter_tests(tests, module=""):
         filtered_tests = []
         for t in tests:
-            if not t.startswith("tests/models/") or Path(t).parts[2] in IMPORTANT_MODELS or  "/".join(Path(t).parts[1:3]) in module:
+            if (
+                not t.startswith("tests/models/")
+                or Path(t).parts[2] in IMPORTANT_MODELS
+                or "/".join(Path(t).parts[1:3]) in module
+            ):
                 filtered_tests += [t]
 
     return {
@@ -978,12 +983,12 @@ def create_module_to_test_map(
         for module, tests in test_map.items()
     }
 
+
 def _print_list(l) -> str:
     """
     Pretty print a list of elements with one line per element and a - starting each line.
     """
     return "\n".join([f"- {f}" for f in l])
-
 
 
 def infer_tests_to_run(
@@ -1026,17 +1031,21 @@ def infer_tests_to_run(
 
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
-    if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]) or not filter_models and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
-        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob("examples/**/*.py", recursive=True)
+    if (
+        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
+        or not filter_models
+        and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
+    ):
+        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob(
+            "examples/**/*.py", recursive=True
+        )
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted and `filter_models=False`. CI is configured to test everything."
             )
     else:
         # All modified tests need to be run.
-        test_files_to_run = [
-            f for f in modified_files if f.startswith("tests") and "/test_" in f
-        ]
+        test_files_to_run = [f for f in modified_files if f.startswith("tests") and "/test_" in f]
         impacted_files = get_impacted_files_from_tiny_model_summary(diff_with_last_commit=diff_with_last_commit)
 
         # Then we grab the corresponding test files.
@@ -1054,7 +1063,7 @@ def infer_tests_to_run(
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
-    create_test_list_from_filter(test_files_to_run, out_path = "test_preparation/")
+    create_test_list_from_filter(test_files_to_run, out_path="test_preparation/")
 
     doctest_list = get_doctest_files()
 
@@ -1119,29 +1128,31 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "torch_and_tf":  r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
-    "torch_and_flax":r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
-    "tf":                r"tests/models/.*/test_modeling_tf_.*",
-    "torch":             r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
-    "tokenization":      r"tests/models/.*/test_tokenization.*",
-    "examples_torch":    r"examples/pytorch/.*test.*",
-    "examples_tf":       r"examples/tensorflow/.*test.*",
-    "examples_flax":     r"examples/flax/.*test.*",
-    "exotic_models":     r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
-    "custom_models":     r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    "repo_utils":        r"tests/repo_utils/test.*",
-    "pipeline_tf":       r"tests/models/.*/test_modeling_tf_.*",
-    "pipeline_torch":    r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
-
+    "torch_and_tf": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
+    "torch_and_flax": r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
+    "tf": r"tests/models/.*/test_modeling_tf_.*",
+    "torch": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
+    "tokenization": r"tests/models/.*/test_tokenization.*",
+    "examples_torch": r"examples/pytorch/.*test.*",
+    "examples_tf": r"examples/tensorflow/.*test.*",
+    "examples_flax": r"examples/flax/.*test.*",
+    "exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
+    "custom_models": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
+    "repo_utils": r"tests/repo_utils/test.*",
+    "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
+    "pipeline_torch": r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
 }
+
+
 def create_test_list_from_filter(full_test_list, out_path):
     all_test_files = "\n".join(full_test_list)
     for job_name, filter in JOB_TO_TEST_FILE.items():
-        file_name = os.path.join(out_path,f"{job_name}_test_list.txt")
+        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
         files_to_test = list(re.findall(filter, all_test_files))
-        print(job_name,file_name)
-        with open(file_name,"w") as f:
+        print(job_name, file_name)
+        with open(file_name, "w") as f:
             f.write("\n".join(files_to_test))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
