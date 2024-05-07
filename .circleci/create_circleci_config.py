@@ -103,7 +103,7 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
-            {"run": " & ".join(self.install_steps)},
+            {"run": " && ".join(self.install_steps)},
             {"run": {
                     "name": "Show installed libraries and their size",
                     "command": """du -h -d 1 "$(pip -V | cut -d ' ' -f 4 | sed 's/pip//g')" | grep -vE "dist-info|_distutils_hack|__pycache__" | sort -h | tee installed.txt || true"""}
