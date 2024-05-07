@@ -1090,7 +1090,7 @@ def infer_tests_to_run(
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
-
+    all_tests = False
     # Grab the corresponding test files:
     if any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"]):
         test_files_to_run = ["tests", "examples"]
