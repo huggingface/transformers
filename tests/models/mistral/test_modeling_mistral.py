@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Mistral model. """
-
+"""Testing suite for the PyTorch Mistral model."""
 
 import gc
 import tempfile
@@ -471,12 +470,13 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mistral flash attention does not support right padding")
-    
-    # copied from Llama tests to supress errors for now
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_new_cache_format
     @unittest.skip("TODO @gante fix this for Mistral")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
+
 
 @require_torch_gpu
 class MistralIntegrationTest(unittest.TestCase):
@@ -634,7 +634,7 @@ class MistralIntegrationTest(unittest.TestCase):
         del model
         backend_empty_cache(torch_device)
         gc.collect()
-    
+
     @slow
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -644,9 +644,14 @@ class MistralIntegrationTest(unittest.TestCase):
 
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = {
-            8: ['My favourite condiment is 100% ketchup. I love it on everything. '
-                'I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles'],
-            # 7: [],
+            8: [
+                "My favourite condiment is 100% ketchup. I love it on everything. "
+                "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
+            ],
+            7: [
+                "My favourite condiment is 100% ketchup. I love it on everything. "
+                "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
+            ],
         }
 
         prompts = ["My favourite condiment is "]
