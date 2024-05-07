@@ -101,10 +101,10 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_mistral import (
-            TFMistralPreTrainedModel,
             TFMistralForCausalLM,
             TFMistralForSequenceClassification,
             TFMistralModel,
+            TFMistralPreTrainedModel,
         )
 
 

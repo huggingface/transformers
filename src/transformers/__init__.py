@@ -8822,10 +8822,10 @@ if TYPE_CHECKING:
             TFMBartPreTrainedModel,
         )
         from .models.mistral import (
-            TFMistralPreTrainedModel,
             TFMistralForCausalLM,
             TFMistralForSequenceClassification,
             TFMistralModel,
+            TFMistralPreTrainedModel,
         )
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
