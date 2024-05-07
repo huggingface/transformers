@@ -1154,7 +1154,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         """Initalize the weights"""
 
         """initialize conv/fc bias value according to a given probability value."""
-        prior_prob = 0.01
+        prior_prob = self.config.initializer_range
         bias = float(-math.log((1 - prior_prob) / prior_prob))
         if isinstance(module, nn.Linear):
             nn.init.xavier_uniform_(module.weight)

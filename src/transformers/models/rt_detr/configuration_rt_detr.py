@@ -175,7 +175,7 @@ class RTDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
-        initializer_range=0.02,
+        initializer_range=0.01,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
