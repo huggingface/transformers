@@ -481,7 +481,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
