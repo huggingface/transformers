@@ -83,7 +83,7 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to root per-token, can be also interpreted as the `top-p` routing
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.

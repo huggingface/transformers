@@ -161,7 +161,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP Llama->Cohere
 class CohereMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
