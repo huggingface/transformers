@@ -24,6 +24,8 @@ import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
+import numpy as np
+
 from .dynamic_module_utils import custom_object_save
 from .image_utils import ChannelDimension, PILImageResampling
 from .tokenization_utils_base import (
@@ -33,8 +35,6 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-import numpy as np
-
 from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,

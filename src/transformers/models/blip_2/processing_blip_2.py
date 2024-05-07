@@ -86,8 +86,9 @@ class Blip2Processor(ProcessorMixin):
                 tensor. Both channels-first and channels-last formats are supported.
             text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you
-                    return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                     - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
