@@ -193,7 +193,6 @@ boxes have the correct coordinates relative to the original image:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_4.png" alt="Beach photo with detected objects"/>
 </div>
 
-```
 ## Batch processing
 
 You can pass multiple sets of images and text queries to search for different (or same) objects in several images.
