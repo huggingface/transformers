@@ -48,6 +48,18 @@ jobs:
                       touch test_preparation/examples_test_list.txt
                   fi
             - run: |
+                  if [ -f custom_test_list.txt ]; then
+                      mv custom_test_list.txt test_preparation/custom_test_list.txt
+                  else
+                      touch test_preparation/custom_test_list.txt
+                  fi
+            - run: |
+                  if [ -f exotic_test_list.txt ]; then
+                      mv exotic_test_list.txt test_preparation/exotic_test_list.txt
+                  else
+                      touch test_preparation/exotic_test_list.txt
+                  fi
+            - run: |
                   if [ -f filtered_test_list_cross_tests.txt ]; then
                       mv filtered_test_list_cross_tests.txt test_preparation/filtered_test_list_cross_tests.txt
                   else
@@ -80,6 +92,10 @@ jobs:
                   path: ~/transformers/test_preparation/filtered_test_list.txt
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
+            - store_artifacts:
+                  path: test_preparation/custom_test_list.txt
+            - store_artifacts:
+                  path: test_preparation/exotic_test_list.txt
             - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                   if [ ! -s test_preparation/generated_config.yml ]; then
