@@ -16,10 +16,13 @@
 # limitations under the License.
 import re
 
+import numpy as np
+import torch
+
 from ..models.auto import AutoProcessor
 from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 from ..utils import is_vision_available
-from .base import PipelineTool
+from .tools import PipelineTool
 
 
 if is_vision_available():
@@ -28,17 +31,19 @@ if is_vision_available():
 
 class DocumentQuestionAnsweringTool(PipelineTool):
     default_checkpoint = "naver-clova-ix/donut-base-finetuned-docvqa"
-    description = (
-        "This is a tool that answers a question about an document (pdf). It takes an input named `document` which "
-        "should be the document containing the information, as well as a `question` that is the question about the "
-        "document. It returns a text that contains the answer to the question."
-    )
+    description = "This is a tool that answers a question about an document (pdf). It returns a text that contains the answer to the question."
     name = "document_qa"
     pre_processor_class = AutoProcessor
     model_class = VisionEncoderDecoderModel
 
-    inputs = ["image", "text"]
-    outputs = ["text"]
+    inputs = {
+        "document": {
+            "type": "image",
+            "description": "The image containing the information. Can be a PIL Image or a string path to the image.",
+        },
+        "question": {"type": "text", "description": "The question in English"},
+    }
+    output_type = "text"
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
@@ -52,6 +57,10 @@ class DocumentQuestionAnsweringTool(PipelineTool):
         decoder_input_ids = self.pre_processor.tokenizer(
             prompt, add_special_tokens=False, return_tensors="pt"
         ).input_ids
+        if isinstance(document, str):
+            img = Image.open(document).convert("RGB")
+            img_array = np.array(img).transpose(2, 0, 1)
+            document = torch.tensor(img_array)
         pixel_values = self.pre_processor(document, return_tensors="pt").pixel_values
 
         return {"decoder_input_ids": decoder_input_ids, "pixel_values": pixel_values}
