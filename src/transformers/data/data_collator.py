@@ -651,7 +651,6 @@ class DataCollatorForSeq2Seq:
             else:
                 batch["labels"] = np.array(batch["labels"], dtype=np.int64)
         else:
-            # TODO need confirmation how this should be handled
             batch["labels"] = None
 
         # prepare decoder_input_ids
