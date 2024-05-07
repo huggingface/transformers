@@ -80,7 +80,7 @@ class CircleCIJob:
             print("Looking for ", test_file)
             if os.path.exists(test_file):
                 with open(test_file) as f:
-                    expanded_tests = f.read().split(" ")
+                    expanded_tests = f.read().split("\n")
                 self.tests_to_run = expanded_tests
             else:
                 self.tests_to_run = []
