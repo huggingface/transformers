@@ -157,7 +157,9 @@ class CircleCIJob:
                     else:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
-                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True)) 
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
+                elif test == "tests/pipelines":
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))  
                 else:
                     expanded_tests.append(test)
             tests = " ".join(expanded_tests)
@@ -166,7 +168,7 @@ class CircleCIJob:
             n_executors = max(len(expanded_tests) // 10, 1)
             # Avoid empty test list on some executor(s) or launching too many executors
             if n_executors > self.parallelism:
-                n_executors = self.parallelism
+                n_executors = self.parallelism if "example" not in self.name else self.parallelism
             job["parallelism"] = n_executors
 
             # Need to be newline separated for the command `circleci tests split` below
@@ -320,7 +322,7 @@ examples_tensorflow_job = CircleCIJob(
     cache_name="tensorflow_examples",
     docker_image=[{"image":"huggingface/transformers-examples-tf"}],
     install_steps=["uv venv && uv pip install ."],
-    parallelism=8
+    parallelism=4
 )
 
 
