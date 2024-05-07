@@ -1204,7 +1204,7 @@ def create_test_list_from_filter(full_test_list):
     all_test_files = "\n".join(full_test_list)
     for k,v in JOB_TO_TEST_FILE.items():
         file_name = f"{k}_test_files.txt"
-        files_to_test = list(re.match(v,full_test_list))
+        files_to_test = list(re.findall(v,all_test_files))
         with open(file_name,"w") as f:
             f.write("\n".join(files_to_test))
     return
