@@ -10,13 +10,13 @@ on:
       - trigger_upload_artifacts_3
 
 jobs:
-#  model-ci:
-#    name: Model CI
-#    uses: ./.github/workflows/self-scheduled.yml
-#    with:
-#      job: run_models_gpu
-#      slack_report_channel: "#transformers-ci-daily-models"
-#    secrets: inherit
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-daily-models"
+    secrets: inherit
 #
 #  torch-pipeline:
 #    name: Torch pipeline CI
