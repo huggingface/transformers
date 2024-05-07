@@ -158,10 +158,8 @@ class CircleCIJob:
                         expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
                     expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
-                elif test == "tests/pipelines":
-                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))  
                 else:
-                    expanded_tests.extend(glob.glob(f"{tests}/**/*.py", recursive=True))
+                    expanded_tests.extend(glob.glob(f"{self.name}/**/*.py", recursive=True))
             tests = " ".join(expanded_tests)
 
             # Each executor to run ~10 tests

@@ -1148,7 +1148,7 @@ def infer_tests_to_run(
     if len(exotic_tests_to_run) > 0 or all_tests:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
         if all_tests:
-            exotic_tests_to_run = ["all"]
+            exotic_tests_to_run = ["tests/models/*layoutlmv*", "tests/models/*nat", "tests/models/deta", "tests/models/udop", "tests/models/nougat"]
         exotic_file = Path(output_file).parent / "exotic_test_list.txt"
         with open(exotic_file, "w", encoding="utf-8") as f:
             f.write(" ".join(exotic_tests_to_run))
@@ -1160,7 +1160,7 @@ def infer_tests_to_run(
     if len(custom_tests_to_run) > 0 or all_tests:
         # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
         if all_tests:
-            custom_tests_to_run = ["all"]
+            custom_tests_to_run = ["tests/models/bert_japanese/test_tokenization_bert_japanese.py", "tests/models/openai/test_tokenization_openai.py", "tests/models/clip/test_tokenization_clip.py"]
         custom_file = Path(output_file).parent / "custom_test_list.txt"
         with open(custom_file, "w", encoding="utf-8") as f:
             f.write(" ".join(custom_tests_to_run))
