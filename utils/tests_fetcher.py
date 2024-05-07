@@ -1054,7 +1054,7 @@ def infer_tests_to_run(
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
-    create_test_list_from_filter(test_files_to_run, out_path = Path(output_file).parent)
+    create_test_list_from_filter(test_files_to_run, out_path = "test_preparation/")
 
     doctest_list = get_doctest_files()
 
@@ -1120,13 +1120,13 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 JOB_TO_TEST_FILE = {
     "torch_and_tf_job":  r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
-    "torch_and_flax_job": r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
+    "torch_and_flax_job":r"tests/models/.*/test_modeling_(?=flax_|[^tf]).*",
     "tf":                r"tests/models/.*/test_modeling_tf_.*",
     "torch":             r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
     "tokenization":      r"tests/models/.*/test_tokenization.*",
     "examples_torch":    r"examples/pytorch/.*test.*",
     "examples_tf":       r"examples/tensorflow/.*test.*",
-    "examples_flax":      r"examples/flax/.*test.*",
+    "examples_flax":     r"examples/flax/.*test.*",
     "exotic_models":     r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "custom_models":     r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "repo_utils":        r"tests/repo_utils/test.*",
