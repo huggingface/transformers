@@ -1152,16 +1152,16 @@ class RTDetrPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initalize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+        """initialize conv/fc bias value according to a given probability value."""
+        prior_prob = 0.01
+        bias = float(-math.log((1 - prior_prob) / prior_prob))
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.Embedding)):
-            if hasattr(module, "bias"):
-                module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                nn.init.constant_(module.bias, bias)
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.normal_(module)
+            nn.init.xavier_uniform_(module)
 
 
 RTDETR_START_DOCSTRING = r"""
@@ -1599,8 +1599,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         # decoder embedding
         if config.learn_initial_query:
-            weight_embedding = torch.empty(1, config.num_queries, config.d_model)
-            self.weight_embedding = nn.Parameter(weight_embedding, requires_grad=True)
+            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
 
         # encoder head
         self.enc_output = nn.Sequential(
@@ -1836,6 +1835,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
             target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = target.detach()
 
         if denoising_class is not None:
             target = torch.concat([denoising_class, target], 1)
