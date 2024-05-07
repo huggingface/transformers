@@ -533,6 +533,7 @@ class YolosPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -769,11 +770,11 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected remote with confidence 0.994 at location [46.96, 72.61, 181.02, 119.73]
-        Detected remote with confidence 0.975 at location [340.66, 79.19, 372.59, 192.65]
-        Detected cat with confidence 0.984 at location [12.27, 54.25, 319.42, 470.99]
-        Detected remote with confidence 0.922 at location [41.66, 71.96, 178.7, 120.33]
-        Detected cat with confidence 0.914 at location [342.34, 21.48, 638.64, 372.46]
+        Detected remote with confidence 0.991 at location [46.48, 72.78, 178.98, 119.3]
+        Detected remote with confidence 0.908 at location [336.48, 79.27, 368.23, 192.36]
+        Detected cat with confidence 0.934 at location [337.18, 18.06, 638.14, 373.09]
+        Detected cat with confidence 0.979 at location [10.93, 53.74, 313.41, 470.67]
+        Detected remote with confidence 0.974 at location [41.63, 72.23, 178.09, 119.99]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

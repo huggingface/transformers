@@ -50,7 +50,6 @@ from ...utils import (
     is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
@@ -71,6 +70,15 @@ if is_tensorflow_probability_available():
             "It seems you have `tensorflow_probability` installed with the wrong tensorflow version. "
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
@@ -830,7 +838,6 @@ class TFTapasMainLayer(keras.layers.Layer):
     config_class = TapasConfig
 
     def __init__(self, config: TapasConfig, add_pooling_layer: bool = True, **kwargs):
-        requires_backends(self, "tensorflow_probability")
         super().__init__(**kwargs)
 
         self.config = config
