@@ -1148,6 +1148,8 @@ def infer_tests_to_run(
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))
 
+    create_test_list_from_filter(test_files_to_run)
+
 def filter_tests(output_file: str, filters: List[str]):
     """
     Reads the content of the output file and filters out all the tests in a list of given folders.
@@ -1217,8 +1219,7 @@ JOB_TO_TEST_FILE = {
 def create_test_list_from_filter(full_test_list):
     for k,v in JOB_TO_TEST_FILE.keys():
         file_name = f"{k}_test_files.txt"
-        filter = re.compile(v)
-        files_to_test = full_test_list.search(filter)
+        files_to_test = list(re.match(v,full_test_list))
         with open(file_name,"w") as f:
             f.write("\n".join(files_to_test))
     return
