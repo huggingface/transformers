@@ -57,7 +57,7 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-To get started, define global constants, such as model name and image size. For this tutorial, we'll use the conditional DETR model due to its faster convergence. Feel free to select any object detection model available in the `transformers` library.
+To get started, we'll define global constants, namely the model name and image size. For this tutorial, we'll use the conditional DETR model due to its faster convergence. Feel free to select any object detection model available in the `transformers` library.
 
 ```py
 >>> MODEL_NAME = "microsoft/conditional-detr-resnet-50"  # or "facebook/detr-resnet-50"
@@ -69,7 +69,7 @@ To get started, define global constants, such as model name and image size. For 
 The [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) contains images with
 annotations identifying medical personal protective equipment (PPE) in the context of the COVID-19 pandemic.
 
-Start by loading the dataset and creating a `validation` split form `train`:
+Start by loading the dataset and creating a `validation` split from `train`:
 
 ```py
 >>> from datasets import load_dataset
@@ -390,7 +390,7 @@ to indicate which pixels are real (1) and which are padding (0).
 
 ## Preparing function to compute mAP
 
-Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` and `mAR` metrics and will wrap it to `compute_metrics` function in order to use in [`Trainer`] for evaluation.
+Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` (mean average precision) and `mAR` (mean average recall) metrics and will wrap it to `compute_metrics` function in order to use in [`Trainer`] for evaluation.
 
 Intermediate format of boxes used for training is `YOLO` (normalized) but we will compute metrics for boxes in `Pascal VOC` (absolute) format in order to correctly handle box areas. Let's define a function that converts bounding boxes to `Pascal VOC` format:
 
