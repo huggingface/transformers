@@ -184,7 +184,7 @@ torch_job = CircleCIJob(
 tokenization_job = CircleCIJob(
     "tokenization",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    parallelism=6,
+    parallelism=16,
     pytest_num_workers=16
 )
 
