@@ -692,10 +692,11 @@ class SiglipModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         model_name = "google/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_name).to(torch_device)
-        processor = SiglipProcessor.from_pretrained(model_name, size=480)
 
         # 640 x 480 image
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height":480, "width":640})
+
         inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
@@ -703,8 +704,9 @@ class SiglipModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, interpolate_pos_encoding=True)
 
         # verify the shape
-        # batch size 1, 50 patches, 768 hidden size
-        expected_shape = torch.Size((1, 50, 768))
+        # patch size = 16
+        # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
+        expected_shape = torch.Size((1, 1200, 768))
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
