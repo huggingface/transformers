@@ -16,8 +16,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
@@ -295,11 +293,6 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("TODO @gante fix this for Cohere")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
