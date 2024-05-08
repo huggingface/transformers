@@ -87,7 +87,7 @@ class CircleCIJob:
         if self.parallelism is None:
             self.parallelism = 1
         else:
-            self.parallelism = min(self.parallelism, 32)
+            self.parallelism = min(self.parallelism, 32, len(self.tests_to_run))
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
@@ -108,7 +108,7 @@ class CircleCIJob:
 
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m {self.marker}" if self.marker is not None else ""
-        additional_flags = f" -rsfE -p no:warnings --tb=short -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        additional_flags = f" -rsfE -p no:warnings -o junit_family=xunit1 --junitxml=test-results/junit.xml"
 
         steps = [
             "checkout",

@@ -1135,7 +1135,7 @@ JOB_TO_TEST_FILE = {
     "tokenization": r"tests/models/.*/test_tokenization.*",
     "examples_torch": r"examples/pytorch/.*test_.*",
     "examples_tensorflow": r"examples/tensorflow/.*test_.*",
-    "examples_flax": r"examples/flax/.*/run.*",
+    "examples_flax": r"examples/flax/.*test.*",
     "exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "repo_utils": r"tests/repo_utils/test.*",
