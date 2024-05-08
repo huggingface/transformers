@@ -1707,8 +1707,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             tools (List[Dict], *optional*): A list of tools (callable functions) that will be accessible
                 to the model. If the template does not support function calling, this argument will have no effect.
-                Each tool should be passed as a JSON Schema[link!], giving the name, description and argument types
-                for the tool. [Docs and links here, including auto-generation of schemas!]
+                Each tool should be passed as a JSON Schema, giving the name, description and argument types
+                for the tool. See our [chat templating guide](
             documents (List[Dict[str, str]], *optional*): A list of dicts representing documents that will be accessible
                 to the model if it is performing RAG (retrieval-augmented generation). If the template does not support
                 RAG, this argument will have no effect. We recommend that each document should be a dict containing

@@ -242,13 +242,12 @@ strings, lists, dicts or whatever else you want.
 
 That said, there are some common use-cases for these extra arguments,
 such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
-we have some opinionated recommendations about what the names and formats of these arguments should be. By sticking
-to these conventions when writing your template, you make it easier for users to use stabdard tool-use or RAG input
-pipelines with your model without needing any manual reformatting.
+we have some opinionated recommendations about what the names and formats of these arguments should be.
 
 ### Arguments for tool use
 
-Our recommendation for "tool use" LLMs which can choose to call functions as external tools is that their template
+"Tool use" LLMs can choose to call functions as external tools before generating an answer. Our recommendation for
+tool use models is that their template
 should accept a `tools` argument. This should be a list of tools, defined via [JSON Schema](https://json-schema.org/). Each "tool"
 is a single function that the model can choose to call, and the schema should include the function name, its description
 and the expected spec for its arguments.
@@ -260,7 +259,10 @@ and the expected spec for its arguments.
 current_time = {
     "name": "current_time",
     "description": "Get the current local time as a string.",
-    "parameters": {},  # TODO - double-check if this is the correct schema for this case
+    "parameters": {
+                'type': 'object',
+                'properties': {}
+            },
     }
 
 # A more complete function that takes two numerical arguments
@@ -289,10 +291,80 @@ models. We recommend trying to keep your tool schemas simple and flat where poss
 
 ### Automated function conversion for tool use
 
-Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
-that writing them can be annoying. Don't panic, though, we have a solution!
+# TODO Docstring and doc for get_json_schema(), then link to it
 
-TODO Explain function conversion with examples
+Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
+that writing them can be annoying. Don't panic, though, we have a solution! You can simply define Python functions
+as tools, and use the `get_json_schema()` function. This function will automatically generate a JSON schema for any
+function that has a valid docstring with parameter annotations and valid type hints. Let's see it in action!
+
+```python
+from transformers.utils import get_json_schema
+
+def multiply(a: float, b: float):
+    """Multiply two numbers together.
+    
+    :param a: The first number to multiply.
+    :param b: The second number to multiply.
+    """
+    return a * b
+
+schema = get_json_schema(multiply)
+print(schema)
+```
+
+This will yield:
+
+```json
+{
+    "name": "multiply", 
+    "description": "Multiply two numbers together.", 
+    "parameters": {
+        "type": "object", 
+        "properties": {
+            "a": {
+                "type": "number", 
+                "description": "The first number to multiply."
+            }, 
+            "b": {
+                "type": "number",
+                "description": "The second number to multiply."
+            }
+        }, 
+        "required": ["a", "b"]
+    }
+}
+```
+
+TODO Add a JSON schema decorator so this can be even shorter
+
+We can use this function to greatly simplify tool-calling:
+
+```python
+import datetime
+
+def current_time():
+    """Get the current local time as a string."""
+    return str(datetime.now())
+
+def multiply(a: float, b: float):
+    """Multiply two numbers together.
+    
+    :param a: The first number to multiply.
+    :param b: The second number to multiply.
+    """
+    return a * b
+
+tools = [current_time, multiply]
+schemas = [get_json_schema(tool) for tool in tools]
+
+model_input = tokenizer.apply_chat_template(
+    messages,
+    tools=schemas
+)
+```
+
+
 
 ### Arguments for retrieval-augmented generation (RAG)
 
