@@ -310,6 +310,7 @@ examples_torch_job = CircleCIJob(
     additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
+    # TODO @ArthurZucker remove this once docker is easier to build
     install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
     pytest_num_workers=1,
 )
