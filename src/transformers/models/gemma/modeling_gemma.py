@@ -104,15 +104,15 @@ class GemmaRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
+        # self.register_buffer("inv_freq", None, persistent=False)
+        self.inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim)
+        )
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.inv_freq is None:
-            self.inv_freq = 1.0 / (
-                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
-            )
+        self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -508,6 +508,10 @@ class GemmaSdpaAttention(GemmaAttention):
     `GemmaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seen_tokens = 0
+
 
     # Ignore copy
     def forward(
@@ -551,10 +555,20 @@ class GemmaSdpaAttention(GemmaAttention):
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
+        if q_len > 1:
+            self._seen_tokens = 0
+            # self._seen_tokens = (64 + 7) - 7 - 1  # compile ok but should fail
+            # self._seen_tokens = (64 + 7) - 7    # failed with index error 71
+        self._seen_tokens += key_states.shape[-2]
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            # full length
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # only necessary length (but we still need to update)
+            # _, _ = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -574,11 +588,28 @@ class GemmaSdpaAttention(GemmaAttention):
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
         is_causal = True if causal_mask is None and q_len > 1 else False
 
+        # length = int(cache_position[-1] + 1)
+        #length = cache_position.size()[0]  # can't compile, failed at `scaled_dot_product_attention` (`(*bias): last dimension must be contiguous`).  Also wrong value!
+        length = self._seen_tokens  # incorrect results (index stay at very small values)
+
+        # _key_states = key_states
+        # _value_states = value_states
+        # _attn_mask = causal_mask if causal_mask is not None else causal_mask
+
+        _key_states = key_states[:, :, :length, :]
+        _value_states = value_states[:, :, :length, :]
+        _attn_mask = causal_mask[:, :, :, :length] if causal_mask is not None else causal_mask
+
+        # _key_states = _key_states.contiguous()
+        # _value_states = _value_states.contiguous()
+        # _attn_mask = _attn_mask.contiguous() if causal_mask is not None else causal_mask
+
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
+            _key_states,
+            _value_states,
+            attn_mask=_attn_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
         )
@@ -588,7 +619,8 @@ class GemmaSdpaAttention(GemmaAttention):
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        verify = None  # key_states[:, :, length - 1, :]
+        return attn_output, verify, past_key_value
 
 
 GEMMA_ATTENTION_CLASSES = {
