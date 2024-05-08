@@ -651,8 +651,8 @@ class LlamaSdpaAttention(LlamaAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if q_len > 1:
-            # self._seen_tokens = 0
-            self._seen_tokens = (64 + 7) - 7 - 1  # compile ok but should fail
+            self._seen_tokens = 0
+            # self._seen_tokens = (64 + 7) - 7 - 1  # compile ok but should fail
             # self._seen_tokens = (64 + 7) - 7    # failed with index error 71
         self._seen_tokens += key_states.shape[-2]
 
@@ -681,16 +681,19 @@ class LlamaSdpaAttention(LlamaAttention):
 
         # length = int(cache_position[-1] + 1)
         #length = cache_position.size()[0]  # can't compile, failed at `scaled_dot_product_attention` (`(*bias): last dimension must be contiguous`).  Also wrong value!
-
         length = self._seen_tokens  # incorrect results (index stay at very small values)
+
+        # _key_states = key_states
+        # _value_states = value_states
+        # _attn_mask = causal_mask if causal_mask is not None else causal_mask
 
         _key_states = key_states[:, :, :length, :]
         _value_states = value_states[:, :, :length, :]
         _attn_mask = causal_mask[:, :, :, :length] if causal_mask is not None else causal_mask
 
-        _key_states = _key_states.contiguous()
-        _value_states = _value_states.contiguous()
-        _attn_mask = _attn_mask.contiguous() if causal_mask is not None else causal_mask
+        # _key_states = _key_states.contiguous()
+        # _value_states = _value_states.contiguous()
+        # _attn_mask = _attn_mask.contiguous() if causal_mask is not None else causal_mask
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -706,8 +709,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         attn_output = self.o_proj(attn_output)
 
-        verify = key_states[:, :, length - 1, :]
-
+        verify = None  # key_states[:, :, length - 1, :]
         return attn_output, verify, past_key_value
 
 
