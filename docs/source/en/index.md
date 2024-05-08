@@ -63,6 +63,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [ALIGN](model_doc/align)                         |       ✅        |         ❌         |      ❌      |
 |                       [AltCLIP](model_doc/altclip)                       |       ✅        |         ❌         |      ❌      |
 | [Audio Spectrogram Transformer](model_doc/audio-spectrogram-transformer) |       ✅        |         ❌         |      ❌      |
+|                     [AudioMAE](model_doc/audio_mae)                      |       ✅        |         ❌         |      ❌      |
 |                    [Autoformer](model_doc/autoformer)                    |       ✅        |         ❌         |      ❌      |
 |                          [Bark](model_doc/bark)                          |       ✅        |         ❌         |      ❌      |
 |                          [BART](model_doc/bart)                          |       ✅        |         ✅         |      ✅      |
