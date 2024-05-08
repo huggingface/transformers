@@ -1142,7 +1142,7 @@ JOB_TO_TEST_FILE = {
     "pipeline_tf": r"tests/models/.*/test_modeling_tf_.*",
     "pipeline_torch": r"tests/models/.*/test_modeling__[^flax_|^tf_)].*",
     "hub": r"tests/models/.*/test_modeling_[^flax_|^tf_)].*",
-    "onnx":r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
+    "onnx": r"tests/models/.*/test_modeling_(?=tf_|[^flax]).*",
 }
 
 
