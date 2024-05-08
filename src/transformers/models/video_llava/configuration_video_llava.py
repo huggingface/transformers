@@ -41,7 +41,7 @@ class VideoLlavaConfig(PretrainedConfig):
             Custom vision config or dict. Defaults ot `CLIPVisionConfig` if not indicated.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-            Defaults ot `LlamaConfig` if not indicated.
+            Defaults to `LlamaConfig` if not indicated.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
