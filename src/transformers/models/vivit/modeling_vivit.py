@@ -67,7 +67,7 @@ class VivitTubeletEmbeddings(nn.Module):
             config.num_channels, config.hidden_size, kernel_size=config.tubelet_size, stride=config.tubelet_size
         )
 
-    def forward(self, pixel_values, interpolate_pos_encoding=False):
+    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
@@ -135,7 +135,7 @@ class VivitEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values, interpolate_pos_encoding=interpolate_pos_encoding):
+    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
@@ -472,7 +472,7 @@ VIVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
+        interpolate_pos_encoding (`bool`, *optional*, `False`):
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
@@ -519,7 +519,7 @@ class VivitModel(VivitPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPooling]:
         r"""
@@ -670,7 +670,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], ImageClassifierOutput]:
         r"""
