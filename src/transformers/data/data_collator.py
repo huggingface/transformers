@@ -592,12 +592,12 @@ class DataCollatorForSeq2Seq:
         # this might occur when we pass {..., "labels": None}
         if labels is not None and all(label is None for label in labels):
             labels = None
-        no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
+        non_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
 
         # run through tokenizer without labels to ensure no side effects
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
-            no_labels_features,
+            non_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
