@@ -364,13 +364,14 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
+### Arguments for RAG
 
-
-### Arguments for retrieval-augmented generation (RAG)
-
-Our recommendation for "RAG" LLMs which can search a corpus of documents for information is that their template
+"Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
+to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
+recommendation for RAG models is that their template
 should accept a `documents` argument. This should be a list of documents, where each "document"
-is a single dict with `title` and `contents` keys, both of which are strings.
+is a single dict with `title` and `contents` keys, both of which are strings. Because this format is much simpler
+than the JSON schemas used for tools, no helper functions are necessary.
 
 #### Example
 
