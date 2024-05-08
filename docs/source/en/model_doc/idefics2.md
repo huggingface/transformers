@@ -64,10 +64,13 @@ messages = [{
 }]
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
-model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b", device_map="auto")
+model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
+model.to(device)
 
 # at inference time, one needs to pass `add_generation_prompt=True` in order to make sure the model completes the prompt
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
+print(text)
+# 'User: What’s the difference between these two images?<image><image><end_of_utterance>\nAssistant:'
 
 inputs = processor(images=images, text=text, return_tensors="pt").to(device)
 
