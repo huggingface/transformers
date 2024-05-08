@@ -54,6 +54,50 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
+def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
+    """
+    Make causal mask used for bi-directional self-attention, supporting both static and dynamic shapes.
+    """
+    bsz, tgt_len = input_ids_shape
+
+    # Create a matrix where only the lower triangle and diagonal are filled with zeros (causal mask)
+    mask = tf.fill((tgt_len, tgt_len), tf.dtypes.as_dtype(dtype).min)
+    mask_cond = tf.range(tgt_len)
+    mask = tf.where(mask_cond[:, None] >= mask_cond[None, :], 0.0, mask)
+
+    if past_key_values_length > 0:
+        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+
+    if bsz is None:
+        # When batch size is dynamic, expand and tile
+        # so we can compile a functional model
+        mask = tf.expand_dims(mask, 0)
+        mask = tf.expand_dims(mask, 0)  # shape: (1, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = tf.tile(mask, [bsz, 1, 1, 1])
+    else:
+        # When batch size is static, directly use broadcast_to
+        mask = tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+
+    return mask
+
+
+def _expand_mask(mask, dtype, tgt_len=None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = shape_list(mask)
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = tf.expand_dims(tf.expand_dims(mask, 1), 1)
+    expanded_mask = tf.broadcast_to(expanded_mask, [bsz, 1, tgt_len, src_len])
+
+    inverted_mask = 1.0 - tf.cast(expanded_mask, dtype)
+
+    return tf.where(
+        tf.cast(inverted_mask, bool), tf.fill(dims=shape_list(inverted_mask), value=tf.float32.min), inverted_mask
+    )
+
+
 class TFMistralRMSNorm(keras.layers.Layer):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         """
@@ -459,7 +503,7 @@ class TFMistralMainLayer(keras.layers.Layer):
         self.embed_tokens = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
-            mask_zero=True,
+            # mask_zero=True, TODO (ariG23498): fix `padding_idx`
             name="embed_tokens",
         )
         self.layers = [
@@ -475,6 +519,26 @@ class TFMistralMainLayer(keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
+
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        # if input_shape[-1] > 1:
+        combined_attention_mask = _make_causal_mask(
+            input_shape,
+            inputs_embeds.dtype,
+            past_key_values_length=past_key_values_length,
+        )
+
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
+
+        return combined_attention_mask
 
     @unpack_inputs
     def call(
@@ -518,23 +582,11 @@ class TFMistralMainLayer(keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is not None:
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask_shape = shape_list(attention_mask)
-            attention_mask = tf.reshape(attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
-
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            one_cst = tf.constant(1.0)
-            attention_mask = tf.cast(attention_mask, dtype=one_cst.dtype)
-            attention_mask = tf.multiply(tf.subtract(one_cst, attention_mask), tf.constant(-10000.0))
+        if attention_mask is None:
+            attention_mask = tf.ones((batch_size, seq_length_with_past), dtype=tf.bool)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        )
 
         hidden_states = inputs_embeds
 
