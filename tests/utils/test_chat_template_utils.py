@@ -15,7 +15,15 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'integer', 'description': 'The input'}}, 'required': ['x']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_union(self):
@@ -28,7 +36,15 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': ['integer', 'number'], 'description': 'The input'}}, 'required': ['x']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": ["integer", "number"], "description": "The input"}},
+                "required": ["x"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_optional(self):
@@ -41,7 +57,15 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'integer', 'description': 'The input', "nullable": True}}, 'required': ['x']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input", "nullable": True}},
+                "required": ["x"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_default_arg(self):
@@ -54,7 +78,11 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'integer', 'description': 'The input'}}}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {"type": "object", "properties": {"x": {"type": "integer", "description": "The input"}}},
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_nested_list(self):
@@ -67,7 +95,21 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'array', 'items': {'type': 'array', 'items': {'type': ['integer', 'string']}}, 'description': 'The input'}}, 'required': ['x']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
+                        "description": "The input",
+                    }
+                },
+                "required": ["x"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_multiple_arguments(self):
@@ -81,7 +123,18 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'integer', 'description': 'The input'}, 'y': {'type': 'string', 'description': 'Also the input'}}, 'required': ['x', 'y']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The input"},
+                    "y": {"type": "string", "description": "Also the input"},
+                },
+                "required": ["x", "y"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_multiple_complex_arguments(self):
@@ -95,7 +148,22 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         schema = get_json_schema(fn)
-        expected_schema = {'name': 'fn', 'description': 'Test function', 'parameters': {'type': 'object', 'properties': {'x': {'type': 'array', 'items': {'type': ['integer', 'number']}, 'description': 'The input'}, 'y': {'anyOf': [{'type': 'integer'}, {'type': 'string'}], 'nullable': True, 'description': 'Also the input'}}, 'required': ['x']}}
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "items": {"type": ["integer", "number"]}, "description": "The input"},
+                    "y": {
+                        "anyOf": [{"type": "integer"}, {"type": "string"}],
+                        "nullable": True,
+                        "description": "Also the input",
+                    },
+                },
+                "required": ["x"],
+            },
+        }
         self.assertEqual(schema, expected_schema)
 
     def test_missing_docstring(self):
@@ -126,3 +194,25 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             get_json_schema(fn)
+
+    def test_return_value_has_no_effect(self):
+        # We ignore return values, so we want to make sure they don't affect the schema
+        def fn(x: int) -> int:
+            """
+            Test function
+
+            :param x: The input
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema, expected_schema)

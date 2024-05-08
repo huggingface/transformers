@@ -36,9 +36,12 @@ def _convert_type_hints_to_json_schema(func):
     properties = {}
 
     signature = inspect.signature(func)
-    required = [
-        param_name for param_name, param in signature.parameters.items() if param.default == inspect.Parameter.empty
-    ]
+    required = []
+    for param_name, param in signature.parameters.items():
+        if param.annotation == inspect.Parameter.empty:
+            raise ValueError(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+        if param.default == inspect.Parameter.empty:
+            required.append(param_name)
 
     for param_name, param_type in type_hints.items():
         if param_name == "return":
@@ -51,8 +54,7 @@ def _convert_type_hints_to_json_schema(func):
 
     return schema
 
-# TODO: Return types!! How are those even handled? Does it even matter? I should check what the different APIs do for this
-#       and also add tests
+
 def _parse_type_hint(hint):
     if (origin := get_origin(hint)) is not None:
         if origin is Union:
