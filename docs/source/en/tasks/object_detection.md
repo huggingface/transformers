@@ -390,7 +390,7 @@ to indicate which pixels are real (1) and which are padding (0).
 
 ## Preparing function to compute mAP
 
-Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` and `mAR` metrics and will wrap it to `compute_metrics` function in order to use in [`Trainer`] for evaluation.
+Object detection models are commonly evaluated with a set of <a href="https://cocodataset.org/#detection-eval">COCO-style metrics</a>. We are going to use `torchmetrics` to compute `mAP` (mean average precision) and `mAR` (mean average recall) metrics and will wrap it to `compute_metrics` function in order to use in [`Trainer`] for evaluation.
 
 Intermediate format of boxes used for training is `YOLO` (normalized) but we will compute metrics for boxes in `Pascal VOC` (absolute) format in order to correctly handle box areas. Let's define a function that converts bounding boxes to `Pascal VOC` format:
 
