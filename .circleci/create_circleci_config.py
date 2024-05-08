@@ -117,7 +117,7 @@ class CircleCIJob:
                  "command": """dpkg-query --show --showformat='${Installed-Size}\t${Package}\n' | sort -rh | head -25 | sort -h | awk '{ package=$2; sub(".*/", "", package); printf("%.5f GB %s\n", $1/1024/1024, package)}' || true"""}
             },
             {"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}},
-            {"run": {"name": "Get tests", "command": f'echo {" ".join(self.tests_to_run)} | tr " " "\\n"'}},
+            {"run": {"name": "Show files being tested tests", "command": f'cat {self.name}_test_list.txt'}},
             {"run": {"name": "Split tests across parallel nodes",
                      "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
             }
