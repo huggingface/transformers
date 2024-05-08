@@ -300,6 +300,7 @@ doc_test_job = CircleCIJob(
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
+        "uv venv && pip install .",
         "touch dummy.py",
         command,
         "cat pr_documentation_tests_temp.txt",
