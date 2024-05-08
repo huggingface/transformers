@@ -173,7 +173,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = mlp_only_layers
+        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
