@@ -371,6 +371,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        # verify the logits
+        # verify the logits shape
         expected_shape = torch.Size((1, 3137, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
