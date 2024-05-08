@@ -106,7 +106,7 @@ class GemmaRotaryEmbedding(nn.Module):
         self.base = base
         # self.register_buffer("inv_freq", None, persistent=False)
         self.inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim)
+            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cuda").float() / self.dim)
         )
 
     @torch.no_grad()
