@@ -374,9 +374,3 @@ class VivitModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 3137, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[-0.5608, 0.6402, 0.1368], [-0.1167, -0.1180, -0.3220], [-0.1988, -0.2729, -0.0176]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

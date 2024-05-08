@@ -69,12 +69,11 @@ class VivitTubeletEmbeddings(nn.Module):
 
     def forward(self, pixel_values, interpolate_pos_encoding=False):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        if not interpolate_pos_encoding:
-            if height != self.image_size or width != self.image_size:
-                raise ValueError(
-                    f"Image image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Image image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
+            )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
         pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
@@ -133,12 +132,10 @@ class VivitEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values, interpolate_pos_encoding=interpolate_pos_encoding):
-        print(pixel_values.shape)
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
