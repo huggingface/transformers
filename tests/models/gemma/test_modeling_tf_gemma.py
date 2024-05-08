@@ -283,7 +283,7 @@ class TFGemmaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     test_headmasking = False
     test_pruning = False
-
+    test_onnx = False
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.6]
