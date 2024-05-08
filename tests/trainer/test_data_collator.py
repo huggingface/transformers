@@ -488,7 +488,9 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
                 original.pop(label_key)
                 batch.pop(label_key)
 
-        self._validate_original_data_against_collated_data(collator=collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_default_collator_immutability(self):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
@@ -502,17 +504,32 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
             (list, self._turn_to_none),
         ]:
             self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                collator=default_data_collator, base_data=features_base_single_label, input_key="inputs", input_datatype=datatype_input, label_key="label", label_datatype=datatype_label
+                collator=default_data_collator,
+                base_data=features_base_single_label,
+                input_key="inputs",
+                input_datatype=datatype_input,
+                label_key="label",
+                label_datatype=datatype_label,
             )
 
         for datatype_input, datatype_label in [(list, list), (list, self._turn_to_none)]:
             self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                collator=default_data_collator, base_data=features_base_multiple_labels, input_key="inputs", input_datatype=datatype_input, label_key="label", label_datatype=datatype_label
+                collator=default_data_collator,
+                base_data=features_base_multiple_labels,
+                input_key="inputs",
+                input_datatype=datatype_input,
+                label_key="label",
+                label_datatype=datatype_label,
             )
 
         features_base_single_label_alt = [{"input_ids": (0, 1, 2, 3, 4), "label": float(i)} for i in range(4)]
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-            collator=default_data_collator, base_data=features_base_single_label_alt, input_key="input_ids", input_datatype=list, label_key="label", label_datatype=float
+            collator=default_data_collator,
+            base_data=features_base_single_label_alt,
+            input_key="input_ids",
+            input_datatype=list,
+            label_key="label",
+            label_datatype=float,
         )
 
     def test_with_padding_collator_immutability(self):
@@ -522,10 +539,14 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
 
         data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10)
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_for_token_classification_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -544,7 +565,12 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
             for collator in token_classification_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -574,7 +600,12 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list), (torch.tensor, torch.tensor)]:
             for collator in seq2seq_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -669,11 +700,15 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
 
         no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
         no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch
+        )
 
         pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
         pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch
+        )
 
     def test_next_sentence_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -688,10 +723,14 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer)
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_sentence_order_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -714,10 +753,14 @@ class DataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer)
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
 
 
 @require_tf
@@ -1126,7 +1169,9 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
                 original.pop(label_key)
                 batch.pop(label_key)
 
-        self._validate_original_data_against_collated_data(collator=collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_default_collator_immutability(self):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
@@ -1175,10 +1220,14 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
 
         data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_for_token_classification_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1197,7 +1246,12 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list)]:
             for collator in token_classification_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -1231,7 +1285,12 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list)]:
             for collator in seq2seq_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -1328,11 +1387,15 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
 
         no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
         no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch
+        )
 
         pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
         pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch
+        )
 
     def test_next_sentence_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1347,10 +1410,14 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_sentence_order_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1373,10 +1440,14 @@ class TFDataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="tf")
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
 
 
 class NumpyDataCollatorIntegrationTest(unittest.TestCase):
@@ -1772,7 +1843,9 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
                 original.pop(label_key)
                 batch.pop(label_key)
 
-        self._validate_original_data_against_collated_data(collator=collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_default_collator_immutability(self):
         features_base_single_label = [{"label": i, "inputs": (0, 1, 2, 3, 4, 5)} for i in range(4)]
@@ -1821,10 +1894,14 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         features_batch = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
 
         data_collator = DataCollatorWithPadding(tokenizer, padding="max_length", max_length=10, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=data_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=data_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_for_token_classification_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1843,7 +1920,12 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list)]:
             for collator in token_classification_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -1877,7 +1959,12 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         for datatype_input, datatype_label in [(list, list)]:
             for collator in seq2seq_collators:
                 self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
-                    collator=collator, base_data=features_base, input_key="input_ids", input_datatype=datatype_input, label_key="labels", label_datatype=datatype_label
+                    collator=collator,
+                    base_data=features_base,
+                    input_key="input_ids",
+                    input_datatype=datatype_input,
+                    label_key="labels",
+                    label_datatype=datatype_label,
                 )
 
         self._validate_original_data_against_collated_data_on_specified_keys_and_datatypes(
@@ -1974,11 +2061,15 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
 
         no_pad_features_original = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
         no_pad_features_batch = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=no_pad_features_original, batch_data=no_pad_features_batch
+        )
 
         pad_features_original = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
         pad_features_batch = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
-        self._validate_original_data_against_collated_data(collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=plm_collator, original_data=pad_features_original, batch_data=pad_features_batch
+        )
 
     def test_next_sentence_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -1993,10 +2084,14 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
         nsp_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=nsp_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=nsp_collator, original_data=features_original, batch_data=features_batch
+        )
 
     def test_sentence_order_prediction_collator_immutability(self):
         tokenizer = BertTokenizer(self.vocab_file)
@@ -2019,7 +2114,11 @@ class NumpyDataCollatorImmutabilityTest(unittest.TestCase):
         ]
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
 
         sop_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8, return_tensors="np")
-        self._validate_original_data_against_collated_data(collator=sop_collator, original_data=features_original, batch_data=features_batch)
+        self._validate_original_data_against_collated_data(
+            collator=sop_collator, original_data=features_original, batch_data=features_batch
+        )
