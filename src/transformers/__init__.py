@@ -4374,7 +4374,7 @@ else:
         ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel"]
     )
     _import_structure["models.mistral"].extend(
-        ["TFMistralPreTrainedModel", "TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralModel"]
+        ["TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralModel", "TFMistralPreTrainedModel"]
     )
     _import_structure["models.mobilebert"].extend(
         [
