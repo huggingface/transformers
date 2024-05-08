@@ -260,7 +260,7 @@ hub_job = CircleCIJob(
     additional_env={"HUGGINGFACE_CO_STAGING": True},
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
     install_steps=[
-        'uv venv && uv pip install .'
+        'uv venv && uv pip install .',
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
     ],
