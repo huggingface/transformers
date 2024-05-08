@@ -264,12 +264,12 @@ class SiglipVisionEmbeddings(nn.Module):
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-        
+
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method is an adapted method for SigLIP (due to SigLIP not having class embedding unlike other ViTs) 
-        that allows the model to interpolate the pre-trained position encodings such that it can be usable on 
-        higher resolution images. 
+        This method is an adapted method for SigLIP (due to SigLIP not having class embedding unlike other ViTs)
+        that allows the model to interpolate the pre-trained position encodings such that it can be usable on
+        higher resolution images.
 
         Source:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
@@ -287,7 +287,9 @@ class SiglipVisionEmbeddings(nn.Module):
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         height, width = height + 0.1, width + 0.1
 
-        patch_pos_embed = position_embeddings.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = position_embeddings.reshape(
+            1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim
+        )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
