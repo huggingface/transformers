@@ -420,9 +420,9 @@ class TrainingArguments:
             the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
-        run_name (`str`, *optional*):
+        run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
-            [mlflow](https://www.mlflow.org/) logging.
+            [mlflow](https://www.mlflow.org/) logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -756,6 +756,12 @@ class TrainingArguments:
             See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
             optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
             only.
+
+        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+            If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
+            rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
+            that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
+            summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
     """
 
     framework = "pt"
@@ -1432,6 +1438,11 @@ class TrainingArguments:
         metadata={
             "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
         },
+    )
+
+    batch_eval_metrics: bool = field(
+        default=False,
+        metadata={"help": "Break eval metrics calculation into batches to save memory."},
     )
 
     def __post_init__(self):
