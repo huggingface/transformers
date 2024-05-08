@@ -120,7 +120,7 @@ class ObjectDetectionPipeline(Pipeline):
             model_outputs["bbox"] = model_inputs["bbox"]
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9):
+    def postprocess(self, model_outputs, threshold=0.5):
         target_size = model_outputs["target_size"]
         if self.tokenizer is not None:
             # This is a LayoutLMForTokenClassification variant.
