@@ -367,8 +367,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("google/vit-base-patch16-224", "29e7a1e183"),
-                "tf": ("google/vit-base-patch16-224", "29e7a1e183"),
+                "pt": ("google/vit-base-patch16-224", "3f49326"),
+                "tf": ("google/vit-base-patch16-224", "3f49326"),
             }
         },
         "type": "image",
@@ -782,6 +782,7 @@ def pipeline(
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
+                cache_dir=model_kwargs.get("cache_dir"),
                 **hub_kwargs,
             )
             hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
