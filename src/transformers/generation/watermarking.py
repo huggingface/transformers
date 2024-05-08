@@ -47,13 +47,15 @@ class WatermarkDetectorOutput:
         green_fraction (np.array of shape (batch_size)):
             Array containing the fraction of green tokens for each batch.
         z_score (np.array of shape (batch_size)):
-            Array containing the z-score for each batch.
+            Array containing the z-score for each batch. Z-score here shows
+            how many standard deviations away is the green token count in the input text
+            from the expected green token count for machine-generated text.
         p_value (np.array of shape (batch_size)):
-            Array containing the p-value for each batch.
+            Array containing the p-value for each batch obtained from z-scores.
         prediction (np.array of shape (batch_size)), *optional*:
-            Array containing predictions for each batch.
+            Array containing predictions if a text is machine-generated for each batch.
         confidence (np.array of shape (batch_size)), *optional*:
-            Array containing confidence scores for each batch.
+            Array containing confidence scores of a text being machine-generated for each batch.
     """
 
     num_tokens_scored: np.array = None
@@ -201,7 +203,7 @@ class WatermarkDetector:
             sensitivity and vice versa for lower z threshold.
         return_dict (`bool`,  *optional*, defaults to `False`):
             Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions,
-
+ma
         Return:
             [`~generation.WatermarkDetectorOutput`] or `np.array`: A [`~generation.WatermarkDetectorOutput`]
             if `return_dict=True` otherwise a `np.array`.

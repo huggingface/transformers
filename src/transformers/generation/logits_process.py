@@ -2280,6 +2280,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     >>> detection_preds = detector(out)
     >>> detection_preds
     array([ True])
+    ```
     """
 
     def __init__(
