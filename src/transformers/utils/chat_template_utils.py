@@ -97,7 +97,7 @@ def _parse_type_hint(hint):
                 "This helper does not parse Tuple types, as they are usually used to indicate that "
                 "each position is associated with a specific type, and this requires JSON schemas "
                 "that are not supported by most templates. We recommend "
-                "either using List or List[Union] instead for arguments where this is appropriate, or "
+                "either using List instead for arguments where this is appropriate, or "
                 "splitting arguments with Tuple types into multiple arguments that take single inputs."
             )
         elif origin is dict:
