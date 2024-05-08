@@ -362,9 +362,9 @@ class VivitModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = VivitModel.from_pretrained("google/vivit-b-16x2").to(torch_device)
 
-        image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2", size=480)
+        image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2")
         video = prepare_video()
-        inputs = image_processor(video, return_tensors="pt")
+        inputs = image_processor(video, size={"shortest_edge": 480}, crop_size={"height": 480, "width": 480}, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
