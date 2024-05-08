@@ -100,6 +100,16 @@ class CircleCIJob:
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
 
+        all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
+        pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
+        pytest_flags.append(
+            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+        )
+
+        timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
+        marker_cmd = "-m {self.marker}" if self.marker is not None else ""
+        additional_flags = f" -rsfE -p no:warnings --tb=short -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -120,31 +130,11 @@ class CircleCIJob:
             {"run": {"name": "Show files being tested tests", "command": f'cat {self.name}_test_list.txt'}},
             {"run": {"name": "Split tests across parallel nodes",
                      "command": f"TESTS=$(circleci tests split {self.name}_test_list.txt) && echo $TESTS > splitted_tests.txt" if self.parallelism else f"cp {self.name}_test_list.txt  splitted_tests.txt"}
-            }
-        ]
-
-        all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
-        pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
-        pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        )
-
-        test_command = ""
-        if self.command_timeout:
-            test_command = f"timeout {self.command_timeout} "
-        test_command += f"python3 -m pytest -rsfE -p no:warnings --tb=short  -o junit_family=xunit1 --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        test_command += " $(cat splitted_tests.txt)"
-        if self.marker is not None:
-            test_command += f" -m {self.marker}"
-
-        test_command = f"({test_command} | tee tests_output.txt)"
-        if self.name == "pr_documentation_tests":
-            # Never fail the test step for the doctest job. We will check the results in the next step, and fail that
-            # step instead if the actual test failures are found. This is to avoid the timeout being reported as test
-            # failure.
-            test_command = f"({test_command}) || true"
-        steps.extend([
-            {"run": {"name": "Run tests", "command": test_command}},
+            },
+            {"run": {
+                "name": "Run tests",
+                "command": f"({timeout_cmd} python3 -m pytest -n {self.pytest_num_workers} {' '.join(pytest_flags)} {marker_cmd} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+            },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
@@ -155,7 +145,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
-        ])
+        ]
         if self.parallelism is not None:
             job["parallelism"] = self.parallelism
         job["steps"] = steps
@@ -321,28 +311,12 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
-    torch_job,
-    tf_job,
-    flax_job,
-    hub_job,
-    onnx_job,
-    tokenization_job
-]
-EXAMPLES_TESTS = [
-    examples_torch_job,
-    examples_tensorflow_job,
-]
-PIPELINE_TESTS = [
-    pipelines_torch_job,
-    pipelines_tf_job,
-]
+REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job] # fmt: skip
+EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
+PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
-
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
 
 def create_circleci_config(folder=None):
     if folder is None:
