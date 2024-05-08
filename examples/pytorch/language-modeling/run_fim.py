@@ -47,10 +47,10 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    is_deepspeed_zero3_enabled,
     is_torch_tpu_available,
     set_seed,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
