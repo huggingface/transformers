@@ -32,7 +32,6 @@ import tests_fetcher  # noqa: E402
 from tests_fetcher import (  # noqa: E402
     checkout_commit,
     clean_code,
-    create_module_to_test_map,
     create_reverse_dependency_map,
     create_reverse_dependency_tree,
     diff_is_docstring_only,
@@ -630,7 +629,6 @@ src/transformers/configuration_utils.py
             }
             assert set(reverse_map["src/transformers/models/bert/__init__.py"]) == expected_init_deps
 
-
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -734,7 +732,6 @@ src/transformers/configuration_utils.py
                     tests_to_run = f.read()
 
             assert tests_to_run == "tests/models/bert/test_modeling_bert.py"
-
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run_with_examples_modifs(self):
