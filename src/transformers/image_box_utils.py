@@ -337,18 +337,18 @@ def check_absolute_boxes_xyxy(boxes: ArrayType, check: str) -> None:
         log_or_raise(message, check)
 
 
-def _convert_boxes_arrays(
+def _convert_boxes_arrays_2d(
     boxes: ArrayType,
     input_format: str,
     output_format: str,
-    image_size: Optional[ArrayType | List] = None,
+    image_size: Optional[Union[ArrayType, List]] = None,
     check: Optional[str] = "warn",
 ) -> ArrayType:
     """
     Convert array/tensor boxes from one format to another
 
     Args:
-        boxes: 1d/2d/3d array, where the last dim is 4 or more elements representing the box coordinates
+        boxes: 2D array, where the last dim is 4 or more elements representing the box coordinates
         input_format: format of the input boxes
         output_format: format of the output boxes
         image_size: tensor of shape (2,) where 2 is the image size (height, width)
@@ -396,10 +396,10 @@ def _convert_boxes_arrays(
 
 
 def _convert_boxes_recursively(
-    boxes: ArrayType | List | Tuple,
+    boxes: Union[ArrayType, List, Tuple],
     input_format: str,
     output_format: str,
-    image_size: Optional[ArrayType | List] = None,
+    image_size: Optional[Union[ArrayType, List]] = None,
     check: Optional[str] = "warn",
 ):
     depth = get_depth_of_nested_objects(boxes)
@@ -436,7 +436,7 @@ def _convert_boxes_recursively(
 
     # Base of recursion.
     if depth == 2 and is_array_type(boxes):
-        return _convert_boxes_arrays(boxes, input_format, output_format, image_size, check)
+        return _convert_boxes_arrays_2d(boxes, input_format, output_format, image_size, check)
 
     # Recursive approach.
     elif depth == 1 and isinstance(boxes, (list, tuple) or is_array_type(boxes)):
@@ -469,10 +469,10 @@ def _convert_boxes_recursively(
 
 
 def convert_boxes(
-    boxes: ArrayType | List | Tuple,
+    boxes: Union[ArrayType, List, Tuple],
     input_format: str,
     output_format: str,
-    image_size: Optional[ArrayType | List | Tuple] = None,
+    image_size: Optional[Union[ArrayType, List, Tuple]] = None,
     check: Optional[str] = "warn",
 ):
     """
