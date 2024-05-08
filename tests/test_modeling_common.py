@@ -4248,13 +4248,11 @@ class ModelTesterMixin:
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
 
-            input_embeds = model.model.embed_tokens(input_ids)
-            model_output = model.model.layers[0].self_attn.forward(input_embeds, position_ids=position_ids)[0]
+            model_output = model.forward(input_ids, position_ids=position_ids)[0]
             # model_output.shape == torch.Size([3, 4, ...])
 
-            input_embeds_shared_prefix = model.model.embed_tokens(input_ids_shared_prefix)
-            model_output_shared_prefix = model.model.layers[0].self_attn.forward(
-                input_embeds_shared_prefix,
+            model_output_shared_prefix = model(
+                input_ids_shared_prefix,
                 attention_mask=mask_shared_prefix,
                 position_ids=position_ids_shared_prefix,
             )[0]
