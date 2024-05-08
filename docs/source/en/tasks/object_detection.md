@@ -1489,7 +1489,7 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 >>> import albumentations as A
 
 >>> from PIL import Image
-
+>>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 >>> url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1508,9 +1508,12 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
 ```py
->>> model_repo = "qubvel/detr_finetuned_cppe5"
+>>> device = "cuda"
+>>> model_repo = "qubvel-hf/detr_finetuned_cppe5"
+
 >>> image_processor = AutoImageProcessor.from_pretrained(model_repo)
 >>> model = AutoModelForObjectDetection.from_pretrained(model_repo)
+>>> model = model.to(device)
 ```
 
 And detect bounding boxes:
@@ -1520,7 +1523,7 @@ And detect bounding boxes:
 
 >>> with torch.no_grad():
 ...     inputs = image_processor(images=[np_preprocessed_image], return_tensors="pt")
-...     outputs = model(inputs["pixel_values"].cuda())
+...     outputs = model(inputs["pixel_values"].to(device))
 ...     target_sizes = torch.tensor([np_preprocessed_image.shape[:2]])
 ...     results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
 
