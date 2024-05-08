@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import requests
+from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
 from packaging import version
 
@@ -77,22 +78,18 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
 
 
 def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
-    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model}.md"
+    # Possible variants of the model name in the model doc path
+    model_doc_paths = [
+        REPO_PATH / f"docs/source/en/model_doc/{model}.md",
+        # Try replacing _ with - in the model name
+        REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '-')}.md",
+        # Try replacing _ with "" in the model name
+        REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '')}.md",
+    ]
 
-    if os.path.exists(model_doc_path):
-        return model_doc_path, model
-
-    # Try replacing _ with - in the model name
-    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '-')}.md"
-
-    if os.path.exists(model_doc_path):
-        return model_doc_path, model.replace("_", "-")
-
-    # Try replacing _ with "" in the model name
-    model_doc_path = REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '')}.md"
-
-    if os.path.exists(model_doc_path):
-        return model_doc_path, model.replace("_", "")
+    for model_doc_path in model_doc_paths:
+        if os.path.exists(model_doc_path):
+            return model_doc_path, model
 
     return None, None
 
@@ -116,6 +113,21 @@ def extract_model_info(model):
     return model_info
 
 
+def update_relative_imports(filename, model):
+    with open(filename, "r") as f:
+        filelines = f.read()
+
+    new_file_lines = []
+    for line in filelines.split("\n"):
+        if line.startswith("from ."):
+            new_file_lines.append(line.replace("from .", "from .."))
+        else:
+            new_file_lines.append(line)
+
+    with open(filename, "w") as f:
+        f.write("\n".join(new_file_lines))
+
+
 def move_model_files_to_deprecated(model):
     model_path = REPO_PATH / f"src/transformers/models/{model}"
     deprecated_model_path = REPO_PATH / f"src/transformers/models/deprecated/{model}"
@@ -128,6 +140,9 @@ def move_model_files_to_deprecated(model):
             continue
         repo.git.mv(f"{model_path}/{file}", f"{deprecated_model_path}/{file}")
 
+        # For deprecated files, we then need to update the relative imports
+        update_relative_imports(f"{deprecated_model_path}/{file}", model)
+
 
 def delete_model_tests(model):
     tests_path = REPO_PATH / f"tests/models/{model}"
@@ -136,155 +151,18 @@ def delete_model_tests(model):
         repo.git.rm("-r", tests_path)
 
 
-def update_alphabetic_ordering_of_imports(filelines):
-    # For the direct import, they will be sorted by make fixup.
-    # We need to sort the _import_structure lines
-
-    def get_line_indent(s):
-        return len(s) - len(s.lstrip())
-
-    new_init_file_lines = []
-    else_block = []
-    # To make sure we keep the same structure and the original file, we need to keep track of grouped lines, for example
-    # lines of code which fall under a comment. When we sort alphabetically, we sort at the sub-block level.
-    # Sub-blocks are lines that are indented at the same level. Sub-blocks are separated by a blank line or comment.
-    # For example:
-
-    # a = 1 - sub_block 1
-    # b = 2 - sub_block 1
-    # # Comment
-    # c = 3 - sub_block 2
-
-    # d = 4 - sub_block 3
-    sub_block = []
-
-    # Indented block is a series of lines have an indented section at the same level in a sub-block
-    # a = 1          - sub_block 1
-    # b = [          - sub_block 1, indented_block 1
-    #     1, 2, 3    - sub_block 1, indented_block 1
-    # ]              - sub_block 1, indented_block 1
-    # c = 3          - sub_block 1
-    indented_block = []
-
-    # Maybe block is a block of lines that might be part of the else block, but we're not sure yet
-    #     a = 1  - sub_block 1
-    #            - maybe_else_block 1 (part of else block)
-    #            - maybe_else_block 1 (part of else block)
-    #     b = 2  - sub_block 2
-    #            - maybe_else_block 2 (not part of else block)
-    # c = 3
-    maybe_else_block = []
-    # Track if we're in the else block or the base imports. These are the sections we're interested in, as they
-    # require manual sorting
-    in_else_block = False
-    in_base_imports = False
-    # Tracker for the indent level of the current indented block to know when we've exited it
-    open_indent_level = -1
-
-    # We iterate over each line in the init file to create a new init file
-    for i, line in enumerate(filelines.split("\n")):
-        indent = get_line_indent(line)
-
-        # We first handle the base objects imports
-        if line.startswith("_import_structure = {"):
-            in_base_imports = True
-            new_init_file_lines.append(line)
-
-        # Next line is in the else block
-        elif line.startswith("else:"):
-            new_init_file_lines.append(line)
-            in_else_block = True
-
-        # Not in the else block or base imports block - just add the line directly
-        elif not (in_else_block or in_base_imports):
-            new_init_file_lines.append(line)
-
-        elif in_else_block or in_base_imports:
-            # previous line(s) were a blank line but within the else block
-            if indent and maybe_else_block:
-                else_block.append(maybe_else_block)
-                maybe_else_block = []
-
-            # We might be outside of the block, or it might just be a blank line
-            if not indent and line == "":
-                # End any existing sub_block and add it to the else block
-                else_block.append(sub_block)
-                sub_block = []
-                maybe_else_block.append(line)
-
-            # We've exited the else-block or the base objects imports
-            elif (not indent and line != "") or line.strip().startswith("}"):
-                if sub_block:
-                    else_block.append(sub_block)
-                    sub_block = []
-
-                else_block = [
-                    [sub_block] if not isinstance(sub_block, list) else sub_block for sub_block in else_block
-                ]
-
-                # Sort the sub-blocks in the else block
-                else_block = [sorted(sub_block) for sub_block in else_block]
-
-                # Flatten the lists so they're all lines
-                else_block = [line for sub_block in else_block for line in sub_block]
-
-                # Add the else block to the file lines and reset it
-                new_init_file_lines.extend(else_block)
-                else_block = []
-                in_else_block = in_base_imports = False
-
-                # If we were in a maybe block, we now know it wasn't part of the else block
-                maybe_else_block.append(line)
-                new_init_file_lines.extend(maybe_else_block)
-                maybe_else_block = []
-
-            elif line.endswith(("[", "(")) and not indented_block:
-                # We're at the start of an indented block
-                indented_block.append(line)
-                open_indent_level = indent
-
-            elif indented_block:
-                if indent == open_indent_level and (
-                    line.strip().endswith(("]", ")")) or line.strip().startswith(("],", "),"))
-                ):
-                    # We're at the end of the indented block. Add the block to the sub-block and reset it
-                    indented_block.append(line)
-                    sub_block.append("\n".join(indented_block))
-                    indented_block = []
-                    open_indent_level = -1
-                else:
-                    # We're still in the indented block
-                    indented_block.append(line)
-
-            # We have a comment line - create a new sub-block so lines above the comment are grouped together when sorting
-            elif line.strip().startswith("#"):
-                if sub_block:
-                    else_block.append(sub_block)
-                    sub_block = []
-
-                # When adding else blocks to the file lines, we sort each sub-block, but not between sub-blocks.
-                # Comment lines are added directly to make sure they stay between the sub-blocks they're associated with
-                # structure: [sub_block1, comment1, sub_block2, comment2, ...]
-                else_block.append(line)
-
-            else:
-                sub_block.append(line)
-
-    # Add the last sub-block if it exists
-    if else_block:
-        # Sort the sub-blocks in the else block
-        else_block = [
-            [sorted(sub_block) if isinstance(sub_block, list) else sub_block for sub_block in sub_blocks]
-            for sub_blocks in else_block
-        ]
-        # Flatten the lists so they're all lines
-        else_block = [line for sub_block in else_block for line in sub_block]
-        new_init_file_lines.extend(else_block)
-
-    return "\n".join(new_init_file_lines)
+def get_line_indent(s):
+    return len(s) - len(s.lstrip())
 
 
-def update_init_file(filename, models):
+def update_main_init_file(models):
+    """
+    Replace all instances of model.model_name with model.deprecated.model_name in the __init__.py file
+
+    Args:
+        models (List[str]): The models to mark as deprecated
+    """
+    filename = REPO_PATH / "src/transformers/__init__.py"
     with open(filename, "r") as f:
         init_file = f.read()
 
@@ -292,11 +170,11 @@ def update_init_file(filename, models):
     for model in models:
         init_file = init_file.replace(f"models.{model}", f"models.deprecated.{model}")
 
-    # 2. Resort the imports
-    init_file = update_alphabetic_ordering_of_imports(init_file)
-
     with open(filename, "w") as f:
         f.write(init_file)
+
+    # 2. Resort the imports
+    sort_imports_in_all_inits(check_only=False)
 
 
 def remove_model_references_from_file(filename, models, condition):
@@ -313,7 +191,6 @@ def remove_model_references_from_file(filename, models, condition):
 
     new_file_lines = []
     for i, line in enumerate(init_file.split("\n")):
-        # stripped_line = line.strip().strip(",")
         if any(condition(line, model) for model in models):
             continue
         new_file_lines.append(line)
@@ -322,7 +199,14 @@ def remove_model_references_from_file(filename, models, condition):
         f.write("\n".join(new_file_lines))
 
 
-def remove_model_config_classes_from_config_check(filename, model_config_classes):
+def remove_model_config_classes_from_config_check(model_config_classes):
+    """
+    Remove the deprecated model config classes from the check_config_attributes.py file
+
+    Args:
+        model_config_classes (List[str]): The model config classes to remove e.g. ["BertConfig", "DistilBertConfig"]
+    """
+    filename = REPO_PATH / "utils/check_config_attributes.py"
     with open(filename, "r") as f:
         check_config_attributes = f.read()
 
@@ -332,10 +216,11 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
     new_file_lines = []
 
     for line in check_config_attributes.split("\n"):
-        if line.strip() == "SPECIAL_CASES_TO_ALLOW = {":
+        indent = get_line_indent(line)
+        if (line.strip() == "SPECIAL_CASES_TO_ALLOW = {") or (line.strip() == "SPECIAL_CASES_TO_ALLOW.update("):
             in_special_cases_to_allow = True
 
-        elif in_special_cases_to_allow and line.strip() == "}":
+        elif in_special_cases_to_allow and indent == 0 and line.strip() in ("}", ")"):
             in_special_cases_to_allow = False
 
         if in_indent:
@@ -346,6 +231,7 @@ def remove_model_config_classes_from_config_check(filename, model_config_classes
         if in_special_cases_to_allow and any(
             model_config_class in line for model_config_class in model_config_classes
         ):
+            # Remove comments above the model config class to remove
             while new_file_lines[-1].strip().startswith("#"):
                 new_file_lines.pop()
 
@@ -427,7 +313,7 @@ def deprecate_models(models):
 
     # Remove model config classes from config check
     print("Removing model config classes from config checks")
-    remove_model_config_classes_from_config_check("src/transformers/configuration_utils.py", model_config_classes)
+    remove_model_config_classes_from_config_check(model_config_classes)
 
     tip_message = build_tip_message(get_last_stable_minor_release())
 
@@ -445,11 +331,9 @@ def deprecate_models(models):
         print("Deleting model tests")
         delete_model_tests(model)
 
-    # We do the following with all models passed at once to avoid having to re-write the file multiple times
-
-    # Update the __init__.py file to point to the deprecated model.
+    # # We do the following with all models passed at once to avoid having to re-write the file multiple times
     print("Updating __init__.py file to point to the deprecated models")
-    update_init_file("src/transformers/__init__.py", models)
+    update_main_init_file(models)
 
     # Remove model references from other files
     print("Removing model references from other files")
@@ -459,6 +343,7 @@ def deprecate_models(models):
     remove_model_references_from_file(
         "utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line
     )
+    remove_model_references_from_file("utils/not_doctested.txt", models, lambda line, model: "/" + model + "/" in line)
 
     # Add models to DEPRECATED_MODELS in the configuration_auto.py
     print("Adding models to DEPRECATED_MODELS in configuration_auto.py")
