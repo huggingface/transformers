@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -41,6 +41,7 @@ class QuantizationMethod(str, Enum):
     AQLM = "aqlm"
     QUANTO = "quanto"
     EETQ = "eetq"
+    HQQ = "hqq"
 
 
 class AWQLinearVersion(str, Enum):
@@ -178,6 +179,115 @@ class QuantizationConfigMixin:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+@dataclass
+class HqqConfig(QuantizationConfigMixin):
+    """
+    This is wrapper around hqq's BaseQuantizeConfig.
+
+    Args:
+        nbits (`int`, *optional*, defaults to 4):
+            Number of bits. Supported values are (8, 4, 3, 2, 1).
+        group_size (`int`, *optional*, defaults to 64):
+            Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
+        quant_zero (`bool`, *optional*, defaults to `True`):
+            Quantize the zero-point if set to `True`.
+        quant_scale (`bool`, *optional*, defaults to `False`):
+            Quantize the scaling if set to `True`.
+        offload_meta (`bool`, *optional*, defaults to `False`):
+            Offload the meta-data to the CPU if set to `True`.
+        view_as_float (`bool`, *optional*, defaults to `False`):
+            View the quantized weight as float (used in distributed training) if set to `True`.
+        axis (`int`, *optional*, defaults to 0):
+            Axis along which grouping is performed. Supported values are 0 or 1.
+        dynamic_config (dict, *optional*):
+            Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
+            If set, each layer specified by its id will use its dedicated quantization configuration.
+        skip_modules (`List[str]`, *optional*, defaults to `['lm_head']`):
+            List of `nn.Linear` layers to skip.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        quant_zero: bool = True,
+        quant_scale: bool = False,
+        offload_meta: bool = False,
+        view_as_float: bool = False,
+        axis: int = 0,
+        dynamic_config: Optional[dict] = None,
+        skip_modules: List[str] = ["lm_head"],
+        **kwargs,
+    ):
+        if is_hqq_available():
+            from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+
+        if axis not in [0, 1]:
+            raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
+
+        if dynamic_config is not None:
+            self.quant_config = {}
+            for key in dynamic_config:
+                self.quant_config[key] = HQQBaseQuantizeConfig(**dynamic_config[key])
+        else:
+            self.quant_config = HQQBaseQuantizeConfig(
+                **{
+                    "nbits": nbits,
+                    "group_size": group_size,
+                    "quant_zero": quant_zero,
+                    "quant_scale": quant_scale,
+                    "offload_meta": offload_meta,
+                    "view_as_float": view_as_float,
+                    "axis": axis,
+                }
+            )
+
+        self.quant_method = QuantizationMethod.HQQ
+        self.skip_modules = skip_modules
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        pass
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return self.quant_config
+
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_diff_dict(self) -> Dict[str, Any]:
+        """
+        Removes all attributes from config which correspond to the default config attributes for better readability and
+        serializes to a Python dictionary.
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = HqqConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict
 
 
 @dataclass
