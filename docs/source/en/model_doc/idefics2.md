@@ -45,6 +45,8 @@ from PIL import Image
 from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
 import torch
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
 
@@ -67,7 +69,7 @@ model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2
 # at inference time, one needs to pass `add_generation_prompt=True` in order to make sure the model completes the prompt
 text = processor.apply_chat_template(messages, add_generation_prompt=True)
 
-inputs = processor(images=images, text=text, return_tensors="pt").to("cuda")
+inputs = processor(images=images, text=text, return_tensors="pt").to(device)
 
 generated_text = model.generate(**inputs, max_new_tokens=500)
 generated_text = processor.batch_decode(generated_text, skip_special_tokens=True)[0]
@@ -92,8 +94,8 @@ To load and run a model using Flash Attention-2, simply change the code snippet 
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    torch_dtype=torch.float16,    
-+    _attn_implementation="flash_attention_2",
-).to("cuda")
++    attn_implementation="flash_attention_2",
+).to(device)
 ```
 
 ## Shrinking down Idefics2 using quantization
@@ -105,17 +107,17 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ```diff
 + from transformers import BitsAndBytesConfig
 
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_compute_dtype=torch.float16
-)
++ quantization_config = BitsAndBytesConfig(
++    load_in_4bit=True,
++    bnb_4bit_quant_type="nf4",
++    bnb_4bit_use_double_quant=True,
++    bnb_4bit_compute_dtype=torch.float16
++ )
 model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    torch_dtype=torch.float16,    
 +    quantization_config=quantization_config,
-).to("cuda")
+).to(device)
 ```
 
 ## Resources
