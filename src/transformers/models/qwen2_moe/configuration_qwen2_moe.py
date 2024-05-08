@@ -97,7 +97,7 @@ class Qwen2MoeConfig(PretrainedConfig):
             The aux loss factor for the total loss.
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen2MoeMLP rather than Qwen2MoeSparseMoeBlock
-            integers in list is layer index, from 0 to 23 if we have 24 layers
+            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             when mlp_only_layers is empty, decoder_sparse_step decides Qwen2MoeMLP or Qwen2MoeSparseMoeBlock
             when mlp_only_layers is not empty, decoder_sparse_step becomes invalid
 
