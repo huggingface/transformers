@@ -98,8 +98,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen2MoeMLP rather than Qwen2MoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
-            when mlp_only_layers is empty, decoder_sparse_step decides Qwen2MoeMLP or Qwen2MoeSparseMoeBlock
-            when mlp_only_layers is not empty, decoder_sparse_step becomes invalid
+            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
