@@ -107,7 +107,7 @@ class CircleCIJob:
         )
 
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
-        marker_cmd = "-m {self.marker}" if self.marker is not None else ""
+        marker_cmd = f"-m {self.marker}" if self.marker is not None else ""
         additional_flags = f" -rsfE -p no:warnings --tb=short -o junit_family=xunit1 --junitxml=test-results/junit.xml"
 
         steps = [
