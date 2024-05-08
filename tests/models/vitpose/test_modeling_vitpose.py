@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import VitPoseImageProcessor
 
 
 class ViTPoseModelTester:
@@ -228,11 +228,15 @@ def prepare_img():
 @require_vision
 class ViTPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            ViTFeatureExtractor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
+            VitPoseImageProcessor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
         )
 
     @slow
-    def test_inference_pose_estimation_head(self):
+    def test_inference(self):
+        raise NotImplementedError("To do")
+
+    @slow
+    def test_batched_inference(self):
         raise NotImplementedError("To do")
