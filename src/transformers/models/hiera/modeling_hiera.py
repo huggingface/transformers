@@ -178,7 +178,7 @@ class HieraForImageClassificationOutput(ImageClassifierOutput):
 @dataclass
 class HieraForPreTrainingOutput(ModelOutput):
     """
-    Class for ViTMAEForPreTraining's outputs, with potential hidden states and attentions.
+    Class for HieraForPreTraining's outputs, with potential hidden states and attentions.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`):
@@ -455,7 +455,7 @@ class HieraEmbeddings(nn.Module):
 
 class HieraMaskUnitAttention(nn.Module):
     """
-    Computes either Mask Unit or Global Attention. Also is able to perform q pooling.
+    Computes either Mask Unit or Global Attention. Also is able to perform query pooling.
 
     Note: this assumes the tokens have already been flattened and unrolled into mask units.
     """
@@ -1385,8 +1385,11 @@ class HieraForPreTraining(HieraPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
-        >>> list(logits.shape)
+        >>> loss = outputs.loss
+        >>> print(list(logits.shape))
         [1, 196, 768]
+        >>> print(loss.item())
+        0.5571276545524597
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1401,7 +1404,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=True,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
         feature_maps = outputs.reshaped_hidden_states
@@ -1482,7 +1485,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1627,7 +1630,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
             head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
         hidden_states = outputs.reshaped_hidden_states

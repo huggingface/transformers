@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Meta and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate an Hiera
+    This is the configuration class to store the configuration of a [`HieraModel`]. It is used to instantiate a Hiera
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Hiera
     [EduardoPacheco/hiera-base-224](https://huggingface.co/EduardoPacheco/hiera-base-224) architecture.
@@ -42,16 +42,15 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        input_size (`list(int)`, *optional*, defaults to `[224, 224]`):
+        image_size (`list(int)`, *optional*, defaults to `[224, 224]`):
             The size (resolution) of input in the format (height, width) for images
             and (frames, height, width) for videos.
         patch_kernel (`list(int)`, *optional*, defaults to `[7, 7]`):
             The size (resolution) of each patch.
-        patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
+        patch_size (`list(int)`, *optional*, defaults to `[4, 4]`):
             The stride of the patch.
         patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
             The padding of the patch.
@@ -75,7 +74,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to use masked unit attention in each layer of the Transformer encoder.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate.
-        sep_pos_embed (`bool`, *optional*, defaults to `False`):
+        use_separate_position_embedding (`bool`, *optional*, defaults to `False`):
             Whether to use separate position embedding for temporal and spatial dimensions. Must be `True` for videos.
             and `False` for images.
         num_channels (`int`, *optional*, defaults to 3):
@@ -134,9 +133,9 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     def __init__(
         self,
         embed_dim=96,
-        input_size=[224, 224],
+        image_size=[224, 224],
         patch_kernel=[7, 7],
-        patch_stride=[4, 4],
+        patch_size=[4, 4],
         patch_padding=[3, 3],
         mlp_ratio=4.0,
         depths=[2, 3, 16, 3],
@@ -148,7 +147,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         masked_unit_size=[8, 8],
         masked_unit_attention=[True, True, False, False],
         drop_path_rate=0.0,
-        sep_pos_embed=False,
+        use_separate_position_embedding=False,
         num_channels=3,
         hidden_act="gelu",
         initializer_range=0.02,
@@ -176,9 +175,9 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             )
 
         self.embed_dim = embed_dim
-        self.input_size = input_size
+        self.input_size = image_size
         self.patch_kernel = patch_kernel
-        self.patch_stride = patch_stride
+        self.patch_stride = patch_size
         self.patch_padding = patch_padding
         self.mlp_ratio = mlp_ratio
         self.depths = depths
@@ -191,7 +190,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self.masked_unit_size = masked_unit_size
         self.masked_unit_attention = masked_unit_attention
         self.drop_path_rate = drop_path_rate
-        self.sep_pos_embed = sep_pos_embed
+        self.sep_pos_embed = use_separate_position_embedding
         self.num_channels = num_channels
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -209,19 +208,3 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
-
-
-class HieraOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
