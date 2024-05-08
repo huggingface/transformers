@@ -87,7 +87,7 @@ class CircleCIJob:
         if self.parallelism is None:
             self.parallelism = 1
         else:
-            self.parallelism = min(len(self.tests_to_run) // self.num_test_files_per_worker, 8)
+            self.parallelism = min(self.parallelism, 32)
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
@@ -303,7 +303,7 @@ repo_utils_job = CircleCIJob(
 # the bash output redirection.)
 py_command = 'from utils.tests_fetcher import get_doctest_files; to_test = get_doctest_files() + ["dummy.py"]; to_test = " ".join(to_test); print(to_test)'
 py_command = f"$(python3 -c '{py_command}')"
-command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
+command = f'echo """{py_command}""" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     docker_image=[{"image":"huggingface/transformers-consistency"}],
