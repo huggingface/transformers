@@ -38,6 +38,7 @@ import transformers
 from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
+    CLIPProcessor,
     HfArgumentParser,
     PushToHubCallback,
     TFAutoModel,
@@ -428,6 +429,9 @@ def main():
                 token=model_args.token,
                 trust_remote_code=model_args.trust_remote_code,
             )
+
+    processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
     config = model.config
 
     if model_args.freeze_vision_model:
@@ -472,7 +476,9 @@ def main():
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
-        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
+        text_inputs = processor.tokenizer(
+            captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True
+        )
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
         return examples
@@ -513,8 +519,8 @@ def main():
             batch_size=training_args.per_device_train_batch_size,
             image_column=image_column,
             image_size=config.vision_config.image_size,
-            mean=image_processor.image_mean,
-            std=image_processor.image_std,
+            mean=processor.image_processor.image_mean,
+            std=processor.image_processor.image_std,
             shuffle=True,
         )
 
@@ -543,8 +549,8 @@ def main():
             batch_size=training_args.per_device_eval_batch_size,
             image_column=image_column,
             image_size=config.vision_config.image_size,
-            mean=image_processor.image_mean,
-            std=image_processor.image_std,
+            mean=processor.image_processor.image_mean,
+            std=processor.image_processor.image_std,
             shuffle=False,
         )
 
@@ -577,7 +583,7 @@ def main():
                 output_dir=training_args.output_dir,
                 hub_model_id=push_to_hub_model_id,
                 hub_token=training_args.push_to_hub_token,
-                tokenizer=tokenizer,
+                tokenizer=processor,
                 **model_card_kwargs,
             )
         ]

@@ -42,6 +42,7 @@ from transformers import (
     AutoImageProcessor,
     AutoModel,
     AutoTokenizer,
+    CLIPProcessor,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
@@ -374,6 +375,9 @@ def main():
         trust_remote_code=model_args.trust_remote_code,
     )
 
+    # Create the processor from the image processor and tokenizer
+    processor = CLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
     model = AutoModel.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -430,7 +434,7 @@ def main():
     # 7. Preprocessing the datasets.
     # Initialize torchvision transforms and jit it for faster processing.
     image_transformations = Transform(
-        config.vision_config.image_size, image_processor.image_mean, image_processor.image_std
+        config.vision_config.image_size, processor.image_processor.image_mean, processor.image_processor.image_std
     )
     image_transformations = torch.jit.script(image_transformations)
 
@@ -438,7 +442,9 @@ def main():
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
-        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
+        text_inputs = processor.tokenizer(
+            captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True
+        )
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
         return examples
@@ -546,8 +552,7 @@ def main():
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
-        tokenizer.save_pretrained(training_args.output_dir)
-        image_processor.save_pretrained(training_args.output_dir)
+        processor.save_pretrained(training_args.output_dir)
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
