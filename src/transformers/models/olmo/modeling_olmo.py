@@ -1081,23 +1081,6 @@ class OlmoModel(OlmoPreTrainedModel):
                     causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                         padding_mask, min_dtype
                     )
-                elif attention_mask.dim() == 4:
-                    # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                    # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                    if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                        logger.warning_once(
-                            "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
-                            "transformers v4.42.0"
-                        )
-                        offset = cache_position[0]
-                    else:
-                        offset = 0
-                    mask_shape = attention_mask.shape
-                    mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                    causal_mask[
-                        : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                    ] = mask_slice
-
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
