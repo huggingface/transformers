@@ -51,14 +51,57 @@ Tips:
 - For better results, we recommend users prompt the model with the correct prompt format:
 
 
-```bash
-"USER: <video>\n<prompt> ASSISTANT:"
+```python
+import av
+import torch
+import numpy as np
+import requests
+from PIL import Image
+from transformers import VideoLlavaForConditionalGeneration, VideoLlavaProcessor
+
+def read_video_pyav(container, indices):
+    '''
+    Decode the video with PyAV decoder.
+    Args:
+        container (`av.container.input.InputContainer`): PyAV container.
+        indices (`List[int]`): List of frame indices to decode.
+    Returns:
+        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+
+model = VideoLlavaForConditionalGeneration.from_pretrained("RaushanTurganbay/video-llava-7b-hf", device_map="auto")
+processor = VideoLlavaProcessor.from_pretrained("RaushanTurganbay/video-llava-7b-hf")
+
+video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
+clip = load_video_tensor(video_path, n_frms=8)
+
+container = av.open(video_path)
+total_frames = container.streams.video[0].frames
+indices = np.arange(0, total_frames, total_frames / 8).astype(int)
+video = read_video_pyav(container, indices)
+
+prompt = "USER: <video>Why is this funny? ASSISTANT:"
+inputs = processor(text=prompt, videos=video, return_tensors="pt")
+
+out = model.generate(**inputs, max_new_tokens=40)
+print(processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True))
 ```
 
-For multiple turns conversation:
+For multiple turns conversation change the prompt to:
 
 ```bash
-"USER: <video>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
+"USER: <video>What do you see in this video? ASSISTANT: A baby reading a book. USER: Why is the it funny? ASSISTANT:"
 ```
 
 - Note that the video inputs should have exactly 8 frames at the input, since the models were trained in that setting.
