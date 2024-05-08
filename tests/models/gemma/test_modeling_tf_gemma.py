@@ -371,6 +371,7 @@ class TFGemmaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_xla_generate_slow(self):
         pass
 
+
 @slow
 @require_read_token
 class TFGemmaIntegrationTest(unittest.TestCase):

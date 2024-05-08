@@ -29,6 +29,7 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
+    keras_serializable,
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
@@ -140,6 +141,20 @@ class TFGemmaMLP(tf.keras.layers.Layer):
 
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "gate_proj", None) is not None:
+            with tf.name_scope(self.gate_proj.name):
+                self.gate_proj.build(self.config.hidden_size)
+        if getattr(self, "down_proj", None) is not None:
+            with tf.name_scope(self.down_proj.name):
+                self.down_proj.build(self.config.intermediate_size)
+        if getattr(self, "up_proj", None) is not None:
+            with tf.name_scope(self.up_proj.name):
+                self.up_proj.build(self.config.hidden_size)
 
 
 # Claude: Translated from PyTorch to TensorFlow
@@ -261,9 +276,9 @@ class TFGemmaAttention(tf.keras.layers.Layer):
         attn_output_shape = shape_list(attn_output)
         expected_shape = [bsz, self.num_heads, q_len, self.head_dim]
         tf.debugging.assert_equal(
-          attn_output_shape,
-          expected_shape,
-          message=f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}"
+            attn_output_shape,
+            expected_shape,
+            message=f"`attn_output` should be of size {expected_shape}, but is {attn_output_shape}",
         )
         attn_output = tf.transpose(attn_output, [0, 2, 1, 3])
         attn_output = tf.reshape(attn_output, [bsz, q_len, -1])
@@ -273,6 +288,26 @@ class TFGemmaAttention(tf.keras.layers.Layer):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.hidden_size])
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.hidden_size])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.hidden_size])
+        if getattr(self, "o_proj", None) is not None:
+            with tf.name_scope(self.o_proj.name):
+                self.o_proj.build([None, None, self.hidden_size])
+        if getattr(self, "rotary_emb", None) is not None:
+            with tf.name_scope(self.rotary_emb.name):
+                self.rotary_emb.build(None)
 
 
 # Claude: Translated from PyTorch to TensorFlow
@@ -336,6 +371,23 @@ class TFGemmaDecoderLayer(tf.keras.layers.Layer):
             outputs += (present_key_value,)
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "input_layernorm", None) is not None:
+            with tf.name_scope(self.input_layernorm.name):
+                self.input_layernorm.build(None)
+        if getattr(self, "post_attention_layernorm", None) is not None:
+            with tf.name_scope(self.post_attention_layernorm.name):
+                self.post_attention_layernorm.build(None)
 
 
 GEMMA_START_DOCSTRING = r"""
@@ -500,6 +552,7 @@ class TFGemmaModel(TFGemmaPreTrainedModel):
     GEMMA_START_DOCSTRING,
 )
 # Claude: Translated from PyTorch to TensorFlow
+@keras_serializable
 class TFGemmaMainLayer(tf.keras.layers.Layer):
     config_class = GemmaConfig
 
@@ -661,6 +714,21 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
             causal_mask = tf.where(padding_mask, tf.cast(tf.float32.min, dtype), causal_mask[..., :mask_length])
 
         return causal_mask
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build(None)
+        if getattr(self, "decoder_layers", None) is not None:
+            for layer in self.decoder_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 # Claude: Translated from PyTorch to TensorFlow
@@ -843,6 +911,17 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
         # It would need to be adapted to work with the TensorFlow cache format.
         pass
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build([None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -968,6 +1047,17 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "score", None) is not None:
+            with tf.name_scope(self.score.name):
+                self.score.build([None, None, self.config.hidden_size])
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 # Claude: Some key points about the translation:
