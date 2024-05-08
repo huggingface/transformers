@@ -57,7 +57,7 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-To get started, define global constants, such as model name and image size. For this tutorial, we'll use the conditional DETR model due to its faster convergence. Feel free to select any object detection model available in the `transformers` library.
+To get started, we'll define global constants, namely the model name and image size. For this tutorial, we'll use the conditional DETR model due to its faster convergence. Feel free to select any object detection model available in the `transformers` library.
 
 ```py
 >>> MODEL_NAME = "microsoft/conditional-detr-resnet-50"  # or "facebook/detr-resnet-50"
