@@ -143,7 +143,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        mlp_only_layers=[],
+        mlp_only_layers=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
