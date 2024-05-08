@@ -69,7 +69,7 @@ To get started, define global constants, such as model name and image size. For 
 The [CPPE-5 dataset](https://huggingface.co/datasets/cppe-5) contains images with
 annotations identifying medical personal protective equipment (PPE) in the context of the COVID-19 pandemic.
 
-Start by loading the dataset and creating a `validation` split form `train`:
+Start by loading the dataset and creating a `validation` split from `train`:
 
 ```py
 >>> from datasets import load_dataset
