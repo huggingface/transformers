@@ -1378,7 +1378,7 @@ class GenerationMixin:
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
+        if eos_token_id is not None and (torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any()):
             logger.warning(
                 f"`eos_token_id` should consist of positive integers, but is {eos_token_id}. Your generation will not "
                 "stop until the maximum length is reached. Depending on other flags, it may even crash."
