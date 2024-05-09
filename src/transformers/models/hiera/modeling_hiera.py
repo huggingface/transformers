@@ -146,7 +146,7 @@ class HieraForImageClassificationOutput(ImageClassifierOutput):
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, `optional`):
-            Classification loss.
+            Loss value for the training task.
         logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Prediction scores of the classification head (logits of the output layer).
         hidden_states (`tuple(torch.FloatTensor)`, `optional`):
