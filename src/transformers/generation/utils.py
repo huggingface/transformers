@@ -2544,8 +2544,8 @@ class GenerationMixin:
                     raw_logits += (next_token_logits,)
                 if output_attentions:
                     attentions = tuple(x.clone() if isinstance(x, torch.Tensor) else x for x in outputs.attentions)
-                    print(attentions)
-                    print("=" * 80)
+                    # print(attentions)
+                    # print("=" * 80)
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (attentions,)
                     )

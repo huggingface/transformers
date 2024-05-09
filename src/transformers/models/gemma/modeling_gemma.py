@@ -512,7 +512,6 @@ class GemmaSdpaAttention(GemmaAttention):
         super().__init__(*args, **kwargs)
         self._seen_tokens = 0
 
-
     # Ignore copy
     def forward(
         self,
@@ -559,7 +558,7 @@ class GemmaSdpaAttention(GemmaAttention):
         if q_len > 1:
             self._seen_tokens = 0
             # self._seen_tokens = (64 + 6) - 6 - 1  # compile ok but should fail
-            # self._seen_tokens = (64 + 6) - 6    # failed with index error 71
+            # self._seen_tokens = (64 + 6) - 6    # failed with index error 64
         self._seen_tokens += key_states.shape[-2]
 
         if past_key_value is not None:
@@ -567,9 +566,6 @@ class GemmaSdpaAttention(GemmaAttention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             # full length
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            # only necessary length (but we still need to update)
-            # _, _ = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -589,23 +585,30 @@ class GemmaSdpaAttention(GemmaAttention):
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
         is_causal = True if causal_mask is None and q_len > 1 else False
 
+        # obviously wrong as size is not what should be looked
+        # length = cache_position.size()[0]
+
+        # can't compile (TODO: add error message
         # length = int(cache_position[-1] + 1)
-        #length = cache_position.size()[0]  # can't compile, failed at `scaled_dot_product_attention` (`(*bias): last dimension must be contiguous`).  Also wrong value!
-        # length = self._seen_tokens  # incorrect results (index stay at very small values)
         # length = cache_position[-1] + 1
+
+        # incorrect results with torch.compile (index stays at the value obtained in the 2nd forward call)
+        # length = self._seen_tokens
+        # incorrect results without torch.compile (index stays at the value obtained in the 2nd forward call)
+        # length = 1
+
+        # The correct length
         length = _length
 
+        # to use the full length of the static cache
         # _key_states = key_states
         # _value_states = value_states
         # _attn_mask = causal_mask if causal_mask is not None else causal_mask
 
+        # to use the correct length or the very short length
         _key_states = key_states[:, :, :length, :]
         _value_states = value_states[:, :, :length, :]
         _attn_mask = causal_mask[:, :, :, :length] if causal_mask is not None else causal_mask
-
-        # _key_states = _key_states.contiguous()
-        # _value_states = _value_states.contiguous()
-        # _attn_mask = _attn_mask.contiguous() if causal_mask is not None else causal_mask
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -621,10 +624,9 @@ class GemmaSdpaAttention(GemmaAttention):
 
         attn_output = self.o_proj(attn_output)
 
-        # verify = key_states[:, :, length - 1, :]
+        # verify = self._seen_tokens
         verify = _length
-        # veryif = self.layer_idx
-        # verify = cache_position[-1]
+
         return attn_output, verify, past_key_value
 
 
