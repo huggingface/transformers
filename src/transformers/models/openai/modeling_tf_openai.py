@@ -56,9 +56,6 @@ _CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
 
-from ..deprecated._archive_maps import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFAttention(keras.layers.Layer):
     def __init__(self, nx, config, scale=False, **kwargs):
         super().__init__(**kwargs)

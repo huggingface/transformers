@@ -149,7 +149,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModelForCausalLM.from_config(
+            config.text_config, attn_implementation=config._attn_implementation
+        )
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -242,17 +244,17 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
         >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = "Generate a coco-style caption.\n"
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> generated_ids = model.generate(**model_inputs, max_new_tokens=7)
-        >>> generation_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        >>> print(generation_text)
-        'A bus parked on the side of a road.'
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=7)
+        >>> generation_text = processor.batch_decode(generated_ids[:, -7:], skip_special_tokens=True)
+        >>> print(generation_text[0])
+        A blue bus parked on the side of a road.
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

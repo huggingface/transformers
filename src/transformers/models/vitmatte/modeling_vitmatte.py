@@ -28,7 +28,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
-from ..deprecated._archive_maps import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 from .configuration_vitmatte import VitMatteConfig
 
 
@@ -73,6 +72,7 @@ class VitMattePreTrainedModel(PreTrainedModel):
     config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

@@ -66,9 +66,6 @@ _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
 
 
-from ..deprecated._archive_maps import TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
 class TFElectraSelfAttention(keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):

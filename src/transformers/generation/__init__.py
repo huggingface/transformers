@@ -64,6 +64,7 @@ else:
         "LogitsWarper",
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
+        "MinPLogitsWarper",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -86,6 +87,7 @@ else:
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
+        "StopStringCriteria",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -203,6 +205,7 @@ if TYPE_CHECKING:
             LogitsWarper,
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
+            MinPLogitsWarper,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,
@@ -224,6 +227,7 @@ if TYPE_CHECKING:
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             validate_stopping_criteria,
         )
         from .utils import (

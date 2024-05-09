@@ -135,12 +135,12 @@ BERTモデルの事前学習済みのヘッドは破棄され、ランダムに�
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-評価メトリクスをファインチューニング中に監視したい場合、トレーニング引数で `evaluation_strategy` パラメータを指定して、各エポックの終了時に評価メトリクスを報告します：
+評価メトリクスをファインチューニング中に監視したい場合、トレーニング引数で `eval_strategy` パラメータを指定して、各エポックの終了時に評価メトリクスを報告します：
 
 ```python
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer
