@@ -500,9 +500,9 @@ class SwinModelIntegrationTest(unittest.TestCase):
         # the model on higher resolutions.
         model = SwinModel.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
 
-        image_processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224", size=480)
+        image_processor = self.default_image_processor
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = image_processor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, size={"height": 480, "width": 480}, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
