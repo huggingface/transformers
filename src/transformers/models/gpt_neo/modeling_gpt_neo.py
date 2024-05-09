@@ -68,9 +68,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "GPTNeoConfig"
 
 
-from ..deprecated._archive_maps import GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
 

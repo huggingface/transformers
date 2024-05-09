@@ -41,11 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaNextConfig"
 
-LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-v1.6-mistral-7b-hf",
-    # See all LLaVA-NeXT models at https://huggingface.co/models?filter=llava_next
-]
-
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     """

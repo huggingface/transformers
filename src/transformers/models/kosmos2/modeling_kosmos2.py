@@ -47,9 +47,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = Kosmos2Config
 
 
-from ..deprecated._archive_maps import KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.

@@ -364,7 +364,7 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 ```
 
-Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](../main_classes/text_generation) API.
+Use the [`~generation.GenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](../main_classes/text_generation) API.
 
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM

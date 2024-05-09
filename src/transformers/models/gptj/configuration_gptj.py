@@ -25,9 +25,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class GPTJConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTJModel`]. It is used to instantiate a GPT-J

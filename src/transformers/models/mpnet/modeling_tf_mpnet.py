@@ -64,9 +64,6 @@ _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
 
 
-from ..deprecated._archive_maps import TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFMPNetPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

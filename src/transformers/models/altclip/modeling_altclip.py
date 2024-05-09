@@ -41,9 +41,6 @@ _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
 _CONFIG_FOR_DOC = "AltCLIPConfig"
 
 
-from ..deprecated._archive_maps import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 ALTCLIP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
