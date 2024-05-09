@@ -1343,7 +1343,7 @@ class GenerationMixin:
         converted to tensor.
 
         Note that `generation_config` is changed in place and stops being serializable after this method is called.
-        That is no problem is callen within `generate` (`generation_config` is a local copy that doesn't leave the
+        That is no problem if called within `generate` (`generation_config` is a local copy that doesn't leave the
         function). However, if called outside `generate`, consider creating a copy of `generation_config` first.
         """
 
