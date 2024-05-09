@@ -1487,6 +1487,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "MraPreTrainedModel",
     "MraModel",
@@ -1494,5 +1495,5 @@ __all__ = [
     "MraForSequenceClassification",
     "MraForMultipleChoice",
     "MraForTokenClassification",
-    "MraForQuestionAnswering"
+    "MraForQuestionAnswering",
 ]

@@ -34,6 +34,5 @@ class FlavaFeatureExtractor(FlavaImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "FlavaFeatureExtractor"
-]
+
+__all__ = ["FlavaFeatureExtractor"]

@@ -1691,3 +1691,5 @@ __all__ = [
     "MixtralForSequenceClassification",
     "MixtralForTokenClassification"
 ]
+
+__all__ = ["MixtralPreTrainedModel", "MixtralModel", "MixtralForCausalLM", "MixtralForSequenceClassification"]

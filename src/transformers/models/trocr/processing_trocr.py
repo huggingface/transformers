@@ -142,6 +142,5 @@ class TrOCRProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "TrOCRProcessor"
-]
+
+__all__ = ["TrOCRProcessor"]

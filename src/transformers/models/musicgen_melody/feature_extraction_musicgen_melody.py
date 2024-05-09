@@ -332,6 +332,5 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             del output["spectrogram"]
         return output
 
-__all__ = [
-    "MusicgenMelodyFeatureExtractor"
-]
+
+__all__ = ["MusicgenMelodyFeatureExtractor"]

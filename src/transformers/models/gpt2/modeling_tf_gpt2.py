@@ -1240,10 +1240,11 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
 
+
 __all__ = [
     "TFGPT2PreTrainedModel",
     "TFGPT2Model",
     "TFGPT2LMHeadModel",
     "TFGPT2DoubleHeadsModel",
-    "TFGPT2ForSequenceClassification"
+    "TFGPT2ForSequenceClassification",
 ]

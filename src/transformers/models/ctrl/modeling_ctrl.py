@@ -842,9 +842,5 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "CTRLPreTrainedModel",
-    "CTRLModel",
-    "CTRLLMHeadModel",
-    "CTRLForSequenceClassification"
-]
+
+__all__ = ["CTRLPreTrainedModel", "CTRLModel", "CTRLLMHeadModel", "CTRLForSequenceClassification"]

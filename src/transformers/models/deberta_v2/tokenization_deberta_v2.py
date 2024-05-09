@@ -522,6 +522,5 @@ def convert_to_unicode(text):
     else:
         raise ValueError(f"Unsupported string type: {type(text)}")
 
-__all__ = [
-    "DebertaV2Tokenizer"
-]
+
+__all__ = ["DebertaV2Tokenizer"]

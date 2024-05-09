@@ -202,6 +202,5 @@ class LayoutLMv2Processor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "LayoutLMv2Processor"
-]
+
+__all__ = ["LayoutLMv2Processor"]

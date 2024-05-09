@@ -187,6 +187,5 @@ class FNetTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "FNetTokenizerFast"
-]
+
+__all__ = ["FNetTokenizerFast"]

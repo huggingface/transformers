@@ -443,7 +443,5 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "UperNetPreTrainedModel",
-    "UperNetForSemanticSegmentation"
-]
+
+__all__ = ["UperNetPreTrainedModel", "UperNetForSemanticSegmentation"]

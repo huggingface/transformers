@@ -956,9 +956,5 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "NatPreTrainedModel",
-    "NatModel",
-    "NatForImageClassification",
-    "NatBackbone"
-]
+
+__all__ = ["NatPreTrainedModel", "NatModel", "NatForImageClassification", "NatBackbone"]

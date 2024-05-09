@@ -864,10 +864,11 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
             attentions=None,
         )
 
+
 __all__ = [
     "load_tf_weights_in_mobilenet_v2",
     "MobileNetV2PreTrainedModel",
     "MobileNetV2Model",
     "MobileNetV2ForImageClassification",
-    "MobileNetV2ForSemanticSegmentation"
+    "MobileNetV2ForSemanticSegmentation",
 ]

@@ -739,6 +739,5 @@ class FlavaImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "FlavaImageProcessor"
-]
+
+__all__ = ["FlavaImageProcessor"]

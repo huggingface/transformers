@@ -2563,8 +2563,5 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
                 output = (loss) + output
         return output
 
-__all__ = [
-    "Mask2FormerPreTrainedModel",
-    "Mask2FormerModel",
-    "Mask2FormerForUniversalSegmentation"
-]
+
+__all__ = ["Mask2FormerPreTrainedModel", "Mask2FormerModel", "Mask2FormerForUniversalSegmentation"]

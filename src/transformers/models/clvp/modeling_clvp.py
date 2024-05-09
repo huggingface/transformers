@@ -2024,11 +2024,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
 
+
 __all__ = [
     "ClvpPreTrainedModel",
     "ClvpEncoder",
     "ClvpDecoder",
     "ClvpModel",
     "ClvpForCausalLM",
-    "ClvpModelForConditionalGeneration"
+    "ClvpModelForConditionalGeneration",
 ]

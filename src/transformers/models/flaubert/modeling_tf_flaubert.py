@@ -1340,6 +1340,7 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
             with tf.name_scope(self.logits_proj.name):
                 self.logits_proj.build([None, None, self.config.num_labels])
 
+
 __all__ = [
     "TFFlaubertPreTrainedModel",
     "TFFlaubertModel",
@@ -1347,5 +1348,5 @@ __all__ = [
     "TFFlaubertForSequenceClassification",
     "TFFlaubertForQuestionAnsweringSimple",
     "TFFlaubertForTokenClassification",
-    "TFFlaubertForMultipleChoice"
+    "TFFlaubertForMultipleChoice",
 ]

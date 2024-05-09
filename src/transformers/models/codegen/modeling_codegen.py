@@ -727,8 +727,5 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             for layer_past in past_key_values
         )
 
-__all__ = [
-    "CodeGenPreTrainedModel",
-    "CodeGenModel",
-    "CodeGenForCausalLM"
-]
+
+__all__ = ["CodeGenPreTrainedModel", "CodeGenModel", "CodeGenForCausalLM"]

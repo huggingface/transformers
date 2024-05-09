@@ -298,6 +298,5 @@ class GroundingDinoConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-__all__ = [
-    "GroundingDinoConfig"
-]
+
+__all__ = ["GroundingDinoConfig"]

@@ -1309,5 +1309,5 @@ __all__ = [
     "FlaxCLIPTextModel",
     "FlaxCLIPTextModelWithProjection",
     "FlaxCLIPVisionModel",
-    "FlaxCLIPModel"
+    "FlaxCLIPModel",
 ]

@@ -1528,8 +1528,5 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
 
-__all__ = [
-    "TFBlenderbotSmallPreTrainedModel",
-    "TFBlenderbotSmallModel",
-    "TFBlenderbotSmallForConditionalGeneration"
-]
+
+__all__ = ["TFBlenderbotSmallPreTrainedModel", "TFBlenderbotSmallModel", "TFBlenderbotSmallForConditionalGeneration"]

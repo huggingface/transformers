@@ -389,7 +389,5 @@ class MBartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 flattened_output, name, idx, t
             )
 
-__all__ = [
-    "MBartConfig",
-    "MBartOnnxConfig"
-]
+
+__all__ = ["MBartConfig", "MBartOnnxConfig"]

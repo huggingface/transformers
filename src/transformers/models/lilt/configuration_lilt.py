@@ -129,6 +129,5 @@ class LiltConfig(PretrainedConfig):
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
-__all__ = [
-    "LiltConfig"
-]
+
+__all__ = ["LiltConfig"]

@@ -1328,10 +1328,11 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "MarkupLMPreTrainedModel",
     "MarkupLMModel",
     "MarkupLMForQuestionAnswering",
     "MarkupLMForTokenClassification",
-    "MarkupLMForSequenceClassification"
+    "MarkupLMForSequenceClassification",
 ]

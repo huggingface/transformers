@@ -982,7 +982,5 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "TrOCRPreTrainedModel",
-    "TrOCRForCausalLM"
-]
+
+__all__ = ["TrOCRPreTrainedModel", "TrOCRForCausalLM"]

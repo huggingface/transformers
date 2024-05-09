@@ -329,9 +329,5 @@ class BarkConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "BarkSemanticConfig",
-    "BarkCoarseConfig",
-    "BarkFineConfig",
-    "BarkConfig"
-]
+
+__all__ = ["BarkSemanticConfig", "BarkCoarseConfig", "BarkFineConfig", "BarkConfig"]

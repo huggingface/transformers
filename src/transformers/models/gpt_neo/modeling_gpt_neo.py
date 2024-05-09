@@ -1349,6 +1349,7 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_gpt_neo",
     "GPTNeoPreTrainedModel",
@@ -1356,5 +1357,5 @@ __all__ = [
     "GPTNeoForCausalLM",
     "GPTNeoForSequenceClassification",
     "GPTNeoForTokenClassification",
-    "GPTNeoForQuestionAnswering"
+    "GPTNeoForQuestionAnswering",
 ]

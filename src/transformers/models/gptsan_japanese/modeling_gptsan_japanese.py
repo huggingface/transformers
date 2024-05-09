@@ -1347,8 +1347,5 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
                 total_expert_indexes.append(expert_indexes)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
-__all__ = [
-    "GPTSanJapanesePreTrainedModel",
-    "GPTSanJapaneseModel",
-    "GPTSanJapaneseForConditionalGeneration"
-]
+
+__all__ = ["GPTSanJapanesePreTrainedModel", "GPTSanJapaneseModel", "GPTSanJapaneseForConditionalGeneration"]

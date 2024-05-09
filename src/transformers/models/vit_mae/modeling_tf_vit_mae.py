@@ -1273,8 +1273,5 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
 
-__all__ = [
-    "TFViTMAEPreTrainedModel",
-    "TFViTMAEModel",
-    "TFViTMAEForPreTraining"
-]
+
+__all__ = ["TFViTMAEPreTrainedModel", "TFViTMAEModel", "TFViTMAEForPreTraining"]

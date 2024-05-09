@@ -1646,11 +1646,12 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFDebertaPreTrainedModel",
     "TFDebertaModel",
     "TFDebertaForMaskedLM",
     "TFDebertaForSequenceClassification",
     "TFDebertaForTokenClassification",
-    "TFDebertaForQuestionAnswering"
+    "TFDebertaForQuestionAnswering",
 ]

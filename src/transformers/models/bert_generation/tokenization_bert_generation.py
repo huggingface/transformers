@@ -173,6 +173,5 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "BertGenerationTokenizer"
-]
+
+__all__ = ["BertGenerationTokenizer"]

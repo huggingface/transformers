@@ -951,8 +951,5 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "MaskFormerSwinPreTrainedModel",
-    "MaskFormerSwinModel",
-    "MaskFormerSwinBackbone"
-]
+
+__all__ = ["MaskFormerSwinPreTrainedModel", "MaskFormerSwinModel", "MaskFormerSwinBackbone"]

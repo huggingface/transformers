@@ -1299,9 +1299,5 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "TvltPreTrainedModel",
-    "TvltModel",
-    "TvltForPreTraining",
-    "TvltForAudioVisualClassification"
-]
+
+__all__ = ["TvltPreTrainedModel", "TvltModel", "TvltForPreTraining", "TvltForAudioVisualClassification"]

@@ -616,6 +616,5 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         return semantic_segmentation
 
-__all__ = [
-    "SegGptImageProcessor"
-]
+
+__all__ = ["SegGptImageProcessor"]

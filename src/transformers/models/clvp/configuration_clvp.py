@@ -456,8 +456,5 @@ class ClvpConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "ClvpEncoderConfig",
-    "ClvpDecoderConfig",
-    "ClvpConfig"
-]
+
+__all__ = ["ClvpEncoderConfig", "ClvpDecoderConfig", "ClvpConfig"]

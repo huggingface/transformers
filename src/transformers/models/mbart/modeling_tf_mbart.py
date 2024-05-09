@@ -1575,8 +1575,5 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
 
-__all__ = [
-    "TFMBartPreTrainedModel",
-    "TFMBartModel",
-    "TFMBartForConditionalGeneration"
-]
+
+__all__ = ["TFMBartPreTrainedModel", "TFMBartModel", "TFMBartForConditionalGeneration"]

@@ -142,6 +142,5 @@ class YosoConfig(PretrainedConfig):
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
 
-__all__ = [
-    "YosoConfig"
-]
+
+__all__ = ["YosoConfig"]

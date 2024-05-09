@@ -483,9 +483,10 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+
 __all__ = [
     "load_tf_weights_in_mobilenet_v1",
     "MobileNetV1PreTrainedModel",
     "MobileNetV1Model",
-    "MobileNetV1ForImageClassification"
+    "MobileNetV1ForImageClassification",
 ]

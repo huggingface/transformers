@@ -34,6 +34,5 @@ class PerceiverFeatureExtractor(PerceiverImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "PerceiverFeatureExtractor"
-]
+
+__all__ = ["PerceiverFeatureExtractor"]

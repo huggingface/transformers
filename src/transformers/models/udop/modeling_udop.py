@@ -2045,9 +2045,5 @@ class UdopEncoderModel(UdopPreTrainedModel):
 
         return encoder_outputs
 
-__all__ = [
-    "UdopPreTrainedModel",
-    "UdopModel",
-    "UdopForConditionalGeneration",
-    "UdopEncoderModel"
-]
+
+__all__ = ["UdopPreTrainedModel", "UdopModel", "UdopForConditionalGeneration", "UdopEncoderModel"]

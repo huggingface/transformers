@@ -1878,6 +1878,7 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.output_dim])
 
+
 __all__ = [
     "TFDebertaV2PreTrainedModel",
     "TFDebertaV2Model",
@@ -1885,5 +1886,5 @@ __all__ = [
     "TFDebertaV2ForSequenceClassification",
     "TFDebertaV2ForTokenClassification",
     "TFDebertaV2ForQuestionAnswering",
-    "TFDebertaV2ForMultipleChoice"
+    "TFDebertaV2ForMultipleChoice",
 ]

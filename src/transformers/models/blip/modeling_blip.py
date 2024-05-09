@@ -1554,11 +1554,12 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             question_embeds=question_embeds,
         )
 
+
 __all__ = [
     "BlipPreTrainedModel",
     "BlipVisionModel",
     "BlipModel",
     "BlipForConditionalGeneration",
     "BlipForQuestionAnswering",
-    "BlipForImageTextRetrieval"
+    "BlipForImageTextRetrieval",
 ]

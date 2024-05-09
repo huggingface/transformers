@@ -3260,8 +3260,5 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
                 output = (loss) + output
         return output
 
-__all__ = [
-    "OneFormerPreTrainedModel",
-    "OneFormerModel",
-    "OneFormerForUniversalSegmentation"
-]
+
+__all__ = ["OneFormerPreTrainedModel", "OneFormerModel", "OneFormerForUniversalSegmentation"]

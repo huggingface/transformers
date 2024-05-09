@@ -1530,10 +1530,11 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "GPTBigCodePreTrainedModel",
     "GPTBigCodeModel",
     "GPTBigCodeForCausalLM",
     "GPTBigCodeForSequenceClassification",
-    "GPTBigCodeForTokenClassification"
+    "GPTBigCodeForTokenClassification",
 ]

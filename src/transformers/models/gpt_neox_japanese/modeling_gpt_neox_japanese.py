@@ -729,8 +729,5 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "GPTNeoXJapanesePreTrainedModel",
-    "GPTNeoXJapaneseModel",
-    "GPTNeoXJapaneseForCausalLM"
-]
+
+__all__ = ["GPTNeoXJapanesePreTrainedModel", "GPTNeoXJapaneseModel", "GPTNeoXJapaneseForCausalLM"]

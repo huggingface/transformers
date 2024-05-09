@@ -391,6 +391,5 @@ class BartTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-__all__ = [
-    "BartTokenizer"
-]
+
+__all__ = ["BartTokenizer"]

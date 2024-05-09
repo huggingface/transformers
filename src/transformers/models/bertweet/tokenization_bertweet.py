@@ -767,6 +767,4 @@ def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=Fa
 
 ###############################################################################
 
-__all__ = [
-    "BertweetTokenizer"
-]
+__all__ = ["BertweetTokenizer"]

@@ -322,6 +322,5 @@ class BigBirdTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-__all__ = [
-    "BigBirdTokenizer"
-]
+
+__all__ = ["BigBirdTokenizer"]

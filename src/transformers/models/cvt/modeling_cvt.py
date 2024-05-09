@@ -725,8 +725,5 @@ class CvtForImageClassification(CvtPreTrainedModel):
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
-__all__ = [
-    "CvtPreTrainedModel",
-    "CvtModel",
-    "CvtForImageClassification"
-]
+
+__all__ = ["CvtPreTrainedModel", "CvtModel", "CvtForImageClassification"]

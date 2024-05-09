@@ -2826,6 +2826,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "Wav2Vec2PreTrainedModel",
     "Wav2Vec2Model",
@@ -2834,5 +2835,5 @@ __all__ = [
     "Wav2Vec2ForCTC",
     "Wav2Vec2ForSequenceClassification",
     "Wav2Vec2ForAudioFrameClassification",
-    "Wav2Vec2ForXVector"
+    "Wav2Vec2ForXVector",
 ]

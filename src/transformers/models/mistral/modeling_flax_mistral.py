@@ -704,7 +704,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
     """,
     MISTRAL_START_DOCSTRING,
 )
-
 # Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Mistral
 @register(backends=("flax",))
 class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
@@ -745,8 +744,4 @@ append_call_sample_docstring(
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
-__all__ = [
-    "FlaxMistralPreTrainedModel",
-    "FlaxMistralModel",
-    "FlaxMistralForCausalLM"
-]
+__all__ = ["FlaxMistralPreTrainedModel", "FlaxMistralModel", "FlaxMistralForCausalLM"]

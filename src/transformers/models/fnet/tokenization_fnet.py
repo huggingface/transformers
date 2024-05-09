@@ -339,6 +339,5 @@ class FNetTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "FNetTokenizer"
-]
+
+__all__ = ["FNetTokenizer"]

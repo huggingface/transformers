@@ -161,6 +161,5 @@ class RoCBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
-__all__ = [
-    "RoCBertConfig"
-]
+
+__all__ = ["RoCBertConfig"]

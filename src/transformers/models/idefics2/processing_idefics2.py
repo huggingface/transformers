@@ -355,6 +355,5 @@ class Idefics2Processor(ProcessorMixin):
         )
         # fmt: on
 
-__all__ = [
-    "Idefics2Processor"
-]
+
+__all__ = ["Idefics2Processor"]

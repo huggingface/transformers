@@ -1637,6 +1637,7 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "DebertaV2PreTrainedModel",
     "DebertaV2Model",
@@ -1644,5 +1645,5 @@ __all__ = [
     "DebertaV2ForSequenceClassification",
     "DebertaV2ForTokenClassification",
     "DebertaV2ForQuestionAnswering",
-    "DebertaV2ForMultipleChoice"
+    "DebertaV2ForMultipleChoice",
 ]

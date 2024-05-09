@@ -945,11 +945,12 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "MptPreTrainedModel",
     "MptModel",
     "MptForCausalLM",
     "MptForSequenceClassification",
     "MptForTokenClassification",
-    "MptForQuestionAnswering"
+    "MptForQuestionAnswering",
 ]

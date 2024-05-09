@@ -218,7 +218,5 @@ class GPTJOnnxConfig(OnnxConfigWithPast):
     def default_onnx_opset(self) -> int:
         return 13
 
-__all__ = [
-    "GPTJConfig",
-    "GPTJOnnxConfig"
-]
+
+__all__ = ["GPTJConfig", "GPTJOnnxConfig"]

@@ -153,7 +153,5 @@ class Data2VecTextOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "Data2VecTextConfig",
-    "Data2VecTextOnnxConfig"
-]
+
+__all__ = ["Data2VecTextConfig", "Data2VecTextOnnxConfig"]

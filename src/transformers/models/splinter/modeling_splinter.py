@@ -1111,9 +1111,5 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         positions[rows, cols] = flat_positions
         return positions
 
-__all__ = [
-    "SplinterPreTrainedModel",
-    "SplinterModel",
-    "SplinterForQuestionAnswering",
-    "SplinterForPreTraining"
-]
+
+__all__ = ["SplinterPreTrainedModel", "SplinterModel", "SplinterForQuestionAnswering", "SplinterForPreTraining"]

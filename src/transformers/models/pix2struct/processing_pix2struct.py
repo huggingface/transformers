@@ -164,6 +164,5 @@ class Pix2StructProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-__all__ = [
-    "Pix2StructProcessor"
-]
+
+__all__ = ["Pix2StructProcessor"]

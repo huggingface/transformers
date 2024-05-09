@@ -1761,8 +1761,5 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             with tf.name_scope(self.model.name):
                 self.model.build(None)
 
-__all__ = [
-    "TFWhisperPreTrainedModel",
-    "TFWhisperModel",
-    "TFWhisperForConditionalGeneration"
-]
+
+__all__ = ["TFWhisperPreTrainedModel", "TFWhisperModel", "TFWhisperForConditionalGeneration"]

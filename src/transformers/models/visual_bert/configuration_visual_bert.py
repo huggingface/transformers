@@ -133,6 +133,5 @@ class VisualBertConfig(PretrainedConfig):
         self.bypass_transformer = bypass_transformer
         self.special_visual_initialize = special_visual_initialize
 
-__all__ = [
-    "VisualBertConfig"
-]
+
+__all__ = ["VisualBertConfig"]

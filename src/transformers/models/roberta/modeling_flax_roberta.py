@@ -1504,5 +1504,5 @@ __all__ = [
     "FlaxRobertaForMultipleChoice",
     "FlaxRobertaForTokenClassification",
     "FlaxRobertaForQuestionAnswering",
-    "FlaxRobertaForCausalLM"
+    "FlaxRobertaForCausalLM",
 ]

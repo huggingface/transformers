@@ -632,6 +632,5 @@ class UnivNetModel(PreTrainedModel):
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
 
-__all__ = [
-    "UnivNetModel"
-]
+
+__all__ = ["UnivNetModel"]

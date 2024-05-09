@@ -877,8 +877,5 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "VitDetPreTrainedModel",
-    "VitDetModel",
-    "VitDetBackbone"
-]
+
+__all__ = ["VitDetPreTrainedModel", "VitDetModel", "VitDetBackbone"]

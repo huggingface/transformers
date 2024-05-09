@@ -184,6 +184,5 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
         return encoded_inputs
 
-__all__ = [
-    "MarkupLMFeatureExtractor"
-]
+
+__all__ = ["MarkupLMFeatureExtractor"]

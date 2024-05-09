@@ -1179,10 +1179,11 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             with tf.name_scope(self.distillation_classifier.name):
                 self.distillation_classifier.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFDeiTPreTrainedModel",
     "TFDeiTModel",
     "TFDeiTForMaskedImageModeling",
     "TFDeiTForImageClassification",
-    "TFDeiTForImageClassificationWithTeacher"
+    "TFDeiTForImageClassificationWithTeacher",
 ]

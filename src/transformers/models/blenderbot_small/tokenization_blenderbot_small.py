@@ -235,6 +235,5 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             "{{ eos_token }}"
         )
 
-__all__ = [
-    "BlenderbotSmallTokenizer"
-]
+
+__all__ = ["BlenderbotSmallTokenizer"]

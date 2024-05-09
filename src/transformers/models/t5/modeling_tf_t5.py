@@ -1684,9 +1684,5 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
 
-__all__ = [
-    "TFT5PreTrainedModel",
-    "TFT5Model",
-    "TFT5ForConditionalGeneration",
-    "TFT5EncoderModel"
-]
+
+__all__ = ["TFT5PreTrainedModel", "TFT5Model", "TFT5ForConditionalGeneration", "TFT5EncoderModel"]

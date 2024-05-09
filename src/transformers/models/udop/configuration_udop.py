@@ -158,6 +158,5 @@ class UdopConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "UdopConfig"
-]
+
+__all__ = ["UdopConfig"]

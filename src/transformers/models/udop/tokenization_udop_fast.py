@@ -1008,6 +1008,5 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "UdopTokenizerFast"
-]
+
+__all__ = ["UdopTokenizerFast"]

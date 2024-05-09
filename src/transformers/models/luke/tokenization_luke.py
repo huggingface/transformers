@@ -1706,6 +1706,5 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file, entity_vocab_file
 
-__all__ = [
-    "LukeTokenizer"
-]
+
+__all__ = ["LukeTokenizer"]

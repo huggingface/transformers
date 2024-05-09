@@ -411,7 +411,5 @@ class BigBirdPegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 flattened_output, name, idx, t
             )
 
-__all__ = [
-    "BigBirdPegasusConfig",
-    "BigBirdPegasusOnnxConfig"
-]
+
+__all__ = ["BigBirdPegasusConfig", "BigBirdPegasusOnnxConfig"]

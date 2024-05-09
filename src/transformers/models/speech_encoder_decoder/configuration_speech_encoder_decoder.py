@@ -109,6 +109,5 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
-__all__ = [
-    "SpeechEncoderDecoderConfig"
-]
+
+__all__ = ["SpeechEncoderDecoderConfig"]

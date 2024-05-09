@@ -258,6 +258,5 @@ class DbrxConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
-__all__ = [
-    "DbrxConfig"
-]
+
+__all__ = ["DbrxConfig"]

@@ -2238,6 +2238,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LukePreTrainedModel",
     "LukeModel",
@@ -2248,5 +2249,5 @@ __all__ = [
     "LukeForSequenceClassification",
     "LukeForTokenClassification",
     "LukeForQuestionAnswering",
-    "LukeForMultipleChoice"
+    "LukeForMultipleChoice",
 ]

@@ -1315,6 +1315,7 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "YosoPreTrainedModel",
     "YosoModel",
@@ -1322,5 +1323,5 @@ __all__ = [
     "YosoForSequenceClassification",
     "YosoForMultipleChoice",
     "YosoForTokenClassification",
-    "YosoForQuestionAnswering"
+    "YosoForQuestionAnswering",
 ]

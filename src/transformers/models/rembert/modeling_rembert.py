@@ -1531,6 +1531,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_rembert",
     "RemBertPreTrainedModel",
@@ -1540,5 +1541,5 @@ __all__ = [
     "RemBertForSequenceClassification",
     "RemBertForMultipleChoice",
     "RemBertForTokenClassification",
-    "RemBertForQuestionAnswering"
+    "RemBertForQuestionAnswering",
 ]

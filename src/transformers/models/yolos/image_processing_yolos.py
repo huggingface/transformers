@@ -1516,6 +1516,5 @@ class YolosImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "YolosImageProcessor"
-]
+
+__all__ = ["YolosImageProcessor"]

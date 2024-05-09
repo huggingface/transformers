@@ -184,6 +184,5 @@ class SpeechT5Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-__all__ = [
-    "SpeechT5Processor"
-]
+
+__all__ = ["SpeechT5Processor"]

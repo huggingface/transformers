@@ -146,6 +146,5 @@ class Starcoder2Config(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Starcoder2Config"
-]
+
+__all__ = ["Starcoder2Config"]

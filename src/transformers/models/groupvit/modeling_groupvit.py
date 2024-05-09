@@ -1585,9 +1585,5 @@ class GroupViTModel(GroupViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-__all__ = [
-    "GroupViTPreTrainedModel",
-    "GroupViTTextModel",
-    "GroupViTVisionModel",
-    "GroupViTModel"
-]
+
+__all__ = ["GroupViTPreTrainedModel", "GroupViTTextModel", "GroupViTVisionModel", "GroupViTModel"]

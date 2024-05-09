@@ -432,8 +432,5 @@ class CLIPSegConfig(PretrainedConfig):
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
-__all__ = [
-    "CLIPSegTextConfig",
-    "CLIPSegVisionConfig",
-    "CLIPSegConfig"
-]
+
+__all__ = ["CLIPSegTextConfig", "CLIPSegVisionConfig", "CLIPSegConfig"]

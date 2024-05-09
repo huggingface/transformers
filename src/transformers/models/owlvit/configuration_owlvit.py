@@ -385,9 +385,5 @@ class OwlViTOnnxConfig(OnnxConfig):
     def default_onnx_opset(self) -> int:
         return 14
 
-__all__ = [
-    "OwlViTTextConfig",
-    "OwlViTVisionConfig",
-    "OwlViTConfig",
-    "OwlViTOnnxConfig"
-]
+
+__all__ = ["OwlViTTextConfig", "OwlViTVisionConfig", "OwlViTConfig", "OwlViTOnnxConfig"]

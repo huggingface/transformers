@@ -698,6 +698,5 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
 
-__all__ = [
-    "TFVisionEncoderDecoderModel"
-]
+
+__all__ = ["TFVisionEncoderDecoderModel"]

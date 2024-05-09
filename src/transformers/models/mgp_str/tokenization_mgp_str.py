@@ -102,6 +102,5 @@ class MgpstrTokenizer(PreTrainedTokenizer):
 
         return (vocab_file,)
 
-__all__ = [
-    "MgpstrTokenizer"
-]
+
+__all__ = ["MgpstrTokenizer"]

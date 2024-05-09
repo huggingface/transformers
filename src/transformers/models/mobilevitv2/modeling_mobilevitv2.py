@@ -1031,9 +1031,10 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
             attentions=None,
         )
 
+
 __all__ = [
     "MobileViTV2PreTrainedModel",
     "MobileViTV2Model",
     "MobileViTV2ForImageClassification",
-    "MobileViTV2ForSemanticSegmentation"
+    "MobileViTV2ForSemanticSegmentation",
 ]

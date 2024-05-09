@@ -1784,8 +1784,5 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             )
         )
 
-__all__ = [
-    "TimeSeriesTransformerPreTrainedModel",
-    "TimeSeriesTransformerModel",
-    "TimeSeriesTransformerForPrediction"
-]
+
+__all__ = ["TimeSeriesTransformerPreTrainedModel", "TimeSeriesTransformerModel", "TimeSeriesTransformerForPrediction"]

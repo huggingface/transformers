@@ -532,6 +532,5 @@ class BeitImageProcessor(BaseImageProcessor):
 
         return semantic_segmentation
 
-__all__ = [
-    "BeitImageProcessor"
-]
+
+__all__ = ["BeitImageProcessor"]

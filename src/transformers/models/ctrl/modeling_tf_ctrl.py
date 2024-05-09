@@ -932,9 +932,5 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
 
-__all__ = [
-    "TFCTRLPreTrainedModel",
-    "TFCTRLModel",
-    "TFCTRLLMHeadModel",
-    "TFCTRLForSequenceClassification"
-]
+
+__all__ = ["TFCTRLPreTrainedModel", "TFCTRLModel", "TFCTRLLMHeadModel", "TFCTRLForSequenceClassification"]

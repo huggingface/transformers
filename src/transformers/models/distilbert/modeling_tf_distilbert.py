@@ -1142,6 +1142,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.dim])
 
+
 __all__ = [
     "TFDistilBertPreTrainedModel",
     "TFDistilBertModel",
@@ -1149,5 +1150,5 @@ __all__ = [
     "TFDistilBertForSequenceClassification",
     "TFDistilBertForTokenClassification",
     "TFDistilBertForMultipleChoice",
-    "TFDistilBertForQuestionAnswering"
+    "TFDistilBertForQuestionAnswering",
 ]

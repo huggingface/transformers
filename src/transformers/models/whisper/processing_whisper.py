@@ -98,6 +98,5 @@ class WhisperProcessor(ProcessorMixin):
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
 
-__all__ = [
-    "WhisperProcessor"
-]
+
+__all__ = ["WhisperProcessor"]

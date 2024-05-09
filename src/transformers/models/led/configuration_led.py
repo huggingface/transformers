@@ -163,6 +163,5 @@ class LEDConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "LEDConfig"
-]
+
+__all__ = ["LEDConfig"]

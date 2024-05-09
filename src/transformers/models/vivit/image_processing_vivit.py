@@ -425,6 +425,5 @@ class VivitImageProcessor(BaseImageProcessor):
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "VivitImageProcessor"
-]
+
+__all__ = ["VivitImageProcessor"]

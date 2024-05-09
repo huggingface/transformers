@@ -2957,10 +2957,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             guidance_scale=1.0,
         )
 
+
 __all__ = [
     "MusicgenPreTrainedModel",
     "MusicgenDecoder",
     "MusicgenModel",
     "MusicgenForCausalLM",
-    "MusicgenForConditionalGeneration"
+    "MusicgenForConditionalGeneration",
 ]

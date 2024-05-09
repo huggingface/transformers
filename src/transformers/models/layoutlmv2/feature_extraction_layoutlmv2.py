@@ -36,6 +36,5 @@ class LayoutLMv2FeatureExtractor(LayoutLMv2ImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "LayoutLMv2FeatureExtractor"
-]
+
+__all__ = ["LayoutLMv2FeatureExtractor"]

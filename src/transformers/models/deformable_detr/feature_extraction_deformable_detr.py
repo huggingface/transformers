@@ -44,6 +44,5 @@ class DeformableDetrFeatureExtractor(DeformableDetrImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "DeformableDetrFeatureExtractor"
-]
+
+__all__ = ["DeformableDetrFeatureExtractor"]

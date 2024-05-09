@@ -1412,10 +1412,11 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LayoutLMv2PreTrainedModel",
     "LayoutLMv2Model",
     "LayoutLMv2ForSequenceClassification",
     "LayoutLMv2ForTokenClassification",
-    "LayoutLMv2ForQuestionAnswering"
+    "LayoutLMv2ForQuestionAnswering",
 ]

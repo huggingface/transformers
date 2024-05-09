@@ -33,8 +33,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_efficientformer import EfficientFormerConfig
 from ...utils.import_utils import register
+from .configuration_efficientformer import EfficientFormerConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -496,7 +497,7 @@ class EfficientFormerEncoder(nn.Module):
         )
 
 
-@register(backends=('torch',))
+@register(backends=("torch",))
 class EfficientFormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -549,7 +550,7 @@ EFFICIENTFORMER_INPUTS_DOCSTRING = r"""
     "The bare EfficientFormer Model transformer outputting raw hidden-states without any specific head on top.",
     EFFICIENTFORMER_START_DOCSTRING,
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
@@ -613,7 +614,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
@@ -744,7 +745,7 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
@@ -809,5 +810,5 @@ __all__ = [
     "EfficientFormerPreTrainedModel",
     "EfficientFormerModel",
     "EfficientFormerForImageClassification",
-    "EfficientFormerForImageClassificationWithTeacher"
+    "EfficientFormerForImageClassificationWithTeacher",
 ]

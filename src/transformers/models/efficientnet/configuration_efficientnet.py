@@ -168,7 +168,5 @@ class EfficientNetOnnxConfig(OnnxConfig):
     def atol_for_validation(self) -> float:
         return 1e-5
 
-__all__ = [
-    "EfficientNetConfig",
-    "EfficientNetOnnxConfig"
-]
+
+__all__ = ["EfficientNetConfig", "EfficientNetOnnxConfig"]

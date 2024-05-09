@@ -88,6 +88,5 @@ class SuperPointConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "SuperPointConfig"
-]
+
+__all__ = ["SuperPointConfig"]

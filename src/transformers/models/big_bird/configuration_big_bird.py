@@ -175,7 +175,5 @@ class BigBirdOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "BigBirdConfig",
-    "BigBirdOnnxConfig"
-]
+
+__all__ = ["BigBirdConfig", "BigBirdOnnxConfig"]

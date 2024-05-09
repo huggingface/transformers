@@ -394,6 +394,5 @@ class DebertaTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-__all__ = [
-    "DebertaTokenizer"
-]
+
+__all__ = ["DebertaTokenizer"]

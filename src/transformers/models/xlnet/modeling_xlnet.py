@@ -2090,6 +2090,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                     attentions=transformer_outputs.attentions,
                 )
 
+
 __all__ = [
     "load_tf_weights_in_xlnet",
     "XLNetPreTrainedModel",
@@ -2099,5 +2100,5 @@ __all__ = [
     "XLNetForTokenClassification",
     "XLNetForMultipleChoice",
     "XLNetForQuestionAnsweringSimple",
-    "XLNetForQuestionAnswering"
+    "XLNetForQuestionAnswering",
 ]

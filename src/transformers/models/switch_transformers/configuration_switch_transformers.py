@@ -183,6 +183,5 @@ class SwitchTransformersConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "SwitchTransformersConfig"
-]
+
+__all__ = ["SwitchTransformersConfig"]

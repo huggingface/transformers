@@ -458,9 +458,5 @@ class CLIPOnnxConfig(OnnxConfig):
     def default_onnx_opset(self) -> int:
         return 14
 
-__all__ = [
-    "CLIPTextConfig",
-    "CLIPVisionConfig",
-    "CLIPConfig",
-    "CLIPOnnxConfig"
-]
+
+__all__ = ["CLIPTextConfig", "CLIPVisionConfig", "CLIPConfig", "CLIPOnnxConfig"]

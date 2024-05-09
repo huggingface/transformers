@@ -263,6 +263,5 @@ class RemBertTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "RemBertTokenizer"
-]
+
+__all__ = ["RemBertTokenizer"]

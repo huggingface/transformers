@@ -1139,9 +1139,5 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "VideoMAEPreTrainedModel",
-    "VideoMAEModel",
-    "VideoMAEForPreTraining",
-    "VideoMAEForVideoClassification"
-]
+
+__all__ = ["VideoMAEPreTrainedModel", "VideoMAEModel", "VideoMAEForPreTraining", "VideoMAEForVideoClassification"]

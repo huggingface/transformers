@@ -485,6 +485,5 @@ class DPTImageProcessor(BaseImageProcessor):
 
         return semantic_segmentation
 
-__all__ = [
-    "DPTImageProcessor"
-]
+
+__all__ = ["DPTImageProcessor"]

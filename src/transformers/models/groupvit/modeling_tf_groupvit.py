@@ -2142,9 +2142,5 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             with tf.name_scope(self.groupvit.name):
                 self.groupvit.build(None)
 
-__all__ = [
-    "TFGroupViTPreTrainedModel",
-    "TFGroupViTTextModel",
-    "TFGroupViTVisionModel",
-    "TFGroupViTModel"
-]
+
+__all__ = ["TFGroupViTPreTrainedModel", "TFGroupViTTextModel", "TFGroupViTVisionModel", "TFGroupViTModel"]

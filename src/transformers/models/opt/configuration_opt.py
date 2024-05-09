@@ -144,6 +144,5 @@ class OPTConfig(PretrainedConfig):
         # see https://github.com/facebookresearch/metaseq/pull/164
         self._remove_final_layer_norm = _remove_final_layer_norm
 
-__all__ = [
-    "OPTConfig"
-]
+
+__all__ = ["OPTConfig"]

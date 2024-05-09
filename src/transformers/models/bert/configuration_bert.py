@@ -153,7 +153,5 @@ class BertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "BertConfig",
-    "BertOnnxConfig"
-]
+
+__all__ = ["BertConfig", "BertOnnxConfig"]

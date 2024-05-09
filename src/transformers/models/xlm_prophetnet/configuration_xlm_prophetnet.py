@@ -179,6 +179,5 @@ class XLMProphetNetConfig(PretrainedConfig):
             " `num_decoder_layers`."
         )
 
-__all__ = [
-    "XLMProphetNetConfig"
-]
+
+__all__ = ["XLMProphetNetConfig"]

@@ -513,9 +513,5 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
             attentions=None,
         )
 
-__all__ = [
-    "ResNetPreTrainedModel",
-    "ResNetModel",
-    "ResNetForImageClassification",
-    "ResNetBackbone"
-]
+
+__all__ = ["ResNetPreTrainedModel", "ResNetModel", "ResNetForImageClassification", "ResNetBackbone"]

@@ -1917,10 +1917,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 outputs = torch.cat([bos_tokens, outputs], dim=-1)
         return outputs
 
+
 __all__ = [
     "Blip2PreTrainedModel",
     "Blip2VisionModel",
     "Blip2QFormerModel",
     "Blip2Model",
-    "Blip2ForConditionalGeneration"
+    "Blip2ForConditionalGeneration",
 ]

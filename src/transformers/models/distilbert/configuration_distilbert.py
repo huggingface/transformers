@@ -140,7 +140,5 @@ class DistilBertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "DistilBertConfig",
-    "DistilBertOnnxConfig"
-]
+
+__all__ = ["DistilBertConfig", "DistilBertOnnxConfig"]

@@ -1319,10 +1319,11 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "BrosPreTrainedModel",
     "BrosModel",
     "BrosForTokenClassification",
     "BrosSpadeEEForTokenClassification",
-    "BrosSpadeELForTokenClassification"
+    "BrosSpadeELForTokenClassification",
 ]

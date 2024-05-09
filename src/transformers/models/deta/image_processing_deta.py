@@ -1238,6 +1238,5 @@ class DetaImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "DetaImageProcessor"
-]
+
+__all__ = ["DetaImageProcessor"]

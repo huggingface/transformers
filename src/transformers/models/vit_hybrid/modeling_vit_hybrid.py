@@ -769,8 +769,5 @@ class ViTHybridForImageClassification(ViTHybridPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "ViTHybridPreTrainedModel",
-    "ViTHybridModel",
-    "ViTHybridForImageClassification"
-]
+
+__all__ = ["ViTHybridPreTrainedModel", "ViTHybridModel", "ViTHybridForImageClassification"]

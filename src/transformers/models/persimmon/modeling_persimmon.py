@@ -1115,3 +1115,5 @@ __all__ = [
     "PersimmonForSequenceClassification",
     "PersimmonForTokenClassification"
 ]
+
+__all__ = ["PersimmonPreTrainedModel", "PersimmonModel", "PersimmonForCausalLM", "PersimmonForSequenceClassification"]

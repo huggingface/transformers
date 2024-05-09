@@ -174,7 +174,5 @@ class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     def default_onnx_opset(self) -> int:
         return 13
 
-__all__ = [
-    "LongT5Config",
-    "LongT5OnnxConfig"
-]
+
+__all__ = ["LongT5Config", "LongT5OnnxConfig"]

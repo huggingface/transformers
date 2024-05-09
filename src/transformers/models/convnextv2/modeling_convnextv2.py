@@ -575,9 +575,5 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
             attentions=None,
         )
 
-__all__ = [
-    "ConvNextV2PreTrainedModel",
-    "ConvNextV2Model",
-    "ConvNextV2ForImageClassification",
-    "ConvNextV2Backbone"
-]
+
+__all__ = ["ConvNextV2PreTrainedModel", "ConvNextV2Model", "ConvNextV2ForImageClassification", "ConvNextV2Backbone"]

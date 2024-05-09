@@ -3365,11 +3365,12 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         return waveform
 
+
 __all__ = [
     "SpeechT5PreTrainedModel",
     "SpeechT5Model",
     "SpeechT5ForSpeechToText",
     "SpeechT5ForTextToSpeech",
     "SpeechT5ForSpeechToSpeech",
-    "SpeechT5HifiGan"
+    "SpeechT5HifiGan",
 ]

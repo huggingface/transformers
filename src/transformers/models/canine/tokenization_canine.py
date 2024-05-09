@@ -242,6 +242,5 @@ class CanineTokenizer(PreTrainedTokenizer):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
         return ()
 
-__all__ = [
-    "CanineTokenizer"
-]
+
+__all__ = ["CanineTokenizer"]

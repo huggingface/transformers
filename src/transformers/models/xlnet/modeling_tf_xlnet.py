@@ -1816,6 +1816,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFXLNetPreTrainedModel",
     "TFXLNetModel",
@@ -1823,5 +1824,5 @@ __all__ = [
     "TFXLNetForSequenceClassification",
     "TFXLNetForMultipleChoice",
     "TFXLNetForTokenClassification",
-    "TFXLNetForQuestionAnsweringSimple"
+    "TFXLNetForQuestionAnsweringSimple",
 ]

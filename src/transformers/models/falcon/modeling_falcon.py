@@ -1647,11 +1647,12 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "FalconPreTrainedModel",
     "FalconModel",
     "FalconForCausalLM",
     "FalconForSequenceClassification",
     "FalconForTokenClassification",
-    "FalconForQuestionAnswering"
+    "FalconForQuestionAnswering",
 ]

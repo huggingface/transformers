@@ -1957,6 +1957,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_gpt2",
     "GPT2PreTrainedModel",
@@ -1965,5 +1966,5 @@ __all__ = [
     "GPT2DoubleHeadsModel",
     "GPT2ForSequenceClassification",
     "GPT2ForTokenClassification",
-    "GPT2ForQuestionAnswering"
+    "GPT2ForQuestionAnswering",
 ]

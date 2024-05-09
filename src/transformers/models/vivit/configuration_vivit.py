@@ -117,6 +117,5 @@ class VivitConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "VivitConfig"
-]
+
+__all__ = ["VivitConfig"]

@@ -24,6 +24,7 @@ from ... import AutoTokenizer
 from ...utils import logging
 from ...utils.import_utils import register
 
+
 _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
 
 
@@ -165,6 +166,4 @@ class RealmRetriever:
         return has_answers, start_pos, end_pos
 
 
-__all__ = [
-    "RealmRetriever"
-]
+__all__ = ["RealmRetriever"]

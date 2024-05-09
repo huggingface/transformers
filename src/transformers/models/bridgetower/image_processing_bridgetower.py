@@ -562,6 +562,5 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         return encoded_outputs
 
-__all__ = [
-    "BridgeTowerImageProcessor"
-]
+
+__all__ = ["BridgeTowerImageProcessor"]

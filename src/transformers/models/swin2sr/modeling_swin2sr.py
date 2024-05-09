@@ -1178,8 +1178,5 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "Swin2SRPreTrainedModel",
-    "Swin2SRModel",
-    "Swin2SRForImageSuperResolution"
-]
+
+__all__ = ["Swin2SRPreTrainedModel", "Swin2SRModel", "Swin2SRForImageSuperResolution"]

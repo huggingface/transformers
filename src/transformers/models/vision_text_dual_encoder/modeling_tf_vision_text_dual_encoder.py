@@ -622,6 +622,5 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         dummy = {"pixel_values": pixel_values, "input_ids": input_ids}
         return dummy
 
-__all__ = [
-    "TFVisionTextDualEncoderModel"
-]
+
+__all__ = ["TFVisionTextDualEncoderModel"]

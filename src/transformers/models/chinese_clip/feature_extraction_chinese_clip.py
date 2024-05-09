@@ -34,6 +34,5 @@ class ChineseCLIPFeatureExtractor(ChineseCLIPImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "ChineseCLIPFeatureExtractor"
-]
+
+__all__ = ["ChineseCLIPFeatureExtractor"]

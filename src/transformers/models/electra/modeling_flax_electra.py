@@ -1619,5 +1619,5 @@ __all__ = [
     "FlaxElectraForMultipleChoice",
     "FlaxElectraForQuestionAnswering",
     "FlaxElectraForSequenceClassification",
-    "FlaxElectraForCausalLM"
+    "FlaxElectraForCausalLM",
 ]

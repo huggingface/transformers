@@ -325,6 +325,5 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "WhisperFeatureExtractor"
-]
+
+__all__ = ["WhisperFeatureExtractor"]

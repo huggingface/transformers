@@ -434,6 +434,5 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             return self.bos_token_id + token_ids_0 + self.eos_token_id
         return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
 
-__all__ = [
-    "CodeLlamaTokenizerFast"
-]
+
+__all__ = ["CodeLlamaTokenizerFast"]

@@ -404,7 +404,5 @@ class BartOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 flattened_output, name, idx, t
             )
 
-__all__ = [
-    "BartConfig",
-    "BartOnnxConfig"
-]
+
+__all__ = ["BartConfig", "BartOnnxConfig"]

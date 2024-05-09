@@ -314,6 +314,5 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
         return out_vocab_file, out_monolingual_vocab_file
 
-__all__ = [
-    "BartphoTokenizer"
-]
+
+__all__ = ["BartphoTokenizer"]

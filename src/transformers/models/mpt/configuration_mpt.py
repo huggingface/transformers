@@ -246,6 +246,5 @@ class MptConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
-__all__ = [
-    "MptConfig"
-]
+
+__all__ = ["MptConfig"]

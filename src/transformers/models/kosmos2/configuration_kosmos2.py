@@ -293,6 +293,5 @@ class Kosmos2Config(PretrainedConfig):
 
         self.latent_query_num = latent_query_num
 
-__all__ = [
-    "Kosmos2Config"
-]
+
+__all__ = ["Kosmos2Config"]

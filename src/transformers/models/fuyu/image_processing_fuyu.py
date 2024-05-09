@@ -737,6 +737,5 @@ class FuyuImageProcessor(BaseImageProcessor):
             }
         )
 
-__all__ = [
-    "FuyuImageProcessor"
-]
+
+__all__ = ["FuyuImageProcessor"]

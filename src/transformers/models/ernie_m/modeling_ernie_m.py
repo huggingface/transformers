@@ -1061,6 +1061,7 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
             attentions=result.attentions,
         )
 
+
 __all__ = [
     "ErnieMPreTrainedModel",
     "ErnieMModel",
@@ -1068,5 +1069,5 @@ __all__ = [
     "ErnieMForMultipleChoice",
     "ErnieMForTokenClassification",
     "ErnieMForQuestionAnswering",
-    "ErnieMForInformationExtraction"
+    "ErnieMForInformationExtraction",
 ]

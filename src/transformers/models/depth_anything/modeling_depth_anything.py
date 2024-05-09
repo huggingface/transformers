@@ -465,7 +465,5 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "DepthAnythingPreTrainedModel",
-    "DepthAnythingForDepthEstimation"
-]
+
+__all__ = ["DepthAnythingPreTrainedModel", "DepthAnythingForDepthEstimation"]

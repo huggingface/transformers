@@ -1571,9 +1571,5 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-__all__ = [
-    "ChineseCLIPPreTrainedModel",
-    "ChineseCLIPTextModel",
-    "ChineseCLIPVisionModel",
-    "ChineseCLIPModel"
-]
+
+__all__ = ["ChineseCLIPPreTrainedModel", "ChineseCLIPTextModel", "ChineseCLIPVisionModel", "ChineseCLIPModel"]

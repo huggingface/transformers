@@ -176,6 +176,5 @@ class MusicgenMelodyProcessor(ProcessorMixin):
 
         return inputs
 
-__all__ = [
-    "MusicgenMelodyProcessor"
-]
+
+__all__ = ["MusicgenMelodyProcessor"]

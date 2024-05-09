@@ -1568,6 +1568,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFAlbertPreTrainedModel",
     "TFAlbertModel",
@@ -1576,5 +1577,5 @@ __all__ = [
     "TFAlbertForSequenceClassification",
     "TFAlbertForTokenClassification",
     "TFAlbertForQuestionAnswering",
-    "TFAlbertForMultipleChoice"
+    "TFAlbertForMultipleChoice",
 ]

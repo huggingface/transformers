@@ -1246,11 +1246,12 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "BloomPreTrainedModel",
     "BloomModel",
     "BloomForCausalLM",
     "BloomForSequenceClassification",
     "BloomForTokenClassification",
-    "BloomForQuestionAnswering"
+    "BloomForQuestionAnswering",
 ]

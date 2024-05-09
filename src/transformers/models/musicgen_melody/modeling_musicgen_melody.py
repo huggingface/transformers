@@ -2812,10 +2812,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         return model_kwargs
 
+
 __all__ = [
     "MusicgenMelodyPreTrainedModel",
     "MusicgenMelodyDecoder",
     "MusicgenMelodyModel",
     "MusicgenMelodyForCausalLM",
-    "MusicgenMelodyForConditionalGeneration"
+    "MusicgenMelodyForConditionalGeneration",
 ]

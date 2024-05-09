@@ -142,6 +142,5 @@ class VipLlavaConfig(PretrainedConfig):
             output.pop("_vocab_size", None)
             return output
 
-__all__ = [
-    "VipLlavaConfig"
-]
+
+__all__ = ["VipLlavaConfig"]

@@ -1581,6 +1581,5 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "GroundingDinoImageProcessor"
-]
+
+__all__ = ["GroundingDinoImageProcessor"]

@@ -942,8 +942,5 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
                 v_state = v_state.index_select(0, beam_idx.to(v_state.device))
         return None
 
-__all__ = [
-    "RecurrentGemmaPreTrainedModel",
-    "RecurrentGemmaModel",
-    "RecurrentGemmaForCausalLM"
-]
+
+__all__ = ["RecurrentGemmaPreTrainedModel", "RecurrentGemmaModel", "RecurrentGemmaForCausalLM"]

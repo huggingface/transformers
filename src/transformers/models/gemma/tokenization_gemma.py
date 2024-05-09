@@ -328,6 +328,5 @@ class GemmaTokenizer(PreTrainedTokenizer):
 
         return output
 
-__all__ = [
-    "GemmaTokenizer"
-]
+
+__all__ = ["GemmaTokenizer"]

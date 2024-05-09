@@ -288,6 +288,5 @@ class BarkProcessor(ProcessorMixin):
 
         return encoded_text
 
-__all__ = [
-    "BarkProcessor"
-]
+
+__all__ = ["BarkProcessor"]

@@ -683,8 +683,5 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_sizes[-1]])
 
-__all__ = [
-    "TFConvNextV2PreTrainedModel",
-    "TFConvNextV2Model",
-    "TFConvNextV2ForImageClassification"
-]
+
+__all__ = ["TFConvNextV2PreTrainedModel", "TFConvNextV2Model", "TFConvNextV2ForImageClassification"]

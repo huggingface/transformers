@@ -139,6 +139,5 @@ class CanineConfig(PretrainedConfig):
         self.num_hash_buckets = num_hash_buckets
         self.local_transformer_stride = local_transformer_stride
 
-__all__ = [
-    "CanineConfig"
-]
+
+__all__ = ["CanineConfig"]

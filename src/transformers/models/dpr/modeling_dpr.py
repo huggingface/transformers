@@ -665,6 +665,7 @@ class DPRReader(DPRPretrainedReader):
             return_dict=return_dict,
         )
 
+
 __all__ = [
     "DPRPreTrainedModel",
     "DPRPretrainedContextEncoder",
@@ -673,5 +674,5 @@ __all__ = [
     "DPRContextEncoder",
     "DPRQuestionEncoder",
     "DPRReader",
-    "DPRReaderOutput"
+    "DPRReaderOutput",
 ]

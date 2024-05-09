@@ -250,6 +250,5 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
 
         return (vocab_file, merges_file)
 
-__all__ = [
-    "Speech2Text2Tokenizer"
-]
+
+__all__ = ["Speech2Text2Tokenizer"]

@@ -467,6 +467,5 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return template
 
-__all__ = [
-    "LlamaTokenizer"
-]
+
+__all__ = ["LlamaTokenizer"]

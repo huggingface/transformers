@@ -1387,6 +1387,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "DistilBertPreTrainedModel",
     "DistilBertModel",
@@ -1394,5 +1395,5 @@ __all__ = [
     "DistilBertForSequenceClassification",
     "DistilBertForQuestionAnswering",
     "DistilBertForTokenClassification",
-    "DistilBertForMultipleChoice"
+    "DistilBertForMultipleChoice",
 ]

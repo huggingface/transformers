@@ -275,6 +275,5 @@ class OneFormerConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "OneFormerConfig"
-]
+
+__all__ = ["OneFormerConfig"]

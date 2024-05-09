@@ -816,8 +816,5 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "TimesformerPreTrainedModel",
-    "TimesformerModel",
-    "TimesformerForVideoClassification"
-]
+
+__all__ = ["TimesformerPreTrainedModel", "TimesformerModel", "TimesformerForVideoClassification"]

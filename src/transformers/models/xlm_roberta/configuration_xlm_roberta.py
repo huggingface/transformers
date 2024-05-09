@@ -156,7 +156,5 @@ class XLMRobertaOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "XLMRobertaConfig",
-    "XLMRobertaOnnxConfig"
-]
+
+__all__ = ["XLMRobertaConfig", "XLMRobertaOnnxConfig"]

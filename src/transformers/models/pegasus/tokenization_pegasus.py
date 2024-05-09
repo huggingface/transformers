@@ -286,6 +286,5 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "PegasusTokenizer"
-]
+
+__all__ = ["PegasusTokenizer"]

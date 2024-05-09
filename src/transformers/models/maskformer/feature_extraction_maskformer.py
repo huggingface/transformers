@@ -34,6 +34,5 @@ class MaskFormerFeatureExtractor(MaskFormerImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "MaskFormerFeatureExtractor"
-]
+
+__all__ = ["MaskFormerFeatureExtractor"]

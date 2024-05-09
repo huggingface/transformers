@@ -421,7 +421,5 @@ class SpeechT5HifiGanConfig(PretrainedConfig):
         self.normalize_before = normalize_before
         super().__init__(**kwargs)
 
-__all__ = [
-    "SpeechT5Config",
-    "SpeechT5HifiGanConfig"
-]
+
+__all__ = ["SpeechT5Config", "SpeechT5HifiGanConfig"]

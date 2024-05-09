@@ -847,8 +847,5 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "XGLMPreTrainedModel",
-    "XGLMModel",
-    "XGLMForCausalLM"
-]
+
+__all__ = ["XGLMPreTrainedModel", "XGLMModel", "XGLMForCausalLM"]

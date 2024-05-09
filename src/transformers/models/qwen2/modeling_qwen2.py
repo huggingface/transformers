@@ -1483,3 +1483,5 @@ __all__ = [
     "Qwen2ForSequenceClassification",
     "Qwen2ForTokenClassification"
 ]
+
+__all__ = ["Qwen2PreTrainedModel", "Qwen2Model", "Qwen2ForCausalLM", "Qwen2ForSequenceClassification"]

@@ -2688,11 +2688,12 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             attentions=reformer_outputs.attentions,
         )
 
+
 __all__ = [
     "ReformerPreTrainedModel",
     "ReformerModel",
     "ReformerModelWithLMHead",
     "ReformerForMaskedLM",
     "ReformerForSequenceClassification",
-    "ReformerForQuestionAnswering"
+    "ReformerForQuestionAnswering",
 ]

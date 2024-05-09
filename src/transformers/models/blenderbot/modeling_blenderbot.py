@@ -1615,9 +1615,10 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "BlenderbotPreTrainedModel",
     "BlenderbotModel",
     "BlenderbotForConditionalGeneration",
-    "BlenderbotForCausalLM"
+    "BlenderbotForCausalLM",
 ]

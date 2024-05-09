@@ -198,7 +198,5 @@ class ImageGPTOnnxConfig(OnnxConfig):
 
         return inputs
 
-__all__ = [
-    "ImageGPTConfig",
-    "ImageGPTOnnxConfig"
-]
+
+__all__ = ["ImageGPTConfig", "ImageGPTOnnxConfig"]

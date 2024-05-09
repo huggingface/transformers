@@ -175,7 +175,5 @@ class UMT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     def atol_for_validation(self) -> float:
         return 5e-4
 
-__all__ = [
-    "UMT5Config",
-    "UMT5OnnxConfig"
-]
+
+__all__ = ["UMT5Config", "UMT5OnnxConfig"]

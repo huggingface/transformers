@@ -907,8 +907,5 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
-__all__ = [
-    "TFViTPreTrainedModel",
-    "TFViTModel",
-    "TFViTForImageClassification"
-]
+
+__all__ = ["TFViTPreTrainedModel", "TFViTModel", "TFViTForImageClassification"]

@@ -1542,6 +1542,7 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFRoFormerPreTrainedModel",
     "TFRoFormerModel",
@@ -1550,5 +1551,5 @@ __all__ = [
     "TFRoFormerForSequenceClassification",
     "TFRoFormerForMultipleChoice",
     "TFRoFormerForTokenClassification",
-    "TFRoFormerForQuestionAnswering"
+    "TFRoFormerForQuestionAnswering",
 ]

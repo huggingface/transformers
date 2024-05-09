@@ -140,6 +140,5 @@ class LukeConfig(PretrainedConfig):
         self.use_entity_aware_attention = use_entity_aware_attention
         self.classifier_dropout = classifier_dropout
 
-__all__ = [
-    "LukeConfig"
-]
+
+__all__ = ["LukeConfig"]

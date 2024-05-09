@@ -1517,8 +1517,5 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "DbrxPreTrainedModel",
-    "DbrxModel",
-    "DbrxForCausalLM"
-]
+
+__all__ = ["DbrxPreTrainedModel", "DbrxModel", "DbrxForCausalLM"]

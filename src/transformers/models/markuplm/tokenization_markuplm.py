@@ -1446,6 +1446,5 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-__all__ = [
-    "MarkupLMTokenizer"
-]
+
+__all__ = ["MarkupLMTokenizer"]

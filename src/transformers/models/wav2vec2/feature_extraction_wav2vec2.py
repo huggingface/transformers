@@ -241,6 +241,5 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "Wav2Vec2FeatureExtractor"
-]
+
+__all__ = ["Wav2Vec2FeatureExtractor"]

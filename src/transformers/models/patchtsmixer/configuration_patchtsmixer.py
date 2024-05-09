@@ -233,6 +233,5 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         super().__init__(**kwargs)
 
-__all__ = [
-    "PatchTSMixerConfig"
-]
+
+__all__ = ["PatchTSMixerConfig"]

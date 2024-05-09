@@ -191,6 +191,5 @@ class PLBartOnnxConfig(OnnxConfigWithPast):
                 ]
             )
 
-__all__ = [
-    "PLBartConfig"
-]
+
+__all__ = ["PLBartConfig"]

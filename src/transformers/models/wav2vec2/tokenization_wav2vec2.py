@@ -917,7 +917,5 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         return (vocab_file,)
 
-__all__ = [
-    "Wav2Vec2CTCTokenizer",
-    "Wav2Vec2Tokenizer"
-]
+
+__all__ = ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"]

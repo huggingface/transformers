@@ -505,6 +505,5 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
-__all__ = [
-    "CodeLlamaTokenizer"
-]
+
+__all__ = ["CodeLlamaTokenizer"]

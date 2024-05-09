@@ -1860,9 +1860,5 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.classifier_proj_size])
 
-__all__ = [
-    "TFWav2Vec2PreTrainedModel",
-    "TFWav2Vec2Model",
-    "TFWav2Vec2ForCTC",
-    "TFWav2Vec2ForSequenceClassification"
-]
+
+__all__ = ["TFWav2Vec2PreTrainedModel", "TFWav2Vec2Model", "TFWav2Vec2ForCTC", "TFWav2Vec2ForSequenceClassification"]

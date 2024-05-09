@@ -311,6 +311,5 @@ class Wav2Vec2BertConfig(PretrainedConfig):
             ratio = ratio * (self.adapter_stride**self.num_adapter_layers)
         return ratio
 
-__all__ = [
-    "Wav2Vec2BertConfig"
-]
+
+__all__ = ["Wav2Vec2BertConfig"]

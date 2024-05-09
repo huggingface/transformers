@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
-@register(backends=('tokenizers',))
+@register(backends=("tokenizers",))
 class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -44,7 +44,7 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
-@register(backends=('tokenizers',))
+@register(backends=("tokenizers",))
 class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
@@ -303,7 +303,7 @@ class CustomDPRReaderTokenizerMixin:
         return chosen_span_intervals
 
 
-@register(backends=('tokenizers',))
+@register(backends=("tokenizers",))
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
 class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     r"""

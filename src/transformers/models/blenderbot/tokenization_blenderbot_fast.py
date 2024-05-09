@@ -305,6 +305,5 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             "{{ eos_token }}"
         )
 
-__all__ = [
-    "BlenderbotTokenizerFast"
-]
+
+__all__ = ["BlenderbotTokenizerFast"]

@@ -899,6 +899,5 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         return model
 
-__all__ = [
-    "FlaxEncoderDecoderModel"
-]
+
+__all__ = ["FlaxEncoderDecoderModel"]

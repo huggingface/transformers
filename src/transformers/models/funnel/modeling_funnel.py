@@ -1604,6 +1604,7 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_funnel",
     "FunnelPreTrainedModel",
@@ -1614,5 +1615,5 @@ __all__ = [
     "FunnelForSequenceClassification",
     "FunnelForMultipleChoice",
     "FunnelForTokenClassification",
-    "FunnelForQuestionAnswering"
+    "FunnelForQuestionAnswering",
 ]

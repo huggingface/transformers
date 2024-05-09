@@ -1787,9 +1787,10 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             "use_cache": use_cache,
         }
 
+
 __all__ = [
     "Pix2StructPreTrainedModel",
     "Pix2StructVisionModel",
     "Pix2StructTextModel",
-    "Pix2StructForConditionalGeneration"
+    "Pix2StructForConditionalGeneration",
 ]

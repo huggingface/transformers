@@ -1448,3 +1448,5 @@ __all__ = [
     "GemmaForSequenceClassification",
     "GemmaForTokenClassification"
 ]
+
+__all__ = ["GemmaPreTrainedModel", "GemmaModel", "GemmaForCausalLM", "GemmaForSequenceClassification"]

@@ -22,7 +22,6 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-
 @register()
 class LlavaNextConfig(PretrainedConfig):
     r"""
@@ -142,6 +141,5 @@ class LlavaNextConfig(PretrainedConfig):
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
-__all__ = [
-    "LlavaNextConfig"
-]
+
+__all__ = ["LlavaNextConfig"]

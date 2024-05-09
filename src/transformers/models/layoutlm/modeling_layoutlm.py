@@ -1381,11 +1381,12 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LayoutLMPreTrainedModel",
     "LayoutLMModel",
     "LayoutLMForMaskedLM",
     "LayoutLMForSequenceClassification",
     "LayoutLMForTokenClassification",
-    "LayoutLMForQuestionAnswering"
+    "LayoutLMForQuestionAnswering",
 ]

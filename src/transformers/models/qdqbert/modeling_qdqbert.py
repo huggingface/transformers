@@ -1748,6 +1748,7 @@ class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_qdqbert",
     "QDQBertPreTrainedModel",
@@ -1758,5 +1759,5 @@ __all__ = [
     "QDQBertForSequenceClassification",
     "QDQBertForMultipleChoice",
     "QDQBertForTokenClassification",
-    "QDQBertForQuestionAnswering"
+    "QDQBertForQuestionAnswering",
 ]

@@ -125,6 +125,5 @@ class Pop2PianoConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Pop2PianoConfig"
-]
+
+__all__ = ["Pop2PianoConfig"]

@@ -135,6 +135,5 @@ class MraConfig(PretrainedConfig):
         self.initial_prior_first_n_blocks = initial_prior_first_n_blocks
         self.initial_prior_diagonal_n_blocks = initial_prior_diagonal_n_blocks
 
-__all__ = [
-    "MraConfig"
-]
+
+__all__ = ["MraConfig"]

@@ -803,8 +803,4 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
-__all__ = [
-    "FlaxXGLMPreTrainedModel",
-    "FlaxXGLMModel",
-    "FlaxXGLMForCausalLM"
-]
+__all__ = ["FlaxXGLMPreTrainedModel", "FlaxXGLMModel", "FlaxXGLMForCausalLM"]

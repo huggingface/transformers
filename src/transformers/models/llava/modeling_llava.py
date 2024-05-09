@@ -573,7 +573,5 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
 
-__all__ = [
-    "LlavaPreTrainedModel",
-    "LlavaForConditionalGeneration"
-]
+
+__all__ = ["LlavaPreTrainedModel", "LlavaForConditionalGeneration"]

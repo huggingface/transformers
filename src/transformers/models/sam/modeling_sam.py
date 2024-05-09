@@ -1415,7 +1415,5 @@ class SamModel(SamPreTrainedModel):
             mask_decoder_attentions=mask_decoder_attentions,
         )
 
-__all__ = [
-    "SamPreTrainedModel",
-    "SamModel"
-]
+
+__all__ = ["SamPreTrainedModel", "SamModel"]

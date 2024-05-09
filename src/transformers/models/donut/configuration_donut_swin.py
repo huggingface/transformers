@@ -133,6 +133,5 @@ class DonutSwinConfig(PretrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
 
-__all__ = [
-    "DonutSwinConfig"
-]
+
+__all__ = ["DonutSwinConfig"]

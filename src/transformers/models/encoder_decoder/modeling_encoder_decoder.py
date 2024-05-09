@@ -693,6 +693,5 @@ class EncoderDecoderModel(PreTrainedModel):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
 
-__all__ = [
-    "EncoderDecoderModel"
-]
+
+__all__ = ["EncoderDecoderModel"]

@@ -227,6 +227,5 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )
 
-__all__ = [
-    "TimeSeriesTransformerConfig"
-]
+
+__all__ = ["TimeSeriesTransformerConfig"]

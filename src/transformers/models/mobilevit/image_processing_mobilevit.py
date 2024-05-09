@@ -494,6 +494,5 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         return semantic_segmentation
 
-__all__ = [
-    "MobileViTImageProcessor"
-]
+
+__all__ = ["MobileViTImageProcessor"]

@@ -1461,9 +1461,5 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             with tf.name_scope(self.clip.name):
                 self.clip.build(None)
 
-__all__ = [
-    "TFCLIPPreTrainedModel",
-    "TFCLIPTextModel",
-    "TFCLIPVisionModel",
-    "TFCLIPModel"
-]
+
+__all__ = ["TFCLIPPreTrainedModel", "TFCLIPTextModel", "TFCLIPVisionModel", "TFCLIPModel"]

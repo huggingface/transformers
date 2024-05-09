@@ -198,7 +198,5 @@ class LayoutLMOnnxConfig(OnnxConfig):
         input_dict["bbox"] = torch.tensor([*[box] * seq_length]).tile(batch_size, 1, 1)
         return input_dict
 
-__all__ = [
-    "LayoutLMConfig",
-    "LayoutLMOnnxConfig"
-]
+
+__all__ = ["LayoutLMConfig", "LayoutLMOnnxConfig"]

@@ -211,7 +211,5 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
 
-__all__ = [
-    "VisionEncoderDecoderConfig",
-    "VisionEncoderDecoderOnnxConfig"
-]
+
+__all__ = ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]

@@ -145,6 +145,5 @@ class EsmTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.all_tokens)
 
-__all__ = [
-    "EsmTokenizer"
-]
+
+__all__ = ["EsmTokenizer"]

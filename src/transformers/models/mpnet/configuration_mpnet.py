@@ -114,6 +114,5 @@ class MPNetConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.relative_attention_num_buckets = relative_attention_num_buckets
 
-__all__ = [
-    "MPNetConfig"
-]
+
+__all__ = ["MPNetConfig"]

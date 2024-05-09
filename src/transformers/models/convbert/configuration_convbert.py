@@ -159,7 +159,5 @@ class ConvBertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "ConvBertConfig",
-    "ConvBertOnnxConfig"
-]
+
+__all__ = ["ConvBertConfig", "ConvBertOnnxConfig"]

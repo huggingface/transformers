@@ -1430,11 +1430,12 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "GPTNeoXPreTrainedModel",
     "GPTNeoXModel",
     "GPTNeoXForCausalLM",
     "GPTNeoXForSequenceClassification",
     "GPTNeoXForTokenClassification",
-    "GPTNeoXForQuestionAnswering"
+    "GPTNeoXForQuestionAnswering",
 ]

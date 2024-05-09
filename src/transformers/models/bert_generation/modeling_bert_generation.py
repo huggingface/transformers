@@ -1024,9 +1024,10 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "load_tf_weights_in_bert_generation",
     "BertGenerationPreTrainedModel",
     "BertGenerationEncoder",
-    "BertGenerationDecoder"
+    "BertGenerationDecoder",
 ]

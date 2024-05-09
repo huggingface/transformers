@@ -1348,6 +1348,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFMPNetPreTrainedModel",
     "TFMPNetModel",
@@ -1355,5 +1356,5 @@ __all__ = [
     "TFMPNetForSequenceClassification",
     "TFMPNetForMultipleChoice",
     "TFMPNetForTokenClassification",
-    "TFMPNetForQuestionAnswering"
+    "TFMPNetForQuestionAnswering",
 ]

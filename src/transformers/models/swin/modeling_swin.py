@@ -1406,10 +1406,11 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "SwinPreTrainedModel",
     "SwinModel",
     "SwinForMaskedImageModeling",
     "SwinForImageClassification",
-    "SwinBackbone"
+    "SwinBackbone",
 ]

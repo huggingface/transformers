@@ -363,6 +363,5 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         return input_features
 
-__all__ = [
-    "ClapFeatureExtractor"
-]
+
+__all__ = ["ClapFeatureExtractor"]

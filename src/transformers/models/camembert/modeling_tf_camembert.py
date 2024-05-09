@@ -1797,6 +1797,7 @@ class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelin
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build(None)
 
+
 __all__ = [
     "TFCamembertPreTrainedModel",
     "TFCamembertModel",
@@ -1805,5 +1806,5 @@ __all__ = [
     "TFCamembertForTokenClassification",
     "TFCamembertForMultipleChoice",
     "TFCamembertForQuestionAnswering",
-    "TFCamembertForCausalLM"
+    "TFCamembertForCausalLM",
 ]

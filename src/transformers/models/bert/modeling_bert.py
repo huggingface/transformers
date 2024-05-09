@@ -2032,6 +2032,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_bert",
     "BertPreTrainedModel",
@@ -2043,5 +2044,5 @@ __all__ = [
     "BertForSequenceClassification",
     "BertForMultipleChoice",
     "BertForTokenClassification",
-    "BertForQuestionAnswering"
+    "BertForQuestionAnswering",
 ]

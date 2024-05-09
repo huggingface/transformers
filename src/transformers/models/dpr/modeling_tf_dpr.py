@@ -796,11 +796,12 @@ class TFDPRReader(TFDPRPretrainedReader):
             with tf.name_scope(self.span_predictor.name):
                 self.span_predictor.build(None)
 
+
 __all__ = [
     "TFDPRPretrainedContextEncoder",
     "TFDPRPretrainedQuestionEncoder",
     "TFDPRPretrainedReader",
     "TFDPRContextEncoder",
     "TFDPRQuestionEncoder",
-    "TFDPRReader"
+    "TFDPRReader",
 ]

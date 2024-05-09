@@ -44,6 +44,5 @@ class DetrFeatureExtractor(DetrImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "DetrFeatureExtractor"
-]
+
+__all__ = ["DetrFeatureExtractor"]

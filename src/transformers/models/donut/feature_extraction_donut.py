@@ -34,6 +34,5 @@ class DonutFeatureExtractor(DonutImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "DonutFeatureExtractor"
-]
+
+__all__ = ["DonutFeatureExtractor"]

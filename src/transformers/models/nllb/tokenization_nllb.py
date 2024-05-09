@@ -434,6 +434,5 @@ class NllbTokenizer(PreTrainedTokenizer):
             self.prefix_tokens = [self.cur_lang_code]
             self.suffix_tokens = [self.eos_token_id]
 
-__all__ = [
-    "NllbTokenizer"
-]
+
+__all__ = ["NllbTokenizer"]

@@ -414,6 +414,5 @@ class SeamlessM4TConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "SeamlessM4TConfig"
-]
+
+__all__ = ["SeamlessM4TConfig"]

@@ -1606,8 +1606,5 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         else:
             return (tf_weight,)
 
-__all__ = [
-    "TFSpeech2TextPreTrainedModel",
-    "TFSpeech2TextModel",
-    "TFSpeech2TextForConditionalGeneration"
-]
+
+__all__ = ["TFSpeech2TextPreTrainedModel", "TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]

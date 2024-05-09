@@ -229,6 +229,5 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         return results
 
-__all__ = [
-    "GroundingDinoProcessor"
-]
+
+__all__ = ["GroundingDinoProcessor"]

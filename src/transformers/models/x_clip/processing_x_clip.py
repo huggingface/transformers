@@ -149,6 +149,5 @@ class XCLIPProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "XCLIPProcessor"
-]
+
+__all__ = ["XCLIPProcessor"]

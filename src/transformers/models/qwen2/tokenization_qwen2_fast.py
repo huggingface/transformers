@@ -135,6 +135,5 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-__all__ = [
-    "Qwen2TokenizerFast"
-]
+
+__all__ = ["Qwen2TokenizerFast"]

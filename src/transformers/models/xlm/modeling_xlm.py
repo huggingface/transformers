@@ -1269,6 +1269,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "XLMPreTrainedModel",
     "XLMModel",
@@ -1277,5 +1278,5 @@ __all__ = [
     "XLMForQuestionAnsweringSimple",
     "XLMForQuestionAnswering",
     "XLMForTokenClassification",
-    "XLMForMultipleChoice"
+    "XLMForMultipleChoice",
 ]

@@ -3090,11 +3090,12 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "BigBirdPegasusPreTrainedModel",
     "BigBirdPegasusModel",
     "BigBirdPegasusForConditionalGeneration",
     "BigBirdPegasusForSequenceClassification",
     "BigBirdPegasusForQuestionAnswering",
-    "BigBirdPegasusForCausalLM"
+    "BigBirdPegasusForCausalLM",
 ]

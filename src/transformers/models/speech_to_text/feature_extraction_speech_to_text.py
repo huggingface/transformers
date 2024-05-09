@@ -298,6 +298,5 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "Speech2TextFeatureExtractor"
-]
+
+__all__ = ["Speech2TextFeatureExtractor"]

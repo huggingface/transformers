@@ -1341,6 +1341,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_convbert",
     "ConvBertPreTrainedModel",
@@ -1349,5 +1350,5 @@ __all__ = [
     "ConvBertForSequenceClassification",
     "ConvBertForMultipleChoice",
     "ConvBertForTokenClassification",
-    "ConvBertForQuestionAnswering"
+    "ConvBertForQuestionAnswering",
 ]

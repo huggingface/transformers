@@ -1527,5 +1527,5 @@ append_replace_return_docstrings(
 __all__ = [
     "FlaxBlenderbotSmallPreTrainedModel",
     "FlaxBlenderbotSmallModel",
-    "FlaxBlenderbotSmallForConditionalGeneration"
+    "FlaxBlenderbotSmallForConditionalGeneration",
 ]

@@ -1177,7 +1177,9 @@ try:
 except OptionalDependencyNotAvailable:
     from .utils import dummy_torch_objects
 
-    _import_structure["utils.dummy_torch_objects"] = [name for name in dir(dummy_torch_objects) if not name.startswith("_")]
+    _import_structure["utils.dummy_torch_objects"] = [
+        name for name in dir(dummy_torch_objects) if not name.startswith("_")
+    ]
 else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]

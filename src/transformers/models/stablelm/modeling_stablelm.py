@@ -1491,3 +1491,5 @@ __all__ = [
     "StableLmForSequenceClassification",
     "StableLmForTokenClassification"
 ]
+
+__all__ = ["StableLmPreTrainedModel", "StableLmModel", "StableLmForCausalLM", "StableLmForSequenceClassification"]

@@ -203,7 +203,5 @@ class LongformerOnnxConfig(OnnxConfig):
 
         return inputs
 
-__all__ = [
-    "LongformerConfig",
-    "LongformerOnnxConfig"
-]
+
+__all__ = ["LongformerConfig", "LongformerOnnxConfig"]

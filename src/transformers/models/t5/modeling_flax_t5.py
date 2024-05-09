@@ -1802,9 +1802,4 @@ append_replace_return_docstrings(
     FlaxT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
 
-__all__ = [
-    "FlaxT5PreTrainedModel",
-    "FlaxT5Model",
-    "FlaxT5EncoderModel",
-    "FlaxT5ForConditionalGeneration"
-]
+__all__ = ["FlaxT5PreTrainedModel", "FlaxT5Model", "FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration"]

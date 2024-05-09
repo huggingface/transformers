@@ -755,6 +755,5 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
 
-__all__ = [
-    "LlavaNextImageProcessor"
-]
+
+__all__ = ["LlavaNextImageProcessor"]

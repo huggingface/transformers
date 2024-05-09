@@ -1644,9 +1644,5 @@ class RagTokenForGeneration(RagPreTrainedModel):
         loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
         return loss
 
-__all__ = [
-    "RagPreTrainedModel",
-    "RagModel",
-    "RagSequenceForGeneration",
-    "RagTokenForGeneration"
-]
+
+__all__ = ["RagPreTrainedModel", "RagModel", "RagSequenceForGeneration", "RagTokenForGeneration"]

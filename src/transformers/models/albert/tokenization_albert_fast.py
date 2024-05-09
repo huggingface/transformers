@@ -210,6 +210,5 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "AlbertTokenizerFast"
-]
+
+__all__ = ["AlbertTokenizerFast"]

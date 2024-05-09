@@ -273,6 +273,5 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "SuperPointImageProcessor"
-]
+
+__all__ = ["SuperPointImageProcessor"]

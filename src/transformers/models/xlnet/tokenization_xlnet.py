@@ -383,6 +383,5 @@ class XLNetTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "XLNetTokenizer"
-]
+
+__all__ = ["XLNetTokenizer"]

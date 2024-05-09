@@ -1704,11 +1704,12 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
             with tf.name_scope(self.itm_head.name):
                 self.itm_head.build([None, None, self.config.text_config.hidden_size])
 
+
 __all__ = [
     "TFBlipPreTrainedModel",
     "TFBlipVisionModel",
     "TFBlipModel",
     "TFBlipForConditionalGeneration",
     "TFBlipForQuestionAnswering",
-    "TFBlipForImageTextRetrieval"
+    "TFBlipForImageTextRetrieval",
 ]

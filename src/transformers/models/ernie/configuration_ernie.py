@@ -162,7 +162,5 @@ class ErnieOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "ErnieConfig",
-    "ErnieOnnxConfig"
-]
+
+__all__ = ["ErnieConfig", "ErnieOnnxConfig"]

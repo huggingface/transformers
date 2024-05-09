@@ -151,6 +151,5 @@ class GemmaConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "GemmaConfig"
-]
+
+__all__ = ["GemmaConfig"]

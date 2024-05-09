@@ -170,6 +170,5 @@ class ElectraTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-__all__ = [
-    "ElectraTokenizerFast"
-]
+
+__all__ = ["ElectraTokenizerFast"]

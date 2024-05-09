@@ -604,6 +604,5 @@ class XLMTokenizer(PreTrainedTokenizer):
 
         self.sm = sacremoses
 
-__all__ = [
-    "XLMTokenizer"
-]
+
+__all__ = ["XLMTokenizer"]

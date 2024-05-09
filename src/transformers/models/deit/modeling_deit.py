@@ -938,10 +938,11 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "DeiTPreTrainedModel",
     "DeiTModel",
     "DeiTForMaskedImageModeling",
     "DeiTForImageClassification",
-    "DeiTForImageClassificationWithTeacher"
+    "DeiTForImageClassificationWithTeacher",
 ]

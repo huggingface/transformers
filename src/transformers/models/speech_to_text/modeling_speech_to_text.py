@@ -1370,8 +1370,5 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "Speech2TextPreTrainedModel",
-    "Speech2TextModel",
-    "Speech2TextForConditionalGeneration"
-]
+
+__all__ = ["Speech2TextPreTrainedModel", "Speech2TextModel", "Speech2TextForConditionalGeneration"]

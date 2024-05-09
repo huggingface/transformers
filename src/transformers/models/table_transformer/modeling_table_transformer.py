@@ -1923,8 +1923,5 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
 
-__all__ = [
-    "TableTransformerPreTrainedModel",
-    "TableTransformerModel",
-    "TableTransformerForObjectDetection"
-]
+
+__all__ = ["TableTransformerPreTrainedModel", "TableTransformerModel", "TableTransformerForObjectDetection"]

@@ -282,7 +282,5 @@ class M2M100OnnxConfig(OnnxSeq2SeqConfigWithPast):
 
     generate_dummy_inputs = _generate_dummy_inputs_for_default_and_seq2seq_lm
 
-__all__ = [
-    "M2M100Config",
-    "M2M100OnnxConfig"
-]
+
+__all__ = ["M2M100Config", "M2M100OnnxConfig"]

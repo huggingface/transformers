@@ -129,6 +129,5 @@ class DPRConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.position_embedding_type = position_embedding_type
 
-__all__ = [
-    "DPRConfig"
-]
+
+__all__ = ["DPRConfig"]

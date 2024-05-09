@@ -1123,6 +1123,5 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             with tf.name_scope(self.cls.name):
                 self.cls.build(None)
 
-__all__ = [
-    "TFBlipTextModel"
-]
+
+__all__ = ["TFBlipTextModel"]

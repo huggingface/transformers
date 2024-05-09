@@ -823,8 +823,4 @@ append_replace_return_docstrings(
     config_class=RegNetConfig,
 )
 
-__all__ = [
-    "FlaxRegNetPreTrainedModel",
-    "FlaxRegNetModel",
-    "FlaxRegNetForImageClassification"
-]
+__all__ = ["FlaxRegNetPreTrainedModel", "FlaxRegNetModel", "FlaxRegNetForImageClassification"]

@@ -2781,6 +2781,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFLongformerPreTrainedModel",
     "TFLongformerModel",
@@ -2788,5 +2789,5 @@ __all__ = [
     "TFLongformerForQuestionAnswering",
     "TFLongformerForSequenceClassification",
     "TFLongformerForMultipleChoice",
-    "TFLongformerForTokenClassification"
+    "TFLongformerForTokenClassification",
 ]

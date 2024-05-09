@@ -1898,9 +1898,5 @@ class JambaForSequenceClassification(JambaPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "JambaPreTrainedModel",
-    "JambaModel",
-    "JambaForCausalLM",
-    "JambaForSequenceClassification"
-]
+
+__all__ = ["JambaPreTrainedModel", "JambaModel", "JambaForCausalLM", "JambaForSequenceClassification"]

@@ -349,8 +349,5 @@ class BridgeTowerConfig(PretrainedConfig):
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
-__all__ = [
-    "BridgeTowerVisionConfig",
-    "BridgeTowerTextConfig",
-    "BridgeTowerConfig"
-]
+
+__all__ = ["BridgeTowerVisionConfig", "BridgeTowerTextConfig", "BridgeTowerConfig"]

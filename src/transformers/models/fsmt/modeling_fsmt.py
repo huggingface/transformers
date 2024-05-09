@@ -1392,8 +1392,5 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
 
-__all__ = [
-    "PretrainedFSMTModel",
-    "FSMTModel",
-    "FSMTForConditionalGeneration"
-]
+
+__all__ = ["PretrainedFSMTModel", "FSMTModel", "FSMTForConditionalGeneration"]

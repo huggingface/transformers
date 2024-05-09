@@ -167,6 +167,5 @@ class Wav2Vec2Processor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-__all__ = [
-    "Wav2Vec2Processor"
-]
+
+__all__ = ["Wav2Vec2Processor"]

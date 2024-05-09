@@ -118,6 +118,5 @@ class SeamlessM4TProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
 
-__all__ = [
-    "SeamlessM4TProcessor"
-]
+
+__all__ = ["SeamlessM4TProcessor"]

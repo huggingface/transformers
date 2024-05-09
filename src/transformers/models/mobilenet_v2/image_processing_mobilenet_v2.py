@@ -374,6 +374,5 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
 
         return semantic_segmentation
 
-__all__ = [
-    "MobileNetV2ImageProcessor"
-]
+
+__all__ = ["MobileNetV2ImageProcessor"]

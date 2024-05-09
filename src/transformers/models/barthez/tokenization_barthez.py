@@ -287,6 +287,5 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "BarthezTokenizer"
-]
+
+__all__ = ["BarthezTokenizer"]

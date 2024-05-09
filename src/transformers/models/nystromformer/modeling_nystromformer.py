@@ -1119,6 +1119,7 @@ class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "NystromformerPreTrainedModel",
     "NystromformerModel",
@@ -1126,5 +1127,5 @@ __all__ = [
     "NystromformerForSequenceClassification",
     "NystromformerForMultipleChoice",
     "NystromformerForTokenClassification",
-    "NystromformerForQuestionAnswering"
+    "NystromformerForQuestionAnswering",
 ]

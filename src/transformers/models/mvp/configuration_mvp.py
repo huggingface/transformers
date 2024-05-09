@@ -181,6 +181,5 @@ class MvpConfig(PretrainedConfig):
                 "The config can simply be saved and uploaded again to be fixed."
             )
 
-__all__ = [
-    "MvpConfig"
-]
+
+__all__ = ["MvpConfig"]

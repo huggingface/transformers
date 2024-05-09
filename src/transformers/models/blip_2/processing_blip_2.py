@@ -156,6 +156,5 @@ class Blip2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-__all__ = [
-    "Blip2Processor"
-]
+
+__all__ = ["Blip2Processor"]

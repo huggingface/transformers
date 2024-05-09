@@ -2458,10 +2458,11 @@ def _calculate_regression_loss(
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
     return per_example_answer_loss_scaled, large_answer_loss_mask
 
+
 __all__ = [
     "TFTapasPreTrainedModel",
     "TFTapasModel",
     "TFTapasForMaskedLM",
     "TFTapasForQuestionAnswering",
-    "TFTapasForSequenceClassification"
+    "TFTapasForSequenceClassification",
 ]

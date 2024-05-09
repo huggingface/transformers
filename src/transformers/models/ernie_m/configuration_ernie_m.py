@@ -112,6 +112,5 @@ class ErnieMConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.act_dropout = act_dropout
 
-__all__ = [
-    "ErnieMConfig"
-]
+
+__all__ = ["ErnieMConfig"]

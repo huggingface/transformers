@@ -2338,6 +2338,7 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "UniSpeechSatPreTrainedModel",
     "UniSpeechSatModel",
@@ -2345,5 +2346,5 @@ __all__ = [
     "UniSpeechSatForCTC",
     "UniSpeechSatForSequenceClassification",
     "UniSpeechSatForAudioFrameClassification",
-    "UniSpeechSatForXVector"
+    "UniSpeechSatForXVector",
 ]

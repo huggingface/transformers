@@ -1839,6 +1839,7 @@ class ErnieForQuestionAnswering(ErniePreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "ErniePreTrainedModel",
     "ErnieModel",
@@ -1849,5 +1850,5 @@ __all__ = [
     "ErnieForSequenceClassification",
     "ErnieForMultipleChoice",
     "ErnieForTokenClassification",
-    "ErnieForQuestionAnswering"
+    "ErnieForQuestionAnswering",
 ]

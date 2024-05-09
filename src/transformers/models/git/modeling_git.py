@@ -1550,9 +1550,5 @@ class GitForCausalLM(GitPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "GitPreTrainedModel",
-    "GitVisionModel",
-    "GitModel",
-    "GitForCausalLM"
-]
+
+__all__ = ["GitPreTrainedModel", "GitVisionModel", "GitModel", "GitForCausalLM"]

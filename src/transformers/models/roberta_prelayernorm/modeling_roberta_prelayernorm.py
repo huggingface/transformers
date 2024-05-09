@@ -1571,6 +1571,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
 
+
 __all__ = [
     "RobertaPreLayerNormPreTrainedModel",
     "RobertaPreLayerNormModel",
@@ -1579,5 +1580,5 @@ __all__ = [
     "RobertaPreLayerNormForSequenceClassification",
     "RobertaPreLayerNormForMultipleChoice",
     "RobertaPreLayerNormForTokenClassification",
-    "RobertaPreLayerNormForQuestionAnswering"
+    "RobertaPreLayerNormForQuestionAnswering",
 ]

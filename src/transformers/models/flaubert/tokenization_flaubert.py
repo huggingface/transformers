@@ -565,6 +565,5 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
         self.sm = sacremoses
 
-__all__ = [
-    "FlaubertTokenizer"
-]
+
+__all__ = ["FlaubertTokenizer"]

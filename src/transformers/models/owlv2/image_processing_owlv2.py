@@ -629,6 +629,5 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "Owlv2ImageProcessor"
-]
+
+__all__ = ["Owlv2ImageProcessor"]

@@ -154,6 +154,5 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
         super().__init__(**kwargs)
 
-__all__ = [
-    "OpenAIGPTConfig"
-]
+
+__all__ = ["OpenAIGPTConfig"]

@@ -217,6 +217,5 @@ class NllbMoeConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "NllbMoeConfig"
-]
+
+__all__ = ["NllbMoeConfig"]

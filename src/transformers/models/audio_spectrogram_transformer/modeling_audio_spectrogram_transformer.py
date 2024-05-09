@@ -659,8 +659,5 @@ class ASTForAudioClassification(ASTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "ASTPreTrainedModel",
-    "ASTModel",
-    "ASTForAudioClassification"
-]
+
+__all__ = ["ASTPreTrainedModel", "ASTModel", "ASTForAudioClassification"]

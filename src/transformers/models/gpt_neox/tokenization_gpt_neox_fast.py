@@ -239,6 +239,5 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
-__all__ = [
-    "GPTNeoXTokenizerFast"
-]
+
+__all__ = ["GPTNeoXTokenizerFast"]

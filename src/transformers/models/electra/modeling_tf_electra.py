@@ -1772,6 +1772,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFElectraPreTrainedModel",
     "TFElectraModel",
@@ -1780,5 +1781,5 @@ __all__ = [
     "TFElectraForSequenceClassification",
     "TFElectraForMultipleChoice",
     "TFElectraForTokenClassification",
-    "TFElectraForQuestionAnswering"
+    "TFElectraForQuestionAnswering",
 ]

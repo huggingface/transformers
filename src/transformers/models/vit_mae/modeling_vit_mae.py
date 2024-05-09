@@ -1054,8 +1054,5 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "ViTMAEPreTrainedModel",
-    "ViTMAEModel",
-    "ViTMAEForPreTraining"
-]
+
+__all__ = ["ViTMAEPreTrainedModel", "ViTMAEModel", "ViTMAEForPreTraining"]

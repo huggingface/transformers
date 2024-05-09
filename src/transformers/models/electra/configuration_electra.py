@@ -186,7 +186,5 @@ class ElectraOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "ElectraConfig",
-    "ElectraOnnxConfig"
-]
+
+__all__ = ["ElectraConfig", "ElectraOnnxConfig"]

@@ -1642,9 +1642,5 @@ class AlignModel(AlignPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-__all__ = [
-    "AlignPreTrainedModel",
-    "AlignTextModel",
-    "AlignVisionModel",
-    "AlignModel"
-]
+
+__all__ = ["AlignPreTrainedModel", "AlignTextModel", "AlignVisionModel", "AlignModel"]

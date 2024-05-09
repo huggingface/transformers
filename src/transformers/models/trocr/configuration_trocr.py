@@ -144,6 +144,5 @@ class TrOCRConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "TrOCRConfig"
-]
+
+__all__ = ["TrOCRConfig"]

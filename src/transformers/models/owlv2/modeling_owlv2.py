@@ -1741,10 +1741,5 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-__all__ = [
-    "Owlv2PreTrainedModel",
-    "Owlv2TextModel",
-    "Owlv2VisionModel",
-    "Owlv2Model",
-    "Owlv2ForObjectDetection"
-]
+
+__all__ = ["Owlv2PreTrainedModel", "Owlv2TextModel", "Owlv2VisionModel", "Owlv2Model", "Owlv2ForObjectDetection"]

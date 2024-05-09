@@ -161,6 +161,5 @@ class NougatProcessor(ProcessorMixin):
         """
         return self.tokenizer.post_process_generation(*args, **kwargs)
 
-__all__ = [
-    "NougatProcessor"
-]
+
+__all__ = ["NougatProcessor"]

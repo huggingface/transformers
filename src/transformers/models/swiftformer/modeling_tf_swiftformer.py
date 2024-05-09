@@ -866,8 +866,5 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
                 self.dist_head.build(self.config.embed_dims[-1])
         self.built = True
 
-__all__ = [
-    "TFSwiftFormerPreTrainedModel",
-    "TFSwiftFormerModel",
-    "TFSwiftFormerForImageClassification"
-]
+
+__all__ = ["TFSwiftFormerPreTrainedModel", "TFSwiftFormerModel", "TFSwiftFormerForImageClassification"]

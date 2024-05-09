@@ -162,6 +162,5 @@ class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-__all__ = [
-    "FocalNetConfig"
-]
+
+__all__ = ["FocalNetConfig"]

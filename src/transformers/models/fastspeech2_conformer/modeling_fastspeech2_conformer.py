@@ -1685,9 +1685,10 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
 
         return FastSpeech2ConformerWithHifiGanOutput(waveform=waveform, **model_outputs)
 
+
 __all__ = [
     "FastSpeech2ConformerPreTrainedModel",
     "FastSpeech2ConformerModel",
     "FastSpeech2ConformerHifiGan",
-    "FastSpeech2ConformerWithHifiGan"
+    "FastSpeech2ConformerWithHifiGan",
 ]

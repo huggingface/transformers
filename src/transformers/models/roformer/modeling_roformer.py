@@ -1575,6 +1575,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_roformer",
     "RoFormerPreTrainedModel",
@@ -1584,5 +1585,5 @@ __all__ = [
     "RoFormerForSequenceClassification",
     "RoFormerForMultipleChoice",
     "RoFormerForTokenClassification",
-    "RoFormerForQuestionAnswering"
+    "RoFormerForQuestionAnswering",
 ]

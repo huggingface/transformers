@@ -225,6 +225,5 @@ class JambaConfig(PretrainedConfig):
             for i in range(self.num_hidden_layers)
         ]
 
-__all__ = [
-    "JambaConfig"
-]
+
+__all__ = ["JambaConfig"]

@@ -1876,6 +1876,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFFunnelPreTrainedModel",
     "TFFunnelBaseModel",
@@ -1885,5 +1886,5 @@ __all__ = [
     "TFFunnelForSequenceClassification",
     "TFFunnelForMultipleChoice",
     "TFFunnelForTokenClassification",
-    "TFFunnelForQuestionAnswering"
+    "TFFunnelForQuestionAnswering",
 ]

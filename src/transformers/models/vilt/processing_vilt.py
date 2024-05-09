@@ -149,6 +149,5 @@ class ViltProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "ViltProcessor"
-]
+
+__all__ = ["ViltProcessor"]

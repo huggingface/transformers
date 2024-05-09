@@ -1494,10 +1494,11 @@ class PhiForTokenClassification(PhiPreTrainedModel):
             attentions=model_outputs.attentions,
         )
 
+
 __all__ = [
     "PhiPreTrainedModel",
     "PhiModel",
     "PhiForCausalLM",
     "PhiForSequenceClassification",
-    "PhiForTokenClassification"
+    "PhiForTokenClassification",
 ]

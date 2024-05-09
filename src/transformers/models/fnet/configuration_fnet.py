@@ -117,6 +117,5 @@ class FNetConfig(PretrainedConfig):
         self.use_tpu_fourier_optimizations = use_tpu_fourier_optimizations
         self.tpu_short_seq_length = tpu_short_seq_length
 
-__all__ = [
-    "FNetConfig"
-]
+
+__all__ = ["FNetConfig"]

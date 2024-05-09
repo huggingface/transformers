@@ -1008,8 +1008,5 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         else:
             return (tf_weight,)
 
-__all__ = [
-    "TFXGLMPreTrainedModel",
-    "TFXGLMModel",
-    "TFXGLMForCausalLM"
-]
+
+__all__ = ["TFXGLMPreTrainedModel", "TFXGLMModel", "TFXGLMForCausalLM"]

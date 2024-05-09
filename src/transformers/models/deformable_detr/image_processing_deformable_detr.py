@@ -1622,6 +1622,5 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "DeformableDetrImageProcessor"
-]
+
+__all__ = ["DeformableDetrImageProcessor"]

@@ -1577,7 +1577,7 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     return module
 
 
-def register(*, backends=tuple()):
+def register(*, backends=()):
     """
     This method enables two things:
     - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
@@ -1608,7 +1608,7 @@ def define_import_structure(module_path):
             file_content = f.read()
 
         # Remove the .py suffix
-        if module_name.endswith('.py'):
+        if module_name.endswith(".py"):
             module_name = module_name[:-3]
 
         previous_line = ""
@@ -1623,15 +1623,15 @@ def define_import_structure(module_path):
                     backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
                     backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ")]))
                 else:
-                    backends = tuple()
+                    backends = ()
 
                 if backends not in module_requirements:
                     module_requirements[backends] = {}
                 if module_name not in module_requirements[backends]:
                     module_requirements[backends][module_name] = []
 
-                start_index = 6 if line.startswith('class') else 4
-                object_name = line[start_index:].split("(")[0].strip(':')
+                start_index = 6 if line.startswith("class") else 4
+                object_name = line[start_index:].split("(")[0].strip(":")
                 module_requirements[backends][module_name].append(object_name)
             previous_line = line
 

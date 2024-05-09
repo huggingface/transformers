@@ -406,6 +406,5 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
         return (vocab_file,)
 
-__all__ = [
-    "ErnieMTokenizer"
-]
+
+__all__ = ["ErnieMTokenizer"]

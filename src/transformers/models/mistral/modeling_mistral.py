@@ -1548,3 +1548,5 @@ __all__ = [
     "MistralForSequenceClassification",
     "MistralForTokenClassification"
 ]
+
+__all__ = ["MistralPreTrainedModel", "MistralModel", "MistralForCausalLM", "MistralForSequenceClassification"]

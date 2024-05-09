@@ -92,6 +92,5 @@ class RegNetConfig(PretrainedConfig):
         # always downsample in the first stage
         self.downsample_in_first_stage = True
 
-__all__ = [
-    "RegNetConfig"
-]
+
+__all__ = ["RegNetConfig"]

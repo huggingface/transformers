@@ -363,7 +363,5 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         )
         return model_inputs
 
-__all__ = [
-    "FuyuPreTrainedModel",
-    "FuyuForCausalLM"
-]
+
+__all__ = ["FuyuPreTrainedModel", "FuyuForCausalLM"]

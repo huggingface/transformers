@@ -1787,10 +1787,11 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "PLBartPreTrainedModel",
     "PLBartModel",
     "PLBartForConditionalGeneration",
     "PLBartForSequenceClassification",
-    "PLBartForCausalLM"
+    "PLBartForCausalLM",
 ]

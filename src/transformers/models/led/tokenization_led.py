@@ -450,6 +450,5 @@ class LEDTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-__all__ = [
-    "LEDTokenizer"
-]
+
+__all__ = ["LEDTokenizer"]

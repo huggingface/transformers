@@ -162,6 +162,5 @@ class CLIPSegProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "CLIPSegProcessor"
-]
+
+__all__ = ["CLIPSegProcessor"]

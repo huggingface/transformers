@@ -24,9 +24,10 @@ import numpy as np
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
+from ...utils.import_utils import register
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
-from ...utils.import_utils import register
+
 
 if is_datasets_available():
     from datasets import Dataset, load_dataset, load_from_disk
@@ -675,6 +676,4 @@ class RagRetriever:
             )
 
 
-__all__ = [
-    "RagRetriever"
-]
+__all__ = ["RagRetriever"]

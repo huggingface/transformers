@@ -154,6 +154,5 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-__all__ = [
-    "PvtV2Config"
-]
+
+__all__ = ["PvtV2Config"]

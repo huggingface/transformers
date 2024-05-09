@@ -663,6 +663,5 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(None)
 
-__all__ = [
-    "TFEncoderDecoderModel"
-]
+
+__all__ = ["TFEncoderDecoderModel"]

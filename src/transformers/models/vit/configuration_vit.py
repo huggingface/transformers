@@ -140,7 +140,5 @@ class ViTOnnxConfig(OnnxConfig):
     def atol_for_validation(self) -> float:
         return 1e-4
 
-__all__ = [
-    "ViTConfig",
-    "ViTOnnxConfig"
-]
+
+__all__ = ["ViTConfig", "ViTOnnxConfig"]

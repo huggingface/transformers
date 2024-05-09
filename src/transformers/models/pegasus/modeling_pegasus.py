@@ -1704,9 +1704,5 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "PegasusPreTrainedModel",
-    "PegasusModel",
-    "PegasusForConditionalGeneration",
-    "PegasusForCausalLM"
-]
+
+__all__ = ["PegasusPreTrainedModel", "PegasusModel", "PegasusForConditionalGeneration", "PegasusForCausalLM"]

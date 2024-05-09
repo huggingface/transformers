@@ -1753,9 +1753,5 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "SEWDPreTrainedModel",
-    "SEWDModel",
-    "SEWDForCTC",
-    "SEWDForSequenceClassification"
-]
+
+__all__ = ["SEWDPreTrainedModel", "SEWDModel", "SEWDForCTC", "SEWDForSequenceClassification"]

@@ -34,6 +34,5 @@ class MobileViTFeatureExtractor(MobileViTImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "MobileViTFeatureExtractor"
-]
+
+__all__ = ["MobileViTFeatureExtractor"]

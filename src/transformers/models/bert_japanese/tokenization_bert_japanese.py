@@ -982,8 +982,5 @@ class SentencepieceTokenizer(object):
 
         return new_pieces
 
-__all__ = [
-    "BertJapaneseTokenizer",
-    "CharacterTokenizer",
-    "MecabTokenizer"
-]
+
+__all__ = ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"]

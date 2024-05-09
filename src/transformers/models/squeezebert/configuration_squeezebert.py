@@ -166,7 +166,5 @@ class SqueezeBertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "SqueezeBertConfig",
-    "SqueezeBertOnnxConfig"
-]
+
+__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]

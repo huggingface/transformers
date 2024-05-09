@@ -365,6 +365,5 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-__all__ = [
-    "ClvpTokenizer"
-]
+
+__all__ = ["ClvpTokenizer"]

@@ -2394,11 +2394,12 @@ def _calculate_regression_loss(
 
     return per_example_answer_loss_scaled, large_answer_loss_mask
 
+
 __all__ = [
     "load_tf_weights_in_tapas",
     "TapasPreTrainedModel",
     "TapasModel",
     "TapasForMaskedLM",
     "TapasForQuestionAnswering",
-    "TapasForSequenceClassification"
+    "TapasForSequenceClassification",
 ]
