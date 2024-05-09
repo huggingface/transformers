@@ -484,6 +484,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config_class = EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

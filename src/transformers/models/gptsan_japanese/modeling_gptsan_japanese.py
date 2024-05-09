@@ -920,6 +920,10 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         device = self.position_embeddings.weight.device
         if input_ids is None:
             input_ids = torch.zeros([1, 1]).int().to(device)  # dummy for input_ids was None
+        if inputs_embeds is not None:
+            raise NotImplementedError(
+                "GPTSanJapaneseModel does not use `inputs_embeds`. Make sure to pass in `input_ids` instead."
+            )
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
         pasts_or_spout_value = None

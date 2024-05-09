@@ -26,7 +26,7 @@ specific language governing permissions and limitations under the License.
 始める前に、必要なライブラリがすべてインストールされていることを確認してください：
 
 ```bash
-!pip install transformers datasets
+!pip install transformers datasets evaluate accelerate
 ```
 
 あなたはまた、好きな機械学習フレームワークをインストールする必要があります:

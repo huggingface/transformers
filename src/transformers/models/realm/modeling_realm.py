@@ -368,11 +368,18 @@ class RealmSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Realm
+REALM_SELF_ATTENTION_CLASSES = {
+    "eager": RealmSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Realm,BERT->REALM
 class RealmAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = RealmSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = REALM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = RealmSelfOutput(config)
         self.pruned_heads = set()
 
@@ -788,6 +795,9 @@ class RealmLMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
@@ -1384,6 +1394,7 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(
         REALM_INPUTS_DOCSTRING.format("batch_size, num_candidates, sequence_length")
