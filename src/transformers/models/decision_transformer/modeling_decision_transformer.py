@@ -938,9 +938,10 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+
 __all__ = [
     "DecisionTransformerGPT2PreTrainedModel",
     "DecisionTransformerGPT2Model",
     "DecisionTransformerPreTrainedModel",
-    "DecisionTransformerModel"
+    "DecisionTransformerModel",
 ]

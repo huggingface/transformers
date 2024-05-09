@@ -1203,10 +1203,11 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_imagegpt",
     "ImageGPTPreTrainedModel",
     "ImageGPTModel",
     "ImageGPTForCausalImageModeling",
-    "ImageGPTForImageClassification"
+    "ImageGPTForImageClassification",
 ]

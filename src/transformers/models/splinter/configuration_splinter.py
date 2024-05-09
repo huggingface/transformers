@@ -121,6 +121,5 @@ class SplinterConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.question_token_id = question_token_id
 
-__all__ = [
-    "SplinterConfig"
-]
+
+__all__ = ["SplinterConfig"]

@@ -35,8 +35,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_swiftformer import SwiftFormerConfig
 from ...utils.import_utils import register
+from .configuration_swiftformer import SwiftFormerConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -406,7 +407,7 @@ class SwiftFormerEncoder(nn.Module):
         )
 
 
-@register(backends=('torch',))
+@register(backends=("torch",))
 class SwiftFormerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -459,7 +460,7 @@ SWIFTFORMER_INPUTS_DOCSTRING = r"""
     "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
     SWIFTFORMER_START_DOCSTRING,
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class SwiftFormerModel(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig):
         super().__init__(config)
@@ -517,7 +518,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     """,
     SWIFTFORMER_START_DOCSTRING,
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__(config)
@@ -608,8 +609,4 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         )
 
 
-__all__ = [
-    "SwiftFormerModel",
-    "SwiftFormerForImageClassification",
-    "SwiftFormerPreTrainedModel"
-]
+__all__ = ["SwiftFormerModel", "SwiftFormerForImageClassification", "SwiftFormerPreTrainedModel"]

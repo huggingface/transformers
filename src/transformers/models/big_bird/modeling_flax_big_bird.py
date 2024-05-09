@@ -2653,5 +2653,5 @@ __all__ = [
     "FlaxBigBirdForMultipleChoice",
     "FlaxBigBirdForTokenClassification",
     "FlaxBigBirdForQuestionAnswering",
-    "FlaxBigBirdForCausalLM"
+    "FlaxBigBirdForCausalLM",
 ]

@@ -238,6 +238,5 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         return (vocab_file,)
 
-__all__ = [
-    "VitsTokenizer"
-]
+
+__all__ = ["VitsTokenizer"]

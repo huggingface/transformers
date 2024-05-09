@@ -1230,9 +1230,10 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "Data2VecVisionPreTrainedModel",
     "Data2VecVisionModel",
     "Data2VecVisionForImageClassification",
-    "Data2VecVisionForSemanticSegmentation"
+    "Data2VecVisionForSemanticSegmentation",
 ]

@@ -955,7 +955,5 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
-__all__ = [
-    "DonutSwinPreTrainedModel",
-    "DonutSwinModel"
-]
+
+__all__ = ["DonutSwinPreTrainedModel", "DonutSwinModel"]

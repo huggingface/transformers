@@ -1374,10 +1374,11 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "SiglipPreTrainedModel",
     "SiglipTextModel",
     "SiglipVisionModel",
     "SiglipModel",
-    "SiglipForImageClassification"
+    "SiglipForImageClassification",
 ]

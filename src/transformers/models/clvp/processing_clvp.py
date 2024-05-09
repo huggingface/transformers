@@ -92,6 +92,5 @@ class ClvpProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-__all__ = [
-    "ClvpProcessor"
-]
+
+__all__ = ["ClvpProcessor"]

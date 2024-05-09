@@ -135,6 +135,5 @@ class MgpstrConfig(PretrainedConfig):
         self.output_a3_attentions = output_a3_attentions
         self.initializer_range = initializer_range
 
-__all__ = [
-    "MgpstrConfig"
-]
+
+__all__ = ["MgpstrConfig"]

@@ -313,6 +313,5 @@ class BlipImageProcessor(BaseImageProcessor):
 
         return encoded_outputs
 
-__all__ = [
-    "BlipImageProcessor"
-]
+
+__all__ = ["BlipImageProcessor"]

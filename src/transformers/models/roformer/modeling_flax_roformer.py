@@ -1094,5 +1094,5 @@ __all__ = [
     "FlaxRoFormerForSequenceClassification",
     "FlaxRoFormerForMultipleChoice",
     "FlaxRoFormerForTokenClassification",
-    "FlaxRoFormerForQuestionAnswering"
+    "FlaxRoFormerForQuestionAnswering",
 ]

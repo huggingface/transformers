@@ -394,6 +394,5 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         return output
 
-__all__ = [
-    "SpeechT5FeatureExtractor"
-]
+
+__all__ = ["SpeechT5FeatureExtractor"]

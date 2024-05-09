@@ -255,6 +255,5 @@ class Mask2FormerConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Mask2FormerConfig"
-]
+
+__all__ = ["Mask2FormerConfig"]

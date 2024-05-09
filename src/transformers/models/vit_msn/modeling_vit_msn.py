@@ -690,8 +690,5 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "ViTMSNPreTrainedModel",
-    "ViTMSNModel",
-    "ViTMSNForImageClassification"
-]
+
+__all__ = ["ViTMSNPreTrainedModel", "ViTMSNModel", "ViTMSNForImageClassification"]

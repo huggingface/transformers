@@ -1716,9 +1716,5 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
             with tf.name_scope(self.classification_head.name):
                 self.classification_head.build(None)
 
-__all__ = [
-    "TFBartPretrainedModel",
-    "TFBartModel",
-    "TFBartForConditionalGeneration",
-    "TFBartForSequenceClassification"
-]
+
+__all__ = ["TFBartPretrainedModel", "TFBartModel", "TFBartForConditionalGeneration", "TFBartForSequenceClassification"]

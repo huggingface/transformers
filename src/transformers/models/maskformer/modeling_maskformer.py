@@ -1963,8 +1963,5 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             auxiliary_logits=auxiliary_logits,
         )
 
-__all__ = [
-    "MaskFormerPreTrainedModel",
-    "MaskFormerModel",
-    "MaskFormerForInstanceSegmentation"
-]
+
+__all__ = ["MaskFormerPreTrainedModel", "MaskFormerModel", "MaskFormerForInstanceSegmentation"]

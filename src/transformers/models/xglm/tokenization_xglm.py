@@ -297,6 +297,5 @@ class XGLMTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "XGLMTokenizer"
-]
+
+__all__ = ["XGLMTokenizer"]

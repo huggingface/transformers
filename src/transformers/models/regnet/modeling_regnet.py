@@ -446,8 +446,5 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
-__all__ = [
-    "RegNetPreTrainedModel",
-    "RegNetModel",
-    "RegNetForImageClassification"
-]
+
+__all__ = ["RegNetPreTrainedModel", "RegNetModel", "RegNetForImageClassification"]

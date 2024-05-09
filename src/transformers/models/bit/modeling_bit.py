@@ -900,9 +900,5 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
             attentions=None,
         )
 
-__all__ = [
-    "BitPreTrainedModel",
-    "BitModel",
-    "BitForImageClassification",
-    "BitBackbone"
-]
+
+__all__ = ["BitPreTrainedModel", "BitModel", "BitForImageClassification", "BitBackbone"]

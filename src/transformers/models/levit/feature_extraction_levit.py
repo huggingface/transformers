@@ -34,6 +34,5 @@ class LevitFeatureExtractor(LevitImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "LevitFeatureExtractor"
-]
+
+__all__ = ["LevitFeatureExtractor"]

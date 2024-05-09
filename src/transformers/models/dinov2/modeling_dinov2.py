@@ -858,9 +858,5 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
             attentions=outputs.attentions if output_attentions else None,
         )
 
-__all__ = [
-    "Dinov2PreTrainedModel",
-    "Dinov2Model",
-    "Dinov2ForImageClassification",
-    "Dinov2Backbone"
-]
+
+__all__ = ["Dinov2PreTrainedModel", "Dinov2Model", "Dinov2ForImageClassification", "Dinov2Backbone"]

@@ -3441,6 +3441,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
 
         return final_inputs, modality_sizes, inputs_without_pos
 
+
 __all__ = [
     "PerceiverPreTrainedModel",
     "PerceiverModel",
@@ -3450,5 +3451,5 @@ __all__ = [
     "PerceiverForImageClassificationFourier",
     "PerceiverForImageClassificationConvProcessing",
     "PerceiverForOpticalFlow",
-    "PerceiverForMultimodalAutoencoding"
+    "PerceiverForMultimodalAutoencoding",
 ]

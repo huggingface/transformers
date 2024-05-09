@@ -1426,6 +1426,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "CLIPPreTrainedModel",
     "CLIPTextModel",
@@ -1433,5 +1434,5 @@ __all__ = [
     "CLIPModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModelWithProjection",
-    "CLIPForImageClassification"
+    "CLIPForImageClassification",
 ]

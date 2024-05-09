@@ -90,6 +90,5 @@ class TvltProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))
 
-__all__ = [
-    "TvltProcessor"
-]
+
+__all__ = ["TvltProcessor"]

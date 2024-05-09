@@ -220,6 +220,5 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "SpeechT5Tokenizer"
-]
+
+__all__ = ["SpeechT5Tokenizer"]

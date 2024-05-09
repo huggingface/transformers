@@ -127,6 +127,5 @@ class MegatronBertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
 
-__all__ = [
-    "MegatronBertConfig"
-]
+
+__all__ = ["MegatronBertConfig"]

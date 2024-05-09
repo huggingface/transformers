@@ -1393,6 +1393,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_albert",
     "AlbertPreTrainedModel",
@@ -1402,5 +1403,5 @@ __all__ = [
     "AlbertForSequenceClassification",
     "AlbertForTokenClassification",
     "AlbertForQuestionAnswering",
-    "AlbertForMultipleChoice"
+    "AlbertForMultipleChoice",
 ]

@@ -216,6 +216,5 @@ class GraphormerConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "GraphormerConfig"
-]
+
+__all__ = ["GraphormerConfig"]

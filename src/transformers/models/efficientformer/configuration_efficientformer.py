@@ -168,6 +168,5 @@ class EfficientFormerConfig(PretrainedConfig):
         self.image_size = image_size
         self.batch_norm_eps = batch_norm_eps
 
-__all__ = [
-    "EfficientFormerConfig"
-]
+
+__all__ = ["EfficientFormerConfig"]

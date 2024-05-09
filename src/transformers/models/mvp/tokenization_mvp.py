@@ -392,6 +392,5 @@ class MvpTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-__all__ = [
-    "MvpTokenizer"
-]
+
+__all__ = ["MvpTokenizer"]

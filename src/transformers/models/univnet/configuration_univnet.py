@@ -123,6 +123,5 @@ class UnivNetConfig(PretrainedConfig):
         self.leaky_relu_slope = leaky_relu_slope
         super().__init__(**kwargs)
 
-__all__ = [
-    "UnivNetConfig"
-]
+
+__all__ = ["UnivNetConfig"]

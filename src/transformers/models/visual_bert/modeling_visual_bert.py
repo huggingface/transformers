@@ -1598,6 +1598,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "VisualBertPreTrainedModel",
     "VisualBertModel",
@@ -1605,5 +1606,5 @@ __all__ = [
     "VisualBertForMultipleChoice",
     "VisualBertForQuestionAnswering",
     "VisualBertForVisualReasoning",
-    "VisualBertForRegionToPhraseAlignment"
+    "VisualBertForRegionToPhraseAlignment",
 ]

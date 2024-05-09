@@ -1781,5 +1781,5 @@ __all__ = [
     "FlaxMBartModel",
     "FlaxMBartForConditionalGeneration",
     "FlaxMBartForSequenceClassification",
-    "FlaxMBartForQuestionAnswering"
+    "FlaxMBartForQuestionAnswering",
 ]

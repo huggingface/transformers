@@ -345,6 +345,5 @@ class ViTHybridImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "ViTHybridImageProcessor"
-]
+
+__all__ = ["ViTHybridImageProcessor"]

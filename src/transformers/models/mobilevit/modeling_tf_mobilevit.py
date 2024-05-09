@@ -1374,9 +1374,10 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
             with tf.name_scope(self.segmentation_head.name):
                 self.segmentation_head.build(None)
 
+
 __all__ = [
     "TFMobileViTPreTrainedModel",
     "TFMobileViTModel",
     "TFMobileViTForImageClassification",
-    "TFMobileViTForSemanticSegmentation"
+    "TFMobileViTForSemanticSegmentation",
 ]

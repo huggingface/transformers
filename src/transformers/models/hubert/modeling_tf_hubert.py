@@ -1676,8 +1676,5 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build([None, None, self.output_hidden_size])
 
-__all__ = [
-    "TFHubertPreTrainedModel",
-    "TFHubertModel",
-    "TFHubertForCTC"
-]
+
+__all__ = ["TFHubertPreTrainedModel", "TFHubertModel", "TFHubertForCTC"]

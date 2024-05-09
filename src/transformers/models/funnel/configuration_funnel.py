@@ -164,6 +164,5 @@ class FunnelConfig(PretrainedConfig):
     def num_blocks(self, value):
         raise NotImplementedError("This model does not support the setting of `num_blocks`. Please set `block_sizes`.")
 
-__all__ = [
-    "FunnelConfig"
-]
+
+__all__ = ["FunnelConfig"]

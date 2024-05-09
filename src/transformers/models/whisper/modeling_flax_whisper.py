@@ -1704,5 +1704,5 @@ __all__ = [
     "FlaxWhisperPreTrainedModel",
     "FlaxWhisperModel",
     "FlaxWhisperForConditionalGeneration",
-    "FlaxWhisperForAudioClassification"
+    "FlaxWhisperForAudioClassification",
 ]

@@ -191,7 +191,5 @@ class DebertaV2OnnxConfig(OnnxConfig):
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
 
-__all__ = [
-    "DebertaV2Config",
-    "DebertaV2OnnxConfig"
-]
+
+__all__ = ["DebertaV2Config", "DebertaV2OnnxConfig"]

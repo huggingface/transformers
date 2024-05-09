@@ -34,6 +34,5 @@ class GLPNFeatureExtractor(GLPNImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "GLPNFeatureExtractor"
-]
+
+__all__ = ["GLPNFeatureExtractor"]

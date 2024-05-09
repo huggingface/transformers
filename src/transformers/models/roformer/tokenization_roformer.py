@@ -538,6 +538,5 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-__all__ = [
-    "RoFormerTokenizer"
-]
+
+__all__ = ["RoFormerTokenizer"]

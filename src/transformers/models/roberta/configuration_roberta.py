@@ -153,7 +153,5 @@ class RobertaOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "RobertaConfig",
-    "RobertaOnnxConfig"
-]
+
+__all__ = ["RobertaConfig", "RobertaOnnxConfig"]

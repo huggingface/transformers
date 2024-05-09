@@ -175,6 +175,5 @@ class PegasusXConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-__all__ = [
-    "PegasusXConfig"
-]
+
+__all__ = ["PegasusXConfig"]

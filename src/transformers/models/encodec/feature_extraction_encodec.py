@@ -207,6 +207,5 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "EncodecFeatureExtractor"
-]
+
+__all__ = ["EncodecFeatureExtractor"]

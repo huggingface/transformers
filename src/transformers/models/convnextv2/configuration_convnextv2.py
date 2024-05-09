@@ -115,6 +115,5 @@ class ConvNextV2Config(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-__all__ = [
-    "ConvNextV2Config"
-]
+
+__all__ = ["ConvNextV2Config"]

@@ -752,8 +752,4 @@ append_call_sample_docstring(
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
-__all__ = [
-    "FlaxLlamaPreTrainedModel",
-    "FlaxLlamaModel",
-    "FlaxLlamaForCausalLM"
-]
+__all__ = ["FlaxLlamaPreTrainedModel", "FlaxLlamaModel", "FlaxLlamaForCausalLM"]

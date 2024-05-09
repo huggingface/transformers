@@ -358,8 +358,5 @@ class InstructBlipConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "InstructBlipVisionConfig",
-    "InstructBlipQFormerConfig",
-    "InstructBlipConfig"
-]
+
+__all__ = ["InstructBlipVisionConfig", "InstructBlipQFormerConfig", "InstructBlipConfig"]

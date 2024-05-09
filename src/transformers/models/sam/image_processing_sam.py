@@ -1497,6 +1497,5 @@ def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thre
 
     return masks, iou_scores, rle_masks, mask_boxes
 
-__all__ = [
-    "SamImageProcessor"
-]
+
+__all__ = ["SamImageProcessor"]

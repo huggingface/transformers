@@ -152,6 +152,5 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
-__all__ = [
-    "GPT2TokenizerFast"
-]
+
+__all__ = ["GPT2TokenizerFast"]

@@ -342,7 +342,5 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def atol_for_validation(self) -> float:
         return 1e-3
 
-__all__ = [
-    "WhisperConfig",
-    "WhisperOnnxConfig"
-]
+
+__all__ = ["WhisperConfig", "WhisperOnnxConfig"]

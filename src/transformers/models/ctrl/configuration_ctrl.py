@@ -114,6 +114,5 @@ class CTRLConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "CTRLConfig"
-]
+
+__all__ = ["CTRLConfig"]

@@ -1572,9 +1572,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         return outputs
 
+
 __all__ = [
     "InstructBlipPreTrainedModel",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
-    "InstructBlipForConditionalGeneration"
+    "InstructBlipForConditionalGeneration",
 ]

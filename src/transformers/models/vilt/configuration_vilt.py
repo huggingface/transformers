@@ -145,6 +145,5 @@ class ViltConfig(PretrainedConfig):
         self.max_image_length = max_image_length
         self.num_images = num_images
 
-__all__ = [
-    "ViltConfig"
-]
+
+__all__ = ["ViltConfig"]

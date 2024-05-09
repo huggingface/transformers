@@ -1723,9 +1723,5 @@ class MarianForCausalLM(MarianPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "MarianPreTrainedModel",
-    "MarianModel",
-    "MarianMTModel",
-    "MarianForCausalLM"
-]
+
+__all__ = ["MarianPreTrainedModel", "MarianModel", "MarianMTModel", "MarianForCausalLM"]

@@ -347,6 +347,5 @@ class AlbertTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "AlbertTokenizer"
-]
+
+__all__ = ["AlbertTokenizer"]

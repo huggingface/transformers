@@ -1429,10 +1429,11 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "GPTJPreTrainedModel",
     "GPTJModel",
     "GPTJForCausalLM",
     "GPTJForSequenceClassification",
-    "GPTJForQuestionAnswering"
+    "GPTJForQuestionAnswering",
 ]

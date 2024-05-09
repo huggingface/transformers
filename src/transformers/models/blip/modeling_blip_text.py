@@ -951,6 +951,5 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "BlipTextModel"
-]
+
+__all__ = ["BlipTextModel"]

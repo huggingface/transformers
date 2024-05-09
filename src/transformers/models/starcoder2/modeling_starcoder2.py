@@ -1382,9 +1382,10 @@ class Starcoder2ForSequenceClassification(Starcoder2PreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "Starcoder2PreTrainedModel",
     "Starcoder2Model",
     "Starcoder2ForCausalLM",
-    "Starcoder2ForSequenceClassification"
+    "Starcoder2ForSequenceClassification",
 ]

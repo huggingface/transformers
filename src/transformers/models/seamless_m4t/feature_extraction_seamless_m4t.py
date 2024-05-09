@@ -307,6 +307,5 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "SeamlessM4TFeatureExtractor"
-]
+
+__all__ = ["SeamlessM4TFeatureExtractor"]

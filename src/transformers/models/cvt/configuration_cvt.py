@@ -144,6 +144,5 @@ class CvtConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
 
-__all__ = [
-    "CvtConfig"
-]
+
+__all__ = ["CvtConfig"]

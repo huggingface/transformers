@@ -310,9 +310,5 @@ class SamConfig(PretrainedConfig):
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
 
-__all__ = [
-    "SamPromptEncoderConfig",
-    "SamMaskDecoderConfig",
-    "SamVisionConfig",
-    "SamConfig"
-]
+
+__all__ = ["SamPromptEncoderConfig", "SamMaskDecoderConfig", "SamVisionConfig", "SamConfig"]

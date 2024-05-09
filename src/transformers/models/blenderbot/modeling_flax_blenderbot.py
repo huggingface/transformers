@@ -1508,8 +1508,4 @@ append_replace_return_docstrings(
     FlaxBlenderbotForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
 
-__all__ = [
-    "FlaxBlenderbotPreTrainedModel",
-    "FlaxBlenderbotModel",
-    "FlaxBlenderbotForConditionalGeneration"
-]
+__all__ = ["FlaxBlenderbotPreTrainedModel", "FlaxBlenderbotModel", "FlaxBlenderbotForConditionalGeneration"]

@@ -325,6 +325,5 @@ class IdeficsConfig(PretrainedConfig):
         # of this object many attributes have default values and haven't yet been overridden.
         # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
 
-__all__ = [
-    "IdeficsConfig"
-]
+
+__all__ = ["IdeficsConfig"]

@@ -231,6 +231,5 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "BigBirdTokenizerFast"
-]
+
+__all__ = ["BigBirdTokenizerFast"]

@@ -155,6 +155,5 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-__all__ = [
-    "VitDetConfig"
-]
+
+__all__ = ["VitDetConfig"]

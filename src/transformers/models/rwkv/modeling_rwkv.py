@@ -862,8 +862,5 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
             attentions=rwkv_outputs.attentions,
         )
 
-__all__ = [
-    "RwkvPreTrainedModel",
-    "RwkvModel",
-    "RwkvForCausalLM"
-]
+
+__all__ = ["RwkvPreTrainedModel", "RwkvModel", "RwkvForCausalLM"]

@@ -704,9 +704,5 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
             attentions=None,
         )
 
-__all__ = [
-    "PvtV2PreTrainedModel",
-    "PvtV2Model",
-    "PvtV2ForImageClassification",
-    "PvtV2Backbone"
-]
+
+__all__ = ["PvtV2PreTrainedModel", "PvtV2Model", "PvtV2ForImageClassification", "PvtV2Backbone"]

@@ -225,6 +225,5 @@ class OwlViTProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "OwlViTProcessor"
-]
+
+__all__ = ["OwlViTProcessor"]

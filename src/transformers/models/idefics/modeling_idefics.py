@@ -1588,8 +1588,5 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
-__all__ = [
-    "IdeficsPreTrainedModel",
-    "IdeficsModel",
-    "IdeficsForVisionText2Text"
-]
+
+__all__ = ["IdeficsPreTrainedModel", "IdeficsModel", "IdeficsForVisionText2Text"]

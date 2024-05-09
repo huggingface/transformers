@@ -271,6 +271,5 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "MBartTokenizerFast"
-]
+
+__all__ = ["MBartTokenizerFast"]

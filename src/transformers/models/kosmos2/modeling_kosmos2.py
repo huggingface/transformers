@@ -2054,8 +2054,5 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
 
         return output
 
-__all__ = [
-    "Kosmos2PreTrainedModel",
-    "Kosmos2Model",
-    "Kosmos2ForConditionalGeneration"
-]
+
+__all__ = ["Kosmos2PreTrainedModel", "Kosmos2Model", "Kosmos2ForConditionalGeneration"]

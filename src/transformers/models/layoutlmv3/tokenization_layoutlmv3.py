@@ -1462,6 +1462,5 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-__all__ = [
-    "LayoutLMv3Tokenizer"
-]
+
+__all__ = ["LayoutLMv3Tokenizer"]

@@ -503,6 +503,5 @@ class TvpImageProcessor(BaseImageProcessor):
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "TvpImageProcessor"
-]
+
+__all__ = ["TvpImageProcessor"]

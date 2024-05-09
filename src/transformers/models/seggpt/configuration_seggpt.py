@@ -142,6 +142,5 @@ class SegGptConfig(PretrainedConfig):
         self.beta = beta
         self.mlp_dim = int(hidden_size * 4) if mlp_dim is None else mlp_dim
 
-__all__ = [
-    "SegGptConfig"
-]
+
+__all__ = ["SegGptConfig"]

@@ -200,6 +200,5 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "CamembertTokenizerFast"
-]
+
+__all__ = ["CamembertTokenizerFast"]

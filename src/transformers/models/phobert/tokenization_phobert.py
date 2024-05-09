@@ -350,6 +350,5 @@ class PhobertTokenizer(PreTrainedTokenizer):
             word = line[:idx]
             self.encoder[word] = len(self.encoder)
 
-__all__ = [
-    "PhobertTokenizer"
-]
+
+__all__ = ["PhobertTokenizer"]

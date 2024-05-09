@@ -1656,8 +1656,5 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             with tf.name_scope(self.answer_head.name):
                 self.answer_head.build(None)
 
-__all__ = [
-    "TFLxmertPreTrainedModel",
-    "TFLxmertModel",
-    "TFLxmertForPreTraining"
-]
+
+__all__ = ["TFLxmertPreTrainedModel", "TFLxmertModel", "TFLxmertForPreTraining"]

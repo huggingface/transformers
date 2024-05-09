@@ -44,6 +44,5 @@ class YolosFeatureExtractor(YolosImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "YolosFeatureExtractor"
-]
+
+__all__ = ["YolosFeatureExtractor"]

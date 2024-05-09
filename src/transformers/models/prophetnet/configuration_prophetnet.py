@@ -178,6 +178,5 @@ class ProphetNetConfig(PretrainedConfig):
             " `num_decoder_layers`."
         )
 
-__all__ = [
-    "ProphetNetConfig"
-]
+
+__all__ = ["ProphetNetConfig"]

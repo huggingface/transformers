@@ -1575,8 +1575,5 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
 
-__all__ = [
-    "TFPegasusPreTrainedModel",
-    "TFPegasusModel",
-    "TFPegasusForConditionalGeneration"
-]
+
+__all__ = ["TFPegasusPreTrainedModel", "TFPegasusModel", "TFPegasusForConditionalGeneration"]

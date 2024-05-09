@@ -1515,5 +1515,5 @@ __all__ = [
     "FlaxXLMRobertaForMultipleChoice",
     "FlaxXLMRobertaForTokenClassification",
     "FlaxXLMRobertaForQuestionAnswering",
-    "FlaxXLMRobertaForCausalLM"
+    "FlaxXLMRobertaForCausalLM",
 ]

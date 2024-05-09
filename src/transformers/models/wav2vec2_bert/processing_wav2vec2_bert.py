@@ -146,6 +146,5 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-__all__ = [
-    "Wav2Vec2BertProcessor"
-]
+
+__all__ = ["Wav2Vec2BertProcessor"]

@@ -34,6 +34,5 @@ class BeitFeatureExtractor(BeitImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "BeitFeatureExtractor"
-]
+
+__all__ = ["BeitFeatureExtractor"]

@@ -117,6 +117,5 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "ReformerTokenizerFast"
-]
+
+__all__ = ["ReformerTokenizerFast"]

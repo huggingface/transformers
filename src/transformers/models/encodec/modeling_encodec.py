@@ -809,7 +809,5 @@ class EncodecModel(EncodecPreTrainedModel):
 
         return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
 
-__all__ = [
-    "EncodecPreTrainedModel",
-    "EncodecModel"
-]
+
+__all__ = ["EncodecPreTrainedModel", "EncodecModel"]

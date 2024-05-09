@@ -435,6 +435,5 @@ class TvltImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "TvltImageProcessor"
-]
+
+__all__ = ["TvltImageProcessor"]

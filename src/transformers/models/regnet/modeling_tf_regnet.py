@@ -611,8 +611,5 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             with tf.name_scope(self.classifier[1].name):
                 self.classifier[1].build([None, None, None, self.config.hidden_sizes[-1]])
 
-__all__ = [
-    "TFRegNetPreTrainedModel",
-    "TFRegNetModel",
-    "TFRegNetForImageClassification"
-]
+
+__all__ = ["TFRegNetPreTrainedModel", "TFRegNetModel", "TFRegNetForImageClassification"]

@@ -1371,9 +1371,5 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "GemmaPreTrainedModel",
-    "GemmaModel",
-    "GemmaForCausalLM",
-    "GemmaForSequenceClassification"
-]
+
+__all__ = ["GemmaPreTrainedModel", "GemmaModel", "GemmaForCausalLM", "GemmaForSequenceClassification"]

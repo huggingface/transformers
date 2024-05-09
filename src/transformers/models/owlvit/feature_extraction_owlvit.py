@@ -34,6 +34,5 @@ class OwlViTFeatureExtractor(OwlViTImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "OwlViTFeatureExtractor"
-]
+
+__all__ = ["OwlViTFeatureExtractor"]

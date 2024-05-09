@@ -274,6 +274,5 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         else:
             return completion
 
-__all__ = [
-    "CodeGenTokenizerFast"
-]
+
+__all__ = ["CodeGenTokenizerFast"]

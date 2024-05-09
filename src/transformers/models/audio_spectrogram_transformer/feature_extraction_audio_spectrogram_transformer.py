@@ -237,6 +237,5 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__ = [
-    "ASTFeatureExtractor"
-]
+
+__all__ = ["ASTFeatureExtractor"]

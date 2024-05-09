@@ -418,6 +418,5 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         else:
             return completion
 
-__all__ = [
-    "CodeGenTokenizer"
-]
+
+__all__ = ["CodeGenTokenizer"]

@@ -2324,7 +2324,5 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)
 
-__all__ = [
-    "EsmFoldPreTrainedModel",
-    "EsmForProteinFolding"
-]
+
+__all__ = ["EsmFoldPreTrainedModel", "EsmForProteinFolding"]

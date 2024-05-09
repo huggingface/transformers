@@ -478,8 +478,5 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "FastSpeech2ConformerConfig",
-    "FastSpeech2ConformerHifiGanConfig",
-    "FastSpeech2ConformerWithHifiGanConfig"
-]
+
+__all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]

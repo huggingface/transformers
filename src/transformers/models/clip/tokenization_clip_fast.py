@@ -160,6 +160,5 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-__all__ = [
-    "CLIPTokenizerFast"
-]
+
+__all__ = ["CLIPTokenizerFast"]

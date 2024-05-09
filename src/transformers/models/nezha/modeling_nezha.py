@@ -1704,6 +1704,7 @@ class NezhaForQuestionAnswering(NezhaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "NezhaPreTrainedModel",
     "NezhaModel",
@@ -1713,5 +1714,5 @@ __all__ = [
     "NezhaForSequenceClassification",
     "NezhaForMultipleChoice",
     "NezhaForTokenClassification",
-    "NezhaForQuestionAnswering"
+    "NezhaForQuestionAnswering",
 ]

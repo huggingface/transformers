@@ -137,6 +137,5 @@ class XGLMConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "XGLMConfig"
-]
+
+__all__ = ["XGLMConfig"]

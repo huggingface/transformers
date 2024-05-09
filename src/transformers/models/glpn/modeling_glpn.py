@@ -779,8 +779,5 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "GLPNPreTrainedModel",
-    "GLPNModel",
-    "GLPNForDepthEstimation"
-]
+
+__all__ = ["GLPNPreTrainedModel", "GLPNModel", "GLPNForDepthEstimation"]

@@ -355,8 +355,5 @@ class Blip2Config(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Blip2VisionConfig",
-    "Blip2QFormerConfig",
-    "Blip2Config"
-]
+
+__all__ = ["Blip2VisionConfig", "Blip2QFormerConfig", "Blip2Config"]

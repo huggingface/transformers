@@ -1391,9 +1391,5 @@ class MistralForSequenceClassification(MistralPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "MistralPreTrainedModel",
-    "MistralModel",
-    "MistralForCausalLM",
-    "MistralForSequenceClassification"
-]
+
+__all__ = ["MistralPreTrainedModel", "MistralModel", "MistralForCausalLM", "MistralForSequenceClassification"]

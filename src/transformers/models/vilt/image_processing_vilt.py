@@ -506,6 +506,5 @@ class ViltImageProcessor(BaseImageProcessor):
 
         return encoded_outputs
 
-__all__ = [
-    "ViltImageProcessor"
-]
+
+__all__ = ["ViltImageProcessor"]

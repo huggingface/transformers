@@ -833,10 +833,11 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "SegformerPreTrainedModel",
     "SegformerModel",
     "SegformerForImageClassification",
     "SegformerDecodeHead",
-    "SegformerForSemanticSegmentation"
+    "SegformerForSemanticSegmentation",
 ]

@@ -154,6 +154,5 @@ class GPTSanJapaneseConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "GPTSanJapaneseConfig"
-]
+
+__all__ = ["GPTSanJapaneseConfig"]

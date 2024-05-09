@@ -228,7 +228,5 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
     def default_onnx_opset(self) -> int:
         return 13
 
-__all__ = [
-    "CodeGenConfig",
-    "CodeGenOnnxConfig"
-]
+
+__all__ = ["CodeGenConfig", "CodeGenOnnxConfig"]

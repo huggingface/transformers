@@ -4813,11 +4813,12 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "SeamlessM4Tv2PreTrainedModel",
     "SeamlessM4Tv2ForTextToText",
     "SeamlessM4Tv2ForSpeechToText",
     "SeamlessM4Tv2ForTextToSpeech",
     "SeamlessM4Tv2ForSpeechToSpeech",
-    "SeamlessM4Tv2Model"
+    "SeamlessM4Tv2Model",
 ]

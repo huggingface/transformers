@@ -928,7 +928,5 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "Speech2Text2PreTrainedModel",
-    "Speech2Text2ForCausalLM"
-]
+
+__all__ = ["Speech2Text2PreTrainedModel", "Speech2Text2ForCausalLM"]

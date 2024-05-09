@@ -1976,6 +1976,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFMobileBertPreTrainedModel",
     "TFMobileBertModel",
@@ -1985,5 +1986,5 @@ __all__ = [
     "TFMobileBertForSequenceClassification",
     "TFMobileBertForQuestionAnswering",
     "TFMobileBertForMultipleChoice",
-    "TFMobileBertForTokenClassification"
+    "TFMobileBertForTokenClassification",
 ]

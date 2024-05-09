@@ -839,9 +839,5 @@ class ViTForImageClassification(ViTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "ViTPreTrainedModel",
-    "ViTModel",
-    "ViTForMaskedImageModeling",
-    "ViTForImageClassification"
-]
+
+__all__ = ["ViTPreTrainedModel", "ViTModel", "ViTForMaskedImageModeling", "ViTForImageClassification"]

@@ -2012,11 +2012,12 @@ class MvpForCausalLM(MvpPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "MvpPreTrainedModel",
     "MvpModel",
     "MvpForConditionalGeneration",
     "MvpForSequenceClassification",
     "MvpForQuestionAnswering",
-    "MvpForCausalLM"
+    "MvpForCausalLM",
 ]

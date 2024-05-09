@@ -1171,6 +1171,5 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-__all__ = [
-    "LayoutXLMTokenizer"
-]
+
+__all__ = ["LayoutXLMTokenizer"]

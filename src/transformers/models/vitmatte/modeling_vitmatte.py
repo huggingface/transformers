@@ -335,7 +335,5 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "VitMattePreTrainedModel",
-    "VitMatteForImageMatting"
-]
+
+__all__ = ["VitMattePreTrainedModel", "VitMatteForImageMatting"]

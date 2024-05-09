@@ -150,6 +150,5 @@ class DinatConfig(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-__all__ = [
-    "DinatConfig"
-]
+
+__all__ = ["DinatConfig"]

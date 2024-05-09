@@ -1563,10 +1563,11 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LlamaPreTrainedModel",
     "LlamaModel",
     "LlamaForCausalLM",
     "LlamaForSequenceClassification",
-    "LlamaForQuestionAnswering"
+    "LlamaForQuestionAnswering",
 ]

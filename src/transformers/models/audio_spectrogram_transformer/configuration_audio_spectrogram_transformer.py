@@ -122,6 +122,5 @@ class ASTConfig(PretrainedConfig):
         self.max_length = max_length
         self.num_mel_bins = num_mel_bins
 
-__all__ = [
-    "ASTConfig"
-]
+
+__all__ = ["ASTConfig"]

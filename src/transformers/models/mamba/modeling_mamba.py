@@ -708,8 +708,5 @@ class MambaForCausalLM(MambaPreTrainedModel):
             hidden_states=mamba_outputs.hidden_states,
         )
 
-__all__ = [
-    "MambaPreTrainedModel",
-    "MambaModel",
-    "MambaForCausalLM"
-]
+
+__all__ = ["MambaPreTrainedModel", "MambaModel", "MambaForCausalLM"]

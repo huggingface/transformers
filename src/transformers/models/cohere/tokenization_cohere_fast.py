@@ -696,6 +696,5 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-__all__ = [
-    "CohereTokenizerFast"
-]
+
+__all__ = ["CohereTokenizerFast"]

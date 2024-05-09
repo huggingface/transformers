@@ -394,7 +394,5 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
             inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
 
-__all__ = [
-    "BlenderbotConfig",
-    "BlenderbotOnnxConfig"
-]
+
+__all__ = ["BlenderbotConfig", "BlenderbotOnnxConfig"]

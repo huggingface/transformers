@@ -721,8 +721,4 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
-__all__ = [
-    "FlaxGPTJPreTrainedModel",
-    "FlaxGPTJModel",
-    "FlaxGPTJForCausalLM"
-]
+__all__ = ["FlaxGPTJPreTrainedModel", "FlaxGPTJModel", "FlaxGPTJForCausalLM"]

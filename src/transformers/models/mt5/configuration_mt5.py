@@ -175,7 +175,5 @@ class MT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     def atol_for_validation(self) -> float:
         return 5e-4
 
-__all__ = [
-    "MT5Config",
-    "MT5OnnxConfig"
-]
+
+__all__ = ["MT5Config", "MT5OnnxConfig"]

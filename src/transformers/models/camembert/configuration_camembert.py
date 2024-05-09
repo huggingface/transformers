@@ -154,7 +154,5 @@ class CamembertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "CamembertConfig",
-    "CamembertOnnxConfig"
-]
+
+__all__ = ["CamembertConfig", "CamembertOnnxConfig"]

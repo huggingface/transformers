@@ -182,7 +182,5 @@ class MobileBertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "MobileBertConfig",
-    "MobileBertOnnxConfig"
-]
+
+__all__ = ["MobileBertConfig", "MobileBertOnnxConfig"]

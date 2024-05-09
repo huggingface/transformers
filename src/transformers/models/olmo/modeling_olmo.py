@@ -1316,8 +1316,5 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "OlmoPreTrainedModel",
-    "OlmoModel",
-    "OlmoForCausalLM"
-]
+
+__all__ = ["OlmoPreTrainedModel", "OlmoModel", "OlmoForCausalLM"]

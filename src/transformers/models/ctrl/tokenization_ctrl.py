@@ -250,6 +250,5 @@ class CTRLTokenizer(PreTrainedTokenizer):
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)
     #     return ''.join(tokens_generated_so_far)
 
-__all__ = [
-    "CTRLTokenizer"
-]
+
+__all__ = ["CTRLTokenizer"]

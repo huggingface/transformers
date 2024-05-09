@@ -1606,8 +1606,5 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "M2M100PreTrainedModel",
-    "M2M100Model",
-    "M2M100ForConditionalGeneration"
-]
+
+__all__ = ["M2M100PreTrainedModel", "M2M100Model", "M2M100ForConditionalGeneration"]

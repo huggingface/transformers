@@ -159,6 +159,5 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
-__all__ = [
-    "BloomTokenizerFast"
-]
+
+__all__ = ["BloomTokenizerFast"]

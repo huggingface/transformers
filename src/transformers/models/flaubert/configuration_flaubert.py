@@ -233,7 +233,5 @@ class FlaubertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "FlaubertConfig",
-    "FlaubertOnnxConfig"
-]
+
+__all__ = ["FlaubertConfig", "FlaubertOnnxConfig"]

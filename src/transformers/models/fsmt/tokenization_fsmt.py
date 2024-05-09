@@ -520,6 +520,5 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
         self.sm = sacremoses
 
-__all__ = [
-    "FSMTTokenizer"
-]
+
+__all__ = ["FSMTTokenizer"]

@@ -267,6 +267,5 @@ class SamProcessor(ProcessorMixin):
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
 
-__all__ = [
-    "SamProcessor"
-]
+
+__all__ = ["SamProcessor"]

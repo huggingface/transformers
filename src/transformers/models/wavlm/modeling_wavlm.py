@@ -1852,11 +1852,12 @@ class WavLMForXVector(WavLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "WavLMPreTrainedModel",
     "WavLMModel",
     "WavLMForCTC",
     "WavLMForSequenceClassification",
     "WavLMForAudioFrameClassification",
-    "WavLMForXVector"
+    "WavLMForXVector",
 ]

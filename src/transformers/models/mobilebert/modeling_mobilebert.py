@@ -1629,6 +1629,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_mobilebert",
     "MobileBertPreTrainedModel",
@@ -1639,5 +1640,5 @@ __all__ = [
     "MobileBertForSequenceClassification",
     "MobileBertForQuestionAnswering",
     "MobileBertForMultipleChoice",
-    "MobileBertForTokenClassification"
+    "MobileBertForTokenClassification",
 ]

@@ -154,6 +154,5 @@ class MarkupLMConfig(PretrainedConfig):
         self.subs_pad_id = subs_pad_id
         self.xpath_unit_hidden_size = xpath_unit_hidden_size
 
-__all__ = [
-    "MarkupLMConfig"
-]
+
+__all__ = ["MarkupLMConfig"]

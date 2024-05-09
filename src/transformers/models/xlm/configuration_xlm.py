@@ -239,7 +239,5 @@ class XLMOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "XLMConfig",
-    "XLMOnnxConfig"
-]
+
+__all__ = ["XLMConfig", "XLMOnnxConfig"]

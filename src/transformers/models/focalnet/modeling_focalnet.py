@@ -1035,10 +1035,11 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
             attentions=None,
         )
 
+
 __all__ = [
     "FocalNetPreTrainedModel",
     "FocalNetModel",
     "FocalNetForMaskedImageModeling",
     "FocalNetForImageClassification",
-    "FocalNetBackbone"
+    "FocalNetBackbone",
 ]

@@ -1530,5 +1530,5 @@ __all__ = [
     "FlaxRobertaPreLayerNormForMultipleChoice",
     "FlaxRobertaPreLayerNormForTokenClassification",
     "FlaxRobertaPreLayerNormForQuestionAnswering",
-    "FlaxRobertaPreLayerNormForCausalLM"
+    "FlaxRobertaPreLayerNormForCausalLM",
 ]

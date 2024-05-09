@@ -766,10 +766,5 @@ class FlavaConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "FlavaImageConfig",
-    "FlavaTextConfig",
-    "FlavaMultimodalConfig",
-    "FlavaImageCodebookConfig",
-    "FlavaConfig"
-]
+
+__all__ = ["FlavaImageConfig", "FlavaTextConfig", "FlavaMultimodalConfig", "FlavaImageCodebookConfig", "FlavaConfig"]

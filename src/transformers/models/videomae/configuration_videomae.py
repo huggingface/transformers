@@ -146,6 +146,5 @@ class VideoMAEConfig(PretrainedConfig):
         self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
 
-__all__ = [
-    "VideoMAEConfig"
-]
+
+__all__ = ["VideoMAEConfig"]

@@ -389,7 +389,5 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 flattened_output, name, idx, t
             )
 
-__all__ = [
-    "BlenderbotSmallConfig",
-    "BlenderbotSmallOnnxConfig"
-]
+
+__all__ = ["BlenderbotSmallConfig", "BlenderbotSmallOnnxConfig"]

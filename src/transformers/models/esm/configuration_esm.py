@@ -360,6 +360,5 @@ def get_default_vocab_list():
         "<mask>",
     )
 
-__all__ = [
-    "EsmConfig"
-]
+
+__all__ = ["EsmConfig"]

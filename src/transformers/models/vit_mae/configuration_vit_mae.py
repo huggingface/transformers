@@ -138,6 +138,5 @@ class ViTMAEConfig(PretrainedConfig):
         self.mask_ratio = mask_ratio
         self.norm_pix_loss = norm_pix_loss
 
-__all__ = [
-    "ViTMAEConfig"
-]
+
+__all__ = ["ViTMAEConfig"]

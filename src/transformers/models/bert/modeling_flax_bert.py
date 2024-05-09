@@ -1733,5 +1733,5 @@ __all__ = [
     "FlaxBertForMultipleChoice",
     "FlaxBertForTokenClassification",
     "FlaxBertForQuestionAnswering",
-    "FlaxBertForCausalLM"
+    "FlaxBertForCausalLM",
 ]

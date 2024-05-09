@@ -44,6 +44,5 @@ class ConditionalDetrFeatureExtractor(ConditionalDetrImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "ConditionalDetrFeatureExtractor"
-]
+
+__all__ = ["ConditionalDetrFeatureExtractor"]

@@ -1775,9 +1775,5 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             with tf.name_scope(self.rag.name):
                 self.rag.build(None)
 
-__all__ = [
-    "TFRagPreTrainedModel",
-    "TFRagModel",
-    "TFRagTokenForGeneration",
-    "TFRagSequenceForGeneration"
-]
+
+__all__ = ["TFRagPreTrainedModel", "TFRagModel", "TFRagTokenForGeneration", "TFRagSequenceForGeneration"]

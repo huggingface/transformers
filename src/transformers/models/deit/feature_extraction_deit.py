@@ -34,6 +34,5 @@ class DeiTFeatureExtractor(DeiTImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "DeiTFeatureExtractor"
-]
+
+__all__ = ["DeiTFeatureExtractor"]

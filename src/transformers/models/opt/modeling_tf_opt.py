@@ -1098,8 +1098,5 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             with tf.name_scope(self.model.name):
                 self.model.build(None)
 
-__all__ = [
-    "TFOPTPreTrainedModel",
-    "TFOPTModel",
-    "TFOPTForCausalLM"
-]
+
+__all__ = ["TFOPTPreTrainedModel", "TFOPTModel", "TFOPTForCausalLM"]

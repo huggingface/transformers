@@ -20,4 +20,3 @@ from transformers.utils.import_utils import register
 @register(backends=("sentencepiece",))
 class MT5Tokenizer(T5Tokenizer):
     pass
-

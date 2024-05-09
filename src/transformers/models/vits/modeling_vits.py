@@ -1482,7 +1482,5 @@ class VitsModel(VitsPreTrainedModel):
             attentions=text_encoder_output.attentions,
         )
 
-__all__ = [
-    "VitsPreTrainedModel",
-    "VitsModel"
-]
+
+__all__ = ["VitsPreTrainedModel", "VitsModel"]

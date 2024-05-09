@@ -141,7 +141,5 @@ class DeiTOnnxConfig(OnnxConfig):
     def atol_for_validation(self) -> float:
         return 1e-4
 
-__all__ = [
-    "DeiTConfig",
-    "DeiTOnnxConfig"
-]
+
+__all__ = ["DeiTConfig", "DeiTOnnxConfig"]

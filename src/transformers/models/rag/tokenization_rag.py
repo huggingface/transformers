@@ -26,7 +26,6 @@ from .configuration_rag import RagConfig
 logger = logging.get_logger(__name__)
 
 
-
 @register()
 class RagTokenizer:
     def __init__(self, question_encoder, generator):

@@ -236,7 +236,5 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     def default_onnx_opset(self) -> int:
         return 13
 
-__all__ = [
-    "BloomConfig",
-    "BloomOnnxConfig"
-]
+
+__all__ = ["BloomConfig", "BloomOnnxConfig"]

@@ -221,6 +221,5 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "DebertaV2TokenizerFast"
-]
+
+__all__ = ["DebertaV2TokenizerFast"]

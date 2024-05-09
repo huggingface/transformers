@@ -200,6 +200,5 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-__all__ = [
-    "GemmaTokenizerFast"
-]
+
+__all__ = ["GemmaTokenizerFast"]

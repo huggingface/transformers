@@ -2334,6 +2334,7 @@ class BartForCausalLM(BartPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "BartPreTrainedModel",
     "PretrainedBartModel",
@@ -2343,5 +2344,5 @@ __all__ = [
     "BartForConditionalGeneration",
     "BartForSequenceClassification",
     "BartForQuestionAnswering",
-    "BartForCausalLM"
+    "BartForCausalLM",
 ]

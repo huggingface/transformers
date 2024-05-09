@@ -340,6 +340,5 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
-__all__ = [
-    "GPT2Tokenizer"
-]
+
+__all__ = ["GPT2Tokenizer"]

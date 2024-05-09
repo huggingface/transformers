@@ -1849,6 +1849,7 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "MegatronBertPreTrainedModel",
     "MegatronBertModel",
@@ -1859,5 +1860,5 @@ __all__ = [
     "MegatronBertForSequenceClassification",
     "MegatronBertForMultipleChoice",
     "MegatronBertForTokenClassification",
-    "MegatronBertForQuestionAnswering"
+    "MegatronBertForQuestionAnswering",
 ]

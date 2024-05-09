@@ -327,6 +327,5 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "MobileNetV1ImageProcessor"
-]
+
+__all__ = ["MobileNetV1ImageProcessor"]

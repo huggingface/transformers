@@ -388,6 +388,5 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "EfficientNetImageProcessor"
-]
+
+__all__ = ["EfficientNetImageProcessor"]

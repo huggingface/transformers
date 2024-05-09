@@ -313,6 +313,5 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             "Bot:"
         )
 
-__all__ = [
-    "GPTSw3Tokenizer"
-]
+
+__all__ = ["GPTSw3Tokenizer"]

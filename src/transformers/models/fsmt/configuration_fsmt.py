@@ -217,6 +217,5 @@ class FSMTConfig(PretrainedConfig):
             **common_kwargs,
         )
 
-__all__ = [
-    "FSMTConfig"
-]
+
+__all__ = ["FSMTConfig"]

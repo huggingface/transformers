@@ -141,6 +141,5 @@ class MusicgenProcessor(ProcessorMixin):
 
         return audio_values
 
-__all__ = [
-    "MusicgenProcessor"
-]
+
+__all__ = ["MusicgenProcessor"]

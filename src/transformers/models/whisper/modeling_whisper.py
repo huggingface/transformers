@@ -2215,10 +2215,11 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+
 __all__ = [
     "WhisperPreTrainedModel",
     "WhisperModel",
     "WhisperForConditionalGeneration",
     "WhisperForCausalLM",
-    "WhisperForAudioClassification"
+    "WhisperForAudioClassification",
 ]

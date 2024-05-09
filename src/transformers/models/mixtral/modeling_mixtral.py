@@ -1614,9 +1614,5 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "MixtralPreTrainedModel",
-    "MixtralModel",
-    "MixtralForCausalLM",
-    "MixtralForSequenceClassification"
-]
+
+__all__ = ["MixtralPreTrainedModel", "MixtralModel", "MixtralForCausalLM", "MixtralForSequenceClassification"]

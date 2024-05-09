@@ -2000,10 +2000,11 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "UniSpeechPreTrainedModel",
     "UniSpeechModel",
     "UniSpeechForPreTraining",
     "UniSpeechForCTC",
-    "UniSpeechForSequenceClassification"
+    "UniSpeechForSequenceClassification",
 ]

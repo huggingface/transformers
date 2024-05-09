@@ -168,6 +168,5 @@ class LxmertConfig(PretrainedConfig):
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
         super().__init__(**kwargs)
 
-__all__ = [
-    "LxmertConfig"
-]
+
+__all__ = ["LxmertConfig"]

@@ -155,7 +155,5 @@ class RobertaPreLayerNormOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "RobertaPreLayerNormConfig",
-    "RobertaPreLayerNormOnnxConfig"
-]
+
+__all__ = ["RobertaPreLayerNormConfig", "RobertaPreLayerNormOnnxConfig"]

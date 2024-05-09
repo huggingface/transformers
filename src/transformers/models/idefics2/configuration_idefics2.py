@@ -263,6 +263,5 @@ class Idefics2Config(PretrainedConfig):
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
 
-__all__ = [
-    "Idefics2Config"
-]
+
+__all__ = ["Idefics2Config"]

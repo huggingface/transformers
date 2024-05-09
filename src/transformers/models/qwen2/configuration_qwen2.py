@@ -141,6 +141,5 @@ class Qwen2Config(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Qwen2Config"
-]
+
+__all__ = ["Qwen2Config"]

@@ -197,6 +197,5 @@ class DonutProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "DonutProcessor"
-]
+
+__all__ = ["DonutProcessor"]

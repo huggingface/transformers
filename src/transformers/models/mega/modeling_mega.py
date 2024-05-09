@@ -2278,6 +2278,7 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "MegaPreTrainedModel",
     "MegaModel",
@@ -2286,5 +2287,5 @@ __all__ = [
     "MegaForSequenceClassification",
     "MegaForMultipleChoice",
     "MegaForTokenClassification",
-    "MegaForQuestionAnswering"
+    "MegaForQuestionAnswering",
 ]

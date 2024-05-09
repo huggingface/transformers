@@ -977,9 +977,5 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "DinatPreTrainedModel",
-    "DinatModel",
-    "DinatForImageClassification",
-    "DinatBackbone"
-]
+
+__all__ = ["DinatPreTrainedModel", "DinatModel", "DinatForImageClassification", "DinatBackbone"]

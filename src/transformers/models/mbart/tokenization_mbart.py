@@ -338,6 +338,5 @@ class MBartTokenizer(PreTrainedTokenizer):
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
-__all__ = [
-    "MBartTokenizer"
-]
+
+__all__ = ["MBartTokenizer"]

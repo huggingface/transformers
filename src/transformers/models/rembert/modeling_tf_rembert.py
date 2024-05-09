@@ -1717,6 +1717,7 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFRemBertPreTrainedModel",
     "TFRemBertModel",
@@ -1725,5 +1726,5 @@ __all__ = [
     "TFRemBertForSequenceClassification",
     "TFRemBertForMultipleChoice",
     "TFRemBertForTokenClassification",
-    "TFRemBertForQuestionAnswering"
+    "TFRemBertForQuestionAnswering",
 ]

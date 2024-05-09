@@ -220,6 +220,5 @@ class LayoutLMv2Config(PretrainedConfig):
 
         return detectron2_config
 
-__all__ = [
-    "LayoutLMv2Config"
-]
+
+__all__ = ["LayoutLMv2Config"]

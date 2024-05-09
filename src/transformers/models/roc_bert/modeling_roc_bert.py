@@ -2005,6 +2005,7 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_roc_bert",
     "RoCBertPreTrainedModel",
@@ -2015,5 +2016,5 @@ __all__ = [
     "RoCBertForSequenceClassification",
     "RoCBertForMultipleChoice",
     "RoCBertForTokenClassification",
-    "RoCBertForQuestionAnswering"
+    "RoCBertForQuestionAnswering",
 ]

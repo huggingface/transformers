@@ -2046,8 +2046,5 @@ class InformerForPrediction(InformerPreTrainedModel):
             )
         )
 
-__all__ = [
-    "InformerPreTrainedModel",
-    "InformerModel",
-    "InformerForPrediction"
-]
+
+__all__ = ["InformerPreTrainedModel", "InformerModel", "InformerForPrediction"]

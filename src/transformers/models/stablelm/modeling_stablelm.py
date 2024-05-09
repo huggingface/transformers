@@ -1389,9 +1389,5 @@ class StableLmForSequenceClassification(StableLmPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "StableLmPreTrainedModel",
-    "StableLmModel",
-    "StableLmForCausalLM",
-    "StableLmForSequenceClassification"
-]
+
+__all__ = ["StableLmPreTrainedModel", "StableLmModel", "StableLmForCausalLM", "StableLmForSequenceClassification"]

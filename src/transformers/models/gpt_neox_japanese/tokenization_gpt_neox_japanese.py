@@ -363,6 +363,5 @@ class SubWordJapaneseTokenizer(object):
         text = "".join(words)
         return text
 
-__all__ = [
-    "GPTNeoXJapaneseTokenizer"
-]
+
+__all__ = ["GPTNeoXJapaneseTokenizer"]

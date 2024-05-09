@@ -2155,8 +2155,5 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             )
         )
 
-__all__ = [
-    "AutoformerPreTrainedModel",
-    "AutoformerModel",
-    "AutoformerForPrediction"
-]
+
+__all__ = ["AutoformerPreTrainedModel", "AutoformerModel", "AutoformerForPrediction"]

@@ -34,6 +34,5 @@ class ImageGPTFeatureExtractor(ImageGPTImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "ImageGPTFeatureExtractor"
-]
+
+__all__ = ["ImageGPTFeatureExtractor"]

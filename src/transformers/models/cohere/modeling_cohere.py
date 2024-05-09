@@ -1261,8 +1261,5 @@ class CohereForCausalLM(CoherePreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "CoherePreTrainedModel",
-    "CohereModel",
-    "CohereForCausalLM"
-]
+
+__all__ = ["CoherePreTrainedModel", "CohereModel", "CohereForCausalLM"]

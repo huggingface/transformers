@@ -233,6 +233,5 @@ class ReformerConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "ReformerConfig"
-]
+
+__all__ = ["ReformerConfig"]

@@ -259,6 +259,5 @@ class PatchTSTConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-__all__ = [
-    "PatchTSTConfig"
-]
+
+__all__ = ["PatchTSTConfig"]

@@ -1379,9 +1379,5 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "DPTPreTrainedModel",
-    "DPTModel",
-    "DPTForDepthEstimation",
-    "DPTForSemanticSegmentation"
-]
+
+__all__ = ["DPTPreTrainedModel", "DPTModel", "DPTForDepthEstimation", "DPTForSemanticSegmentation"]

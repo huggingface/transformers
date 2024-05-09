@@ -174,6 +174,5 @@ class InstructBlipProcessor(ProcessorMixin):
         args.append(qformer_tokenizer)
         return cls(*args)
 
-__all__ = [
-    "InstructBlipProcessor"
-]
+
+__all__ = ["InstructBlipProcessor"]

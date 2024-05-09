@@ -1533,8 +1533,4 @@ append_replace_return_docstrings(
     FlaxPegasusForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
 
-__all__ = [
-    "FlaxPegasusPreTrainedModel",
-    "FlaxPegasusModel",
-    "FlaxPegasusForConditionalGeneration"
-]
+__all__ = ["FlaxPegasusPreTrainedModel", "FlaxPegasusModel", "FlaxPegasusForConditionalGeneration"]

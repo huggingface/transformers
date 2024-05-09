@@ -1693,6 +1693,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
             )
         return reordered_past
 
+
 __all__ = [
     "load_tf_weights_in_electra",
     "ElectraPreTrainedModel",
@@ -1703,5 +1704,5 @@ __all__ = [
     "ElectraForTokenClassification",
     "ElectraForQuestionAnswering",
     "ElectraForMultipleChoice",
-    "ElectraForCausalLM"
+    "ElectraForCausalLM",
 ]

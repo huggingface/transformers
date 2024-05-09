@@ -1655,7 +1655,5 @@ class TFSamModel(TFSamPreTrainedModel):
             with tf.name_scope(self.mask_decoder.name):
                 self.mask_decoder.build(None)
 
-__all__ = [
-    "TFSamPreTrainedModel",
-    "TFSamModel"
-]
+
+__all__ = ["TFSamPreTrainedModel", "TFSamModel"]

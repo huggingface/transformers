@@ -1748,9 +1748,5 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "HubertPreTrainedModel",
-    "HubertModel",
-    "HubertForCTC",
-    "HubertForSequenceClassification"
-]
+
+__all__ = ["HubertPreTrainedModel", "HubertModel", "HubertForCTC", "HubertForSequenceClassification"]

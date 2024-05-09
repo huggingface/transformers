@@ -1188,10 +1188,11 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LiltPreTrainedModel",
     "LiltModel",
     "LiltForSequenceClassification",
     "LiltForTokenClassification",
-    "LiltForQuestionAnswering"
+    "LiltForQuestionAnswering",
 ]

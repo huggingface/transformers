@@ -34,6 +34,5 @@ class SegformerFeatureExtractor(SegformerImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "SegformerFeatureExtractor"
-]
+
+__all__ = ["SegformerFeatureExtractor"]

@@ -1042,10 +1042,11 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             with tf.name_scope(self.decode_head.name):
                 self.decode_head.build(None)
 
+
 __all__ = [
     "TFSegformerPreTrainedModel",
     "TFSegformerModel",
     "TFSegformerForImageClassification",
     "TFSegformerDecodeHead",
-    "TFSegformerForSemanticSegmentation"
+    "TFSegformerForSemanticSegmentation",
 ]

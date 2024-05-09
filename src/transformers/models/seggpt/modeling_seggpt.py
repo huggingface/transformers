@@ -1025,8 +1025,5 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "SegGptPreTrainedModel",
-    "SegGptModel",
-    "SegGptForImageSegmentation"
-]
+
+__all__ = ["SegGptPreTrainedModel", "SegGptModel", "SegGptForImageSegmentation"]

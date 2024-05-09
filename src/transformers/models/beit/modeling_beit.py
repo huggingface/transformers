@@ -1429,11 +1429,12 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "BeitPreTrainedModel",
     "BeitModel",
     "BeitForMaskedImageModeling",
     "BeitForImageClassification",
     "BeitForSemanticSegmentation",
-    "BeitBackbone"
+    "BeitBackbone",
 ]

@@ -909,5 +909,5 @@ __all__ = [
     "FlaxDistilBertForSequenceClassification",
     "FlaxDistilBertForMultipleChoice",
     "FlaxDistilBertForTokenClassification",
-    "FlaxDistilBertForQuestionAnswering"
+    "FlaxDistilBertForQuestionAnswering",
 ]

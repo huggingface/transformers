@@ -243,7 +243,5 @@ class PerceiverOnnxConfig(OnnxConfig):
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
 
-__all__ = [
-    "PerceiverConfig",
-    "PerceiverOnnxConfig"
-]
+
+__all__ = ["PerceiverConfig", "PerceiverOnnxConfig"]

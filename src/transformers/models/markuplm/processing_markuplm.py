@@ -147,6 +147,5 @@ class MarkupLMProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         return tokenizer_input_names
 
-__all__ = [
-    "MarkupLMProcessor"
-]
+
+__all__ = ["MarkupLMProcessor"]

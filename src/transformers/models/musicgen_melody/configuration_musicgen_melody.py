@@ -271,7 +271,5 @@ class MusicgenMelodyConfig(PretrainedConfig):
         self._attn_implementation_internal = value
         self.decoder._attn_implementation = value
 
-__all__ = [
-    "MusicgenMelodyDecoderConfig",
-    "MusicgenMelodyConfig"
-]
+
+__all__ = ["MusicgenMelodyDecoderConfig", "MusicgenMelodyConfig"]

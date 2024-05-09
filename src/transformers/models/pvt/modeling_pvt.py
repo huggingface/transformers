@@ -669,8 +669,5 @@ class PvtForImageClassification(PvtPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "PvtPreTrainedModel",
-    "PvtModel",
-    "PvtForImageClassification"
-]
+
+__all__ = ["PvtPreTrainedModel", "PvtModel", "PvtForImageClassification"]

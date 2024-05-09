@@ -1688,10 +1688,5 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-__all__ = [
-    "OwlViTPreTrainedModel",
-    "OwlViTTextModel",
-    "OwlViTVisionModel",
-    "OwlViTModel",
-    "OwlViTForObjectDetection"
-]
+
+__all__ = ["OwlViTPreTrainedModel", "OwlViTTextModel", "OwlViTVisionModel", "OwlViTModel", "OwlViTForObjectDetection"]

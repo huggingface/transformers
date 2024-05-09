@@ -162,6 +162,5 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
         return BackboneOutput(feature_maps=feature_maps, hidden_states=hidden_states, attentions=None)
 
-__all__ = [
-    "TimmBackbone"
-]
+
+__all__ = ["TimmBackbone"]

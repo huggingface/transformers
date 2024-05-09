@@ -1864,6 +1864,7 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+
 __all__ = [
     "UMT5PreTrainedModel",
     "UMT5Model",
@@ -1871,5 +1872,5 @@ __all__ = [
     "UMT5EncoderModel",
     "UMT5ForSequenceClassification",
     "UMT5ForTokenClassification",
-    "UMT5ForQuestionAnswering"
+    "UMT5ForQuestionAnswering",
 ]

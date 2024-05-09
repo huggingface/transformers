@@ -426,6 +426,5 @@ class PLBartTokenizer(PreTrainedTokenizer):
         lang = FAIRSEQ_LANGUAGE_CODES_MAP[lang] if lang in FAIRSEQ_LANGUAGE_CODES_MAP.keys() else lang
         return lang
 
-__all__ = [
-    "PLBartTokenizer"
-]
+
+__all__ = ["PLBartTokenizer"]

@@ -149,7 +149,5 @@ class RoFormerOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "RoFormerConfig",
-    "RoFormerOnnxConfig"
-]
+
+__all__ = ["RoFormerConfig", "RoFormerOnnxConfig"]

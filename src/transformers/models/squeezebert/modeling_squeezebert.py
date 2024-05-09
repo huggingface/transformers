@@ -1095,6 +1095,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "SqueezeBertPreTrainedModel",
     "SqueezeBertModel",
@@ -1102,5 +1103,5 @@ __all__ = [
     "SqueezeBertForSequenceClassification",
     "SqueezeBertForMultipleChoice",
     "SqueezeBertForTokenClassification",
-    "SqueezeBertForQuestionAnswering"
+    "SqueezeBertForQuestionAnswering",
 ]

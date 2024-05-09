@@ -612,6 +612,5 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return results
 
-__all__ = [
-    "OwlViTImageProcessor"
-]
+
+__all__ = ["OwlViTImageProcessor"]

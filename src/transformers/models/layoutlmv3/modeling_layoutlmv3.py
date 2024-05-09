@@ -1373,10 +1373,11 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "LayoutLMv3PreTrainedModel",
     "LayoutLMv3Model",
     "LayoutLMv3ForTokenClassification",
     "LayoutLMv3ForQuestionAnswering",
-    "LayoutLMv3ForSequenceClassification"
+    "LayoutLMv3ForSequenceClassification",
 ]

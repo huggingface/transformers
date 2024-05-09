@@ -120,6 +120,5 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
         return cls(vision_config=vision_config.to_dict(), text_config=text_config.to_dict(), **kwargs)
 
-__all__ = [
-    "VisionTextDualEncoderConfig"
-]
+
+__all__ = ["VisionTextDualEncoderConfig"]

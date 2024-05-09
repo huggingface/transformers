@@ -609,6 +609,5 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-__all__ = [
-    "LlavaNextImageProcessor"
-]
+
+__all__ = ["LlavaNextImageProcessor"]

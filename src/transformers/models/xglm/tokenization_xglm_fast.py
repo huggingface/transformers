@@ -194,6 +194,5 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "XGLMTokenizerFast"
-]
+
+__all__ = ["XGLMTokenizerFast"]

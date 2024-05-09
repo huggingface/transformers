@@ -269,6 +269,5 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-__all__ = [
-    "RobertaTokenizerFast"
-]
+
+__all__ = ["RobertaTokenizerFast"]

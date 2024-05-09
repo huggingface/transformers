@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_realm import *
     from .modeling_realm import *
+    from .retrieval_realm import *
     from .tokenization_realm import *
     from .tokenization_realm_fast import *
-    from .retrieval_realm import *
 else:
     import sys
 

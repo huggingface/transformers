@@ -1868,6 +1868,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
             predicted_answer_ids=predicted_answer_ids,
         )
 
+
 __all__ = [
     "load_tf_weights_in_realm",
     "RealmPreTrainedModel",
@@ -1875,5 +1876,5 @@ __all__ = [
     "RealmScorer",
     "RealmKnowledgeAugEncoder",
     "RealmReader",
-    "RealmForOpenQA"
+    "RealmForOpenQA",
 ]

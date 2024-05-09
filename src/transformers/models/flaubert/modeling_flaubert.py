@@ -1307,6 +1307,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "FlaubertPreTrainedModel",
     "FlaubertModel",
@@ -1315,5 +1316,5 @@ __all__ = [
     "FlaubertForTokenClassification",
     "FlaubertForQuestionAnsweringSimple",
     "FlaubertForQuestionAnswering",
-    "FlaubertForMultipleChoice"
+    "FlaubertForMultipleChoice",
 ]

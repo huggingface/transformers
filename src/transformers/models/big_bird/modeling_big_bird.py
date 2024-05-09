@@ -3162,6 +3162,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         mask = torch.where(mask < q_lengths, 1, 0)
         return mask
 
+
 __all__ = [
     "load_tf_weights_in_big_bird",
     "BigBirdPreTrainedModel",
@@ -3172,5 +3173,5 @@ __all__ = [
     "BigBirdForSequenceClassification",
     "BigBirdForMultipleChoice",
     "BigBirdForTokenClassification",
-    "BigBirdForQuestionAnswering"
+    "BigBirdForQuestionAnswering",
 ]

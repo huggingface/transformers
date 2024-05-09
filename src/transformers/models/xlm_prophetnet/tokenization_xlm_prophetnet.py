@@ -324,6 +324,5 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
 
-__all__ = [
-    "XLMProphetNetTokenizer"
-]
+
+__all__ = ["XLMProphetNetTokenizer"]

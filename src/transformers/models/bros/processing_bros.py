@@ -110,6 +110,5 @@ class BrosProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         return list(dict.fromkeys(tokenizer_input_names))
 
-__all__ = [
-    "BrosProcessor"
-]
+
+__all__ = ["BrosProcessor"]

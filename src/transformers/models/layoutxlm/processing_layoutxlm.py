@@ -201,6 +201,5 @@ class LayoutXLMProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "LayoutXLMProcessor"
-]
+
+__all__ = ["LayoutXLMProcessor"]

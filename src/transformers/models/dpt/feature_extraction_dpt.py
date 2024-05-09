@@ -34,6 +34,5 @@ class DPTFeatureExtractor(DPTImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "DPTFeatureExtractor"
-]
+
+__all__ = ["DPTFeatureExtractor"]

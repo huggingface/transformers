@@ -517,6 +517,5 @@ class CLIPTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-__all__ = [
-    "CLIPTokenizer"
-]
+
+__all__ = ["CLIPTokenizer"]

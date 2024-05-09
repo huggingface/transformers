@@ -1496,6 +1496,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "ViltPreTrainedModel",
     "ViltModel",
@@ -1503,5 +1504,5 @@ __all__ = [
     "ViltForQuestionAnswering",
     "ViltForImageAndTextRetrieval",
     "ViltForImagesAndTextClassification",
-    "ViltForTokenClassification"
+    "ViltForTokenClassification",
 ]

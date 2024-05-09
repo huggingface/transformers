@@ -170,6 +170,5 @@ class MixtralConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "MixtralConfig"
-]
+
+__all__ = ["MixtralConfig"]

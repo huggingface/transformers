@@ -1721,9 +1721,10 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             with tf.name_scope(self.fpn2[0].name):
                 self.fpn2[0].build([None, None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFData2VecVisionPreTrainedModel",
     "TFData2VecVisionModel",
     "TFData2VecVisionForImageClassification",
-    "TFData2VecVisionForSemanticSegmentation"
+    "TFData2VecVisionForSemanticSegmentation",
 ]

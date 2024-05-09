@@ -1401,9 +1401,5 @@ class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "Qwen2PreTrainedModel",
-    "Qwen2Model",
-    "Qwen2ForCausalLM",
-    "Qwen2ForSequenceClassification"
-]
+
+__all__ = ["Qwen2PreTrainedModel", "Qwen2Model", "Qwen2ForCausalLM", "Qwen2ForSequenceClassification"]

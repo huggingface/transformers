@@ -2877,8 +2877,5 @@ class DetaStage1Assigner(nn.Module):
     def postprocess_indices(self, pr_inds, gt_inds, iou):
         return sample_topk_per_gt(pr_inds, gt_inds, iou, self.k)
 
-__all__ = [
-    "DetaPreTrainedModel",
-    "DetaModel",
-    "DetaForObjectDetection"
-]
+
+__all__ = ["DetaPreTrainedModel", "DetaModel", "DetaForObjectDetection"]

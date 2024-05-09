@@ -183,7 +183,5 @@ class XmodOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "XmodConfig",
-    "XmodOnnxConfig"
-]
+
+__all__ = ["XmodConfig", "XmodOnnxConfig"]

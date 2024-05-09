@@ -133,6 +133,5 @@ class GLPNConfig(PretrainedConfig):
         self.max_depth = max_depth
         self.head_in_index = head_in_index
 
-__all__ = [
-    "GLPNConfig"
-]
+
+__all__ = ["GLPNConfig"]

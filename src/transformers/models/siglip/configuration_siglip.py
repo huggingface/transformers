@@ -301,8 +301,5 @@ class SiglipConfig(PretrainedConfig):
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
-__all__ = [
-    "SiglipTextConfig",
-    "SiglipVisionConfig",
-    "SiglipConfig"
-]
+
+__all__ = ["SiglipTextConfig", "SiglipVisionConfig", "SiglipConfig"]

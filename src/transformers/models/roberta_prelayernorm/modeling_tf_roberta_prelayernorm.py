@@ -1804,6 +1804,7 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFRobertaPreLayerNormPreTrainedModel",
     "TFRobertaPreLayerNormModel",
@@ -1812,5 +1813,5 @@ __all__ = [
     "TFRobertaPreLayerNormForMultipleChoice",
     "TFRobertaPreLayerNormForTokenClassification",
     "TFRobertaPreLayerNormForQuestionAnswering",
-    "TFRobertaPreLayerNormForSequenceClassification"
+    "TFRobertaPreLayerNormForSequenceClassification",
 ]

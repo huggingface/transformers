@@ -2121,6 +2121,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFBertPreTrainedModel",
     "TFBertModel",
@@ -2131,5 +2132,5 @@ __all__ = [
     "TFBertForSequenceClassification",
     "TFBertForMultipleChoice",
     "TFBertForTokenClassification",
-    "TFBertForQuestionAnswering"
+    "TFBertForQuestionAnswering",
 ]

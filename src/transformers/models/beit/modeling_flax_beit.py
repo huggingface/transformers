@@ -956,5 +956,5 @@ __all__ = [
     "FlaxBeitPreTrainedModel",
     "FlaxBeitModel",
     "FlaxBeitForMaskedImageModeling",
-    "FlaxBeitForImageClassification"
+    "FlaxBeitForImageClassification",
 ]

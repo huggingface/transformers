@@ -1912,10 +1912,11 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "BridgeTowerPreTrainedModel",
     "BridgeTowerModel",
     "BridgeTowerForMaskedLM",
     "BridgeTowerForImageAndTextRetrieval",
-    "BridgeTowerForContrastiveLearning"
+    "BridgeTowerForContrastiveLearning",
 ]

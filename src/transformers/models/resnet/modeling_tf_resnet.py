@@ -596,8 +596,5 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             with tf.name_scope(self.classifier_layer.name):
                 self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])
 
-__all__ = [
-    "TFResNetPreTrainedModel",
-    "TFResNetModel",
-    "TFResNetForImageClassification"
-]
+
+__all__ = ["TFResNetPreTrainedModel", "TFResNetModel", "TFResNetForImageClassification"]

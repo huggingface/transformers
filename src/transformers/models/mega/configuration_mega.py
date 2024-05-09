@@ -241,7 +241,5 @@ class MegaOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "MegaConfig",
-    "MegaOnnxConfig"
-]
+
+__all__ = ["MegaConfig", "MegaOnnxConfig"]

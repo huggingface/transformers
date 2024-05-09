@@ -166,6 +166,5 @@ class FlavaProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "FlavaProcessor"
-]
+
+__all__ = ["FlavaProcessor"]

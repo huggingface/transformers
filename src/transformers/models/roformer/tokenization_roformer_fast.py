@@ -177,6 +177,5 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
 
-__all__ = [
-    "RoFormerTokenizerFast"
-]
+
+__all__ = ["RoFormerTokenizerFast"]

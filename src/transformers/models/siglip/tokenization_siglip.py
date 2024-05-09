@@ -376,6 +376,5 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "SiglipTokenizer"
-]
+
+__all__ = ["SiglipTokenizer"]

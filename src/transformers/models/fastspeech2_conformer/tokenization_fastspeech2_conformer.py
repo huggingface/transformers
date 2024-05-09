@@ -23,6 +23,7 @@ from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, requires_backends
 from ...utils.import_utils import register
 
+
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
@@ -185,6 +186,4 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             )
 
 
-__all__ = [
-    "FastSpeech2ConformerTokenizer"
-]
+__all__ = ["FastSpeech2ConformerTokenizer"]

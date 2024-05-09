@@ -1438,9 +1438,5 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
             cross_encoder_attentions=lxmert_output.cross_encoder_attentions,
         )
 
-__all__ = [
-    "LxmertPreTrainedModel",
-    "LxmertModel",
-    "LxmertForPreTraining",
-    "LxmertForQuestionAnswering"
-]
+
+__all__ = ["LxmertPreTrainedModel", "LxmertModel", "LxmertForPreTraining", "LxmertForQuestionAnswering"]

@@ -1651,8 +1651,5 @@ class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
-__all__ = [
-    "PegasusXPreTrainedModel",
-    "PegasusXModel",
-    "PegasusXForConditionalGeneration"
-]
+
+__all__ = ["PegasusXPreTrainedModel", "PegasusXModel", "PegasusXForConditionalGeneration"]

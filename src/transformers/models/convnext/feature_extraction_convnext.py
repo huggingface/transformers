@@ -34,6 +34,5 @@ class ConvNextFeatureExtractor(ConvNextImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "ConvNextFeatureExtractor"
-]
+
+__all__ = ["ConvNextFeatureExtractor"]

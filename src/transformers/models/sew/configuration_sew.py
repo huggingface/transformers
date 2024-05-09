@@ -254,6 +254,5 @@ class SEWConfig(PretrainedConfig):
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
-__all__ = [
-    "SEWConfig"
-]
+
+__all__ = ["SEWConfig"]

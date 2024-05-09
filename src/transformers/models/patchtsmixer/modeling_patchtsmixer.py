@@ -2177,11 +2177,12 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
 
+
 __all__ = [
     "PatchTSMixerPreTrainedModel",
     "PatchTSMixerModel",
     "PatchTSMixerForPretraining",
     "PatchTSMixerForPrediction",
     "PatchTSMixerForTimeSeriesClassification",
-    "PatchTSMixerForRegression"
+    "PatchTSMixerForRegression",
 ]

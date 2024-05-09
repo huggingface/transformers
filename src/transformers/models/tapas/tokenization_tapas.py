@@ -2765,6 +2765,5 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
 
     return table
 
-__all__ = [
-    "TapasTokenizer"
-]
+
+__all__ = ["TapasTokenizer"]

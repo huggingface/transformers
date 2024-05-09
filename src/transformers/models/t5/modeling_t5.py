@@ -2387,6 +2387,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_t5",
     "T5PreTrainedModel",
@@ -2395,5 +2396,5 @@ __all__ = [
     "T5EncoderModel",
     "T5ForSequenceClassification",
     "T5ForTokenClassification",
-    "T5ForQuestionAnswering"
+    "T5ForQuestionAnswering",
 ]

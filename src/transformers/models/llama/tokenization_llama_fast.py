@@ -311,6 +311,5 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-__all__ = [
-    "LlamaTokenizerFast"
-]
+
+__all__ = ["LlamaTokenizerFast"]

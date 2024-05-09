@@ -626,6 +626,5 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         else:
             return self.post_process_single(generation, fix_markdown=fix_markdown)
 
-__all__ = [
-    "NougatTokenizerFast"
-]
+
+__all__ = ["NougatTokenizerFast"]

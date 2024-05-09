@@ -1353,6 +1353,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFXLMPreTrainedModel",
     "TFXLMModel",
@@ -1360,5 +1361,5 @@ __all__ = [
     "TFXLMForSequenceClassification",
     "TFXLMForMultipleChoice",
     "TFXLMForTokenClassification",
-    "TFXLMForQuestionAnsweringSimple"
+    "TFXLMForQuestionAnsweringSimple",
 ]

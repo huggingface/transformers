@@ -235,6 +235,5 @@ class ByT5Tokenizer(PreTrainedTokenizer):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
 
-__all__ = [
-    "ByT5Tokenizer"
-]
+
+__all__ = ["ByT5Tokenizer"]

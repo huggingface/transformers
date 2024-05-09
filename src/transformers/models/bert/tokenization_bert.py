@@ -503,8 +503,5 @@ class WordpieceTokenizer(object):
                 output_tokens.extend(sub_tokens)
         return output_tokens
 
-__all__ = [
-    "BertTokenizer",
-    "BasicTokenizer",
-    "WordpieceTokenizer"
-]
+
+__all__ = ["BertTokenizer", "BasicTokenizer", "WordpieceTokenizer"]

@@ -1023,7 +1023,7 @@ class BarkSemanticModel(BarkCausalModel):
     language modeling head on top.""",
     BARK_MODEL_START_DOCSTRING.format(config="BarkCoarseConfig"),
 )
-@register(backends=('torch',))
+@register(backends=("torch",))
 class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
     config_class = BarkCoarseConfig
@@ -1911,11 +1911,12 @@ class BarkModel(BarkPreTrainedModel):
         config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config
 
+
 __all__ = [
     "BarkPreTrainedModel",
     "BarkCausalModel",
     "BarkFineModel",
     "BarkCoarseModel",
     "BarkSemanticModel",
-    "BarkModel"
+    "BarkModel",
 ]

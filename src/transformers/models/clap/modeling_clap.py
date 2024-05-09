@@ -2305,11 +2305,12 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
             hidden_states=audio_outputs.hidden_states,
         )
 
+
 __all__ = [
     "ClapPreTrainedModel",
     "ClapAudioModel",
     "ClapTextModel",
     "ClapModel",
     "ClapTextModelWithProjection",
-    "ClapAudioModelWithProjection"
+    "ClapAudioModelWithProjection",
 ]

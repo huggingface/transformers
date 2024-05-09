@@ -2009,5 +2009,5 @@ __all__ = [
     "FlaxBartForSequenceClassification",
     "FlaxBartForQuestionAnswering",
     "FlaxBartDecoderPreTrainedModel",
-    "FlaxBartForCausalLM"
+    "FlaxBartForCausalLM",
 ]

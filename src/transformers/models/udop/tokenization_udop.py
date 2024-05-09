@@ -1467,6 +1467,5 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-__all__ = [
-    "UdopTokenizer"
-]
+
+__all__ = ["UdopTokenizer"]

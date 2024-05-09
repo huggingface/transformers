@@ -172,6 +172,5 @@ class Qwen2MoeConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Qwen2MoeConfig"
-]
+
+__all__ = ["Qwen2MoeConfig"]

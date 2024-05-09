@@ -2667,8 +2667,5 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
 
-__all__ = [
-    "TFLEDPreTrainedModel",
-    "TFLEDModel",
-    "TFLEDForConditionalGeneration"
-]
+
+__all__ = ["TFLEDPreTrainedModel", "TFLEDModel", "TFLEDForConditionalGeneration"]

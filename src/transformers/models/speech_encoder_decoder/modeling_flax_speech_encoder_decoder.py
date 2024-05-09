@@ -927,6 +927,5 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
 
         return model
 
-__all__ = [
-    "FlaxSpeechEncoderDecoderModel"
-]
+
+__all__ = ["FlaxSpeechEncoderDecoderModel"]

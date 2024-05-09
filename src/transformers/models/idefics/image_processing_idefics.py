@@ -169,6 +169,5 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
         return images
 
-__all__ = [
-    "IdeficsImageProcessor"
-]
+
+__all__ = ["IdeficsImageProcessor"]

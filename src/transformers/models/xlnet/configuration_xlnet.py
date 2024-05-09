@@ -238,6 +238,5 @@ class XLNetConfig(PretrainedConfig):
             f"The model {self.model_type} is one of the few models that has no sequence length limit."
         )
 
-__all__ = [
-    "XLNetConfig"
-]
+
+__all__ = ["XLNetConfig"]

@@ -185,6 +185,5 @@ class TvltConfig(PretrainedConfig):
         self.task_mae = task_mae
         self.loss_type = loss_type
 
-__all__ = [
-    "TvltConfig"
-]
+
+__all__ = ["TvltConfig"]

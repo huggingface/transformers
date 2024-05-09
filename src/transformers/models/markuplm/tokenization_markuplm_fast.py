@@ -919,6 +919,5 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-__all__ = [
-    "MarkupLMTokenizerFast"
-]
+
+__all__ = ["MarkupLMTokenizerFast"]

@@ -152,6 +152,5 @@ class Swin2SRConfig(PretrainedConfig):
         self.resi_connection = resi_connection
         self.upsampler = upsampler
 
-__all__ = [
-    "Swin2SRConfig"
-]
+
+__all__ = ["Swin2SRConfig"]

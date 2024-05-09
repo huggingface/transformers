@@ -151,6 +151,5 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         )
         return self.image_processor
 
-__all__ = [
-    "VisionTextDualEncoderProcessor"
-]
+
+__all__ = ["VisionTextDualEncoderProcessor"]

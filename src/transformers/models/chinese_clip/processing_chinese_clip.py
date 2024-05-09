@@ -142,6 +142,5 @@ class ChineseCLIPProcessor(ProcessorMixin):
         )
         return self.image_processor_class
 
-__all__ = [
-    "ChineseCLIPProcessor"
-]
+
+__all__ = ["ChineseCLIPProcessor"]

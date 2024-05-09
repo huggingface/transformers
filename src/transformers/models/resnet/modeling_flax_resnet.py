@@ -704,8 +704,4 @@ append_replace_return_docstrings(
     FlaxResNetForImageClassification, output_type=FlaxImageClassifierOutputWithNoAttention, config_class=ResNetConfig
 )
 
-__all__ = [
-    "FlaxResNetPreTrainedModel",
-    "FlaxResNetModel",
-    "FlaxResNetForImageClassification"
-]
+__all__ = ["FlaxResNetPreTrainedModel", "FlaxResNetModel", "FlaxResNetForImageClassification"]

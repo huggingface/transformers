@@ -695,6 +695,5 @@ class FuyuProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-__all__ = [
-    "FuyuProcessor"
-]
+
+__all__ = ["FuyuProcessor"]

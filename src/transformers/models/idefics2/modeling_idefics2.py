@@ -1960,8 +1960,5 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
             )
         return reordered_past
 
-__all__ = [
-    "Idefics2PreTrainedModel",
-    "Idefics2Model",
-    "Idefics2ForConditionalGeneration"
-]
+
+__all__ = ["Idefics2PreTrainedModel", "Idefics2Model", "Idefics2ForConditionalGeneration"]

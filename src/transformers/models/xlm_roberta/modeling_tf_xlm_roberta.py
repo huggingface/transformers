@@ -1788,6 +1788,7 @@ class TFXLMRobertaForQuestionAnswering(TFXLMRobertaPreTrainedModel, TFQuestionAn
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
 
+
 __all__ = [
     "TFXLMRobertaPreTrainedModel",
     "TFXLMRobertaModel",
@@ -1796,5 +1797,5 @@ __all__ = [
     "TFXLMRobertaForSequenceClassification",
     "TFXLMRobertaForMultipleChoice",
     "TFXLMRobertaForTokenClassification",
-    "TFXLMRobertaForQuestionAnswering"
+    "TFXLMRobertaForQuestionAnswering",
 ]

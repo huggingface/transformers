@@ -282,7 +282,5 @@ class TableTransformerOnnxConfig(OnnxConfig):
     def default_onnx_opset(self) -> int:
         return 12
 
-__all__ = [
-    "TableTransformerConfig",
-    "TableTransformerOnnxConfig"
-]
+
+__all__ = ["TableTransformerConfig", "TableTransformerOnnxConfig"]

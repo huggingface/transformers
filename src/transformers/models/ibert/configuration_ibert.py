@@ -140,7 +140,5 @@ class IBertOnnxConfig(OnnxConfig):
             ]
         )
 
-__all__ = [
-    "IBertConfig",
-    "IBertOnnxConfig"
-]
+
+__all__ = ["IBertConfig", "IBertOnnxConfig"]

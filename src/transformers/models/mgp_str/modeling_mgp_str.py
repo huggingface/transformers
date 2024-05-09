@@ -513,8 +513,5 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
             a3_attentions=all_a3_attentions,
         )
 
-__all__ = [
-    "MgpstrPreTrainedModel",
-    "MgpstrModel",
-    "MgpstrForSceneTextRecognition"
-]
+
+__all__ = ["MgpstrPreTrainedModel", "MgpstrModel", "MgpstrForSceneTextRecognition"]

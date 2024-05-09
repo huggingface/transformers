@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "T5Config"
 
 
-@register(backends=('tf',))
+@register(backends=("tf",))
 class TFMT5Model(TFT5Model):
     r"""
     This class overrides [`TFT5Model`]. Please check the superclass for the appropriate documentation alongside usage
@@ -51,7 +51,7 @@ class TFMT5Model(TFT5Model):
     config_class = MT5Config
 
 
-@register(backends=('tf',))
+@register(backends=("tf",))
 class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     r"""
     This class overrides [`TFT5ForConditionalGeneration`]. Please check the superclass for the appropriate
@@ -76,7 +76,7 @@ class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     config_class = MT5Config
 
 
-@register(backends=('tf',))
+@register(backends=("tf",))
 class TFMT5EncoderModel(TFT5EncoderModel):
     r"""
     This class overrides [`TFT5EncoderModel`]. Please check the superclass for the appropriate documentation alongside
@@ -99,8 +99,4 @@ class TFMT5EncoderModel(TFT5EncoderModel):
     config_class = MT5Config
 
 
-__all__ = [
-    "TFMT5Model",
-    "TFMT5EncoderModel",
-    "TFMT5ForConditionalGeneration"
-]
+__all__ = ["TFMT5Model", "TFMT5EncoderModel", "TFMT5ForConditionalGeneration"]

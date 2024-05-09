@@ -34,6 +34,5 @@ class PoolFormerFeatureExtractor(PoolFormerImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "PoolFormerFeatureExtractor"
-]
+
+__all__ = ["PoolFormerFeatureExtractor"]

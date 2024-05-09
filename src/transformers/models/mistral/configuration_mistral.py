@@ -148,6 +148,5 @@ class MistralConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "MistralConfig"
-]
+
+__all__ = ["MistralConfig"]

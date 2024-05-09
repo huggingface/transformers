@@ -103,6 +103,5 @@ class NezhaConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
 
-__all__ = [
-    "NezhaConfig"
-]
+
+__all__ = ["NezhaConfig"]

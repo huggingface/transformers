@@ -34,6 +34,5 @@ class MobileNetV2FeatureExtractor(MobileNetV2ImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "MobileNetV2FeatureExtractor"
-]
+
+__all__ = ["MobileNetV2FeatureExtractor"]

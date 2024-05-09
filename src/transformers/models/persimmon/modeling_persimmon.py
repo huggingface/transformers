@@ -1017,9 +1017,5 @@ class PersimmonForSequenceClassification(PersimmonPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-__all__ = [
-    "PersimmonPreTrainedModel",
-    "PersimmonModel",
-    "PersimmonForCausalLM",
-    "PersimmonForSequenceClassification"
-]
+
+__all__ = ["PersimmonPreTrainedModel", "PersimmonModel", "PersimmonForCausalLM", "PersimmonForSequenceClassification"]

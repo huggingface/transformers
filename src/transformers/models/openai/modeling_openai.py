@@ -862,11 +862,12 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_openai_gpt",
     "OpenAIGPTPreTrainedModel",
     "OpenAIGPTModel",
     "OpenAIGPTLMHeadModel",
     "OpenAIGPTDoubleHeadsModel",
-    "OpenAIGPTForSequenceClassification"
+    "OpenAIGPTForSequenceClassification",
 ]

@@ -942,10 +942,11 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
 
+
 __all__ = [
     "TFOpenAIGPTPreTrainedModel",
     "TFOpenAIGPTModel",
     "TFOpenAIGPTLMHeadModel",
     "TFOpenAIGPTDoubleHeadsModel",
-    "TFOpenAIGPTForSequenceClassification"
+    "TFOpenAIGPTForSequenceClassification",
 ]

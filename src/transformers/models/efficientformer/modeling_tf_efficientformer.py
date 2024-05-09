@@ -1194,9 +1194,10 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
                 with tf.name_scope(self.distillation_classifier.name):
                     self.distillation_classifier.build([None, None, self.config.hidden_sizes[-1]])
 
+
 __all__ = [
     "TFEfficientFormerPreTrainedModel",
     "TFEfficientFormerModel",
     "TFEfficientFormerForImageClassification",
-    "TFEfficientFormerForImageClassificationWithTeacher"
+    "TFEfficientFormerForImageClassificationWithTeacher",
 ]

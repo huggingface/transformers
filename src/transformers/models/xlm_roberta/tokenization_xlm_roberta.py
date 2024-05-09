@@ -298,6 +298,5 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-__all__ = [
-    "XLMRobertaTokenizer"
-]
+
+__all__ = ["XLMRobertaTokenizer"]

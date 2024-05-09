@@ -1137,5 +1137,5 @@ __all__ = [
     "FlaxAlbertForSequenceClassification",
     "FlaxAlbertForMultipleChoice",
     "FlaxAlbertForTokenClassification",
-    "FlaxAlbertForQuestionAnswering"
+    "FlaxAlbertForQuestionAnswering",
 ]

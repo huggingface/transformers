@@ -595,6 +595,5 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         return token_ids
 
-__all__ = [
-    "WhisperTokenizerFast"
-]
+
+__all__ = ["WhisperTokenizerFast"]

@@ -191,6 +191,5 @@ class Owlv2Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-__all__ = [
-    "Owlv2Processor"
-]
+
+__all__ = ["Owlv2Processor"]

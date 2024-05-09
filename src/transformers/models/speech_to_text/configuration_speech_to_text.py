@@ -197,6 +197,5 @@ class Speech2TextConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "Speech2TextConfig"
-]
+
+__all__ = ["Speech2TextConfig"]

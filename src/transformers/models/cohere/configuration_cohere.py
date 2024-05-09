@@ -158,6 +158,5 @@ class CohereConfig(PretrainedConfig):
             **kwargs,
         )
 
-__all__ = [
-    "CohereConfig"
-]
+
+__all__ = ["CohereConfig"]

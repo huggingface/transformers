@@ -20,4 +20,3 @@ from transformers.utils.import_utils import register
 @register(backends=("tokenizers",))
 class MT5TokenizerFast(T5TokenizerFast):
     pass
-

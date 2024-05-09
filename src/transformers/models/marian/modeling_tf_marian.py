@@ -1560,8 +1560,5 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             with tf.name_scope(self.bias_layer.name):
                 self.bias_layer.build(None)
 
-__all__ = [
-    "TFMarianPreTrainedModel",
-    "TFMarianModel",
-    "TFMarianMTModel"
-]
+
+__all__ = ["TFMarianPreTrainedModel", "TFMarianModel", "TFMarianMTModel"]

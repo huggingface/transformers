@@ -676,8 +676,4 @@ append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
 
-__all__ = [
-    "FlaxViTPreTrainedModel",
-    "FlaxViTModel",
-    "FlaxViTForImageClassification"
-]
+__all__ = ["FlaxViTPreTrainedModel", "FlaxViTModel", "FlaxViTForImageClassification"]

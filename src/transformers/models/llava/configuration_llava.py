@@ -154,6 +154,5 @@ class LlavaConfig(PretrainedConfig):
         output.pop("_vocab_size", None)
         return output
 
-__all__ = [
-    "LlavaConfig"
-]
+
+__all__ = ["LlavaConfig"]

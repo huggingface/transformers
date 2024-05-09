@@ -1649,6 +1649,7 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "load_tf_weights_in_canine",
     "CaninePreTrainedModel",
@@ -1656,5 +1657,5 @@ __all__ = [
     "CanineForSequenceClassification",
     "CanineForMultipleChoice",
     "CanineForTokenClassification",
-    "CanineForQuestionAnswering"
+    "CanineForQuestionAnswering",
 ]

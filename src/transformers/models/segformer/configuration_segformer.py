@@ -170,7 +170,5 @@ class SegformerOnnxConfig(OnnxConfig):
     def default_onnx_opset(self) -> int:
         return 12
 
-__all__ = [
-    "SegformerConfig",
-    "SegformerOnnxConfig"
-]
+
+__all__ = ["SegformerConfig", "SegformerOnnxConfig"]

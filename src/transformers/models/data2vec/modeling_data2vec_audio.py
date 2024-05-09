@@ -1873,11 +1873,12 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 __all__ = [
     "Data2VecAudioPreTrainedModel",
     "Data2VecAudioModel",
     "Data2VecAudioForCTC",
     "Data2VecAudioForSequenceClassification",
     "Data2VecAudioForAudioFrameClassification",
-    "Data2VecAudioForXVector"
+    "Data2VecAudioForXVector",
 ]

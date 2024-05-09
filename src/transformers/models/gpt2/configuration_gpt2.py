@@ -271,7 +271,5 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
     def default_onnx_opset(self) -> int:
         return 13
 
-__all__ = [
-    "GPT2Config",
-    "GPT2OnnxConfig"
-]
+
+__all__ = ["GPT2Config", "GPT2OnnxConfig"]

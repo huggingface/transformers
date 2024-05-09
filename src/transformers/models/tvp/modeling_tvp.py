@@ -892,8 +892,5 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "TvpPreTrainedModel",
-    "TvpModel",
-    "TvpForVideoGrounding"
-]
+
+__all__ = ["TvpPreTrainedModel", "TvpModel", "TvpForVideoGrounding"]

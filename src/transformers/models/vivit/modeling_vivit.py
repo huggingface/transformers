@@ -794,8 +794,5 @@ class VivitForVideoClassification(VivitPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "VivitPreTrainedModel",
-    "VivitModel",
-    "VivitForVideoClassification"
-]
+
+__all__ = ["VivitPreTrainedModel", "VivitModel", "VivitForVideoClassification"]

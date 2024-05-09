@@ -34,6 +34,5 @@ class VideoMAEFeatureExtractor(VideoMAEImageProcessor):
         )
         super().__init__(*args, **kwargs)
 
-__all__ = [
-    "VideoMAEFeatureExtractor"
-]
+
+__all__ = ["VideoMAEFeatureExtractor"]
