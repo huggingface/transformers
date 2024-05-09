@@ -523,6 +523,7 @@ class GemmaSdpaAttention(GemmaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        _length: int = 0,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # if output_attentions:
         #     # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -591,6 +592,7 @@ class GemmaSdpaAttention(GemmaAttention):
         # length = int(cache_position[-1] + 1)
         #length = cache_position.size()[0]  # can't compile, failed at `scaled_dot_product_attention` (`(*bias): last dimension must be contiguous`).  Also wrong value!
         length = self._seen_tokens  # incorrect results (index stay at very small values)
+        length = cache_position[-1] + 1
 
         # _key_states = key_states
         # _value_states = value_states
@@ -619,9 +621,9 @@ class GemmaSdpaAttention(GemmaAttention):
         attn_output = self.o_proj(attn_output)
 
         # verify = key_states[:, :, length - 1, :]
-        verify = length
+        verify = _length
         # veryif = self.layer_idx
-        verify = cache_position[-1]
+        # verify = cache_position[-1]
         return attn_output, verify, past_key_value
 
 
@@ -653,6 +655,7 @@ class GemmaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        _length: int = 0,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -687,6 +690,7 @@ class GemmaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            _length=_length,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -891,6 +895,7 @@ class GemmaModel(GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        _length: int = 0,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -967,6 +972,7 @@ class GemmaModel(GemmaPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    _length=_length,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1121,6 +1127,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        _length: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1165,6 +1172,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            _length=_length,
         )
 
         hidden_states = outputs[0]
@@ -1203,6 +1211,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         inputs_embeds=None,
         cache_position=None,
         use_cache=True,
+        _length=None,
         **kwargs,
     ):
         # With static cache, the `past_key_values` is None
@@ -1280,6 +1289,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
+                "_length": int(cache_position[-1]),
             }
         )
         return model_inputs
