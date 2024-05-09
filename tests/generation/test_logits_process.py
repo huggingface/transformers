@@ -211,9 +211,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores[0, 0] = -(1 / vocab_size)
         scores[1, 5] = 4 / vocab_size
 
-        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
-            penalty=2.0, encoder_input_ids=input_ids
-        )
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=input_ids)
 
         processed_scores = rep_penalty_proc(input_ids, scores)
 
@@ -380,9 +378,7 @@ class LogitsProcessorTest(unittest.TestCase):
         length = 5
 
         logits = self._get_uniform_logits(batch_size=batch_size, length=length)
-        typical_warp_safety_check = TypicalLogitsWarper(
-            mass=0.5, filter_value=0.0, min_tokens_to_keep=3
-        )
+        typical_warp_safety_check = TypicalLogitsWarper(mass=0.5, filter_value=0.0, min_tokens_to_keep=3)
 
         scores = typical_warp_safety_check(input_ids, logits)
         # uniform dist is not changed
@@ -518,12 +514,8 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = torch.tensor([[1, 2, 1], [8, 0, 2]], device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size * num_beams, vocab_size)
 
-        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(
-            2, encoder_input_ids=encoder_input_ids
-        )
-        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(
-            3, encoder_input_ids=encoder_input_ids
-        )
+        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(2, encoder_input_ids=encoder_input_ids)
+        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(3, encoder_input_ids=encoder_input_ids)
 
         filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores)
         filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores)
@@ -549,12 +541,8 @@ class LogitsProcessorTest(unittest.TestCase):
         input_ids = torch.tensor([[1, 2, 1], [1, 0, 2], [0, 0, 0], [0, 2, 2]], device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size * num_beams, vocab_size)
 
-        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(
-            2, encoder_input_ids=encoder_input_ids
-        )
-        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(
-            3, encoder_input_ids=encoder_input_ids
-        )
+        no_repeat_proc_2_gram = EncoderNoRepeatNGramLogitsProcessor(2, encoder_input_ids=encoder_input_ids)
+        no_repeat_proc_3_gram = EncoderNoRepeatNGramLogitsProcessor(3, encoder_input_ids=encoder_input_ids)
 
         filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, scores.clone())
         filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, scores.clone())
@@ -591,9 +579,7 @@ class LogitsProcessorTest(unittest.TestCase):
         bad_word_tokens = [[1], [4], [1, 0], [0, 1, 2], [1, 3, 1, 3]]
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
-        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(
-            bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id
-        )
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
 
         filtered_scores = no_bad_words_dist_proc(input_ids, scores)
 
@@ -608,9 +594,7 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertFalse(torch.all(scores == filtered_scores))
 
         # check edge case
-        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(
-            bad_words_ids=[[4]], eos_token_id=eos_token_id
-        )
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[4]], eos_token_id=eos_token_id)
         filtered_scores = no_bad_words_dist_proc(input_ids, scores)
         self.assertTrue(torch.allclose(scores, filtered_scores, atol=1e-3))
 
@@ -661,9 +645,7 @@ class LogitsProcessorTest(unittest.TestCase):
         top_k_warp = TopKLogitsWarper(3)
         top_p_warp = TopPLogitsWarper(0.8)
         no_repeat_proc = NoRepeatNGramLogitsProcessor(2)
-        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(
-            bad_words_ids=[[1]], eos_token_id=eos_token_id
-        )
+        no_bad_words_dist_proc = NoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
 
         # no processor list
         scores = min_dist_proc(input_ids, scores)
@@ -704,9 +686,7 @@ class LogitsProcessorTest(unittest.TestCase):
         def prefix_allowed_tokens_fn(batch_id, inputs_ids):
             return [[0, 1], [2, 3]][batch_id]
 
-        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(
-            prefix_allowed_tokens_fn, 1
-        )
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, 1)
 
         filtered_scores = prefix_constrained_logits_proc(input_ids, scores)
 
@@ -719,9 +699,7 @@ class LogitsProcessorTest(unittest.TestCase):
         def empty_prefix_allowed_tokens_fn(batch_id, inputs_ids):
             return []
 
-        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(
-            empty_prefix_allowed_tokens_fn, 1
-        )
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(empty_prefix_allowed_tokens_fn, 1)
 
         self.assertRaises(ValueError, prefix_constrained_logits_proc, input_ids, scores)
 

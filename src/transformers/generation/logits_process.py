@@ -198,7 +198,11 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(
-        self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = None
+        self,
+        prompt_length_to_skip: int,
+        min_new_tokens: int,
+        eos_token_id: Union[int, List[int], torch.Tensor],
+        device: str = None,
     ):
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
@@ -209,7 +213,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
         if device is None:
             device = "cpu"
-        
+
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -446,9 +450,7 @@ class TopPLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(
-        self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1
-    ):
+    def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         top_p = float(top_p)
         if top_p < 0 or top_p > 1.0:
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
@@ -512,9 +514,7 @@ class TopKLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(
-        self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1
-    ):
+    def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
@@ -660,9 +660,7 @@ class TypicalLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(
-        self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1
-    ):
+    def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         mass = float(mass)
         if not (mass > 0 and mass < 1):
             raise ValueError(f"`typical_p` has to be a float > 0 and < 1, but is {mass}")
@@ -737,9 +735,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     ```
     """
 
-    def __init__(
-        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1
-    ):
+    def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
             raise ValueError(f"`epsilon_cutoff` has to be a float > 0 and < 1, but is {epsilon}")
@@ -1333,9 +1329,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(
-        self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int
-    ):
+    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
@@ -1575,7 +1569,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
 
         if device is None:
             device = "cpu"
-        
+
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]

@@ -749,7 +749,9 @@ class GenerationMixin:
             )
         if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
             warpers.append(
-                EtaLogitsWarper(epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device)
+                EtaLogitsWarper(
+                    epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
+                )
             )
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -786,9 +788,7 @@ class GenerationMixin:
                 )
             )
         if generation_config.sequence_bias is not None:
-            processors.append(
-                SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias)
-            )
+            processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
         if generation_config.diversity_penalty is not None and generation_config.diversity_penalty > 0.0:
             processors.append(
@@ -809,9 +809,7 @@ class GenerationMixin:
                 )
             )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(
-                RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty)
-            )
+            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         if (
@@ -1700,7 +1698,12 @@ class GenerationMixin:
 
             # 12. prepare logits warper (if `do_sample` is `True`)
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device,) if generation_config.do_sample else None
+                self._get_logits_warper(
+                    generation_config,
+                    device=input_ids.device,
+                )
+                if generation_config.do_sample
+                else None
             )
 
             # 13. run assisted generate
