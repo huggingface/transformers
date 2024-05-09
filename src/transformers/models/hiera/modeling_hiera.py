@@ -853,7 +853,7 @@ class HieraEncoder(nn.Module):
                 all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states] if v is not None)
         return HieraEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1542,7 +1542,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[4:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return HieraForImageClassificationOutput(
@@ -1628,7 +1628,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
             head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs.reshaped_hidden_states
