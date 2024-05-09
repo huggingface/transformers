@@ -503,7 +503,6 @@ class TFMistralMainLayer(keras.layers.Layer):
         self.embed_tokens = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.hidden_size,
-            # mask_zero=True, TODO (ariG23498): fix `padding_idx`
             name="embed_tokens",
         )
         self.layers = [
