@@ -55,8 +55,8 @@ class RTDetrConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*, defaults to `{'features_only': True, 'out_indices': [2, 3, 4]}`):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
+        enconder_hidden_dim (`int`, *optional*, defaults to 256):
+            Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
             Multi level features input for encoder.
         feat_strides (`List[int]`, *optional*, defaults to `[8, 16, 32]`):
@@ -89,6 +89,8 @@ class RTDetrConfig(PretrainedConfig):
             feed-forward modules.
         hidden_expansion (`float`, *optional*, defaults to 1.0):
             Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimension of the layers exclude hybrid encoder.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
         decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -185,7 +187,7 @@ class RTDetrConfig(PretrainedConfig):
         use_pretrained_backbone=True,
         backbone_kwargs=None,
         # encoder HybridEncoder
-        d_model=256,
+        enconder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
@@ -201,6 +203,7 @@ class RTDetrConfig(PretrainedConfig):
         normalize_before=False,
         hidden_expansion=1.0,
         # decoder RTDetrTransformer
+        d_model=256,
         num_queries=300,
         decoder_in_channels=[256, 256, 256],
         decoder_ffn_dim=1024,
@@ -269,7 +272,7 @@ class RTDetrConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
 
         # encoder
-        self.d_model = d_model
+        self.enconder_hidden_dim = enconder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
         self.encoder_attention_heads = encoder_attention_heads
@@ -285,6 +288,7 @@ class RTDetrConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
         # decoder
+        self.d_model = d_model
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_in_channels = decoder_in_channels

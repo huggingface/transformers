@@ -1166,7 +1166,9 @@ class RTDetrPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module)
+            nn.init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
 RTDETR_START_DOCSTRING = r"""
@@ -1263,11 +1265,11 @@ class RTDetrHybridEncoder(nn.Module):
         self.config = config
         self.in_channels = config.encoder_in_channels
         self.feat_strides = config.feat_strides
-        self.d_model = config.d_model
+        self.enconder_hidden_dim = config.enconder_hidden_dim
         self.encode_proj_layers = config.encode_proj_layers
         self.positional_encoding_temperature = config.positional_encoding_temperature
         self.eval_size = config.eval_size
-        self.out_channels = [self.d_model for _ in self.in_channels]
+        self.out_channels = [self.enconder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
         activation_function = config.activation_function
 
@@ -1278,7 +1280,7 @@ class RTDetrHybridEncoder(nn.Module):
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(
-                RTDetrConvNormLayer(config, self.d_model, self.d_model, 1, 1, activation=activation_function)
+                RTDetrConvNormLayer(config, self.enconder_hidden_dim, self.enconder_hidden_dim, 1, 1, activation=activation_function)
             )
             self.fpn_blocks.append(RTDetrCSPRepLayer(config))
 
@@ -1287,7 +1289,7 @@ class RTDetrHybridEncoder(nn.Module):
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
-                RTDetrConvNormLayer(config, self.d_model, self.d_model, 3, 2, activation=activation_function)
+                RTDetrConvNormLayer(config, self.enconder_hidden_dim, self.enconder_hidden_dim, 3, 2, activation=activation_function)
             )
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
 
@@ -1365,7 +1367,7 @@ class RTDetrHybridEncoder(nn.Module):
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
-                        width, height, self.d_model, self.positional_encoding_temperature
+                        width, height, self.enconder_hidden_dim, self.positional_encoding_temperature
                     ).to(src_flatten.device)
                 else:
                     pos_embed = None
@@ -1376,7 +1378,7 @@ class RTDetrHybridEncoder(nn.Module):
                     output_attentions=output_attentions,
                 )
                 hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.d_model, height, width).contiguous()
+                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.enconder_hidden_dim, height, width).contiguous()
                 )
 
                 if output_attentions:

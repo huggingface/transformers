@@ -61,7 +61,7 @@ class RTDetrModelTester:
         use_pretrained_backbone=True,
         backbone_kwargs=None,
         # encoder HybridEncoder
-        d_model=32,
+        enconder_hidden_dim=32,
         encoder_in_channels=[128, 256, 512],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
@@ -76,6 +76,7 @@ class RTDetrModelTester:
         eval_size=None,
         normalize_before=False,
         # decoder RTDetrTransformer
+        d_model=32,
         num_queries=30,
         decoder_in_channels=[32, 32, 32],
         decoder_ffn_dim=64,
@@ -109,7 +110,7 @@ class RTDetrModelTester:
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.d_model = d_model
+        self.enconder_hidden_dim = enconder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
         self.encoder_layers = encoder_layers
@@ -123,6 +124,7 @@ class RTDetrModelTester:
         self.activation_function = activation_function
         self.eval_size = eval_size
         self.normalize_before = normalize_before
+        self.d_model = d_model
         self.num_queries = num_queries
         self.decoder_in_channels = decoder_in_channels
         self.decoder_ffn_dim = decoder_ffn_dim
@@ -186,7 +188,7 @@ class RTDetrModelTester:
             backbone=None,
             use_pretrained_backbone=False,
             backbone_kwargs=self.backbone_kwargs,
-            d_model=self.d_model,
+            enconder_hidden_dim=self.enconder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
             feat_strides=self.feat_strides,
             encoder_layers=self.encoder_layers,
@@ -200,6 +202,7 @@ class RTDetrModelTester:
             activation_function=self.activation_function,
             eval_size=self.eval_size,
             normalize_before=self.normalize_before,
+            d_model=self.d_model,
             num_queries=self.num_queries,
             decoder_in_channels=self.decoder_in_channels,
             decoder_ffn_dim=self.decoder_ffn_dim,
