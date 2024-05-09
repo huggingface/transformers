@@ -51,6 +51,8 @@ class LlavaNextConfig(PretrainedConfig):
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -86,6 +88,7 @@ class LlavaNextConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_grid_pinpoints=None,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -134,4 +137,4 @@ class LlavaNextConfig(PretrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
