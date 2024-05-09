@@ -853,7 +853,11 @@ class HieraEncoder(nn.Module):
                 all_reshaped_hidden_states = all_reshaped_hidden_states + (reshaped_hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states]
+                if v is not None
+            )
         return HieraEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
