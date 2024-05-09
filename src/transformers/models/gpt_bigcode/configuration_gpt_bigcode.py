@@ -21,9 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class GPTBigCodeConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPTBigCodeModel`]. It is used to instantiate a

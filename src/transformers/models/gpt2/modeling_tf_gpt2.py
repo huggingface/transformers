@@ -59,9 +59,6 @@ _CHECKPOINT_FOR_DOC = "openai-community/gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
 
-from ..deprecated._archive_maps import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFAttention(keras.layers.Layer):
     def __init__(self, nx, config, scale=False, is_cross_attention=False, **kwargs):
         super().__init__(**kwargs)

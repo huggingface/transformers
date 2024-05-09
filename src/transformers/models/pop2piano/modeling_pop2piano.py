@@ -65,9 +65,6 @@ _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "sweetcocoa/pop2piano"
 
 
-from ..deprecated._archive_maps import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 POP2PIANO_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

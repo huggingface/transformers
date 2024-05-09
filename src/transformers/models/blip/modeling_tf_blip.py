@@ -49,9 +49,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
 
 
-from ..deprecated._archive_maps import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.clip.modeling_tf_clip.contrastive_loss
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(

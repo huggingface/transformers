@@ -25,9 +25,6 @@ from ..bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class DPTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT

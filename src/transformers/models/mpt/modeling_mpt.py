@@ -43,9 +43,6 @@ _CHECKPOINT_FOR_DOC = "mosaicml/mpt-7b"
 _CONFIG_FOR_DOC = "MptConfig"
 
 
-from ..deprecated._archive_maps import MPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):
     r"""
     Link to paper: https://arxiv.org/abs/2108.12409 - Alibi tensor is not causal as the original paper mentions, it

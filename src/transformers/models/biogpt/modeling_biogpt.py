@@ -47,9 +47,6 @@ _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
 
 
-from ..deprecated._archive_maps import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """
