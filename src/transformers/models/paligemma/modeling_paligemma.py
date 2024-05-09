@@ -295,11 +295,16 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         final_attention_mask_4d = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
         final_attention_mask_4d = final_attention_mask_4d.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
 
-        position_ids = torch.arange(1, sequence_length + 1, device=input_ids.device).expand(batch_size, -1)
-        position_ids = torch.where(input_ids == self.pad_token_id, torch.zeros_like(input_ids), position_ids)
+        #position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
+        #position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
+        position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
+
+        
         if labels is not None:
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
-        return final_embedding, final_attention_mask_4d, final_labels, position_ids
+
+        return final_embedding, final_attention_mask_4d, final_labels, position_ids        
+        #return final_embedding, attention_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

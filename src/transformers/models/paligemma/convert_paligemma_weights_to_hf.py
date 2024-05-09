@@ -316,8 +316,29 @@ def verify_logits(model, processor):
     """
 
     cow_on_beach_path = "/home/pablo/cow_beach_1.png"
-
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
+    
+    # Test image captioning generation without padding
+    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
+    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning without padding should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works without padding.")
+
+
+    # Test image captioning generation with padding
+    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
+    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
+    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
+    if captioning_output[0] != "\ncow standing on the beach":
+        raise ValueError(fr"Image captioning with should match, got {captioning_output[0]}.")
+    else:
+        print("Image captioning works with padding.")
+
+
+
     prompt = ["answer en Where is the cow standing?", ""]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt")
@@ -333,24 +354,7 @@ def verify_logits(model, processor):
             print("Generation matches. You're almost done!")
 
 
-    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
-    # Test image captioning generation
-    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works without padding.")
 
-    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
-    
-    # Test image captioning generation
-    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works with padding.")
  
 
     
@@ -414,7 +418,7 @@ def convert_paligemma_checkpoint(
     else:
         processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
         model = PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
-    #model.config._attn_implementation = 'eager'
+    model.config._attn_implementation = 'sdpa'
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
@@ -528,7 +532,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/raid/pablo/paligemma/paligemma-test-hf ",
+        default="/raid/pablo/converted_224_test/",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
