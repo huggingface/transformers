@@ -44,9 +44,6 @@ _CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
 
 
-from ..deprecated._archive_maps import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
     """
     A map of modules from TF to PyTorch. I use a map to keep the PyTorch model as identical to the original PyTorch

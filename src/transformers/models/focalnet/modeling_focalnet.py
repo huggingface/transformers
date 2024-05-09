@@ -54,9 +54,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/focalnet-tiny"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class FocalNetEncoderOutput(ModelOutput):
     """
@@ -636,6 +633,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["FocalNetStage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

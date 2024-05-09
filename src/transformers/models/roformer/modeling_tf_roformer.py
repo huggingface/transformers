@@ -65,9 +65,6 @@ _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
 
 
-from ..deprecated._archive_maps import TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 

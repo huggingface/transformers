@@ -52,9 +52,6 @@ _CONFIG_FOR_DOC = "OneFormerConfig"
 _CHECKPOINT_FOR_DOC = "shi-labs/oneformer_ade20k_swin_tiny"
 
 
-from ..deprecated._archive_maps import ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 

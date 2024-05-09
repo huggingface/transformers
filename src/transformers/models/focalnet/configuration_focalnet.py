@@ -22,9 +22,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FocalNetModel`]. It is used to instantiate a

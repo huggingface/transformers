@@ -22,7 +22,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_align": [
-        "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AlignConfig",
         "AlignTextConfig",
         "AlignVisionConfig",
@@ -37,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_align"] = [
-        "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AlignModel",
         "AlignPreTrainedModel",
         "AlignTextModel",
@@ -46,7 +44,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_align import (
-        ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
         AlignTextConfig,
         AlignVisionConfig,
@@ -60,7 +57,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_align import (
-            ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlignModel,
             AlignPreTrainedModel,
             AlignTextModel,
