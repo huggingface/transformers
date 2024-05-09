@@ -339,7 +339,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # check edge cases with negative and extreme logits
         ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float) - (vocab_size // 2)
-        ramp_logits = ramp_logits.unsqueeze(0).repeat(batch_size, 1) 
+        ramp_logits = ramp_logits.unsqueeze(0).repeat(batch_size, 1)
 
         # make ramp_logits more extreme
         ramp_logits[1] = ramp_logits[1] * 100.0
