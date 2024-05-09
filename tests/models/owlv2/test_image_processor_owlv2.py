@@ -134,8 +134,9 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
-            target_sizes = torch.tensor([image.size[::-1]])
-            results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=target_sizes)[0]
+
+        target_sizes = torch.tensor([image.size[::-1]])
+        results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=target_sizes)[0]
 
         boxes = results["boxes"].tolist()
         self.assertEqual(boxes[0], [341.66656494140625, 23.38756561279297, 642.321044921875, 371.3482971191406])
