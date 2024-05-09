@@ -1,5 +1,4 @@
 from ... import PretrainedConfig
-from ..deprecated._archive_maps import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class NezhaConfig(PretrainedConfig):

@@ -24,9 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class Kosmos2TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a

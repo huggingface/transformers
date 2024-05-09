@@ -84,9 +84,6 @@ _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 
-from ..deprecated._archive_maps import TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
 

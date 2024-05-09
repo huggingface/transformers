@@ -39,8 +39,6 @@ _CONFIG_FOR_DOC = "SuperPointConfig"
 
 _CHECKPOINT_FOR_DOC = "magic-leap-community/superpoint"
 
-SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["magic-leap-community/superpoint"]
-
 
 def remove_keypoints_from_borders(
     keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int

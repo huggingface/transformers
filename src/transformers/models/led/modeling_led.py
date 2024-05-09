@@ -53,9 +53,6 @@ _CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
 
 
-from ..deprecated._archive_maps import LED_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.

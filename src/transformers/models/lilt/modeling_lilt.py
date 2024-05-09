@@ -41,9 +41,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LiltConfig"
 
 
-from ..deprecated._archive_maps import LILT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class LiltTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
