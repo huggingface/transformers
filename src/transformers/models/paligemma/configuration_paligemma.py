@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PaLIGemmamodel configuration"""
+""" PaliGemmamodel configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,11 +25,11 @@ PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PaLIGemmaConfig(PretrainedConfig):
+class PaliGemmaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaLIGemmaForConditionalGeneration`]. It is used to instantiate an
-    PaLIGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PaLIGemma-2B.
+    This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
+    PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the PaliGemma-2B.
 
     e.g. [paligemma-hf/paligemma-2b](https://huggingface.co/paligemma-hf/paligemma-2b)
 
@@ -37,7 +37,7 @@ class PaLIGemmaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`PaLIGemmaVisionConfig`,  *optional*):
+        vision_config (`PaliGemmaVisionConfig`,  *optional*):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
@@ -46,8 +46,8 @@ class PaLIGemmaConfig(PretrainedConfig):
         image_token_index (`int`, *optional*, defaults to 257152):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
-            Vocabulary size of the PaLIGemmamodel. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~PaLIGemmaForConditionalGeneration`]
+            Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`~PaliGemmaForConditionalGeneration`]
         projection_dim (`int`, *optional*, defaults to 2048):
             Dimension of the multimodal projection space.
         hidden_size (`int`, *optional*, defaults to 2048):
@@ -56,7 +56,7 @@ class PaLIGemmaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PaLIGemmaForConditionalGeneration, PaLIGemmaConfig, SiglipVisionConfig, GemmaConfig
+    >>> from transformers import PaliGemmaForConditionalGeneration, PaliGemmaConfig, SiglipVisionConfig, GemmaConfig
 
     >>> # Initializing a Siglip-like vision config
     >>> vision_config = SiglipVisionConfig()
@@ -64,11 +64,11 @@ class PaLIGemmaConfig(PretrainedConfig):
     >>> # Initializing a Gemma config
     >>> text_config = GemmaConfig()
 
-    >>> # Initializing a PaLIGemma paligemma-1.5-7b style configuration
+    >>> # Initializing a PaliGemma paligemma-1.5-7b style configuration
     >>> configuration = GemmaConfig(vision_config, text_config)
 
     >>> # Initializing a model from the paligemma-1.5-7b style configuration
-    >>> model = PaLIGemmaForConditionalGeneration(configuration)
+    >>> model = PaliGemmaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

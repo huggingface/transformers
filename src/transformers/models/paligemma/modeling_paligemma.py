@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PaLIGemmamodel."""
+""" PyTorch PaliGemmamodel."""
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -31,7 +31,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 
-from .configuration_paligemma import PaLIGemmaConfig
+from .configuration_paligemma import PaliGemmaConfig
 from ...activations import ACT2FN
 
 
@@ -43,12 +43,12 @@ from ..auto import AutoModel, AutoModelForCausalLM
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PaLIGemmaConfig"
+_CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 @dataclass
-class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
+class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for PaLIGemmacausal language model (or autoregressive) outputs.
+    Base class for PaliGemmacausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -87,8 +87,8 @@ class PaLIGemmaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class PaLIGemmaMultiModalProjector(nn.Module):
-    def __init__(self, config: PaLIGemmaConfig):
+class PaliGemmaMultiModalProjector(nn.Module):
+    def __init__(self, config: PaliGemmaConfig):
         super().__init__()
         self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
 
@@ -108,7 +108,7 @@ PALIGEMMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PaLIGemmaConfig`] or [`PaLIGemmaVisionConfig`]):
+        config ([`PaliGemmaConfig`] or [`PaliGemmaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -119,17 +119,17 @@ PALIGEMMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaLIGemmaPreTrainedModel(PreTrainedModel):
-    config_class = PaLIGemmaConfig
+class PaliGemmaPreTrainedModel(PreTrainedModel):
+    config_class = PaliGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PaLIGemmaVisionAttention"]
+    _no_split_modules = ["PaliGemmaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        # important: this ported version of PaLIGemmaisn't meant for training from scratch - only
+        # important: this ported version of PaliGemmaisn't meant for training from scratch - only
         # inference and fine-tuning
         std = (
             self.config.initializer_range
@@ -170,7 +170,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaLIGemmaProcessor`] uses
+            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
             [`SiglipImageProcessor`] for processing images).
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -228,11 +228,11 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
-    def __init__(self, config: PaLIGemmaConfig):
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
+    def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = PaLIGemmaMultiModalProjector(config)
+        self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
@@ -302,7 +302,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PaLIGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -316,7 +316,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PaLIGemmaCausalLMOutputWithPast]:
+    ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -331,9 +331,9 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, PaLIGemmaForConditionalGeneration
+        >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
-        >>> model = PaLIGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
         >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
 
         >>> prompt = "answer en Where is the cow standing?"
@@ -403,7 +403,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
                     )
 
                     # Filter out only the tokens that can be un-attended, this can happen
-                    # if one uses PaLIGemma+ Fused modules where the cache on the
+                    # if one uses PaliGemma+ Fused modules where the cache on the
                     # first iteration is already big enough, or if one passes custom cache
                     valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
                     new_batch_index = batch_index[valid_indices]
@@ -477,7 +477,7 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return PaLIGemmaCausalLMOutputWithPast(
+        return PaliGemmaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,

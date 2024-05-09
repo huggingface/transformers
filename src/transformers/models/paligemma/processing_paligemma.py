@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for PaLIGemma.
+Processor class for PaliGemma.
 """
 
 
@@ -61,12 +61,12 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     """
     return f"{image_token * image_seq_len}{bos_token}{prompt}"
 
-class PaLIGemmaProcessor(ProcessorMixin):
+class PaliGemmaProcessor(ProcessorMixin):
     r"""
-    Constructs a PaLIGemma processor which wraps a PaLIGemma image processor and a PaLIGemma tokenizer into a single processor.
+    Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
 
-    [`PaLIGemmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~PaLIGemmaProcessor.__call__`] and [`~PaLIGemmaProcessor.decode`] for more information.
+    [`PaliGemmaProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~PaliGemmaProcessor.__call__`] and [`~PaliGemmaProcessor.decode`] for more information.
 
     Args:
         image_processor ([`SiglipImageProcessor`], *optional*):
@@ -157,10 +157,10 @@ class PaLIGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is None:
-            raise ValueError("`images` are expected as arguments to a `PaLIGemmaProcessor` instance.")
+            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
         if text is None:
             logger.warning_once(
-                "You are using PaLIGemma without a text prefix. It will perform as a picture-captioning model."
+                "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
             )
 
         if isinstance(text, List) and isinstance(images, List):

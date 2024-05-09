@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert PaLIGemma checkpoints from the original repository.
+"""Convert PaliGemma checkpoints from the original repository.
 """
 
 
@@ -25,9 +25,9 @@ from PIL import Image
 
 from transformers import (
     AutoTokenizer,
-    PaLIGemmaConfig,
-    PaLIGemmaForConditionalGeneration,
-    PaLIGemmaProcessor,
+    PaliGemmaConfig,
+    PaliGemmaForConditionalGeneration,
+    PaliGemmaProcessor,
     GemmaTokenizer,
     GemmaTokenizerFast,
     SiglipImageProcessor,
@@ -45,7 +45,7 @@ PALIGEMMA_VARIANTS = ["2b-test", "2b-224px", "2b-448px", "2b-896px"]
 
 
 def get_paligemma_config(variant: str):
-    config = PaLIGemmaConfig()
+    config = PaliGemmaConfig()
 
     if variant == "2b-test":
         vocab_size = 257152
@@ -355,7 +355,7 @@ def verify_logits(model, processor):
 
     
     print("Verifying that batched generation and single generation works.")
-    big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?\n", "\n", "answer en Where is the cow standing?\n"]
+    big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?", "", "answer en Where is the cow standing?"]
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt')
@@ -400,20 +400,20 @@ def convert_paligemma_checkpoint(
         image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
         image_processor.image_seq_length = config.vision_config.num_image_tokens
 
-        processor = PaLIGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
         del data
         state_dict_transformers = slice_state_dict(state_dict, config)
         del state_dict
 
-        model = PaLIGemmaForConditionalGeneration(config).to(device).eval()
+        model = PaliGemmaForConditionalGeneration(config).to(device).eval()
         model.load_state_dict(state_dict_transformers)
         del state_dict_transformers
 
     else:
-        processor = PaLIGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
+        processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
+        model = PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
     #model.config._attn_implementation = 'eager'
     if do_verify_logits:
         print("Verifying logits...")

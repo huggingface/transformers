@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_paligemma": ["PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "PaLIGemmaConfig"]}
+_import_structure = {"configuration_paligemma": ["PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "PaliGemmaConfig"]}
 
 
 try:
@@ -27,15 +27,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_paligemma"] = [
         "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PaLIGemmaForConditionalGeneration",
-        "PaLIGemmaPreTrainedModel",
+        "PaliGemmaForConditionalGeneration",
+        "PaliGemmaPreTrainedModel",
     ]
-    _import_structure["processing_paligemma"] = ["PaLIGemmaProcessor"]
-    _import_structure["language_modeling_paligemma"] = ["PaLIGemmaLanguageModel", "PaLIGemmaLanguageForCausalLM"]
+    _import_structure["processing_paligemma"] = ["PaliGemmaProcessor"]
+    _import_structure["language_modeling_paligemma"] = ["PaliGemmaLanguageModel", "PaliGemmaLanguageForCausalLM"]
 
 
 if TYPE_CHECKING:
-    from .configuration_paligemma import PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, PaLIGemmaConfig
+    from .configuration_paligemma import PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP, PaliGemmaConfig
 
     try:
         if not is_torch_available():
@@ -43,13 +43,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .language_modeling_paligemma import PaLIGemmaLanguageForCausalLM, PaLIGemmaLanguageModel
         from .modeling_paligemma import (
             PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PaLIGemmaForConditionalGeneration,
-            PaLIGemmaPreTrainedModel,
+            PaliGemmaForConditionalGeneration,
+            PaliGemmaPreTrainedModel,
         )
-        from .processing_paligemma import PaLIGemmaProcessor
+        from .processing_paligemma import PaliGemmaProcessor
 
 
 else:
