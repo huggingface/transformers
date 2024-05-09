@@ -2628,7 +2628,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             # First: create the criterion
             criterion = RTDetrLoss(self.config)
             criterion.to(self.device)
-            # Third: compute the losses, based on outputs and labels
+            # Second: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
@@ -2641,7 +2641,9 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
                 outputs_loss["auxiliary_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
                 if self.training and denoising_meta_values is not None:
-                    outputs_loss["dn_auxiliary_outputs"] = self._set_aux_loss(dn_out_class, dn_out_coord)
+                    outputs_loss["dn_auxiliary_outputs"] = self._set_aux_loss(
+                        dn_out_class.transpose(0, 1), dn_out_coord.transpose(0, 1)
+                    )
                     outputs_loss["denoising_meta_values"] = denoising_meta_values
 
             loss_dict = criterion(outputs_loss, labels)
