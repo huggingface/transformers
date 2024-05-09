@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
+    "configuration_starcoder2": ["Starcoder2Config"],
 }
 
 
@@ -40,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
+    from .configuration_starcoder2 import Starcoder2Config
 
     try:
         if not is_torch_available():

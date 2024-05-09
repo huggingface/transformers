@@ -44,10 +44,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XLMProphetNetConfig"
 
-XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xprophetnet-large-wiki100-cased",
-    # See all XLMProphetNet models at https://huggingface.co/models?filter=xprophetnet
-]
 
 # Copied from src.transformers.models.prophetnet.modeling_prophetnet.PROPHETNET_START_DOCSTRING with ProphetNetConfig->XLMProphetNetConfig
 XLM_PROPHETNET_START_DOCSTRING = r"""

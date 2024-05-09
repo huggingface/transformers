@@ -24,10 +24,6 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/vitmatte-small-composition-1k": "https://huggingface.co/hustvl/vitmatte-small-composition-1k/resolve/main/config.json",
-}
-
 
 class VitMatteConfig(PretrainedConfig):
     r"""

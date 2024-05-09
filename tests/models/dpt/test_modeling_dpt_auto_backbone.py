@@ -31,7 +31,6 @@ if is_torch_available():
 
     from transformers import DPTForDepthEstimation
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.dpt.modeling_dpt import DPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -244,9 +243,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPTForDepthEstimation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Intel/dpt-large"
+        model = DPTForDepthEstimation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

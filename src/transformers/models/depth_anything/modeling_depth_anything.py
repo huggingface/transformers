@@ -38,11 +38,6 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
 
-DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "LiheYoung/depth-anything-small-hf",
-    # See all Depth Anything models at https://huggingface.co/models?filter=depth_anything
-]
-
 
 DEPTH_ANYTHING_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -366,10 +361,14 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     DEPTH_ANYTHING_START_DOCSTRING,
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
+    _no_split_modules = ["DPTViTEmbeddings"]
+
     def __init__(self, config):
         super().__init__(config)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = AutoBackbone.from_config(
+            config.backbone_config, attn_implementation=config._attn_implementation
+        )
         self.neck = DepthAnythingNeck(config)
         self.head = DepthAnythingDepthEstimationHead(config)
 

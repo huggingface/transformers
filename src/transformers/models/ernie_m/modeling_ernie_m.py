@@ -44,12 +44,6 @@ _CHECKPOINT_FOR_DOC = "susnato/ernie-m-base_pytorch"
 _CONFIG_FOR_DOC = "ErnieMConfig"
 _TOKENIZER_FOR_DOC = "ErnieMTokenizer"
 
-ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/ernie-m-base_pytorch",
-    "susnato/ernie-m-large_pytorch",
-    # See all ErnieM models at https://huggingface.co/models?filter=ernie_m
-]
-
 
 # Adapted from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
 class ErnieMEmbeddings(nn.Module):

@@ -25,11 +25,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sail/poolformer_s12": "https://huggingface.co/sail/poolformer_s12/resolve/main/config.json",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-}
-
 
 class PoolFormerConfig(PretrainedConfig):
     r"""

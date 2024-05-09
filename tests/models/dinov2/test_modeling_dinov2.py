@@ -38,7 +38,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Dinov2Backbone, Dinov2ForImageClassification, Dinov2Model
-    from transformers.models.dinov2.modeling_dinov2 import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -287,9 +286,9 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Dinov2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dinov2-base"
+        model = Dinov2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

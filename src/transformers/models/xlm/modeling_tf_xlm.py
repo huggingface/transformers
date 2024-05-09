@@ -66,20 +66,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
 
-TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FacebookAI/xlm-mlm-en-2048",
-    "FacebookAI/xlm-mlm-ende-1024",
-    "FacebookAI/xlm-mlm-enfr-1024",
-    "FacebookAI/xlm-mlm-enro-1024",
-    "FacebookAI/xlm-mlm-tlm-xnli15-1024",
-    "FacebookAI/xlm-mlm-xnli15-1024",
-    "FacebookAI/xlm-clm-enfr-1024",
-    "FacebookAI/xlm-clm-ende-1024",
-    "FacebookAI/xlm-mlm-17-1280",
-    "FacebookAI/xlm-mlm-100-1280",
-    # See all XLM models at https://huggingface.co/models?filter=xlm
-]
-
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])

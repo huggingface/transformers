@@ -49,7 +49,6 @@ if is_torch_available():
         BridgeTowerForMaskedLM,
         BridgeTowerModel,
     )
-    from transformers.models.bridgetower.modeling_bridgetower import BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -356,9 +355,9 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BridgeTowerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "BridgeTower/bridgetower-base"
+        model = BridgeTowerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_save_load_fast_init_from_base(self):
@@ -505,6 +504,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="""Bridge Tower does not have input/output embeddings. Thus this test is not applicable.""")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Bridge Tower does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
 

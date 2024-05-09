@@ -45,11 +45,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TvltConfig"
 _CHECKPOINT_FOR_DOC = "ZinengTang/tvlt-base"
 
-TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ZinengTang/tvlt-base",
-    # See all TVLT models at https://huggingface.co/ZinengTang/tvlt-base
-]
-
 
 @dataclass
 class TvltModelOutput(ModelOutput):

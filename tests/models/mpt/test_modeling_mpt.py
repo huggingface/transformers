@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         MptForCausalLM,
         MptForQuestionAnswering,
@@ -429,9 +428,9 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "mosaicml/mpt-7b"
+        model = MptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @slow

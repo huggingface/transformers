@@ -35,32 +35,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google-t5/t5-small": "https://huggingface.co/google-t5/t5-small/resolve/main/spiece.model",
-        "google-t5/t5-base": "https://huggingface.co/google-t5/t5-base/resolve/main/spiece.model",
-        "google-t5/t5-large": "https://huggingface.co/google-t5/t5-large/resolve/main/spiece.model",
-        "google-t5/t5-3b": "https://huggingface.co/google-t5/t5-3b/resolve/main/spiece.model",
-        "google-t5/t5-11b": "https://huggingface.co/google-t5/t5-11b/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "google-t5/t5-small": "https://huggingface.co/google-t5/t5-small/resolve/main/tokenizer.json",
-        "google-t5/t5-base": "https://huggingface.co/google-t5/t5-base/resolve/main/tokenizer.json",
-        "google-t5/t5-large": "https://huggingface.co/google-t5/t5-large/resolve/main/tokenizer.json",
-        "google-t5/t5-3b": "https://huggingface.co/google-t5/t5-3b/resolve/main/tokenizer.json",
-        "google-t5/t5-11b": "https://huggingface.co/google-t5/t5-11b/resolve/main/tokenizer.json",
-    },
-}
-
 
 # TODO(PVP) - this should be removed in Transformers v5
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google-t5/t5-small": 512,
-    "google-t5/t5-base": 512,
-    "google-t5/t5-large": 512,
-    "google-t5/t5-3b": 512,
-    "google-t5/t5-11b": 512,
-}
 
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
@@ -103,8 +79,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = T5Tokenizer
 

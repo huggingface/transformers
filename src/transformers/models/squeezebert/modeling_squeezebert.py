@@ -42,12 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
 
-SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "squeezebert/squeezebert-uncased",
-    "squeezebert/squeezebert-mnli",
-    "squeezebert/squeezebert-mnli-headless",
-]
-
 
 class SqueezeBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -403,6 +397,9 @@ class SqueezeBertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self) -> None:
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -661,6 +658,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

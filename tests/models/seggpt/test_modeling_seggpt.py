@@ -16,6 +16,7 @@
 
 
 import inspect
+import math
 import unittest
 
 from datasets import load_dataset
@@ -39,7 +40,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SegGptForImageSegmentation, SegGptModel
-    from transformers.models.seggpt.modeling_seggpt import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.seggpt.modeling_seggpt import SegGptLoss
 
 
 if is_vision_available():
@@ -299,11 +300,27 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
+    def test_seggpt_loss(self):
+        torch.manual_seed(100)
+        config = self.model_tester.get_config()
+
+        prompt_masks = torch.rand(1, config.num_channels, config.image_size, config.image_size)
+        label = torch.rand(1, config.num_channels, config.image_size, config.image_size)
+        pred_masks = torch.rand(1, config.num_channels, config.image_size * 2, config.image_size)
+        # seq_len x 2 because the loss concatenates prompt_masks and labels as pred_masks is concatenated
+        bool_masked_pos = torch.rand(1, self.model_tester.seq_length * 2) > 0.5
+
+        loss = SegGptLoss(config)
+        loss_value = loss(prompt_masks, pred_masks, label, bool_masked_pos)
+        expected_loss_value = torch.tensor(0.3340)
+
+        self.assertTrue(torch.allclose(loss_value, expected_loss_value, atol=1e-4))
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SegGptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "BAAI/seggpt-vit-large"
+        model = SegGptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 def prepare_img():
@@ -311,6 +328,20 @@ def prepare_img():
     images = [image.convert("RGB") for image in ds["image"]]
     masks = [image.convert("RGB") for image in ds["mask"]]
     return images, masks
+
+
+def prepare_bool_masked_pos(config: SegGptConfig):
+    num_patches = math.prod([i // config.patch_size for i in config.image_size])
+    mask_ratio = 0.75
+    torch.manual_seed(2)
+    num_masked_patches = int(num_patches * mask_ratio)
+    shuffle_idx = torch.randperm(num_patches)
+    bool_masked_pos = torch.FloatTensor([0] * (num_patches - num_masked_patches) + [1] * num_masked_patches)[
+        shuffle_idx
+    ]
+    bool_masked_pos = bool_masked_pos.unsqueeze(0).bool()
+
+    return bool_masked_pos
 
 
 @require_torch
@@ -332,7 +363,11 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         prompt_mask = masks[0]
 
         inputs = image_processor(
-            images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
+            images=input_image,
+            prompt_images=prompt_image,
+            prompt_masks=prompt_mask,
+            return_tensors="pt",
+            do_convert_rgb=False,
         )
 
         inputs = inputs.to(torch_device)
@@ -373,7 +408,11 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         prompt_masks = [masks[0], masks[2]]
 
         inputs = image_processor(
-            images=input_images, prompt_images=prompt_images, prompt_masks=prompt_masks, return_tensors="pt"
+            images=input_images,
+            prompt_images=prompt_images,
+            prompt_masks=prompt_masks,
+            return_tensors="pt",
+            do_convert_rgb=False,
         )
 
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
@@ -391,3 +430,36 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.pred_masks.shape, expected_shape)
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, 448:451, :3], expected_slice, atol=4e-4))
+
+    @slow
+    def test_one_shot_with_label(self):
+        model = SegGptForImageSegmentation.from_pretrained("BAAI/seggpt-vit-large").to(torch_device)
+
+        image_processor = self.default_image_processor
+
+        images, masks = prepare_img()
+
+        input_image = images[1]
+        label = masks[1]
+        prompt_image = images[0]
+        prompt_mask = masks[0]
+
+        inputs = image_processor(
+            images=input_image,
+            prompt_masks=prompt_mask,
+            prompt_images=prompt_image,
+            return_tensors="pt",
+            do_convert_rgb=False,
+        ).to(torch_device)
+
+        labels = image_processor(images=None, prompt_masks=label, return_tensors="pt", do_convert_rgb=False)[
+            "prompt_masks"
+        ].to(torch_device)
+
+        bool_masked_pos = prepare_bool_masked_pos(model.config).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs, labels=labels, bool_masked_pos=bool_masked_pos)
+
+        expected_loss = torch.tensor(0.0074).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))

@@ -18,11 +18,13 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import torch
 
+from ..cache_utils import DynamicCache
+from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from .configuration_utils import GenerationConfig
-    from .logits_process import LogitsProcessorList
 
 
 class CandidateGenerator:
@@ -92,9 +94,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
         generation_config: "GenerationConfig",
-        logits_processor: "LogitsProcessorList",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
     ):
         # Make sure all data at the same device as assistant model
         device = assistant_model.device
@@ -121,7 +123,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
             )
             assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, assistant_kwargs, model_input_name
+                inputs_tensor, assistant_kwargs, model_input_name, assistant_model.generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
@@ -131,11 +133,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if assistant_model.config.is_encoder_decoder:
             # both are encoder-decoder
             self.input_ids_key = "decoder_input_ids"
-            self.attention_key = "decoder_attention_mask"
         elif "encoder_outputs" in assistant_kwargs:
             # special case for encoder-decoder with decoder-only assistant (like DistilWhisper)
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
             self.assistant_kwargs["attention_mask"] = self.assistant_kwargs.get(
                 "decoder_attention_mask",
                 torch.ones((input_ids.shape[0], 1), device=input_ids.device, dtype=torch.long),
@@ -143,19 +143,24 @@ class AssistedCandidateGenerator(CandidateGenerator):
         else:
             # both are decoder-only
             self.input_ids_key = "input_ids"
-            self.attention_key = "attention_mask"
 
         # Prepare generation-related options.
-        eos_token_id = generation_config.eos_token_id
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        self.eos_token_id_tensor = (
-            torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
-        )
-        self.logits_processor = logits_processor
+        self.logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         self.generation_config = copy.deepcopy(generation_config)
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
+
+        # avoid unnecessary warnings that min_length is larger than max_new_tokens
+        # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
+        self.main_model_min_length = self.generation_config.min_length
+        self.generation_config.min_length = 0
+        self.generation_config.min_new_tokens = None
+        for processor in self.logits_processor:
+            if type(processor) == MinLengthLogitsProcessor:
+                raise ValueError(
+                    "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
+                    "Please pass in `min_length` into `.generate()` instead"
+                )
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -175,6 +180,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
+        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         if max_new_tokens == 0:
             return input_ids, None
 
@@ -195,6 +201,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
             self.input_ids_key: input_ids,
+            "min_new_tokens": min_new_tokens,
             "max_new_tokens": max_new_tokens,
             "generation_config": self.generation_config,
             "logits_processor": self.logits_processor,
@@ -247,15 +254,20 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             The maximum ngram size to be considered for matching in the prompt
         num_output_tokens (`int`):
             The number of tokens to be output as candidate tokens.
+        max_length (`int`):
+            The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
+            Defaults to 20, which is the max length used as default in generation config.
     """
 
     def __init__(
         self,
         num_output_tokens: int = 10,
         max_matching_ngram_size: int = None,
+        max_length: int = 20,
     ):
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
+        self.max_length = max_length
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
@@ -272,6 +284,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
         input_length = input_ids.size(1)
+
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
+        if self.max_length == input_length + 1:
+            return input_ids, None
 
         chosen_ids = None
         match_found = False
@@ -292,7 +308,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             for idx in match_indices:
                 start_idx = idx + ngram_size
                 end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length)
+                end_idx = min(end_idx, input_length, self.max_length)
 
                 if start_idx < end_idx:
                     chosen_ids = input_ids[0, start_idx:end_idx]
@@ -364,7 +380,13 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
         else:
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
-    else:
+    elif isinstance(past_key_values, DynamicCache):
+        for idx in range(len(past_key_values.key_cache)):
+            if past_key_values.value_cache[idx].shape[-1] != 0:
+                past_key_values.key_cache[idx] = past_key_values.key_cache[idx][:, :, :maximum_length, :]
+                past_key_values.value_cache[idx] = past_key_values.value_cache[idx][:, :, :maximum_length, :]
+
+    elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             new_past.append(
                 (

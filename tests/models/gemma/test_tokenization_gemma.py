@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_jinja,
+    require_read_token,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -136,11 +137,12 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in cr_output)
 
     @slow
+    @require_read_token
     def test_tokenizer_integration(self):
         expected_encoding =  {'input_ids': [[2, 158434, 591, 84193, 3836, 685, 6599, 31223, 235290, 140247, 578, 6599, 31223, 235290, 145139, 235290, 3491, 235275, 6572, 3311, 235290, 38197, 109959, 591, 25894, 235269, 162174, 235290, 235284, 235269, 1791, 6362, 12481, 235269, 1576, 18622, 235269, 2900, 1136, 86684, 235269, 29092, 4632, 16994, 604, 13146, 14944, 40371, 591, 19700, 235327, 235275, 578, 13146, 14944, 25511, 591, 235300, 12474, 235275, 675, 1163, 235248, 235304, 235284, 235340, 229903, 5377, 575, 235248, 235274, 235276, 235276, 235340, 17044, 578, 5271, 1061, 118345, 1865, 125247, 235269, 8745, 111226, 578, 176888, 235265], [2, 25894, 603, 6869, 577, 953, 235290, 8297, 5271, 209099, 41642, 774, 748, 78253, 2793, 731, 51506, 34346, 611, 2145, 2731, 578, 1833, 4807, 575, 832, 16630, 235265], [2, 651, 4320, 8426, 25341, 36271, 1163, 573, 27894, 5929, 235265]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="hf-internal-testing/dummy-gemma",
+            model_name="google/gemma-2b",
             revision="",
             padding=False,
         )
@@ -151,10 +153,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
-        pass
-
-    @unittest.skip("This test will be removed from main @LysandreJik")
-    def test_pretrained_model_lists(self):
         pass
 
     @unittest.skip("Skipping")
@@ -322,7 +320,13 @@ class GemmaIntegrationTest(unittest.TestCase):
             encoded1 = pyth_tokenizer.encode(string)
             encoded2 = rust_tokenizer.encode(string)
 
-            self.assertEqual(encoded1, encoded2)
+            self.assertEqual(
+                encoded1,
+                encoded2,
+                msg="Hint: the following tokenization diff were obtained for slow vs fast:\n "
+                f"elements in slow: {set(pyth_tokenizer.tokenize(string))-set(rust_tokenizer.tokenize(string))} \nvs\n "
+                f"elements in fast: {set(rust_tokenizer.tokenize(string))-set(pyth_tokenizer.tokenize(string))} \n\n{string}",
+            )
 
             decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
             decoded2 = rust_tokenizer.decode(encoded1, skip_special_tokens=True)
@@ -336,7 +340,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 encoded1 = pyth_tokenizer.encode(string)
                 encoded2 = rust_tokenizer.encode(string)
 
-                self.assertEqual(encoded1, encoded2)
+                self.assertEqual(encoded1, encoded2, msg=f"failed on {string}")
 
                 decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
                 decoded2 = rust_tokenizer.decode(encoded2, skip_special_tokens=True)

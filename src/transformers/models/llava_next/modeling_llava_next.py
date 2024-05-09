@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Llava-NeXT model."""
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -39,11 +40,6 @@ from .configuration_llava_next import LlavaNextConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaNextConfig"
-
-LLAVA_NEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-v1.6-mistral-7b-hf",
-    # See all LLaVA-NeXT models at https://huggingface.co/models?filter=llava_next
-]
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -306,8 +302,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
-
-        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
@@ -356,7 +352,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where special image tokens are
         special_image_token_mask = input_ids == self.config.image_token_index
@@ -404,8 +399,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        image_to_overwrite = torch.full(
+            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+        )
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
@@ -417,6 +415,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
 
         if labels is None:
             final_labels = None
@@ -535,7 +539,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         image_feature = torch.cat(
                             (
                                 image_feature,
-                                self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                                self.image_newline[:, None, None]
+                                .expand(*image_feature.shape[:-1], 1)
+                                .to(image_feature.dtype),
                             ),
                             dim=-1,
                         )
@@ -546,6 +552,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                         image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
                     new_image_features.append(image_feature)
                 image_features = torch.stack(new_image_features, dim=0)
+                inputs_embeds = inputs_embeds.to(image_features.dtype)
 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
@@ -564,10 +571,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                 # Get the target length
-                target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
 
                 extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                    (attention_mask.shape[0], past_length),
                     dtype=attention_mask.dtype,
                     device=attention_mask.device,
                 )
@@ -582,7 +590,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(

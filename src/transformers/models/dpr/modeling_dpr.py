@@ -39,19 +39,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DPRConfig"
 _CHECKPOINT_FOR_DOC = "facebook/dpr-ctx_encoder-single-nq-base"
 
-DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-ctx_encoder-single-nq-base",
-    "facebook/dpr-ctx_encoder-multiset-base",
-]
-DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-question_encoder-single-nq-base",
-    "facebook/dpr-question_encoder-multiset-base",
-]
-DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-reader-single-nq-base",
-    "facebook/dpr-reader-multiset-base",
-]
-
 
 ##########
 # Outputs
@@ -148,6 +135,8 @@ class DPRReaderOutput(ModelOutput):
 
 
 class DPRPreTrainedModel(PreTrainedModel):
+    _supports_sdpa = True
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):

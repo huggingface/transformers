@@ -22,10 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/autoformer-tourism-monthly": "https://huggingface.co/huggingface/autoformer-tourism-monthly/resolve/main/config.json",
-}
-
 
 class AutoformerConfig(PretrainedConfig):
     r"""

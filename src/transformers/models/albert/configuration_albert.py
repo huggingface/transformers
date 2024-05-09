@@ -21,18 +21,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 
 
-ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "albert/albert-base-v1": "https://huggingface.co/albert/albert-base-v1/resolve/main/config.json",
-    "albert/albert-large-v1": "https://huggingface.co/albert/albert-large-v1/resolve/main/config.json",
-    "albert/albert-xlarge-v1": "https://huggingface.co/albert/albert-xlarge-v1/resolve/main/config.json",
-    "albert/albert-xxlarge-v1": "https://huggingface.co/albert/albert-xxlarge-v1/resolve/main/config.json",
-    "albert/albert-base-v2": "https://huggingface.co/albert/albert-base-v2/resolve/main/config.json",
-    "albert/albert-large-v2": "https://huggingface.co/albert/albert-large-v2/resolve/main/config.json",
-    "albert/albert-xlarge-v2": "https://huggingface.co/albert/albert-xlarge-v2/resolve/main/config.json",
-    "albert/albert-xxlarge-v2": "https://huggingface.co/albert/albert-xxlarge-v2/resolve/main/config.json",
-}
-
-
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used

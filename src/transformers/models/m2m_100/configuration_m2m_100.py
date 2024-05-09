@@ -25,11 +25,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/config.json",
-    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
-}
-
 
 class M2M100Config(PretrainedConfig):
     r"""

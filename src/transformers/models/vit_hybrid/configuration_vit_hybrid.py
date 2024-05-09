@@ -23,11 +23,6 @@ from ..bit import BitConfig
 
 logger = logging.get_logger(__name__)
 
-VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-hybrid-base-bit-384": "https://huggingface.co/vit-hybrid-base-bit-384/resolve/main/config.json",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit
-}
-
 
 class ViTHybridConfig(PretrainedConfig):
     r"""

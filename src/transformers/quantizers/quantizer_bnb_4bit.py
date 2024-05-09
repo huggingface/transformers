@@ -58,6 +58,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
+        if not torch.cuda.is_available():
+            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
@@ -70,9 +72,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 " sure the weights are in PyTorch format."
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-
         device_map = kwargs.get("device_map", None)
         if (
             device_map is not None
@@ -84,14 +83,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             }
             if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
-                    """
-                    Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the
-                    quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules
-                    in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to
-                    `from_pretrained`. Check
-                    https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                    for more details.
-                    """
+                    "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
+                    "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
+                    "in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom `device_map` to "
+                    "`from_pretrained`. Check "
+                    "https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu "
+                    "for more details. "
                 )
 
         if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.39.0"):

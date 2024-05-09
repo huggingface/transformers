@@ -24,11 +24,6 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-TVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/tvp-base": "https://huggingface.co/Intel/tvp-base/resolve/main/config.json",
-}
-
-
 class TvpConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp

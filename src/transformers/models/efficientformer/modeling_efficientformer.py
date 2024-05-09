@@ -50,12 +50,6 @@ _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "snap-research/efficientformer-l1-300",
-    # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
-]
-
-
 class EfficientFormerPatchEmbeddings(nn.Module):
     """
     This class performs downsampling between two stages. For the input tensor with the shape [batch_size, num_channels,
@@ -558,6 +552,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
         self.config = config
+        _no_split_modules = ["EfficientFormerMeta4D"]
 
         self.patch_embed = EfficientFormerConvStem(config, config.hidden_sizes[0])
         self.encoder = EfficientFormerEncoder(config)

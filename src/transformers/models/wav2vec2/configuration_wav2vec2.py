@@ -23,11 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/config.json",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-}
-
 
 class Wav2Vec2Config(PretrainedConfig):
     r"""

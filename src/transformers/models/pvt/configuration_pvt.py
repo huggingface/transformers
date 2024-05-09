@@ -28,11 +28,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt-tiny-224": "https://huggingface.co/Zetatech/pvt-tiny-224",
-    # See all PVT models at https://huggingface.co/models?filter=pvt
-}
-
 
 class PvtConfig(PretrainedConfig):
     r"""

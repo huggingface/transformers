@@ -53,11 +53,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DebertaConfig"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-base"
 
-TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kamalkraj/deberta-base",
-    # See all DeBERTa models at https://huggingface.co/models?filter=DeBERTa
-]
-
 
 class TFDebertaContextPooler(keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):

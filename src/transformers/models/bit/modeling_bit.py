@@ -56,11 +56,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "google/bit-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
-BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/bit-50",
-    # See all BiT models at https://huggingface.co/models?filter=bit
-]
-
 
 def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
     r"""
@@ -660,6 +655,7 @@ class BitPreTrainedModel(PreTrainedModel):
     config_class = BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"
+    _no_split_modules = ["BitEmbeddings"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

@@ -23,11 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hubert-base-ls960": "https://huggingface.co/facebook/hubert-base-ls960/resolve/main/config.json",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-}
-
 
 class HubertConfig(PretrainedConfig):
     r"""

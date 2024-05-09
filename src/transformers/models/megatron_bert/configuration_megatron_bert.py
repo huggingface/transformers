@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # See all MEGATRON_BERT models at https://huggingface.co/models?filter=bert
-}
-
 
 class MegatronBertConfig(PretrainedConfig):
     r"""

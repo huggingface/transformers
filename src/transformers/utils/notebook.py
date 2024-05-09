@@ -292,11 +292,11 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_train_begin(self, args, state, control, **kwargs):
-        self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
+        self.first_column = "Epoch" if args.eval_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
-        if args.evaluation_strategy != IntervalStrategy.NO:
+        if args.eval_strategy != IntervalStrategy.NO:
             column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
@@ -328,7 +328,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation
-        if args.evaluation_strategy == IntervalStrategy.NO and "loss" in logs:
+        if args.eval_strategy == IntervalStrategy.NO and "loss" in logs:
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Llava model."""
+"""PyTorch Llava model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -37,13 +38,6 @@ from .configuration_llava import LlavaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaConfig"
-
-LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all Llava models at https://huggingface.co/models?filter=llava
-]
 
 
 @dataclass
@@ -330,8 +324,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         if labels is not None:
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
-        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
+        image_to_overwrite = torch.full(
+            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
+        )
+        image_to_overwrite[batch_indices, text_to_overwrite] = False
         image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
@@ -343,6 +340,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
+        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
+        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+
+        final_embedding[batch_indices, indices_to_mask] = 0
 
         if labels is None:
             final_labels = None
@@ -386,16 +389,16 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
         >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
+        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
+        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -432,11 +435,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
+                inputs_embeds = inputs_embeds.to(image_features.dtype)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-                if labels is None:
-                    labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
 
             # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
             # generation with cache
@@ -449,10 +451,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
 
                 # Get the target length
-                target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                target_length = input_ids.shape[1]
+                past_length = first_layer_past_key_value.shape[-1]
 
                 extended_attention_mask = torch.ones(
-                    (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                    (attention_mask.shape[0], past_length),
                     dtype=attention_mask.dtype,
                     device=attention_mask.device,
                 )
@@ -467,7 +470,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 # Zero-out the places where we don't need to attend
                 extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
-                attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                 position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
