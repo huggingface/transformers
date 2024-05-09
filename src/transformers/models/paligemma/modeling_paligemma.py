@@ -333,11 +333,11 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, PaLIGemmaForConditionalGeneration
 
-        >>> model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("paligemma-hf/paligemma-1.5-7b-hf")
+        >>> model = PaLIGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
 
-        >>> prompt = "answer en where is the cow standing?\n"
-        >>> url = <cow on beach URL>
+        >>> prompt = "answer en Where is the cow standing?"
+        >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
@@ -430,7 +430,8 @@ class PaLIGemmaForConditionalGeneration(PaLIGemmaPreTrainedModel):
         logits = outputs[0]
         loss = None
         # ----- slice / repeat logits -----
-        # TODO this depends on input_ids existing, which might not be the case. 
+        # TODO this depends on input_ids existing, which might not be the case.
+        # You can safely ignore this part. 
         # padding should be detected with another method.
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # we know if the batch is left padded or not
