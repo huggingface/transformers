@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# PaLIGemma
+# PaliGemma
 
 ## Overview
 
-The PaLIGemma model was proposed by <INSERT AUTHORS HERE>.
+The PaliGemma model was proposed by <INSERT AUTHORS HERE>.
 
 It is a VLM, not a chat model with images. It cuts an image into a fixed number of VIT tokens and prepends it to an optional prompt. One particularity is that the model uses full block attention on all the image tokens plus the input text tokens. 
 
@@ -27,15 +27,15 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## PaLIGemmaConfig
+## PaliGemmaConfig
 
-[[autodoc]] PaLIGemmaConfig
+[[autodoc]] PaliGemmaConfig
 
-## PaLIGemmaProcessor
+## PaliGemmaProcessor
 
-[[autodoc]] PaLIGemmaProcessor
+[[autodoc]] PaliGemmaProcessor
 
-## PaLIGemmaForConditionalGeneration
+## PaliGemmaForConditionalGeneration
 
-[[autodoc]] PaLIGemmaForConditionalGeneration
+[[autodoc]] PaliGemmaForConditionalGeneration
     - forward

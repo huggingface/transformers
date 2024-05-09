@@ -687,7 +687,7 @@ _import_structure = {
     ],
     "models.paligemma": [
         "PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PaLIGemmaConfig",
+        "PaliGemmaConfig",
     ],
     "models.patchtsmixer": [
         "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2937,9 +2937,9 @@ else:
     _import_structure["models.paligemma"].extend(
         [
             "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PaLIGemmaForConditionalGeneration",
-            "PaLIGemmaPreTrainedModel",
-            "PaLIGemmaProcessor",
+            "PaliGemmaForConditionalGeneration",
+            "PaliGemmaPreTrainedModel",
+            "PaliGemmaProcessor",
         ]
     )
     _import_structure["models.patchtsmixer"].extend(
@@ -5582,7 +5582,7 @@ if TYPE_CHECKING:
     )
     from .models.paligemma import (
         PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PaLIGemmaConfig,
+        PaliGemmaConfig,
     )
     from .models.patchtsmixer import (
         PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7558,9 +7558,9 @@ if TYPE_CHECKING:
         )
         from .models.paligemma import (
             PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PaLIGemmaForConditionalGeneration,
-            PaLIGemmaPreTrainedModel,
-            PaLIGemmaProcessor,
+            PaliGemmaForConditionalGeneration,
+            PaliGemmaPreTrainedModel,
+            PaliGemmaProcessor,
         )
         from .models.patchtsmixer import (
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PaLIGemma model. """
+""" Testing suite for the PyTorch PaliGemma model. """
 
 import gc
 import unittest
@@ -21,8 +21,8 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    PaLIGemmaConfig,
-    PaLIGemmaForConditionalGeneration,
+    PaliGemmaConfig,
+    PaliGemmaForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
@@ -41,7 +41,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class PaLIGemmaVisionText2TextModelTester:
+class PaliGemmaVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -113,7 +113,7 @@ class PaLIGemmaVisionText2TextModelTester:
         self.encoder_seq_length = 231
 
     def get_config(self):
-        return PaLIGemmaConfig(
+        return PaliGemmaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
@@ -152,20 +152,20 @@ class PaLIGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class PaLIGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
+class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `PaLIGemmaForConditionalGeneration`.
+    Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
-    all_model_classes = (PaLIGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = PaLIGemmaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PaLIGemmaConfig, has_text_modality=False)
+        self.model_tester = PaliGemmaVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -187,9 +187,9 @@ class PaLIGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 
 
 @require_torch
-class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
+class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("paligemma-hf/bakPaLIGemma-v1-hf")
+        self.processor = AutoProcessor.from_pretrained("paligemma-hf/bakPaliGemma-v1-hf")
 
     def tearDown(self):
         gc.collect()
@@ -199,7 +199,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/bakPaLIGemma-v1-hf", load_in_4bit=True)
+        model = PaliGemmaForConditionalGeneration.from_pretrained("paligemma-hf/bakPaliGemma-v1-hf", load_in_4bit=True)
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://paligemma-vl.github.io/static/images/view.jpg"
@@ -223,7 +223,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
 
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             "paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True
         )
         processor = AutoProcessor.from_pretrained(model_id)
@@ -247,7 +247,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
 
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             "paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True
         )
         processor = AutoProcessor.from_pretrained(model_id)
@@ -271,7 +271,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = PaLIGemmaForConditionalGeneration.from_pretrained("paligemma-hf/bakPaLIGemma-v1-hf", load_in_4bit=True)
+        model = PaliGemmaForConditionalGeneration.from_pretrained("paligemma-hf/bakPaliGemma-v1-hf", load_in_4bit=True)
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -294,7 +294,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             "paligemma-hf/paligemma-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
         )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
@@ -321,7 +321,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
 
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -341,7 +341,7 @@ class PaLIGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_paligemma_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "paligemma-hf/paligemma-1.5-7b-hf"
-        model = PaLIGemmaForConditionalGeneration.from_pretrained(
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
             model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(torch_device)
 

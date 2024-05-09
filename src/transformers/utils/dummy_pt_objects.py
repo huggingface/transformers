@@ -6349,21 +6349,21 @@ class OwlViTVisionModel(metaclass=DummyObject):
 PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class PaLIGemmaForConditionalGeneration(metaclass=DummyObject):
+class PaliGemmaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PaLIGemmaPreTrainedModel(metaclass=DummyObject):
+class PaliGemmaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class PaLIGemmaProcessor(metaclass=DummyObject):
+class PaliGemmaProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
