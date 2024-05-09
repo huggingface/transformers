@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_olmo": ["OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP", "OlmoConfig"],
+    "configuration_olmo": ["OlmoConfig"],
 }
 
 try:
@@ -39,7 +39,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_olmo import OLMO_PRETRAINED_CONFIG_ARCHIVE_MAP, OlmoConfig
+    from .configuration_olmo import OlmoConfig
 
     try:
         if not is_torch_available():

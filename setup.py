@@ -117,7 +117,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.19.3,<1.0",
+    "huggingface-hub>=0.23.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -126,7 +126,7 @@ _deps = [
     "jieba",
     "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
-    "keras<2.16",
+    "keras>2.9,<2.16",
     "keras-nlp>=0.3.1",
     "librosa",
     "nltk",
@@ -169,9 +169,10 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>=2.6,<2.16",
-    "tensorflow>=2.6,<2.16",
+    "tensorflow-cpu>2.9,<2.16",
+    "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
+    "tensorflow-probability<2.16",
     "tf2onnx",
     "timeout-decorator",
     "timm",
@@ -185,6 +186,7 @@ _deps = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
     "uvicorn",
+    "pytest-rich",
 ]
 
 
@@ -258,7 +260,7 @@ extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachip
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("keras", "tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp", "tensorflow-probability")
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
@@ -302,6 +304,7 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
         "pytest",
+        "pytest-rich",
         "pytest-xdist",
         "timeout-decorator",
         "parameterized",
@@ -315,8 +318,6 @@ extras["testing"] = (
         "rouge-score",
         "nltk",
         "GitPython",
-        "hf-doc-builder",
-        "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
         "beautifulsoup4",
@@ -330,7 +331,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "hf-doc-builder", "urllib3")
+extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
 
 extras["all"] = (
     extras["tf"]
@@ -348,11 +349,6 @@ extras["all"] = (
     + extras["video"]
 )
 
-# Might need to add doc-builder and some specific deps in the future
-extras["docs_specific"] = ["hf-doc-builder"]
-
-# "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + extras["docs_specific"]
 
 extras["dev-torch"] = (
     extras["testing"]
@@ -367,7 +363,6 @@ extras["dev-torch"] = (
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
@@ -379,7 +374,6 @@ extras["dev-tensorflow"] = (
     + extras["tokenizers"]
     + extras["vision"]
     + extras["quality"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnx"]
@@ -390,7 +384,6 @@ extras["dev"] = (
     + extras["testing"]
     + extras["quality"]
     + extras["ja"]
-    + extras["docs_specific"]
     + extras["sklearn"]
     + extras["modelcreation"]
 )
@@ -463,3 +456,18 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
+
+extras["tests_torch"] = deps_list()
+extras["tests_tf"] = deps_list()
+extras["tests_flax"] = deps_list()
+extras["tests_torch_and_tf"] = deps_list()
+extras["tests_torch_and_flax"] = deps_list()
+extras["tests_hub"] = deps_list()
+extras["tests_pipelines_torch"] = deps_list()
+extras["tests_pipelines_tf"] = deps_list()
+extras["tests_onnx"] = deps_list()
+extras["tests_examples_torch"] = deps_list()
+extras["tests_examples_tf"] = deps_list()
+extras["tests_custom_tokenizers"] = deps_list()
+extras["tests_exotic_models"] = deps_list()
+extras["consistency"] = deps_list()

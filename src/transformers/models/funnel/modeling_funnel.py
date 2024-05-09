@@ -50,9 +50,6 @@ _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
 
-from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 INF = 1e6
 
 

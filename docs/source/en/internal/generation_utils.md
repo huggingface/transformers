@@ -167,6 +167,9 @@ generation.
 [[autodoc]] MinNewTokensLengthLogitsProcessor
     - __call__
 
+[[autodoc]] MinPLogitsWarper
+    - __call__
+
 [[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 
@@ -308,6 +311,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - __call__
 
 [[autodoc]] MaxTimeCriteria
+    - __call__
+
+[[autodoc]] StopStringCriteria
+    - __call__
+
+[[autodoc]] EosTokenCriteria
     - __call__
 
 ## Constraints

@@ -41,9 +41,6 @@ _CONFIG_FOR_DOC = "SamConfig"
 _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
 
 
-from ..deprecated._archive_maps import TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class TFSamVisionEncoderOutput(ModelOutput):
     """

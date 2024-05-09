@@ -71,9 +71,6 @@ _XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
-from ..deprecated._archive_maps import WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
     shape: Tuple[int, int],
@@ -727,7 +724,7 @@ class WavLMEncoder(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -810,7 +807,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)

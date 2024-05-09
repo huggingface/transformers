@@ -34,9 +34,6 @@ from .configuration_fastspeech2_conformer import (
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class FastSpeech2ConformerModelOutput(ModelOutput):
     """

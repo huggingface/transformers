@@ -85,9 +85,6 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'others'"
 _SEQ_CLASS_EXPECTED_LOSS = "4.72"
 
 
-from ..deprecated._archive_maps import TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss
 class TFMobileBertPreTrainingLoss:
     """

@@ -61,6 +61,7 @@ from .logits_process import (
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     MinNewTokensLengthLogitsProcessor,
+    MinPLogitsWarper,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
@@ -667,7 +668,11 @@ class GenerationMixin:
                     dim=-1,
                 )
 
-        if "cache_position" in model_kwargs and model_kwargs["cache_position"] is not None:
+        if (
+            model_kwargs.get("use_cache", True)
+            and "cache_position" in model_kwargs
+            and model_kwargs["cache_position"] is not None
+        ):
             model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
 
         return model_kwargs
@@ -737,6 +742,9 @@ class GenerationMixin:
             warpers.append(TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=min_tokens_to_keep))
+        if generation_config.min_p is not None:
+            # Applied after temperature scaling (see https://github.com/ggerganov/llama.cpp/pull/3841#issuecomment-2073826084)
+            warpers.append(MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
             warpers.append(
                 TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)
@@ -1293,6 +1301,10 @@ class GenerationMixin:
 
     def _get_initial_cache_position(self, input_ids, model_kwargs):
         """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
+        if not model_kwargs.get("use_cache", True):
+            model_kwargs["cache_position"] = None
+            return model_kwargs
+
         past_length = 0
         if "past_key_values" in model_kwargs:
             if isinstance(model_kwargs["past_key_values"], Cache):
