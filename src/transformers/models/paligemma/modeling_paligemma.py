@@ -315,6 +315,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -428,6 +429,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         # we do not pass labels so output[0] correspond to logits
         # however in the case of right-padding and 4d attn mask outputs need to be sliced
@@ -491,15 +493,22 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
+        self, input_ids, past_key_values=None, inputs_embeds=None, cache_position=None, pixel_values=None, attention_mask=None, **kwargs
     ):
-        # FIXME slicing is going wrong here, input_ids transmitted after 2nd forward are not of size 1
+        past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
@@ -519,9 +528,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-        else:
-            # setup 4D attention mask here, on the first pass
-            pass
+
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -541,6 +548,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
+                "cache_position": cache_position,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
