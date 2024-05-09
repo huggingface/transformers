@@ -14,13 +14,8 @@
 # limitations under the License.
 """ Hiera model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -48,9 +43,9 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         image_size (`list(int)`, *optional*, defaults to `[224, 224]`):
             The size (resolution) of input in the format (height, width) for images
             and (frames, height, width) for videos.
-        patch_kernel (`list(int)`, *optional*, defaults to `[7, 7]`):
+        patch_size (`list(int)`, *optional*, defaults to `[7, 7]`):
             The size (resolution) of each patch.
-        patch_size (`list(int)`, *optional*, defaults to `[4, 4]`):
+        patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):
             The stride of the patch.
         patch_padding (`list(int)`, *optional*, defaults to `[3, 3]`):
             The padding of the patch.
@@ -89,7 +84,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             The initial weight value for layer normalization layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        decoder_embed_dim (`int`, *optional*):
+        decoder_hidden_size (`int`, *optional*):
             Dimensionality of decoder embeddings for MAE pretraining.
         decoder_depth (`int`, *optional*):
             Depth of the decoder for MAE pretraining.
@@ -134,8 +129,8 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self,
         embed_dim=96,
         image_size=[224, 224],
-        patch_kernel=[7, 7],
-        patch_size=[4, 4],
+        patch_size=[7, 7],
+        patch_stride=[4, 4],
         patch_padding=[3, 3],
         mlp_ratio=4.0,
         depths=[2, 3, 16, 3],
@@ -153,7 +148,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         initializer_range=0.02,
         layer_norm_init=1.0,
         layer_norm_eps=1e-6,
-        decoder_embed_dim=None,
+        decoder_hidden_size=None,
         decoder_depth=None,
         decoder_num_heads=None,
         norm_pix_loss=True,
@@ -175,9 +170,9 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             )
 
         self.embed_dim = embed_dim
-        self.input_size = image_size
-        self.patch_kernel = patch_kernel
-        self.patch_stride = patch_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.mlp_ratio = mlp_ratio
         self.depths = depths
@@ -190,13 +185,13 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self.masked_unit_size = masked_unit_size
         self.masked_unit_attention = masked_unit_attention
         self.drop_path_rate = drop_path_rate
-        self.sep_pos_embed = use_separate_position_embedding
+        self.use_separate_position_embedding = use_separate_position_embedding
         self.num_channels = num_channels
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_init = layer_norm_init
         self.layer_norm_eps = layer_norm_eps
-        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_hidden_size = decoder_hidden_size
         self.decoder_depth = decoder_depth
         self.decoder_num_heads = decoder_num_heads
         self.norm_pix_loss = norm_pix_loss

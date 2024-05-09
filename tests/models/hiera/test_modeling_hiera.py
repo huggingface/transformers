@@ -79,7 +79,7 @@ class HieraModelTester:
         use_labels=True,
         embed_dim=8,
         hidden_act="gelu",
-        decoder_embed_dim=2,
+        decoder_hidden_size=2,
         decoder_depth=1,
         decoder_num_heads=1,
         initializer_range=0.02,
@@ -101,7 +101,7 @@ class HieraModelTester:
         self.use_labels = use_labels
         self.embed_dim = embed_dim
         self.hidden_act = hidden_act
-        self.decoder_embed_dim = decoder_embed_dim
+        self.decoder_hidden_size = decoder_hidden_size
         self.decoder_depth = decoder_depth
         self.decoder_num_heads = decoder_num_heads
         self.initializer_range = initializer_range
@@ -139,7 +139,7 @@ class HieraModelTester:
             num_head_multiplier=self.num_head_multiplier,
             embed_dim_multiplier=self.embed_dim_multiplier,
             hidden_act=self.hidden_act,
-            decoder_embed_dim=self.decoder_embed_dim,
+            decoder_hidden_size=self.decoder_hidden_size,
             decoder_depth=self.decoder_depth,
             decoder_num_heads=self.decoder_num_heads,
             initializer_range=self.initializer_range,
@@ -165,7 +165,7 @@ class HieraModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        num_patches = config.input_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
+        num_patches = config.image_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], num_patches, num_patches]
         )
@@ -300,7 +300,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            seq_len = math.prod([i // s for i, s in zip(config.input_size, config.patch_stride)])
+            seq_len = math.prod([i // s for i, s in zip(config.image_size, config.patch_stride)])
             mask_unit_area = math.prod(config.masked_unit_size)
             num_windows = seq_len // mask_unit_area
             if model_class.__name__ == "HieraForPreTraining":
@@ -744,7 +744,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         config = model.config
         mask_spatial_shape = [
-            i // s // ms for i, s, ms in zip(config.input_size, config.patch_stride, config.masked_unit_size)
+            i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
         ]
         num_windows = math.prod(mask_spatial_shape)
         noise = np.random.uniform(size=(1, num_windows))

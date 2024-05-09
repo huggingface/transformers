@@ -238,14 +238,14 @@ class HieraPatchEmbeddings(nn.Module):
         super().__init__()
 
         # Support any number of spatial dimensions
-        self.spatial_dims = len(config.patch_kernel)
+        self.spatial_dims = len(config.patch_size)
         if self.spatial_dims not in (2, 3):
             raise ValueError(
                 f"The number of dimensions of the input image should be 2 or 3, but got {self.spatial_dims}."
             )
         self.num_channels = config.num_channels
-        self.image_size = config.input_size[-2:]
-        self.tokens_spatial_shape = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        self.image_size = config.image_size[-2:]
+        self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)]
         self.mask_ratio = config.mask_ratio
         self.is_mae = is_mae
@@ -253,7 +253,7 @@ class HieraPatchEmbeddings(nn.Module):
         self.projection = conv_nd(self.spatial_dims)(
             self.num_channels,
             config.embed_dim,
-            kernel_size=config.patch_kernel,
+            kernel_size=config.patch_size,
             stride=config.patch_stride,
             padding=config.patch_padding,
         )
@@ -349,10 +349,10 @@ class HieraEmbeddings(nn.Module):
     def __init__(self, config: HieraConfig, is_mae: bool = False) -> None:
         super().__init__()
         self.patch_stride = config.patch_stride
-        self.tokens_spatial_shape = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)]
         self.num_tokens = math.prod(self.tokens_spatial_shape)
-        self.sep_pos_embed = config.sep_pos_embed
+        self.sep_pos_embed = config.use_separate_position_embedding
         self.is_mae = is_mae
 
         self.patch_embeddings = HieraPatchEmbeddings(config, is_mae=is_mae)
@@ -745,7 +745,7 @@ class HieraEncoder(nn.Module):
         # Setting reroll schedule
         # The first stage has to reverse everything
         # The next stage has to reverse all but the first unroll, etc.
-        stage_size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        stage_size = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         unroll_schedule = [config.query_stride] * len(config.depths[:-1])
 
         self.schedule = {}
@@ -928,7 +928,7 @@ class HieraPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
 
         if isinstance(module, HieraEmbeddings):
-            if self.config.sep_pos_embed:
+            if self.config.use_separate_position_embedding:
                 nn.init.trunc_normal_(module.position_embeddings_spatial, std=std)
                 nn.init.trunc_normal_(module.position_embeddings_temporal, std=std)
             else:
@@ -1017,7 +1017,7 @@ class HieraModel(HieraPreTrainedModel):
         self.embeddings = HieraEmbeddings(config, is_mae=is_mae)
         self.encoder = HieraEncoder(config)
 
-        self.unroll_size = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        self.unroll_size = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.unroll_schedule = [config.query_stride] * len(config.depths[:-1])
 
         self.pooler = HieraPooler(config) if add_pooling_layer else None
@@ -1128,7 +1128,7 @@ class HieraDecoder(nn.Module):
     def __init__(self, config: HieraConfig):
         super().__init__()
         num_features = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
-        self.tokens_spatial_shape = [i // s for i, s in zip(config.input_size, config.patch_stride)]
+        self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.tokens_spatial_shape_final = [
             i // s ** (config.num_query_pool) for i, s in zip(self.tokens_spatial_shape, config.query_stride)
         ]
@@ -1136,18 +1136,18 @@ class HieraDecoder(nn.Module):
             i // s ** (config.num_query_pool) for i, s in zip(config.masked_unit_size, config.query_stride)
         ]
 
-        self.decoder_embeddings = nn.Linear(num_features, config.decoder_embed_dim)
+        self.decoder_embeddings = nn.Linear(num_features, config.decoder_hidden_size)
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_embed_dim))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
 
         self.decoder_position_embeddings = nn.Parameter(
-            torch.zeros(1, math.prod(self.tokens_spatial_shape_final), config.decoder_embed_dim)
+            torch.zeros(1, math.prod(self.tokens_spatial_shape_final), config.decoder_hidden_size)
         )
 
         self.decoder_block = HieraStage(
             config=config,
-            dim=config.decoder_embed_dim,
-            dim_out=config.decoder_embed_dim,
+            dim=config.decoder_hidden_size,
+            dim_out=config.decoder_hidden_size,
             num_heads=config.decoder_num_heads,
             depth=config.decoder_depth,
             use_mask_unit_attn=False,
@@ -1156,13 +1156,13 @@ class HieraDecoder(nn.Module):
             window_size=0,
         )
 
-        self.decoder_norm = nn.LayerNorm(config.decoder_embed_dim, eps=config.layer_norm_eps)
+        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
 
         # patch stride of prediction
         self.pred_stride = config.patch_stride[-1] * (config.query_stride[-1] ** config.num_query_pool)
         pred_dim = (self.pred_stride ** len(config.query_stride)) * config.num_channels
 
-        self.decoder_pred = nn.Linear(config.decoder_embed_dim, pred_dim)
+        self.decoder_pred = nn.Linear(config.decoder_hidden_size, pred_dim)
 
     def forward(
         self,
@@ -1176,7 +1176,7 @@ class HieraDecoder(nn.Module):
 
         # Combine visible and mask tokens
 
-        # hidden_states : [batch_size, num_mask_units_visible, *mask_unit_spatial_shape_final, decoder_embed_dim]
+        # hidden_states : [batch_size, num_mask_units_visible, *mask_unit_spatial_shape_final, decoder_hidden_size]
         # mask: [batch_size, num_mask_units]
         decoder_hidden_states = torch.zeros(
             *mask.shape, *hidden_states.shape[2:], device=hidden_states.device, dtype=hidden_states.dtype

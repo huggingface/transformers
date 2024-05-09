@@ -80,7 +80,7 @@ def create_rename_keys(config: HieraConfig, base_model: bool, mae_model: bool):
         ]
     )
 
-    if config.sep_pos_embed:
+    if config.use_separate_position_embedding:
         rename_keys.extend(
             [
                 ("pos_embed_spatial", "hiera.embeddings.position_embeddings_spatial"),
@@ -199,20 +199,20 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
             input_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
-            patch_kernel=(3, 7, 7),
+            patch_size=(3, 7, 7),
             patch_stride=(2, 4, 4),
             patch_padding=(1, 3, 3),
-            sep_pos_embed=True,
+            use_separate_position_embedding=True,
         )
     elif model_name == "hiera-base-plus-16x224":
         config = HieraConfig(
             input_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
-            patch_kernel=(3, 7, 7),
+            patch_size=(3, 7, 7),
             patch_stride=(2, 4, 4),
             patch_padding=(1, 3, 3),
-            sep_pos_embed=True,
+            use_separate_position_embedding=True,
             embed_dim=112,
             initial_num_heads=2,
         )
@@ -221,10 +221,10 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
             input_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
-            patch_kernel=(3, 7, 7),
+            patch_size=(3, 7, 7),
             patch_stride=(2, 4, 4),
             patch_padding=(1, 3, 3),
-            sep_pos_embed=True,
+            use_separate_position_embedding=True,
             embed_dim=144,
             initial_num_heads=2,
             depths=[2, 6, 36, 4],
@@ -234,10 +234,10 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
             input_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
-            patch_kernel=(3, 7, 7),
+            patch_size=(3, 7, 7),
             patch_stride=(2, 4, 4),
             patch_padding=(1, 3, 3),
-            sep_pos_embed=True,
+            use_separate_position_embedding=True,
             embed_dim=256,
             initial_num_heads=4,
             depths=[2, 6, 36, 4],
@@ -249,7 +249,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         pass
     elif mae_model:
         config.num_query_pool = 2
-        config.decoder_embed_dim = 512
+        config.decoder_hidden_size = 512
         config.decoder_depth = 8
         config.decoder_num_heads = 16
         # Table 3b from Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles
@@ -353,7 +353,7 @@ def convert_hiera_checkpoint(args):
 
     # If is MAE we pass a noise to generate a random mask
     mask_spatial_shape = [
-        i // s // ms for i, s, ms in zip(config.input_size, config.patch_stride, config.masked_unit_size)
+        i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
     ]
     num_windows = math.prod(mask_spatial_shape)
     np.random.seed(2)
