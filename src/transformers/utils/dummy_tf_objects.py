@@ -1808,9 +1808,6 @@ class TFMistralPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class TFMobileBertForMaskedLM(metaclass=DummyObject):
     _backends = ["tf"]
 
