@@ -1716,8 +1716,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "title" and "text" keys. Please see the RAG section of the
                 [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#arguments-for-RAG)
                 for examples of passing documents with chat templates.
-            chat_template (str, *optional*): A Jinja template to use for this conversion. By default, the model's
-                template will be used.
+            chat_template (str, *optional*): A Jinja template to use for this conversion. It is usually not necessary
+                to pass anything to this argument, as the model's template will be used by default.
             add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
                 the start of an assistant message. This is useful when you want to generate a response from the model.
                 Note that this argument will be passed to the chat template, and so it must be supported in the
