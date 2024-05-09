@@ -196,7 +196,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         config = HieraConfig(embed_dim=256, initial_num_heads=4, depths=[2, 6, 36, 4])
     elif model_name == "hiera-base-16x224":
         config = HieraConfig(
-            input_size=(16, 224, 224),
+            image_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
             patch_size=(3, 7, 7),
@@ -206,7 +206,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         )
     elif model_name == "hiera-base-plus-16x224":
         config = HieraConfig(
-            input_size=(16, 224, 224),
+            image_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
             patch_size=(3, 7, 7),
@@ -218,7 +218,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         )
     elif model_name == "hiera-large-16x224":
         config = HieraConfig(
-            input_size=(16, 224, 224),
+            image_size=(16, 224, 224),
             query_stride=(1, 2, 2),
             masked_unit_size=(1, 8, 8),
             patch_size=(3, 7, 7),
@@ -398,7 +398,7 @@ def convert_hiera_checkpoint(args):
             hub_name = f"{model_name}-mae"
         else:
             hub_name = f"{model_name}-k400" if model_name.endswith("16x224") else f"{model_name}-in1k"
-        repo_id = f"EduardoPacheco/{hub_name}"
+        repo_id = f"namangarg110/{hub_name}"
         print(f"Pushing model and processor for {model_name} to hub at {repo_id}")
         model.push_to_hub(repo_id)
         image_processor.push_to_hub(repo_id)
