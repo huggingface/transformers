@@ -25,8 +25,6 @@ logger = logging.get_logger(__name__)
 
 # TODO Update this
 
-from ..deprecated._archive_maps import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
 
 class EsmConfig(PretrainedConfig):
     r"""

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100OnnxConfig"],
+    "configuration_m2m_100": ["M2M100Config", "M2M100OnnxConfig"],
     "tokenization_m2m_100": ["M2M100Tokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_m2m_100"] = [
-        "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
         "M2M100ForConditionalGeneration",
         "M2M100Model",
         "M2M100PreTrainedModel",
@@ -37,7 +36,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config, M2M100OnnxConfig
+    from .configuration_m2m_100 import M2M100Config, M2M100OnnxConfig
     from .tokenization_m2m_100 import M2M100Tokenizer
 
     try:
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_m2m_100 import (
-            M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST,
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
