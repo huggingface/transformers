@@ -109,6 +109,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
+        self.maxDiff = None
+
         schema = get_json_schema(fn)
         expected_schema = {
             "name": "fn",
