@@ -468,7 +468,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("segment_size must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
-            encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
             if "input_features" in model_inputs:
@@ -500,11 +499,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         else:
                             generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
 
-            if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
-                generate_kwargs["input_features"] = inputs
-            else:
-                generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
-
+            generate_kwargs["input_features"] = inputs
             tokens = self.model.generate(
                 attention_mask=attention_mask,
                 **generate_kwargs,
