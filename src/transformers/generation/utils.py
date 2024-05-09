@@ -739,6 +739,7 @@ class GenerationMixin:
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.min_p is not None:
+            # Applied after temperature scaling (see https://github.com/ggerganov/llama.cpp/pull/3841#issuecomment-2073826084)
             warpers.append(MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
             warpers.append(

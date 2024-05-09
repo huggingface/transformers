@@ -568,8 +568,8 @@ class MinPLogitsWarper(LogitsWarper):
     """
 
     def __init__(self, min_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        if min_p < 0 or min_p > 1.0:
-            raise ValueError(f"`min_p` has to be a float >= 0 and <= 1, but is {min_p}")
+        if not (0 <= min_p <= 1.0):
+            raise ValueError(f"`min_p` has to be a float in the [0, 1] interval, but is {min_p}")
         if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 1):
             raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
 

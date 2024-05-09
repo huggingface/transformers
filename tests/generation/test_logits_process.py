@@ -314,8 +314,8 @@ class LogitsProcessorTest(unittest.TestCase):
         dist = torch.log(
             torch.tensor(
                 [
-                    [0.9, 0.047, 0.0274, 0.0274],  # the two first tokens should be kept (0.9*0.05=0.045)
-                    [0.15, 0.3, 0.3, 0.25],  # all should be kept
+                    [0.9, 0.0274, 0.047, 0.0274],  # two tokens should be kept (0.047 > 0.9*0.05=0.045)
+                    [0.15, 0.3, 0.3, 0.25],  # all should be kept -- no high-probability token
                     [0.97, 0.01, 0.01, 0.01],  # only the first token should be kept
                 ],
                 device=torch_device,
@@ -328,7 +328,7 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # exp (-inf) => 0
         EXPECTED_FILTERED_DIST = torch.tensor(
-            [[0.9, 0.047, 0.0, 0.0], [0.15, 0.3, 0.3, 0.25], [0.97, 0.0, 0.0, 0.0]],
+            [[0.9, 0.0, 0.047, 0.0], [0.15, 0.3, 0.3, 0.25], [0.97, 0.0, 0.0, 0.0]],
             device=torch_device,
             dtype=torch.float,
         )
