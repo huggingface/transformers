@@ -167,6 +167,9 @@ generation.
 [[autodoc]] MinNewTokensLengthLogitsProcessor
     - __call__
 
+[[autodoc]] MinPLogitsWarper
+    - __call__
+
 [[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 
