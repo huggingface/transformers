@@ -41,21 +41,21 @@ class WatermarkDetectorOutput:
 
     Args:
         num_tokens_scored (np.array of shape (batch_size)):
-            Array containing the number of tokens scored for each batch.
+            Array containing the number of tokens scored for each element in the batch.
         num_green_tokens (np.array of shape (batch_size)):
-            Array containing the number of green tokens for each batch.
+            Array containing the number of green tokens for each element in the batch.
         green_fraction (np.array of shape (batch_size)):
-            Array containing the fraction of green tokens for each batch.
+            Array containing the fraction of green tokens for each element in the batch.
         z_score (np.array of shape (batch_size)):
-            Array containing the z-score for each batch. Z-score here shows
+            Array containing the z-score for each element in the batch. Z-score here shows
             how many standard deviations away is the green token count in the input text
             from the expected green token count for machine-generated text.
         p_value (np.array of shape (batch_size)):
             Array containing the p-value for each batch obtained from z-scores.
         prediction (np.array of shape (batch_size)), *optional*:
-            Array containing predictions if a text is machine-generated for each batch.
+            Array containing boolean predictions whether a text is machine-generated for each element in the batch.
         confidence (np.array of shape (batch_size)), *optional*:
-            Array containing confidence scores of a text being machine-generated for each batch.
+            Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
     num_tokens_scored: np.array = None

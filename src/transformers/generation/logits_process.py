@@ -2350,7 +2350,7 @@ class WatermarkLogitsProcessor(LogitsProcessor):
     >>> out = model.generate(inputs["input_ids"], watermarking_config=watermarking_config, max_length=20, do_sample=False)
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
     'Alice and Bob are both still alive and well and the story is pretty much a one-hour adventure'
-    ```
+
     >>> # to detect watermarked text use the WatermarkDetector class
     >>> from transformers import WatermarkDetector
     >>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config= watermarking_config)
