@@ -557,8 +557,8 @@ class GemmaSdpaAttention(GemmaAttention):
 
         if q_len > 1:
             self._seen_tokens = 0
-            # self._seen_tokens = (64 + 7) - 7 - 1  # compile ok but should fail
-            # self._seen_tokens = (64 + 7) - 7    # failed with index error 71
+            # self._seen_tokens = (64 + 6) - 6 - 1  # compile ok but should fail
+            # self._seen_tokens = (64 + 6) - 6    # failed with index error 71
         self._seen_tokens += key_states.shape[-2]
 
         if past_key_value is not None:
@@ -604,7 +604,6 @@ class GemmaSdpaAttention(GemmaAttention):
         # _value_states = _value_states.contiguous()
         # _attn_mask = _attn_mask.contiguous() if causal_mask is not None else causal_mask
 
-
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             _key_states,
@@ -619,7 +618,9 @@ class GemmaSdpaAttention(GemmaAttention):
 
         attn_output = self.o_proj(attn_output)
 
-        verify = None  # key_states[:, :, length - 1, :]
+        # verify = key_states[:, :, length - 1, :]
+        verify = length
+        # veryif = self.layer_idx
         return attn_output, verify, past_key_value
 
 
