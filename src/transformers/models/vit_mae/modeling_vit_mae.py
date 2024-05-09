@@ -46,6 +46,9 @@ _CONFIG_FOR_DOC = "ViTMAEConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-mae-base"
 
 
+from ..deprecated._archive_maps import VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
+
+
 @dataclass
 class ViTMAEModelOutput(ModelOutput):
     """
@@ -224,6 +227,39 @@ class ViTMAEEmbeddings(nn.Module):
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        if num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        class_pos_embed = self.position_embeddings[:, 0, :]
+        patch_pos_embed = self.position_embeddings[:, 1:, :]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
     def random_masking(self, sequence, noise=None):
         """
         Perform per-sample random masking by per-sample shuffling. Per-sample shuffling is done by argsort random
@@ -256,18 +292,23 @@ class ViTMAEEmbeddings(nn.Module):
 
         return sequence_unmasked, mask, ids_restore
 
-    def forward(self, pixel_values, noise=None):
+    def forward(self, pixel_values, noise=None, interpolate_pos_encoding=False):
         batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        if interpolate_pos_encoding:
+            position_embeddings = self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            position_embeddings = self.position_embeddings
 
         # add position embeddings w/o cls token
-        embeddings = embeddings + self.position_embeddings[:, 1:, :]
+        embeddings = embeddings + position_embeddings[:, 1:, :]
 
         # masking: length -> length * config.mask_ratio
         embeddings, mask, ids_restore = self.random_masking(embeddings, noise)
 
         # append cls token
-        cls_token = self.cls_token + self.position_embeddings[:, :1, :]
+        cls_token = self.cls_token + position_embeddings[:, :1, :]
         cls_tokens = cls_token.expand(embeddings.shape[0], -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
@@ -295,13 +336,14 @@ class ViTMAEPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, interpolate_pos_encoding=False):
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if height != self.image_size[0] or width != self.image_size[1]:
+
+        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
@@ -612,6 +654,9 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional* default `False`):
+            Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
+            resolution images.
 """
 
 
@@ -653,6 +698,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, ViTMAEModelOutput]:
         r"""
         Returns:
@@ -690,7 +736,9 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
+        embedding_output, mask, ids_restore = self.embeddings(
+            pixel_values, noise=noise, interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -740,6 +788,37 @@ class ViTMAEDecoder(nn.Module):
         self.config = config
         self.initialize_weights(num_patches)
 
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.decoder_pos_embed.shape[1] - 1
+        if num_patches == num_positions and height == width:
+            return self.decoder_pos_embed
+        class_pos_embed = self.decoder_pos_embed[:, 0, :]
+        patch_pos_embed = self.decoder_pos_embed[:, 1:, :]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
@@ -757,6 +836,8 @@ class ViTMAEDecoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        interpolate_pos_encoding=False,
+        pixel_values=False,
     ):
         # embed tokens
         x = self.decoder_embed(hidden_states)
@@ -766,9 +847,15 @@ class ViTMAEDecoder(nn.Module):
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
         x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
-
         # add pos embed
-        hidden_states = x + self.decoder_pos_embed
+        if interpolate_pos_encoding:
+            decoder_pos_embed = self.interpolate_pos_encoding(
+                x, pixel_values.shape[-2], pixel_values.shape[-1]
+            )
+        else:
+            decoder_pos_embed = self.decoder_pos_embed
+
+        hidden_states = x + decoder_pos_embed
 
         # apply Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
@@ -847,7 +934,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def patchify(self, pixel_values):
+    def patchify(self, pixel_values, interpolate_pos_encoding=False):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -859,7 +946,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         # sanity checks
-        if (pixel_values.shape[2] != pixel_values.shape[3]) or (pixel_values.shape[2] % patch_size != 0):
+        if not interpolate_pos_encoding and (pixel_values.shape[2] != pixel_values.shape[3] or pixel_values.shape[2] % patch_size != 0
+        ):
             raise ValueError("Make sure the pixel values have a squared size that is divisible by the patch size")
         if pixel_values.shape[1] != num_channels:
             raise ValueError(
@@ -868,17 +956,18 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
         # patchify
         batch_size = pixel_values.shape[0]
-        num_patches_one_direction = pixel_values.shape[2] // patch_size
+        num_patches_h = pixel_values.shape[2] // patch_size
+        num_patches_w = pixel_values.shape[3] // patch_size
         patchified_pixel_values = pixel_values.reshape(
-            batch_size, num_channels, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size
+            batch_size, num_channels, num_patches_h, patch_size, num_patches_w, patch_size
         )
         patchified_pixel_values = torch.einsum("nchpwq->nhwpqc", patchified_pixel_values)
         patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels
+            batch_size, num_patches_h * num_patches_w, patch_size**2 * num_channels
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values):
+    def unpatchify(self, patchified_pixel_values, original_image_size=None):
         """
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
@@ -889,17 +978,20 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
                 Pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
-        num_patches_one_direction = int(patchified_pixel_values.shape[1] ** 0.5)
+        original_image_size = original_image_size if original_image_size is not None else (self.config.image_size, self.config.image_size)
+        original_height, original_width = original_image_size
+        num_patches_h = original_height // patch_size
+        num_patches_w = original_width // patch_size
         # sanity check
-        if num_patches_one_direction**2 != patchified_pixel_values.shape[1]:
-            raise ValueError("Make sure that the number of patches can be squared")
+        if num_patches_h * num_patches_w != patchified_pixel_values.shape[1]:
+            raise ValueError(f"The number of patches in the patchified pixel values {patchified_pixel_values.shape[1]}, does not match the number of patches on original image {num_patches_h}*{num_patches_w}")
 
         # unpatchify
         batch_size = patchified_pixel_values.shape[0]
         patchified_pixel_values = patchified_pixel_values.reshape(
             batch_size,
-            num_patches_one_direction,
-            num_patches_one_direction,
+            num_patches_h,
+            num_patches_w,
             patch_size,
             patch_size,
             num_channels,
@@ -908,12 +1000,12 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         pixel_values = patchified_pixel_values.reshape(
             batch_size,
             num_channels,
-            num_patches_one_direction * patch_size,
-            num_patches_one_direction * patch_size,
+            num_patches_h * patch_size,
+            num_patches_w * patch_size,
         )
         return pixel_values
 
-    def forward_loss(self, pixel_values, pred, mask):
+    def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding=False):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -926,7 +1018,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         Returns:
             `torch.FloatTensor`: Pixel reconstruction loss.
         """
-        target = self.patchify(pixel_values)
+        target = self.patchify(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         if self.config.norm_pix_loss:
             mean = target.mean(dim=-1, keepdim=True)
             var = target.var(dim=-1, keepdim=True)
@@ -934,7 +1026,6 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
 
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
@@ -948,6 +1039,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, ViTMAEForPreTrainingOutput]:
         r"""
         Returns:
@@ -980,16 +1072,19 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         latent = outputs.last_hidden_state
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
-        decoder_outputs = self.decoder(latent, ids_restore)
+        decoder_outputs = self.decoder(
+            latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding, pixel_values=pixel_values
+        )
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
 
-        loss = self.forward_loss(pixel_values, logits, mask)
+        loss = self.forward_loss(pixel_values, logits, mask, interpolate_pos_encoding=interpolate_pos_encoding)
 
         if not return_dict:
             output = (logits, mask, ids_restore) + outputs[2:]
