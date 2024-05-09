@@ -499,8 +499,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         else:
                             generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
 
-            generate_kwargs["input_features"] = inputs
             tokens = self.model.generate(
+                inputs,
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
