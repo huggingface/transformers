@@ -1459,7 +1459,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
-        generation_config = self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
 
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs

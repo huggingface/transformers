@@ -170,7 +170,7 @@ class GenerationTesterMixin:
             num_interleave, dim=0
         )
         generation_config = copy.deepcopy(model.generation_config)
-        generation_config = model._prepare_special_tokens(generation_config)
+        model._prepare_special_tokens(generation_config)
         input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask

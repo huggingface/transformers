@@ -415,7 +415,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             num_interleave, dim=0
         )
         generation_config = copy.deepcopy(model.generation_config)
-        generation_config = model._prepare_special_tokens(generation_config)
+        model._prepare_special_tokens(generation_config)
         input_ids = (
             torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
             + generation_config.decoder_start_token_id

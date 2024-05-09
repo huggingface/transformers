@@ -146,9 +146,6 @@ class MinLengthLogitsProcessor(LogitsProcessor):
                 eos_token_id = [eos_token_id]
             eos_token_id = torch.tensor(eos_token_id)
 
-        if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
-            logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
-
         self.min_length = min_length
         self.eos_token_id = eos_token_id
 
@@ -212,9 +209,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
             eos_token_id = torch.tensor(eos_token_id)
-
-        if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
-            logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
@@ -1492,7 +1486,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
         if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
-            logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -1610,7 +1604,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
         if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
-            logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -2229,7 +2223,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
         self.eos_token_id = eos_token_id
 
         if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
-            logger.warning_once(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
+            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         if min_eos_p is not None and min_eos_p <= 0:
             raise ValueError(f"`min_eos_p` has to be a positive float, but is {min_eos_p}")

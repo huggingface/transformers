@@ -1337,7 +1337,7 @@ class GenerationMixin:
 
     def _prepare_special_tokens(
         self, generation_config: GenerationConfig, kwargs_has_attention_mask: Optional[bool] = None
-    ) -> Tuple[Optional[torch.Tensor]]:
+    ):
         """
         Prepares the special tokens for generation, overwriting the generation config with their processed versions
         converted to tensor.
@@ -1373,19 +1373,22 @@ class GenerationMixin:
             pad_token_id = eos_token_id[0]
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_id} for open-end generation.")
 
-        # Sanity checks
+        # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_id is None:
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
+        if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
+            logger.warning(
+                f"`eos_token_id` should consist of positive integers, but is {eos_token_id}. Your generation will not "
+                "stop until the maximum length is reached. Depending on other flags, it may even crash."
+            )
 
-        # Update generation config with the updated special tokens
+        # Update generation config with the updated special tokens tensors
         generation_config.bos_token_id = bos_token_id
         generation_config.eos_token_id = eos_token_id
         generation_config.pad_token_id = pad_token_id
         generation_config.decoder_start_token_id = decoder_start_token_id
-
-        return generation_config
 
     @torch.no_grad()
     def generate(
@@ -1504,7 +1507,7 @@ class GenerationMixin:
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
-        generation_config = self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
 
         # 3. Define model inputs
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
@@ -1512,12 +1515,13 @@ class GenerationMixin:
         )
         batch_size = inputs_tensor.shape[0]
 
-        # decoder-only models must use left-padding for generation.
+        # decoder-only models must use left-padding for batched generation.
         if not self.config.is_encoder_decoder and not is_torchdynamo_compiling():
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
                 generation_config.pad_token_id is not None
+                and batch_size > 1
                 and len(inputs_tensor.shape) == 2
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
