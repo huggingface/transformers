@@ -20,8 +20,10 @@ from transformers import DonutProcessor
 
 
 class DonutProcessorTest(unittest.TestCase):
+    from_pretrained_id = "naver-clova-ix/donut-base"
+
     def setUp(self):
-        self.processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base")
+        self.processor = DonutProcessor.from_pretrained(self.from_pretrained_id)
 
     def test_token2json(self):
         expected_json = {

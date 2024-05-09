@@ -120,6 +120,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    from_pretrained_id = "magic-leap-community/superpoint"
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
@@ -221,7 +222,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+        model = SuperPointForKeypointDetection.from_pretrained(self.from_pretrained_id)
         self.assertIsNotNone(model)
 
     def test_forward_labels_should_be_none(self):

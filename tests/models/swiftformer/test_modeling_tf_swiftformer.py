@@ -143,6 +143,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     test_head_masking = False
     has_attentions = False
     test_onnx = False
+    from_pretrained_id = "MBZUAI/swiftformer-xs"
 
     def setUp(self):
         self.model_tester = TFSwiftFormerModelTester(self)
@@ -193,7 +194,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        model = TFSwiftFormerModel.from_pretrained("MBZUAI/swiftformer-xs")
+        model = TFSwiftFormerModel.from_pretrained(self.from_pretrained_id)
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="TFSwiftFormer does not output attentions")
