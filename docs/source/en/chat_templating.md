@@ -291,11 +291,9 @@ models. We recommend trying to keep your tool schemas simple and flat where poss
 
 ### Automated function conversion for tool use
 
-# TODO Docstring and doc for get_json_schema(), then link to it
-
 Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
 that writing them can be annoying. Don't panic, though, we have a solution! You can simply define Python functions
-as tools, and use the `get_json_schema()` function. This function will automatically generate a JSON schema for any
+as tools, and use the [`get_json_schema`] function. This function will automatically generate a JSON schema for any
 function that has a valid docstring with parameter annotations and valid type hints. Let's see it in action!
 
 ```python
@@ -336,17 +334,19 @@ This will yield:
 }
 ```
 
-TODO Add a JSON schema decorator so this can be even shorter
-
-We can use this function to greatly simplify tool-calling:
+We can use this function, or the equivalent [`add_json_schema`] decorator, to avoid the need to manually write JSON
+schemas when passing tools to the chat template:
 
 ```python
 import datetime
+from transformers.utils import add_json_schema
 
+@add_json_schema
 def current_time():
     """Get the current local time as a string."""
     return str(datetime.now())
 
+@add_json_schema
 def multiply(a: float, b: float):
     """Multiply two numbers together.
     
@@ -356,11 +356,10 @@ def multiply(a: float, b: float):
     return a * b
 
 tools = [current_time, multiply]
-schemas = [get_json_schema(tool) for tool in tools]
 
 model_input = tokenizer.apply_chat_template(
     messages,
-    tools=schemas
+    tools=tools
 )
 ```
 

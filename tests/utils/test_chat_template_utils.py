@@ -5,7 +5,6 @@ from transformers.utils import get_json_schema
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
-
     def test_simple_function(self):
         def fn(x: int):
             """
@@ -38,10 +37,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         expected_schema = {
             "name": "fn",
             "description": "Test function",
-            "parameters": {
-                'type': 'object',
-                'properties': {}
-            },
+            "parameters": {"type": "object", "properties": {}},
         }
         self.assertEqual(schema, expected_schema)
 
