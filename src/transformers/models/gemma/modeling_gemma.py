@@ -262,7 +262,6 @@ class GemmaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
 
@@ -352,8 +351,6 @@ class GemmaFlashAttention2(GemmaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -551,8 +548,6 @@ class GemmaSdpaAttention(GemmaAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
