@@ -24,6 +24,11 @@ def get_json_schema(func):
     return {"name": func.__name__, "description": main_doc, "parameters": json_schema}
 
 
+def add_json_schema(func):
+    func.json_schema = get_json_schema(func)
+    return func
+
+
 def _get_argument_descriptions_from_docstring(doc):
     param_pattern = r":param (\w+): (.+)"
     params = re.findall(param_pattern, doc)

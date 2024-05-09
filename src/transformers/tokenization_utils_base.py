@@ -1815,6 +1815,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        # The add_json_schema decorator for tools adds a schema under the `json_schema` attribute. If we're passed
+        # decorated functions, let's extract the schema decoration now
+        if tools is not None:
+            tools = [tool.json_schema if hasattr(tool, "json_schema") else tool for tool in tools]
+
         rendered = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         for chat in conversations:
