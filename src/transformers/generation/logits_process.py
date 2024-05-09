@@ -534,7 +534,8 @@ class MinPLogitsWarper(LogitsWarper):
     Args:
         min_p (`float`):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
-            value between 0 and 1, with typical values in the 0.01-0.2 range.
+            value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
+            the 0.99-0.8 range (use the opposite of normal `top_p` values).
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):

@@ -135,8 +135,8 @@ class GenerationConfig(PushToHubMixin):
             `top_p` or higher are kept for generation.
         min_p (`float`, *optional*):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
-            value between 0 and 1, Typical values are in the 0.01-0.2 range, comparably selective as
-            setting top p=0.99 - 0.8 (so use the opposite of normal top p values).
+            value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
+            the 0.99-0.8 range (use the opposite of normal `top_p` values).
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
