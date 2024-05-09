@@ -481,7 +481,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
@@ -524,6 +523,18 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
+
+            # rescale coordinates
+            width_ratio = 1
+            height_ratio = 1
+
+            if img_w < img_h:
+                width_ratio = img_w / img_h
+            elif img_h < img_w:
+                height_ratio = img_h / img_w
+
+            img_w = img_w / width_ratio
+            img_h = img_h / height_ratio
 
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
