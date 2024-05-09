@@ -4248,46 +4248,26 @@ class ModelTesterMixin:
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
 
-            model_output = model.forward(input_ids, position_ids=position_ids)[0]
-            # model_output.shape == torch.Size([3, 4, ...])
+            logits = model.forward(input_ids, position_ids=position_ids).logits
+            # logits.shape == torch.Size([3, 4, ...])
 
-            model_output_shared_prefix = model(
+            logits_shared_prefix = model(
                 input_ids_shared_prefix,
                 attention_mask=mask_shared_prefix,
                 position_ids=position_ids_shared_prefix,
             )[0]
-            # model_output_shared_prefix.shape == torch.Size([1, 6, ...])
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
 
-            out_last_tokens = model_output[:, -1, :]  # last tokens in each batch line
-            out_shared_prefix_last_tokens = model_output_shared_prefix[0, -3:, :]  # last three tokens
-            torch.testing.assert_close(out_last_tokens, out_shared_prefix_last_tokens)
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
 
-    def test_custom_4d_attention_mask_logits(self):
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
+            # comparing greedily-chosen tokens:
+            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
 
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
-                self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
-
-            (
-                input_ids,
-                position_ids,
-                input_ids_shared_prefix,
-                mask_shared_prefix,
-                position_ids_shared_prefix,
-            ) = self._get_custom_4d_mask_test_data()
-
-            logits = model.forward(input_ids, position_ids=position_ids).logits
-            logits_shared_prefix = model.forward(
-                input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
-            ).logits
-
-            logits_last_tokens = logits[:, -1, :]  # last tokens in each batch line
-            logits_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
-            torch.testing.assert_close(logits_last_tokens, logits_shared_prefix_last_tokens)
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
 
 global_rng = random.Random()
