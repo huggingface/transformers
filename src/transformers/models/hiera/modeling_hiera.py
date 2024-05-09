@@ -1388,8 +1388,6 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> loss = outputs.loss
         >>> print(list(logits.shape))
         [1, 196, 768]
-        >>> print(loss.item())
-        0.5571276545524597
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
