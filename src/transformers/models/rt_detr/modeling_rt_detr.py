@@ -1280,7 +1280,9 @@ class RTDetrHybridEncoder(nn.Module):
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(
-                RTDetrConvNormLayer(config, self.enconder_hidden_dim, self.enconder_hidden_dim, 1, 1, activation=activation_function)
+                RTDetrConvNormLayer(
+                    config, self.enconder_hidden_dim, self.enconder_hidden_dim, 1, 1, activation=activation_function
+                )
             )
             self.fpn_blocks.append(RTDetrCSPRepLayer(config))
 
@@ -1289,7 +1291,9 @@ class RTDetrHybridEncoder(nn.Module):
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
-                RTDetrConvNormLayer(config, self.enconder_hidden_dim, self.enconder_hidden_dim, 3, 2, activation=activation_function)
+                RTDetrConvNormLayer(
+                    config, self.enconder_hidden_dim, self.enconder_hidden_dim, 3, 2, activation=activation_function
+                )
             )
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
 
