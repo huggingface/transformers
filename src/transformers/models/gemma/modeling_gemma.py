@@ -621,6 +621,7 @@ class GemmaSdpaAttention(GemmaAttention):
         # verify = key_states[:, :, length - 1, :]
         verify = length
         # veryif = self.layer_idx
+        verify = cache_position[-1]
         return attn_output, verify, past_key_value
 
 
