@@ -101,15 +101,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema, expected_schema)
 
     def test_nested_list(self):
-        def fn(x: List[List[Union[int, str]]]):
+        def fn(x: List[List[Union[str, int]]]):
             """
             Test function
 
             :param x: The input
             """
             return x
-
-        self.maxDiff = None
 
         schema = get_json_schema(fn)
         expected_schema = {
@@ -120,7 +118,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {
                         "type": "array",
-                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
+                        "items": {"type": "array", "items": {"type": ["string", "integer"]}},
                         "description": "The input",
                     }
                 },
