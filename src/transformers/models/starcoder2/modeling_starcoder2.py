@@ -70,7 +70,8 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Starcoder2
+# copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Starcoder2
+# TODO @longjie no longer copied from Mistral after static cache
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -115,7 +116,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# TODO @longjie no longer copied from Mistral after static cache
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -599,7 +601,8 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Starcoder2
+# copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Starcoder2
+# TODO @longjie no longer copied from Mistral after static cache
 class Starcoder2SdpaAttention(Starcoder2Attention):
     """
     Starcoder2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -708,7 +711,8 @@ class Starcoder2DecoderLayer(nn.Module):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
+    # copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
+    # TODO @longjie no longer copied from Mistral after static cache
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1067,7 +1071,8 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
+# copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
+# TODO @longjie no longer copied from Mistral after static cache
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
