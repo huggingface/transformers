@@ -819,7 +819,7 @@ class EtaLogitsWarper(LogitsWarper):
     """
 
     def __init__(
-        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1
+        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
     ):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
@@ -832,10 +832,6 @@ class EtaLogitsWarper(LogitsWarper):
             )
         if device is None:
             device = "cpu"
-            logger.warning(
-                "Setting the device by default to 'cpu'. If that is not the intended behavior, indicate "
-                "correct device when initializing"
-            )
 
         self.epsilon = torch.tensor(epsilon, device=device)
         self.filter_value = filter_value
@@ -1583,7 +1579,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
-            eos_token_id = torch.tensor(eos_token_id, device)
+            eos_token_id = torch.tensor(eos_token_id, device=device)
         self.eos_token_id = eos_token_id
 
         if torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any():
