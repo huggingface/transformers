@@ -591,8 +591,9 @@ class GemmaSdpaAttention(GemmaAttention):
 
         # length = int(cache_position[-1] + 1)
         #length = cache_position.size()[0]  # can't compile, failed at `scaled_dot_product_attention` (`(*bias): last dimension must be contiguous`).  Also wrong value!
-        length = self._seen_tokens  # incorrect results (index stay at very small values)
+        # length = self._seen_tokens  # incorrect results (index stay at very small values)
         # length = cache_position[-1] + 1
+        length = _length
 
         # _key_states = key_states
         # _value_states = value_states
