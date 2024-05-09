@@ -318,7 +318,7 @@ def verify_logits(model, processor):
     cow_on_beach_path = "/home/pablo/cow_beach_1.png"
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    prompt = ["answer en Where is the cow standing?\n", "\n"]
+    prompt = ["answer en Where is the cow standing?", ""]
 
     model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt")
     with torch.inference_mode():        
@@ -333,7 +333,7 @@ def verify_logits(model, processor):
             print("Generation matches. You're almost done!")
 
 
-    image_captioning_inputs_unpad = processor(text="\n", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
+    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
     # Test image captioning generation
     captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
@@ -342,7 +342,7 @@ def verify_logits(model, processor):
     else:
         print("Image captioning works without padding.")
 
-    image_captioning_inputs = processor(text="\n", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
+    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
     
     # Test image captioning generation
     captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
@@ -370,12 +370,6 @@ def verify_logits(model, processor):
                 raise ValueError(f"Single-batch generation does not match batched. {single} != {batched}")
     print("All checks completed. Conversion is proper.")
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path):
-    # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
-    tokenizer = tokenizer_class(input_tokenizer_path)
-
 
 @torch.no_grad()
 def convert_paligemma_checkpoint(
@@ -392,7 +386,7 @@ def convert_paligemma_checkpoint(
             tokenizer_id = "google/gemma-2b"
             tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
         else:
-            tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizer
+            tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
             tokenizer = tokenizer_class(tokenizer_model_file)
         image_token = AddedToken("<image>", normalized=False, special=True)
         tokens_to_add = {
@@ -444,9 +438,17 @@ def convert_paligemma_checkpoint(
         dim=0,
     )
 
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
-    processor.save_pretrained(pytorch_dump_folder_path)
+    #model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    #processor.save_pretrained(pytorch_dump_folder_path)
 
+
+
+# 
+
+
+
+
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -480,11 +482,72 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--do_verify_logits",
-        action="store_true",
+        action="store_false",
         help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
         "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+    )
+
+    args = parser.parse_args()
+    convert_paligemma_checkpoint(
+        checkpoint_path=args.checkpoint_path,
+        tokenizer_model_file=args.tokenizer_model_file,
+        pytorch_dump_folder_path=args.pytorch_dump_folder_path,
+        variant=args.variant,
+        do_verify_logits=args.do_verify_logits,
+        do_convert_weights=args.do_convert_weights,
+    )
+
+"""
+
+"""
+python src/transformers/models/paligemma/convert_paligemma_weights_to_hf.py 
+--checkpoint_path="/raid/pablo/palma_files/test_model/hf_test_ckpt.bv.params.npz"
+ --variant="2b-test" 
+ --tokenizer_model_file="/raid/pablo/paligemma/paligemma_tokenizer.model" 
+ --do_convert_weights --do_verify_logits 
+ --pytorch_dump_folder_path="/raid/pablo/converted_224_test"
+"""
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--checkpoint_path",
+        default="/raid/pablo/palma_files/test_model/hf_test_ckpt.bv.params.npz",
+        type=str,
+        help="Path to the .npz checkpoint",
+    )
+
+    parser.add_argument(
+        "--tokenizer_model_file",
+        default="/raid/pablo/paligemma/paligemma_tokenizer.model",
+        type=str,
+        help="Path to the sentencepiece model file",
+    )
+
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default="/raid/pablo/paligemma/paligemma-test-hf ",
+        type=str,
+        help="Path to the output PyTorch model directory.",
+    )
+
+    parser.add_argument(
+        "--variant",
+        default="2b-test",
+        choices=PALIGEMMA_VARIANTS,
+        type=str,
+        help="String identifier of the paligemma variant to convert."
+    )
+
+    parser.add_argument(
+        "--do_verify_logits",
+        action="store_false",
+        help="Whether or not to run checks against original implementation.",
+    )
+    parser.add_argument(
+        "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
     )
 
     args = parser.parse_args()
