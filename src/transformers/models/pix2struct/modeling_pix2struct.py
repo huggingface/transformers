@@ -49,9 +49,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Pix2StructConfig"
 
 
-from ..deprecated._archive_maps import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Adapted from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
 class Pix2StructLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):

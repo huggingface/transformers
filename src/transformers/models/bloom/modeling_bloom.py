@@ -44,9 +44,6 @@ _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
 
 
-from ..deprecated._archive_maps import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     """
     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it

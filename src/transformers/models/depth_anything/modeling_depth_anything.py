@@ -39,9 +39,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
 
 
-from ..deprecated._archive_maps import DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 DEPTH_ANYTHING_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
