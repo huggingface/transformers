@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -95,9 +95,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
 
 
 @dataclass
@@ -1594,6 +1592,16 @@ class GenerationMixin:
                 )
             if generation_config.cache_implementation == "static":
                 model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
+            elif generation_config.cache_implementation == "sliding_window":
+                if not hasattr(self.config, "sliding_window") or self.config.sliding_window is None:
+                    raise ValueError(
+                        "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                        "sliding window attention, please check if there is a `sliding_window` field in the model "
+                        "config and it's not set to None."
+                    )
+                model_kwargs["past_key_values"] = self._get_sliding_window_cache(
+                    batch_size, generation_config.max_length
+                )
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 

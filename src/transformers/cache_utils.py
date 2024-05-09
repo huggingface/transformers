@@ -448,3 +448,115 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+
+class SlidingWindowCache(Cache):
+    """
+    Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
+
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+    """
+
+    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+        super().__init__()
+        self.max_batch_size = max_batch_size
+        # take the minimum of max_cache_len and config.sliding_window so that we allocate less memory
+        # when we do short-sentence generation
+        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.model_sliding_window_size = config.sliding_window
+        self.sliding_window_size = min(self.max_cache_len, self.model_sliding_window_size)
+        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+
+        self.dtype = dtype if dtype is not None else torch.float32
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
+
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        cache_shape = (
+            config.num_hidden_layers,
+            max_batch_size,
+            self.num_key_value_heads,
+            self.sliding_window_size,
+            self.head_dim,
+        )
+
+        self.key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+
+        torch._dynamo.mark_static_address(self.key_cache)
+        torch._dynamo.mark_static_address(self.value_cache)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Dict[str, Any] | None = None,
+    ) -> Tuple[torch.Tensor]:
+        cache_position = cache_kwargs.get("cache_position")
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+
+        # assume this only happens in prefill phase when prompt length > sliding_window_size
+        if cache_position.shape[0] > self.sliding_window_size:
+            k_out = key_states[:, :, -self.sliding_window_size :, :]
+            v_out = value_states[:, :, -self.sliding_window_size :, :]
+            self.key_cache[layer_idx] = k_out
+            self.value_cache[layer_idx] = v_out
+            # we should return the whole states instead of k_out, v_out to take the whole prompt
+            # into consideration when building kv cache instead of just throwing away tokens outside of the window
+            return key_states, value_states
+
+        slicing = torch.ones(self.sliding_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
+        cache_position = cache_position.clamp(0, self.sliding_window_size - 1)
+        to_shift = cache_position >= self.sliding_window_size - 1
+        indices = (slicing + to_shift[-1].int() - 1) % self.sliding_window_size
+
+        k_out, v_out = k_out, v_out
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        self.key_cache[layer_idx] = k_out
+        self.value_cache[layer_idx] = v_out
+
+        return k_out, v_out
+
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
+        # assume this will be called only in the first generation step
+        # `cache_postion` will be used in other cases
+        return 0
+
+    def get_max_length(self) -> int | None:
+        # in theory there is no limit because the sliding window size is fixed
+        # no matter how long the sentence is
+        return None
+
+    def need_new_cache(self, max_batch_size: int, new_max_cache_len: int) -> bool:
+        # this is used by model.generate, when we reuse model between generations,
+        # we need to be careful because the new `max_cache_len` may become
+        # larger and `self.sliding_window_size` might change accordingly
+        return max_batch_size > self.max_batch_size or (
+            self.sliding_window_size < self.model_sliding_window_size and new_max_cache_len > self.max_cache_len
+        )
+
+    def reset(self):
+        self.key_cache.zero_()
+        self.value_cache.zero_()
