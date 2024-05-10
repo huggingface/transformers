@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class JetMoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate a
     JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a configuration of the JetMoe-4B.
 
