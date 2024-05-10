@@ -215,23 +215,6 @@ class JetMoeTopKGating(nn.Module):
         return index_sorted_experts, batch_index, batch_gates, expert_size
 
     def forward(self, hidden_states):
-        """
-        Compute the top-k gating for the input.
-
-        See paper: https://arxiv.org/abs/1701.06538.
-
-        Args:
-            x (torch.Tensor):
-                Input tensor with shape [batch_size, input_size].
-
-        Returns:
-            torch.Tensor:
-                Top-k indices.
-            torch.Tensor:
-                Top-k gating values.
-            torch.Tensor:
-                router layer logits.
-        """
 
         logits = self.layer(hidden_states).float()
         top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)
