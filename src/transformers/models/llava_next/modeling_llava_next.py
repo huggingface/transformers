@@ -430,14 +430,16 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             feature_lens (`torch.LongTensor` of shape `(num_images)`):
                 The length of visual embeddings of each image as stacked in `image_features`
             inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
-                token embeddings before merging with visual embeddings
+                Token embeddings before merging with visual embeddings
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                input_ids of tokens, possibly filled with image token
+                Input_ids of tokens, possibly filled with image token
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                attention_mask for input_ids
+                Mask to avoid performing attention on padding token indices.
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                config.n_positions - 1]`.
             labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
-                labels need to be recalculated to support training (if provided)
+                :abels need to be recalculated to support training (if provided)
             image_token_index (`int`, *optional*)
                 Token id used to indicate the special "image" token. Defaults to `config.image_token_index`
             ignore_index (`int`, *optional*)
@@ -557,7 +559,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             batch_indices, non_image_indices = torch.where((input_ids != image_token_index) & (attention_mask == 1))
             # 2. Compute the positions where text should be written
             # Calculate new positions for text tokens in merged image-text sequence.
-            # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
+            # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images` text tokens.
             # `torch.cumsum` computes how each image token shifts subsequent text token positions.
             # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
             # ! instead of special_image_token_mask * (num_image_patches - 1)
