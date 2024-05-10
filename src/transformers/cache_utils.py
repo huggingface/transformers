@@ -485,8 +485,6 @@ class SlidingWindowCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
         cache_shape = (
             config.num_hidden_layers,
             max_batch_size,
@@ -527,7 +525,6 @@ class SlidingWindowCache(Cache):
         to_shift = cache_position >= self.sliding_window_size - 1
         indices = (slicing + to_shift[-1].int() - 1) % self.sliding_window_size
 
-        k_out, v_out = k_out, v_out
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
@@ -548,14 +545,6 @@ class SlidingWindowCache(Cache):
         # in theory there is no limit because the sliding window size is fixed
         # no matter how long the sentence is
         return None
-
-    def need_new_cache(self, max_batch_size: int, new_max_cache_len: int) -> bool:
-        # this is used by model.generate, when we reuse model between generations,
-        # we need to be careful because the new `max_cache_len` may become
-        # larger and `self.sliding_window_size` might change accordingly
-        return max_batch_size > self.max_batch_size or (
-            self.sliding_window_size < self.model_sliding_window_size and new_max_cache_len > self.max_cache_len
-        )
 
     def reset(self):
         self.key_cache.zero_()
