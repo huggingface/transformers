@@ -244,9 +244,7 @@ class DataTrainingArguments:
     )
     image_square_size: Optional[int] = field(
         default=600,
-        metadata={
-            "help": "Image longest size will be resized to this value, then image will be padded to square."
-        },
+        metadata={"help": "Image longest size will be resized to this value, then image will be padded to square."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
