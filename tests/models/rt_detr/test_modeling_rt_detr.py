@@ -313,6 +313,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="RTDetr does not use test_inputs_embeds_matches_input_ids")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip(reason="RTDetr does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
