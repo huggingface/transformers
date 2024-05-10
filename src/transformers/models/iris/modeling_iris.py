@@ -181,7 +181,7 @@ class LossWithIntermediateLosses:
             self.intermediate_losses[k] = v / value
         self.loss_total = self.loss_total / value
         return self
-
+@dataclass
 class TokenizerEncoderOutput:
     z: torch.FloatTensor
     z_quantized: torch.FloatTensor
@@ -849,7 +849,7 @@ class Tokenizer(nn.Module):
 
     @torch.no_grad()
     def encode_decode(self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False) -> torch.Tensor:
-        z_q, _, _ = self.encode(x, should_preprocess).z_quantized
+        z_q = self.encode(x, should_preprocess)[0].z_quantized
         return self.decode(z_q, should_postprocess)
 
     def preprocess_input(self, x: torch.Tensor) -> torch.Tensor:
@@ -908,7 +908,6 @@ class Cache:
         assert self._size + x.size(2) <= self._cache.shape[2]
         self._cache = AssignWithoutInplaceCheck.apply(self._cache, x, 2, self._size, self._size + x.size(2))
         self._size += x.size(2)
-
 
 class KVCache:
     def __init__(self, n: int, num_heads: int, max_tokens: int, embed_dim: int, device: torch.device) -> None:
@@ -1055,7 +1054,6 @@ class SelfAttention(nn.Module):
             assert nh == self.num_heads and b == B and c * nh == C
         else:
             L = 0
-
         q = self.query(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
         k = self.key(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)     # (B, nh, T, hs)
         v = self.value(x).view(B, T, self.num_heads, C // self.num_heads).transpose(1, 2)   # (B, nh, T, hs)
@@ -1100,7 +1098,7 @@ class WorldModelEnv:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens,_,_ = self.tokenizer.encode(observations, should_preprocess=True).tokens    # (B, C, H, W) -> (B, K)
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0].tokens    # (B, C, H, W) -> (B, K)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
@@ -1115,13 +1113,12 @@ class WorldModelEnv:
         n, num_observations_tokens = obs_tokens.shape
         assert num_observations_tokens == self.num_observations_tokens
         self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(n=n, max_tokens=self.world_model.config.max_tokens)
-        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)
+        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)[0]
         return outputs_wm.output_sequence  # (B, K, E)
 
     @torch.no_grad()
     def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
         assert self.keys_values_wm is not None and self.num_observations_tokens is not None
-
         num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
 
         output_sequence, obs_tokens = [], []
@@ -1131,10 +1128,11 @@ class WorldModelEnv:
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
         token = token.reshape(-1, 1).to(self.device)  # (B, 1)
+        
 
         for k in range(num_passes):  # assumption that there is only one action token.
 
-            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)
+            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)[0]
             output_sequence.append(outputs_wm.output_sequence)
 
             if k == 0:
@@ -1163,7 +1161,7 @@ class WorldModelEnv:
         h = int(np.sqrt(self.num_observations_tokens))
         z = embedded_tokens.view(embedded_tokens.shape[0], h, -1, embedded_tokens.shape[-1]).permute(0, 3, 1, 2)
 
-        rec = self.tokenizer.decode(z, should_postprocess=True)         # (B, C, H, W)
+        rec = self.tokenizer.decode(z, should_postprocess=True)[0]         # (B, C, H, W)
         return torch.clamp(rec, 0, 1)
 
     @torch.no_grad()
@@ -1173,7 +1171,7 @@ class WorldModelEnv:
 
 
 
-
+@dataclass
 class WorldModelOutput:
     output_sequence: torch.FloatTensor
     logits_observations: torch.FloatTensor
@@ -1232,20 +1230,17 @@ class WorldModel(nn.Module):
             )
         )
 
-
     def __repr__(self) -> str:
         return "world_model"
 
     def forward(self, tokens: torch.LongTensor, output_hidden_states: bool = False, output_attentions: bool = False, past_keys_values: Optional[KeysValues] = None) -> WorldModelOutput:
-
+        
         num_steps = tokens.size(1)  # (B, T)
         assert num_steps <= self.config.max_tokens
         prev_steps = 0 if past_keys_values is None else past_keys_values.size
 
         sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(prev_steps + torch.arange(num_steps, device=tokens.device))
-
         x, transformer_hidden_states, attentions = self.transformer(sequences, output_hidden_states, output_attentions, past_keys_values = past_keys_values)
-
         logits_observations, head_hidden_states_observations = self.head_observations(x, output_hidden_states, num_steps=num_steps, prev_steps=prev_steps)
         logits_rewards, head_hidden_states_rewards = self.head_rewards(x, output_hidden_states, num_steps=num_steps, prev_steps=prev_steps)
         logits_ends, head_hidden_states_ends = self.head_ends(x, output_hidden_states, num_steps=num_steps, prev_steps=prev_steps)
@@ -1255,7 +1250,7 @@ class WorldModel(nn.Module):
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
 
         with torch.no_grad():
-            obs_tokens, _, _ = tokenizer.encode(batch['observations'], should_preprocess=True).tokens  # (BL, K)
+            obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True)[0].tokens  # (BL, K)
 
         act_tokens = batch['actions'].unsqueeze(-1)
         
@@ -1368,7 +1363,6 @@ class ActorCritic(nn.Module):
         x = F.relu(self.maxp4(self.conv4(x)))
         x = torch.flatten(x, start_dim=1)
         hidden_states = hidden_states + (x,) if output_hidden_states else None
-
         if mask_padding is None:
             self.hx, self.cx = self.lstm(x, (self.hx, self.cx))
         else:
@@ -1379,7 +1373,7 @@ class ActorCritic(nn.Module):
         logits_actions = self.actor_linear(self.hx).unsqueeze(1)
         means_values = self.critic_linear(self.hx).unsqueeze(1)
 
-        return ActorCriticOutput(logits_actions, means_values), hidden_states
+        return ActorCriticOutput(logits_actions, means_values), hidden_states,None
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, imagine_horizon: int, gamma: float, lambda_: float, entropy_weight: float, **kwargs: Any) -> LossWithIntermediateLosses:
         assert not self.use_original_obs
@@ -1573,32 +1567,32 @@ class IrisModel(IrisPreTrainedModel):
         )
 
         cfg_tokenizer = {'grad_acc_steps': self.cfg.grad_acc_steps_tokenizer}
-        cfg_world_model = {'grad_acc_steps': self.cfg.grad_acc_steps_world_model}
-        cfg_actor_critic = {'grad_acc_steps': self.cfg.grad_acc_steps_actor_critic,'imagine_horizon':self.cfg.imagine_horizon_train_actor_critic,
+        cfg_world_model = {'tokenizer': self.agent.tokenizer, 'grad_acc_steps': self.cfg.grad_acc_steps_world_model}
+        cfg_actor_critic = {'tokenizer': self.agent.tokenizer, 'world_model': self.agent.world_model, 'grad_acc_steps': self.cfg.grad_acc_steps_actor_critic,'imagine_horizon':self.cfg.imagine_horizon_train_actor_critic,
                             'gamma':self.cfg.gamma,'lambda_':self.cfg.lambda_,'entropy_weight':self.cfg.entropy_weight}
 
-        batch = dict(observations = observations, actions = actions, rewards = rewards, ends = ends, mask_padding = mask_padding)
+        batch_tokenizer = dict(observations = observations[0], actions = actions[0], rewards = rewards[0], ends = ends[0], mask_padding = mask_padding[0])
+        batch_world_model = dict(observations = observations[1], actions = actions[1], rewards = rewards[1], ends = ends[1], mask_padding = mask_padding[1])
+        batch_actor_critic = dict(observations = observations[2], actions = actions[2], rewards = rewards[2], ends = ends[2], mask_padding = mask_padding[2])
                
-        losses_tokenizer = self.component_losses(self.agent.tokenizer, batch, **cfg_tokenizer)
-        losses_world_model = self.component_losses(self.agent.world_model, batch, **cfg_world_model)
-        losses_actor_critic = self.component_losses(self.agent.actor_critic, batch, **cfg_actor_critic)
+        losses_tokenizer = self.component_losses(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
+        losses_world_model = self.component_losses(self.agent.world_model, batch_world_model, **cfg_world_model)
+        losses_actor_critic = self.component_losses(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
         losses = dict(tokenizer_losses = losses_tokenizer, world_model_losses = losses_world_model, actor_critic_losses = losses_actor_critic)
 
-        if should_preprocess == True:
-            observations_for_tokenizer = self.agent.tokenizer.preprocess_input(observations)
         #tokenizer outputs : (outputs.z, outputs.z_quantized, reconstructions)
         tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, 
-                                                                                                         output_attentions, observations_for_tokenizer, 
+                                                                                                         output_attentions, observations[0], 
                                                                                                          should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
-            obs_tokens, _, _ = self.agent.tokenizer.encode(observations, should_preprocess=should_preprocess).tokens
-        act_tokens = self.agent.act(observations, should_sample=self.cfg.should_sample_collect_test, temperature=self.cfg.temperature).unsqueeze(-1)
+            obs_tokens = self.agent.tokenizer.encode(observations[1], should_preprocess=should_preprocess)[0].tokens
+        act_tokens = batch_world_model['actions'].unsqueeze(-1)
         tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
         world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = self.forward_component(self.agent.world_model, output_hidden_states, output_attentions, tokens)
-
-        wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, observations.device)
-        obs = wm_env.reset_from_initial_observations(observations[:, -1])
+        wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, observations[2].device)
+        obs = wm_env.reset_from_initial_observations(observations[2][:, -1])
+        self.agent.actor_critic.reset(n=observations[2].size(0))
         actor_critic_outputs, all_hidden_states_actor_critic, all_attentions_actor_critic = self.forward_component(self.agent.actor_critic, output_hidden_states, output_attentions, obs)
 
         all_hidden_states = (all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic) if output_hidden_states else None
@@ -1607,10 +1601,10 @@ class IrisModel(IrisPreTrainedModel):
         return IrisOutput(
             losses = losses,
             reconstructed_img = tokenizer_outputs[2],
-            action_preds = actor_critic_outputs.actions,
-            reward_preds = actor_critic_outputs.rewards,
-            epsiode_end = actor_critic_outputs.ends,
-            obs_preds = actor_critic_outputs.observations,
+            action_preds = actor_critic_outputs.logits_actions,
+            reward_preds = world_model_outputs.logits_rewards,
+            epsiode_end = world_model_outputs.logits_ends,
+            obs_preds = world_model_outputs.logits_observations,
             hidden_states = all_hidden_states, 
             attentions = all_self_attentions,
         )
