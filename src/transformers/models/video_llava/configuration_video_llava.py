@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "LanguageBind/Video-LLaVA-7B": "https://huggingface.co/LanguageBind/Video-LLaVA-7B/resolve/main/config.json",
+    "LanguageBind/Video-LLaVA-7B-hf": "https://huggingface.co/LanguageBind/Video-LLaVA-7B-hf/resolve/main/config.json",
 }
 
 
@@ -29,9 +29,9 @@ class VideoLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoLlavaForConditionalGeneration`]. It is used to instantiate an
     VideoLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the like LanguageBind/Video-LLaVA-7B.
+    with the defaults will yield a similar configuration to that of the like LanguageBind/Video-LLaVA-7B-hf.
 
-    e.g. [LanguageBind/Video-LLaVA-7B](https://huggingface.co/LanguageBind/Video-LLaVA-7B)
+    e.g. [LanguageBind/Video-LLaVA-7B-hf](https://huggingface.co/LanguageBind/Video-LLaVA-7B-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

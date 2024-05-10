@@ -33,11 +33,11 @@ EPILOG_TXT = """Example:
 Example for creating the old state dict file with Python:
 
     import torch
-    from video_llava.model.language_model.video_llava_llama import VideoLlavaLlamaForCausalLM
+    from video_llava.model.language_model.video_llava import VideoLlavaForCausalLM
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = VideoLlavaLlamaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B", low_cpu_mem_usage=True, **kwargs)
+    model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", low_cpu_mem_usage=True, **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()

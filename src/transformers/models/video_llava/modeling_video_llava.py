@@ -460,8 +460,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-        >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B")
-        >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B")
+        >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
+        >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
         >>> prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
         >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")

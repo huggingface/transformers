@@ -318,7 +318,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 @require_torch
 class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = VideoLlavaProcessor.from_pretrained("RaushanTurganbay/video-llava-7b-hf")
+        self.processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
     def tearDown(self):
         gc.collect()
@@ -328,9 +328,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
-        )
+        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
 
         prompt = "USER: <video>Why is this video funny? ASSISTANT:"
         video_file = hf_hub_download(
@@ -354,9 +352,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_mixed_inputs(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
-        )
+        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
 
         prompts = [
             "USER: <image>What are the cats in the image doing? ASSISTANT:",
@@ -386,12 +382,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
-        )
-        processor = VideoLlavaProcessor.from_pretrained(model_id)
+        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
         prompt = "USER: <video>Describe the video in details. ASSISTANT:"
         video_file = hf_hub_download(
@@ -416,12 +409,9 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
-        model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True
-        )
-        processor = VideoLlavaProcessor.from_pretrained(model_id)
+        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
+        processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
         processor.tokenizer.padding_side = "left"
 
         prompts = [
@@ -450,13 +440,12 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "RaushanTurganbay/video-llava-7b-hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = VideoLlavaForConditionalGeneration.from_pretrained(
-            "RaushanTurganbay/video-llava-7b-hf", load_in_4bit=True, attn_implementation="eager"
+            "LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True, attn_implementation="eager"
         )
-        processor = VideoLlavaProcessor.from_pretrained(model_id, pad_token="<pad>")
+        processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", pad_token="<pad>")
         processor.tokenizer.padding_side = "left"
 
         prompts = [
@@ -489,8 +478,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
-        model_id = "RaushanTurganbay/video-llava-7b-hf"
-        model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
 
         # Simulate a super long prompt
         user_prompt = "Describe the video:?\n" * 200
@@ -508,9 +496,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_video_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "RaushanTurganbay/video-llava-7b-hf"
         model = VideoLlavaForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True
+            "LanguageBind/Video-LLaVA-7B-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(torch_device)
 
         # Simulate some user inputs
