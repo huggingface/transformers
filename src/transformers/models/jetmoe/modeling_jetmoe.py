@@ -200,26 +200,26 @@ class JetMoeTopKGating(nn.Module):
 
     def forward(self, hidden_states):
         # compute the top_k routing decision
-        logits = self.layer(hidden_states).float() # [num_tokens, num_experts]
-        top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1) # [num_tokens, top_k]
-        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states) # [num_tokens, top_k]
+        logits = self.layer(hidden_states).float()  # [num_tokens, num_experts]
+        top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)  # [num_tokens, top_k]
+        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)  # [num_tokens, top_k]
 
         # compute number of input given to each expert
         zeros = torch.zeros(
             [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
-        ) # [num_tokens, num_experts]
-        gates = zeros.scatter(1, top_k_indices, 1) # [num_tokens, num_experts]
-        expert_size = gates.long().sum(0) # [num_experts,]
+        )  # [num_tokens, num_experts]
+        gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
+        expert_size = gates.long().sum(0)  # [num_experts,]
         expert_size = expert_size.tolist()
 
         # sort and group input tokens according to expert assignment
-        top_k_experts = top_k_indices.flatten() # [num_tokens * top_k]
-        _, index_sorted_experts = top_k_experts.sort(0) # [num_tokens * top_k]
-        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc") # [num_tokens * top_k]
+        top_k_experts = top_k_indices.flatten()  # [num_tokens * top_k]
+        _, index_sorted_experts = top_k_experts.sort(0)  # [num_tokens * top_k]
+        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc")  # [num_tokens * top_k]
 
         # gather the gate values for grouped input tokens
-        top_k_gates = top_k_gates.flatten() # [num_tokens * top_k]
-        batch_gates = top_k_gates[index_sorted_experts] # [num_tokens * top_k]
+        top_k_gates = top_k_gates.flatten()  # [num_tokens * top_k]
+        batch_gates = top_k_gates[index_sorted_experts]  # [num_tokens * top_k]
 
         return index_sorted_experts, batch_index, batch_gates, expert_size, logits
 
@@ -316,20 +316,20 @@ class JetMoeMoA(nn.Module):
 
         # Compute gating topology
         bsz, length, emb_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, emb_size) # [bsz * length, emb_size]
+        layer_input = layer_input.reshape(-1, emb_size)  # [bsz * length, emb_size]
         index_sorted_experts, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
         topo_info = (index_sorted_experts, batch_index, batch_gates, expert_size)
 
         # Group inputs according to topology and compute query projection
-        expert_inputs = layer_input[batch_index] # [bsz * length * top_k, emb_size]
-        expert_outputs = self.input_linear(expert_inputs, expert_size) # [bsz * length * top_k, hidden_size]
+        expert_inputs = layer_input[batch_index]  # [bsz * length * top_k, emb_size]
+        expert_outputs = self.input_linear(expert_inputs, expert_size)  # [bsz * length * top_k, hidden_size]
 
         # Ungroup queries back to original order
         zeros = torch.zeros(
             (bsz * length * self.top_k, self.hidden_size), dtype=expert_outputs.dtype, device=expert_outputs.device
         )
         layer_output = zeros.index_add(0, index_sorted_experts, expert_outputs)
-        layer_output = layer_output.view(bsz, length, self.top_k, -1) # [bsz, length, top_k, hidden_size]
+        layer_output = layer_output.view(bsz, length, self.top_k, -1)  # [bsz, length, top_k, hidden_size]
         return layer_output, router_logits, topo_info
 
     def reduce(self, layer_input, topo_info):
@@ -337,12 +337,12 @@ class JetMoeMoA(nn.Module):
         Compute output projection inside each attention experts and merge the outputs of different experts.
         """
         bsz, length, k, hidden_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, hidden_size) # [bsz * length * k, hidden_size]
+        layer_input = layer_input.reshape(-1, hidden_size)  # [bsz * length * k, hidden_size]
         index_sorted_experts, batch_index, batch_gates, expert_size = topo_info
 
         # Group inputs according to topology and compute output projection
-        expert_inputs = layer_input[index_sorted_experts] # [bsz * length * top_k, hidden_size]
-        expert_outputs = self.output_linear(expert_inputs, expert_size) # [bsz * length * top_k, emb_size]
+        expert_inputs = layer_input[index_sorted_experts]  # [bsz * length * top_k, hidden_size]
+        expert_outputs = self.output_linear(expert_inputs, expert_size)  # [bsz * length * top_k, emb_size]
 
         # Apply gates to attention expert outputs
         expert_outputs = expert_outputs * batch_gates[:, None]
