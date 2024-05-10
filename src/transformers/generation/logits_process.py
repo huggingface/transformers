@@ -110,6 +110,8 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
+        device (`str`, *optional*):
+            The device to allocate the tensors.
 
     Examples:
 
@@ -175,6 +177,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
+        device (`str`, *optional*):
+            The device to allocate the tensors.
 
     Examples:
 
@@ -787,6 +791,8 @@ class EtaLogitsWarper(LogitsWarper):
             Specifies the minimum number of tokens that must be kept for generation, regardless of their probabilities.
             For example, if `min_tokens_to_keep` is set to 1, at least one token will always be kept for generation,
             even if all tokens have probabilities below the cutoff `eta`.
+        device (`str`, *optional*):
+            The device to allocate the tensors.
 
     Examples:
     ```python
@@ -1541,6 +1547,8 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
             The maximum length of the sequence to be generated.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
+        device (`str`, *optional*):
+            The device to allocate the tensors.
 
     Examples:
 
