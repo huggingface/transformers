@@ -8346,6 +8346,7 @@ class UperNetPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class VideoLlavaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -8372,6 +8373,7 @@ class VideoLlavaProcessor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
 
 class VideoMAEForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
