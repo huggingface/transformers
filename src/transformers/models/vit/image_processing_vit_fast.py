@@ -28,10 +28,10 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_scaled_image,
     make_list_of_images,
 )
 from ...utils import TensorType, logging
+from ...utils.generic import ExplictEnum
 from ...utils.import_utils import is_torch_available, is_vision_available
 
 
@@ -42,8 +42,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
-    from torchvision.transforms import Compose, InterpolationMode, Normalize, Resize, ToTensor
+    from torchvision.transforms import Compose, InterpolationMode, Lambda, Normalize, Resize, ToTensor
 
 
 pil_torch_interpolation_mapping = {
@@ -68,6 +67,22 @@ class SizeDict:
         if hasattr(self, key):
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
+
+
+class ImageType(ExplictEnum):
+    PIL = "pillow"
+    TORCH = "torch"
+    NUMPY = "numpy"
+
+
+def get_image_type(image):
+    if is_vision_available() and isinstance(image, PIL.Image.Image):
+        return ImageType.PIL
+    if is_torch_available() and isinstance(image, torch.Tensor):
+        return ImageType.TORCH
+    if isinstance(image, np.ndarray):
+        return ImageType.NUMPY
+    raise ValueError(f"Unrecognised image type {type(image)}")
 
 
 class ViTImageProcessorFast(BaseImageProcessorFast):
@@ -158,14 +173,34 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
+        image_type: ImageType,
     ) -> Compose:
+        """
+        Given the input settings build the image transforms using `torchvision.transforms.Compose`.
+        """
+
+        def rescale_image(image, rescale_factor):
+            return image * rescale_factor
+
         transforms = []
         if do_resize:
             transforms.append(
                 Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
             )
         if do_rescale:
-            transforms.append(ToTensor())
+            # To maintain cross-compatibility between the slow and fast image processors, we need to
+            # be able to accept both PIL images as torch.Tensor or numpy images.
+            if image_type in (ImageType.PIL, ImageType.NUMPY):
+                transforms.append(ToTensor())
+                # ToTensor scales the pixel values to [0, 1]
+                if rescale_factor != 1 / 255:
+                    rescale_factor = rescale_factor * 255
+                    transforms.append(Lambda(rescale_image))
+            # If do_rescale is `True`, we should still respect it
+            elif image_type == torch.Tensor:
+                transforms.append(Lambda(rescale_image))
+            else:
+                raise ValueError(f"Unsupported image type {image_type}")
         if do_normalize:
             transforms.append(Normalize(image_mean, image_std))
         return Compose(transforms)
@@ -183,6 +218,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
         data_format: Union[str, ChannelDimension],
+        image_type: ImageType,
     ):
         if return_tensors != "pt":
             raise ValueError("Only returning PyTorch tensors is currently supported.")
@@ -252,15 +288,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
-
-        if input_data_format is not None and input_data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -276,14 +303,21 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
 
         images = make_list_of_images(images)
 
-        if do_rescale:
-            if isinstance(images[0], np.ndarray) and is_scaled_image(images[0]):
-                raise ValueError(
-                    "Images are expected to have pixel values in the range [0, 255] when do_rescale=True. "
-                    "Got pixel values in the range [0, 1]."
-                )
-            elif not isinstance(images[0], Image.Image):
-                raise ValueError("Images must be of type PIL.Image.Image or np.ndarray when do_rescale=True.")
+        image_type = get_image_type(images[0])
+
+        self._validate_input_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            return_tensors=return_tensors,
+            data_format=data_format,
+            image_type=image_type,
+        )
 
         self._maybe_update_transforms(
             do_resize=do_resize,
@@ -294,6 +328,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             rescale_factor=rescale_factor,
             image_mean=image_mean,
             image_std=image_std,
+            image_type=image_type,
         )
         transformed_images = [self._transforms(image) for image in images]
 

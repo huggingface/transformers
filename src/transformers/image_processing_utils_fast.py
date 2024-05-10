@@ -20,6 +20,7 @@ from .image_processing_utils import BaseImageProcessor
 
 class BaseImageProcessorFast(BaseImageProcessor):
     _transform_params = None
+    _transform_settings = None
 
     def _set_transform_settings(self, **kwargs):
         settings = {}
@@ -33,15 +34,25 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         Check if the current settings are the same as the current transforms.
         """
+        if self._transform_settings is None:
+            raise ValueError("Transform settings have not been set.")
+
         for key, value in kwargs.items():
             if value not in self._transform_settings or value != self._transform_settings[key]:
                 return False
         return True
 
     def _build_transforms(self, **kwargs):
+        """
+        Given the input settings e.g. do_resize, build the image transforms.
+        """
         raise NotImplementedError
 
     def set_transforms(self, **kwargs):
+        """
+        Set the image transforms based on the given settings.
+        If the settings are the same as the current ones, do nothing.
+        """
         if self._same_transforms_settings(**kwargs):
             return self._transforms
 
@@ -51,6 +62,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     @functools.lru_cache(maxsize=1)
     def _maybe_update_transforms(self, **kwargs):
+        """
+        If settings are different from those stored in `self._transform_settings`, update
+        the image transforms to apply
+        """
         if self._same_transforms_settings(**kwargs):
             return
         self.set_transforms(**kwargs)

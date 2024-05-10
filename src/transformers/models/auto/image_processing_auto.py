@@ -19,14 +19,14 @@ import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import Dict, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Union
 
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...image_processing_utils import ImageProcessingMixin, BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, ImageProcessingMixin
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging, is_torchvision_available
+from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, is_torchvision_available, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -448,7 +448,13 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(config_class, image_processor_class=None, slow_image_processor_class=None, fast_image_processor_class=None, exist_ok=False):
+    def register(
+        config_class,
+        image_processor_class=None,
+        slow_image_processor_class=None,
+        fast_image_processor_class=None,
+        exist_ok=False,
+    ):
         """
         Register a new image processor for this class.
 
@@ -461,8 +467,8 @@ class AutoImageProcessor:
             if slow_image_processor_class is not None:
                 raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
             warnings.warn(
-               "The image_processor_class argument is deprecated and will be removed in v4.42. Please use slow_image_processor_class, or fast_image_processor_class instead",
-               FutureWarning
+                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use slow_image_processor_class, or fast_image_processor_class instead",
+                FutureWarning,
             )
             slow_image_processor_class = image_processor_class
 
@@ -494,4 +500,6 @@ class AutoImageProcessor:
             if fast_image_processor_class is None:
                 fast_image_processor_class = existing_fast
 
-        IMAGE_PROCESSOR_MAPPING.register(config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok)
+        IMAGE_PROCESSOR_MAPPING.register(
+            config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
+        )
