@@ -11,6 +11,8 @@ import inspect
 from transformers.models.llama.modeling_llama import *
 from transformers.models.cohere.diff_cohere import *
 from transformers.models.starcoder2.modeling_starcoder2 import *
+from transformers.models.starcoder2.diff_starcoder2 import *
+from transformers.models.gemma.diff_gemma import *
 # 1. all the imports from the original file should be copied until end of header? __HEADER__
 # with open(CohereConverter.original_file, 'r') as file, open("result.py", "w+") as modeling:
 #         pass

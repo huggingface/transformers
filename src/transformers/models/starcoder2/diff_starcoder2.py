@@ -57,7 +57,6 @@ class Starcoder2MLP(nn.Module):
 class Starcoder2Attention(LlamaAttention):
     def __init__(self, config: LlamaConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx) # here call to super means
-                                            # we should copy super
         self.attention_dropout = config.attention_dropout
 
     def forward(
