@@ -642,7 +642,12 @@ class CLIPEncoder(nn.Module):
     def __init__(self, config: CLIPConfig, attn_implementation="eager"):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                CLIPEncoderLayer(config, attn_implementation=attn_implementation)
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(
