@@ -384,22 +384,8 @@ class QuantoQuantizedCache(DynamicCache):
         else:
             dequant_key = self._key_cache_quant[layer_idx].dequantize()
             dequant_value = self._value_cache_quant[layer_idx].dequantize()
-            keys_to_return = torch.cat(
-                [
-                    dequant_key,
-                    self.key_cache[layer_idx],
-                    key_states,
-                ],
-                dim=-2,
-            )
-            values_to_return = torch.cat(
-                [
-                    dequant_value,
-                    self.value_cache[layer_idx],
-                    value_states,
-                ],
-                dim=-2,
-            )
+            keys_to_return = [dequant_key, self.key_cache[layer_idx],key_states]
+            keys_to_return = torch.cat(keys_to_returndim=-2)
             if (
                 self.key_cache[layer_idx].dim() == 4
                 and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
