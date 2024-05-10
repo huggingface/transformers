@@ -57,15 +57,6 @@ runs:
               },
               {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": "*Click the button for more details about the commit*"},
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Commit results"},
-                    "url": "${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
-                }
-              },
-              {
-                "type": "section",
                 "text": {"type": "mrkdwn", "text": "*Click here for more details about the action ran*"},
                 "accessory": {
                     "type": "button",
