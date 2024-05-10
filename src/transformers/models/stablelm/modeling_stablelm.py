@@ -5,7 +5,6 @@ import torch.nn as nn
 from transformers import StableLmConfig
 from transformers.utils import ModelConverter
 
-StableLmConverter = ModelConverter(__file__)
 
 class StableLmRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -22,6 +21,7 @@ class StableLmRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
 class StarcoderRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
@@ -78,6 +78,7 @@ class StarcoderRotaryEmbedding(nn.Module):
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
         k_embed = (k * cos) + (self.rotate_half(k) * sin)
         return q_embed, k_embed
+
 class StableLmMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -92,6 +93,7 @@ class StableLmMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
 
 
 class StableLmLayerNormPerHead(nn.Module):

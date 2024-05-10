@@ -31,6 +31,8 @@ def create_single_model_file(converter):
                     source_code = inspect.getsource(converter.registered_classes[class_to_use]).replace(old_class, class_to_use)
                     source_code = source_code.replace(old_model_identifier_camel, model_identifier_camel)
                     modeling.write(source_code)
+                    modeling.write("\n")
+
                 elif match:=re.match(r"class (\w+)\((\w+)\):", line):
                     class_name, parent_class = match.groups()
                     pattern = re.compile(r"((    [\s\S]*?)\n(\n)?(?=    \S))|((    [\s\S]*?)(?=\Z))", re.MULTILINE)
@@ -52,6 +54,10 @@ def create_single_model_file(converter):
                             function_set[full_function.split("(")[0]] = full_function
 
                     modeling.write("".join(function_set.values())) # TODO we wrote the code, next lines shall be ignored
+                    modeling.write("\n")
+
+                elif "= ModelConverter(__file__)" in line:
+                    pass # don't write the converter to the result file
                 elif line not in "".join(function_set.values()) or line=="\n":
                     modeling.write(line)
 

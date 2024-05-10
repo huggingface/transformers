@@ -7,7 +7,6 @@ import torch.nn as nn
 from transformers import Starcoder2Config
 from transformers.utils import ModelConverter
 
-Starcoder2Converter = ModelConverter(__file__)
 
 class Starcoder2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -24,6 +23,7 @@ class Starcoder2RMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
 class StarcoderRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
@@ -80,6 +80,7 @@ class StarcoderRotaryEmbedding(nn.Module):
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
         k_embed = (k * cos) + (self.rotate_half(k) * sin)
         return q_embed, k_embed
+
 
 class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):

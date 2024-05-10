@@ -3,7 +3,6 @@ import torch.nn as nn
 from .configuration_persimmon import PersimmonConfig
 from transformers.utils import ModelConverter
 
-PersimmonConverter = ModelConverter(__file__)
 
 class PersimmonRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
@@ -61,6 +60,7 @@ class PersimmonRotaryEmbedding(nn.Module):
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
         k_embed = (k * cos) + (self.rotate_half(k) * sin)
         return q_embed, k_embed
+
 class PersimmonMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -75,5 +75,6 @@ class PersimmonMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
 
 class PersimmonAttention(nn.Module):

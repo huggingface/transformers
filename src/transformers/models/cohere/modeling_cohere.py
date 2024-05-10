@@ -3,7 +3,6 @@ import torch.nn as nn
 from transformers import CohereConfig
 from transformers.utils import ModelConverter
 
-CohereConverter = ModelConverter(__file__)
 # now should the cohere converted be added to all model converters? 
 
 class CohereLayerNorm(nn.Module):
@@ -66,6 +65,7 @@ class CohereRotaryEmbedding(nn.Module):
 
 
 
+
 class CohereMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -80,6 +80,7 @@ class CohereMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
 class CohereAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -199,6 +200,7 @@ class CohereAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 class CohereSdpaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -318,6 +320,7 @@ class CohereSdpaAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 class CohereFlashAttention2(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -438,6 +441,7 @@ class CohereFlashAttention2(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
+
 COHERE_ATTENTION_CLASSES = {"eager": CohereAttention, "flash_attention_2": CohereFlashAttention2, "sdpa": CohereSdpaAttention}
 
 class CohereDecoderLayer(nn.Module):
@@ -514,6 +518,7 @@ class CoherePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
@@ -743,6 +748,7 @@ class CohereModel(CoherePreTrainedModel):
             causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
         return causal_mask
+
 class CohereForCausalLM(CoherePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -954,3 +960,4 @@ class CohereForCausalLM(CoherePreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+

@@ -2,7 +2,6 @@ from transformers.models.llama.modeling_llama import *
 import torch.nn as nn
 from transformers.utils import ModelConverter
 
-GemmaConverter = ModelConverter(__file__)
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -76,6 +75,7 @@ class GemmaRotaryEmbedding(nn.Module):
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
         k_embed = (k * cos) + (self.rotate_half(k) * sin)
         return q_embed, k_embed
+
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -90,6 +90,7 @@ class GemmaMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
 
 class GemmaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -210,6 +211,7 @@ class GemmaAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 class GemmaSdpaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -329,6 +331,7 @@ class GemmaSdpaAttention(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 class GemmaFlashAttention2(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -449,6 +452,7 @@ class GemmaFlashAttention2(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
+
 COHERE_ATTENTION_CLASSES = {"eager": GemmaAttention, "flash_attention_2": GemmaFlashAttention2, "sdpa": GemmaSdpaAttention}
 
 class GemmaDecoderLayer(nn.Module):
@@ -518,6 +522,7 @@ class GemmaDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
@@ -542,5 +547,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 
 @add_start_docstrings(
