@@ -2526,7 +2526,7 @@ class Trainer:
         # Load adapters following PR # 24096
         elif _is_peft_model(model):
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-            if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
+            if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
                     # For BC for older PEFT versions
                     if hasattr(model, "active_adapters"):
