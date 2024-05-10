@@ -1007,13 +1007,12 @@ class GemmaModel(GemmaPreTrainedModel):
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                if attention_mask.dim() == 2:
-                    mask_length = attention_mask.shape[-1]
-                    padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                    padding_mask = padding_mask == 0
-                    causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                        padding_mask, min_dtype
-                    )
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
