@@ -64,7 +64,6 @@ def dynamically_import_object(module_path, object_name):
     except (ImportError, AttributeError) as e:
         print(f"Failed to import object '{object_name}' from module '{module_path}'")
         print(e)
-        exit(0)
 
 
 # 3. Apply ruff fix to remove unused imports
@@ -83,5 +82,8 @@ if __name__ == '__main__':
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/",".").replace(".py","").replace("src.","")
         model_name = MODEL_NAMES_MAPPING[module_path.split('_')[-1]]
-        converter = dynamically_import_object(module_path, f"{model_name}Converter")
-        create_single_model_file(converter)
+        try:
+            converter = dynamically_import_object(module_path, f"{model_name}Converter")
+            create_single_model_file(converter)
+        except Exception as e:
+            pass
