@@ -957,10 +957,7 @@ class JetMoeBlock(nn.Module):
             outputs += (present_key_value,)
 
         if output_router_logits:
-            outputs += (
-                attn_router_logits,
-                mlp_router_logits,
-            )
+            outputs += attn_router_logits, mlp_router_logits
 
         return outputs
 
