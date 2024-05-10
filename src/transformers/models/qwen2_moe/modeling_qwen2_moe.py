@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Qwen2MoE model."""
+"""PyTorch Qwen2MoE model."""
+
 import inspect
 import math
 import warnings
@@ -861,7 +862,9 @@ class Qwen2MoeDecoderLayer(nn.Module):
 
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        if config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
