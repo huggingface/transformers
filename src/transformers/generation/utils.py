@@ -461,9 +461,6 @@ class GenerationMixin:
         if not is_input_ids:
             return default_attention_mask
 
-        if pad_token_id is not None and pad_token_id.device.type == "meta":
-            return default_attention_mask
-
         # Otherwise we have may have information -> try to infer the attention mask
         if inputs.device.type == "mps":
             # mps does not support torch.isin (https://github.com/pytorch/pytorch/issues/77764)
