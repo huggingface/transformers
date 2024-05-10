@@ -28,9 +28,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an

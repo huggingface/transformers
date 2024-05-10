@@ -47,9 +47,6 @@ _CHECKPOINT_FOR_DOC = "BAAI/seggpt-vit-large"
 _EXPECTED_OUTPUT_SHAPE = [3, 896, 448]
 
 
-from ..deprecated._archive_maps import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class SegGptEncoderOutput(ModelOutput):
     """

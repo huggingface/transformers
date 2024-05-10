@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMOnnxConfig"],
+    "configuration_xlm": ["XLMConfig", "XLMOnnxConfig"],
     "tokenization_xlm": ["XLMTokenizer"],
 }
 
@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_xlm"] = [
-        "XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLMForMultipleChoice",
         "XLMForQuestionAnswering",
         "XLMForQuestionAnsweringSimple",
@@ -47,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_xlm"] = [
-        "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFXLMForMultipleChoice",
         "TFXLMForQuestionAnsweringSimple",
         "TFXLMForSequenceClassification",
@@ -60,7 +58,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMOnnxConfig
+    from .configuration_xlm import XLMConfig, XLMOnnxConfig
     from .tokenization_xlm import XLMTokenizer
 
     try:
@@ -70,7 +68,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_xlm import (
-            XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
             XLMForQuestionAnswering,
             XLMForQuestionAnsweringSimple,
@@ -88,7 +85,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_xlm import (
-            TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,
             TFXLMForQuestionAnsweringSimple,
             TFXLMForSequenceClassification,

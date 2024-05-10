@@ -48,9 +48,6 @@ _CHECKPOINT_FOR_DOC = "jinho8345/bros-base-uncased"
 _CONFIG_FOR_DOC = "BrosConfig"
 
 
-from ..deprecated._archive_maps import BROS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 BROS_START_DOCSTRING = r"""
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage

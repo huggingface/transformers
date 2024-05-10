@@ -25,9 +25,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class ErnieConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieModel`] or a [`TFErnieModel`]. It is used to

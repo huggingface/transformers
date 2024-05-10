@@ -40,13 +40,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DPRConfig"
 
 
-from ..deprecated._archive_maps import (  # noqa: F401, E402
-    TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-    TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-    TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-)
-
-
 ##########
 # Outputs
 ##########

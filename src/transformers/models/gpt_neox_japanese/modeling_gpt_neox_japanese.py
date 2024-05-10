@@ -35,9 +35,6 @@ _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
 
 
-from ..deprecated._archive_maps import GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

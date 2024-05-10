@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_bridgetower": [
-        "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BridgeTowerConfig",
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
@@ -41,7 +40,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bridgetower"] = [
-        "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BridgeTowerForContrastiveLearning",
         "BridgeTowerForImageAndTextRetrieval",
         "BridgeTowerForMaskedLM",
@@ -52,7 +50,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_bridgetower import (
-        BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BridgeTowerConfig,
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
@@ -74,7 +71,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bridgetower import (
-            BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
             BridgeTowerForContrastiveLearning,
             BridgeTowerForImageAndTextRetrieval,
             BridgeTowerForMaskedLM,

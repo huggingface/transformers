@@ -60,8 +60,6 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # for the pretrained weights provided with the models
 ####################################################
 
-from ..deprecated._archive_maps import T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch

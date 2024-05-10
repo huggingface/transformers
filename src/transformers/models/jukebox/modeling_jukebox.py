@@ -34,9 +34,6 @@ from .configuration_jukebox import ATTENTION_PATTERNS, JukeboxConfig, JukeboxPri
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
     """
     Filter a distribution of logits using top-k and/or nucleus (top-p) filtering

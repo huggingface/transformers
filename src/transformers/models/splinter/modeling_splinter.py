@@ -38,9 +38,6 @@ _CHECKPOINT_FOR_DOC = "tau/splinter-base"
 _CONFIG_FOR_DOC = "SplinterConfig"
 
 
-from ..deprecated._archive_maps import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class SplinterEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
