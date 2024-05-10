@@ -1152,7 +1152,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         )
 
@@ -1160,7 +1159,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         assistant_model_id = "openai/whisper-tiny"
         assistant_model = AutoModelForSpeechSeq2Seq.from_pretrained(
             assistant_model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         )
 
@@ -1172,11 +1170,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             generate_kwargs={"language": "en"},
         )
 
-
         start_time = time.time()
         transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
         total_time_assist = time.time() - start_time
-
 
         start_time = time.time()
         transcription_ass = pipe(sample)["text"]
@@ -1194,14 +1190,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_distil(self):
         # Load data:
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
-        sample = dataset[0]
+        sample = dataset[0]["audio"]
 
         # Load model:
         model_id = "openai/whisper-large-v2"
         processor = AutoProcessor.from_pretrained(model_id)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         )
 
@@ -1209,7 +1204,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         assistant_model_id = "distil-whisper/distil-large-v2"
         assistant_model = AutoModelForCausalLM.from_pretrained(
             assistant_model_id,
-            low_cpu_mem_usage=True,
             use_safetensors=True,
         )
 
@@ -1221,22 +1215,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             generate_kwargs={"language": "en"},
         )
 
-        inputs = {
-            "sampling_rate": sample["audio"]["sampling_rate"],
-            "raw": np.array(sample["audio"]["array"]),
-        }
-
         start_time = time.time()
-        transcription_non_ass = pipe(inputs=inputs, generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
         total_time_assist = time.time() - start_time
 
-        inputs = {
-            "sampling_rate": sample["audio"]["sampling_rate"],
-            "raw": np.array(sample["audio"]["array"]),
-        }
-
         start_time = time.time()
-        transcription_ass = pipe(inputs=inputs)["text"]
+        transcription_ass = pipe(sample)["text"]
         total_time_non_assist = time.time() - start_time
 
         assert transcription_ass == transcription_non_ass
