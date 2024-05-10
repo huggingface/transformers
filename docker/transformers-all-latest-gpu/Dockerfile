@@ -48,6 +48,9 @@ RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
+# Some tests require quanto
+RUN python3 -m pip install --no-cache-dir quanto
+
 # For `dinat` model
 # The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
 RUN python3 -m pip install --no-cache-dir natten==0.15.1+torch220$CUDA -f https://shi-labs.com/natten/wheels

@@ -778,11 +778,11 @@ class WhisperGenerationMixin:
                     del generate_kwargs[key]
             seek_outputs = super().generate(
                 segment_input,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )

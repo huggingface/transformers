@@ -1,11 +1,17 @@
+import copy
+import json
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
 from .configuration_utils import PretrainedConfig
-from .utils import logging
+from .utils import is_quanto_available, logging
 
+
+if is_quanto_available():
+    from quanto import QBitsTensor, qint2, qint4
 
 logger = logging.get_logger(__name__)
 
@@ -80,6 +86,140 @@ class Cache:
             return self._seen_tokens
         else:
             return None
+
+
+@dataclass
+class CacheConfig:
+    """
+    Base class for cache configs
+    """
+
+    cache_implementation: None
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        """
+        Constructs a CacheConfig instance from a dictionary of parameters.
+        Args:
+            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            **kwargs: Additional keyword arguments to override dictionary values.
+        Returns:
+            CacheConfig: Instance of CacheConfig constructed from the dictionary.
+        """
+        config = cls(**config_dict)
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+        return config
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+        Args:
+            json_file_path (Union[str, os.PathLike]): Path to the JSON file in which this configuration instance's parameters will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+            writer.write(json_string)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+        Returns:
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        return output
+
+    def __iter__(self):
+        for attr, value in copy.deepcopy(self.__dict__).items():
+            yield attr, value
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def to_json_string(self):
+        """
+        Serializes this instance to a JSON formatted string.
+        Returns:
+            str: JSON formatted string representing the configuration instance.
+        """
+        return json.dumps(self.__dict__, indent=2) + "\n"
+
+    def update(self, **kwargs):
+        """
+        Update the configuration attributes with new values.
+        Args:
+            **kwargs: Keyword arguments representing configuration attributes and their new values.
+        """
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+
+@dataclass
+class QuantizedCacheConfig(CacheConfig):
+    """
+    Configuration class for quantized cache settings.
+
+    Attributes:
+        nbits (`Optional[int]`, *optional*, defaults to 4):
+            Number of bits, can be 2 or 4. Defaults to 2.
+        q_group_size (`Optional[int]`, *optional*, defaults to 64):
+            Size of the quantization group, should be a divisor of the model's hidden dimension.
+            Defaults to 64.
+        residual_length (`Optional[int]`, *optional*, defaults to 128):
+            Length of the residual cache which will always be stored in original presicion.
+            Defaults to 128.
+    """
+
+    def __init__(
+        self,
+        nbits: Optional[int] = 4,
+        q_group_size: Optional[int] = 64,
+        residual_length: Optional[int] = 128,
+    ):
+        self.nbits = nbits
+        self.q_group_size = q_group_size
+        self.residual_length = residual_length
+
+    def validate(self):
+        """Validates if the arguments passed are correct"""
+
+        incorrect_arg_msg = (
+            "Some of the keys in `cache_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+        if self.nbits not in [2, 4]:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="nbits",
+                    correct_value="2 or 4",
+                    found_value=self.nbits,
+                ),
+            )
+        if self.q_group_size <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="q_group_size",
+                    correct_value="a positive integer",
+                    found_value=self.q_group_size,
+                ),
+            )
+        if self.residual_length < 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="residual_length",
+                    correct_value="a positive integer",
+                    found_value=self.residual_length,
+                ),
+            )
 
 
 class DynamicCache(Cache):
@@ -184,6 +324,105 @@ class DynamicCache(Cache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
+
+
+class QuantoQuantizedCache(DynamicCache):
+    """
+    A cache similar to what described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
+
+    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for
+    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
+    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper. Current implementation
+    supports `int2` and `int4` dtypes from `quanto` cache.
+
+    Cache stores the original precision Key and Value states as a list of tensors, one for each layer. The maximum expected shape for each tensor is
+    `[batch_size, num_heads, residual_length, head_dim]`. Quantized Key and Value are stored separately as a list of quantized tensors, one for each layer.
+    The size of each tensor is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
+
+    Parameters:
+        nbits (`Optional[int]`, *optional*, defaults to 4):
+            Number of bits, can be 2 or 4. Defaults to 2.
+        q_group_size (`Optional[int]`, *optional*, defaults to 64):
+            Size of the quantization group, should be a divisor of the model's hidden dimension.
+            Defaults to 64.
+        residual_length (`Optional[int]`, *optional*, defaults to 128):
+            Length of the residual cache which will always be stored in original presicion.
+            Defaults to 128.
+    """
+
+    def __init__(self, nbits: int = 4, q_group_size: int = 64, residual_length: int = 128) -> None:
+        if nbits not in [2, 4]:
+            raise ValueError(f"`nbits` has to be one of [`2`, `4`] but got {nbits}")
+
+        self._key_cache_quant: List[torch.Tensor] = []
+        self._value_cache_quant: List[torch.Tensor] = []
+
+        self.residual_length = residual_length
+        self.qtype = qint4 if nbits == 4 else qint2
+        self.q_group_size = q_group_size
+
+        super.__init__()
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self.seen_token += key_states.shape[-2]
+
+        if len(self.key_cache) <= layer_idx:
+            self._quantized_value_cache.append(self._quantize(key_states.contiguous()))
+            self._value_cache_quant.append(self._quantize(value_states.contiguous()))
+            self.key_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
+            self.value_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
+            keys_to_return, values_to_return = key_states, value_states
+        else:
+            dequant_key = self._key_cache_quant[layer_idx].dequantize()
+            dequant_value = self._value_cache_quant[layer_idx].dequantize()
+            keys_to_return = torch.cat(
+                [
+                    dequant_key,
+                    self.key_cache[layer_idx],
+                    key_states,
+                ],
+                dim=-2,
+            )
+            values_to_return = torch.cat(
+                [
+                    dequant_value,
+                    self.value_cache[layer_idx],
+                    value_states,
+                ],
+                dim=-2,
+            )
+            if (
+                self.key_cache[layer_idx].dim() == 4
+                and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
+            ):
+                self._key_cache_quant[layer_idx] = self._quantize(keys_to_return.contiguous())
+                self._value_cache_quant[layer_idx] = self._quantize(values_to_return.contiguous())
+                self.key_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+                self.value_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+            else:
+                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return keys_to_return, values_to_return
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        return self.seen_token
+
+    def _quantize(self, tensor):
+        qtensor = QBitsTensor.quantize(tensor, axis=0, qtype=self.qtype, group_size=self.q_group_size)
+        return qtensor
 
 
 class SinkCache(Cache):
