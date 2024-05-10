@@ -61,9 +61,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class BeitModelOutputWithPooling(BaseModelOutputWithPooling):
     """
@@ -563,6 +560,7 @@ class BeitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["BeitLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

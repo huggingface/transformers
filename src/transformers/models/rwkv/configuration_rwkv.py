@@ -22,9 +22,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class RwkvConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`RwkvModel`]. It is used to instantiate a RWKV
@@ -41,7 +38,7 @@ class RwkvConfig(PretrainedConfig):
             Vocabulary size of the RWKV model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`RwkvModel`].
         context_length (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model can be be used with in a single forward (using it in RNN mode
+            The maximum sequence length that this model can be used with in a single forward (using it in RNN mode
             lets use any sequence length).
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.

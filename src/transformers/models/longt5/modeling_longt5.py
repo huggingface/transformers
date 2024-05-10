@@ -52,8 +52,6 @@ _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
 # TODO: Update before the merge
 
-from ..deprecated._archive_maps import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 def _pad_to_multiple(x: torch.Tensor, block_len: int, dim: int, pad_value: int = 0) -> torch.Tensor:
     """Pad a tensor so that a sequence length will be a multiple of `block_len`"""

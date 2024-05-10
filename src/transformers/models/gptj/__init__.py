@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJOnnxConfig"]}
+_import_structure = {"configuration_gptj": ["GPTJConfig", "GPTJOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -31,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gptj"] = [
-        "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTJForCausalLM",
         "GPTJForQuestionAnswering",
         "GPTJForSequenceClassification",
@@ -67,7 +66,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig, GPTJOnnxConfig
+    from .configuration_gptj import GPTJConfig, GPTJOnnxConfig
 
     try:
         if not is_torch_available():
@@ -76,7 +75,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gptj import (
-            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTJForCausalLM,
             GPTJForQuestionAnswering,
             GPTJForSequenceClassification,

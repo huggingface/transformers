@@ -48,9 +48,6 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/levit-128S"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     """
@@ -491,6 +488,7 @@ class LevitPreTrainedModel(PreTrainedModel):
     config_class = LevitConfig
     base_model_prefix = "levit"
     main_input_name = "pixel_values"
+    _no_split_modules = ["LevitResidualLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -21,8 +21,6 @@ from ..auto.configuration_auto import AutoConfig
 
 logger = logging.get_logger(__name__)
 
-from ..deprecated._archive_maps import MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
 
 class MusicgenMelodyDecoderConfig(PretrainedConfig):
     r"""

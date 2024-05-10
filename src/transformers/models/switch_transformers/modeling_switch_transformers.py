@@ -55,8 +55,6 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # for the pretrained weights provided with the models
 ####################################################
 
-from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
@@ -1721,6 +1719,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        output_router_logits = kwargs.get("output_router_logits", True)
+
         return {
             "decoder_input_ids": input_ids,
             "past_key_values": past_key_values,
@@ -1730,6 +1730,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
+            "output_router_logits": output_router_logits,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):

@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SuperPointForKeypointDetection,
     )
 
@@ -85,13 +84,17 @@ class SuperPointModelTester:
             border_removal_distance=self.border_removal_distance,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_keypoint_detection(self, config, pixel_values):
         model = SuperPointForKeypointDetection(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
+        self.parent.assertEqual(result.keypoints.shape[0], self.batch_size)
+        self.parent.assertEqual(result.keypoints.shape[-1], 2)
+
+        result = model(pixel_values, output_hidden_states=True)
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
+            result.hidden_states[-1].shape,
             (
                 self.batch_size,
                 self.encoder_hidden_sizes[-1],
@@ -117,6 +120,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    from_pretrained_id = "magic-leap-community/superpoint"
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
@@ -146,19 +150,19 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -166,9 +170,9 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    def test_model(self):
+    def test_keypoint_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        self.model_tester.create_and_check_keypoint_detection(*config_and_inputs)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
@@ -218,9 +222,8 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SuperPointForKeypointDetection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model = SuperPointForKeypointDetection.from_pretrained(self.from_pretrained_id)
+        self.assertIsNotNone(model)
 
     def test_forward_labels_should_be_none(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
