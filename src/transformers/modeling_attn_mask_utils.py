@@ -240,6 +240,7 @@ class AttentionMaskConverter:
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
         sliding_window: Optional[int] = None,
+        is_training: bool = False,
     ) -> bool:
         """
         Detects whether the optional user-specified attention_mask & the automatically created causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
@@ -263,11 +264,11 @@ class AttentionMaskConverter:
         if attention_mask is None:
             # TODO: When tracing with TorchDynamo with fullgraph=True, the model is recompiled depending on the input shape, thus SDPA's `is_causal` argument is rightfully updated (see https://gist.github.com/fxmarty/1313f39037fc1c112508989628c57363). However, when using `torch.export` or
             # or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is hard-coded. If a user exports a model with q_len > 1, the exported model will hard-code `is_causal=True` which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108).
-            # Thus, we currently can NOT set `ignore_causal_mask = True` here. We would need a `torch._dynamo.is_exporting()` flag.
+            # Thus, we only set `ignore_causal_mask = True` if the model is set to training.
             #
             # Besides, jit.trace can not handle the `q_len > 1` condition for `is_causal` (`TypeError: scaled_dot_product_attention(): argument 'is_causal' must be bool, not Tensor`).
             if (
-                not is_tracing
+                (is_training or not is_tracing)
                 and (query_length == 1 or key_value_length == query_length)
                 and (sliding_window is None or key_value_length < sliding_window)
             ):
@@ -279,7 +280,7 @@ class AttentionMaskConverter:
                     raise ValueError(
                         f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
                     )
-            elif not is_tracing and torch.all(attention_mask == 1):
+            elif (is_training or not is_tracing) and torch.all(attention_mask == 1):
                 if query_length == 1 or key_value_length == query_length:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
                     ignore_causal_mask = True
@@ -445,10 +446,8 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
     )
 
-    if torch.all(mask == 1):
-        if is_tracing:
-            pass
-        elif tgt_len == 1:
+    if not is_tracing and torch.all(mask == 1):
+        if tgt_len == 1:
             # For query_length == 1, causal attention and bi-directional attention are the same.
             return None
         elif key_value_length == tgt_len:

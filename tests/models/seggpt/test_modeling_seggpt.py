@@ -363,7 +363,11 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         prompt_mask = masks[0]
 
         inputs = image_processor(
-            images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
+            images=input_image,
+            prompt_images=prompt_image,
+            prompt_masks=prompt_mask,
+            return_tensors="pt",
+            do_convert_rgb=False,
         )
 
         inputs = inputs.to(torch_device)
@@ -404,7 +408,11 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         prompt_masks = [masks[0], masks[2]]
 
         inputs = image_processor(
-            images=input_images, prompt_images=prompt_images, prompt_masks=prompt_masks, return_tensors="pt"
+            images=input_images,
+            prompt_images=prompt_images,
+            prompt_masks=prompt_masks,
+            return_tensors="pt",
+            do_convert_rgb=False,
         )
 
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
@@ -437,10 +445,16 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         prompt_mask = masks[0]
 
         inputs = image_processor(
-            images=input_image, prompt_masks=prompt_mask, prompt_images=prompt_image, return_tensors="pt"
+            images=input_image,
+            prompt_masks=prompt_mask,
+            prompt_images=prompt_image,
+            return_tensors="pt",
+            do_convert_rgb=False,
         ).to(torch_device)
 
-        labels = image_processor(images=None, prompt_masks=label, return_tensors="pt")["prompt_masks"].to(torch_device)
+        labels = image_processor(images=None, prompt_masks=label, return_tensors="pt", do_convert_rgb=False)[
+            "prompt_masks"
+        ].to(torch_device)
 
         bool_masked_pos = prepare_bool_masked_pos(model.config).to(torch_device)
 

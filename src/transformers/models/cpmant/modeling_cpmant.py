@@ -37,9 +37,6 @@ _CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
 _CONFIG_FOR_DOC = "CpmAntConfig"
 
 
-from ..deprecated._archive_maps import CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class CpmAntLayerNorm(nn.Module):
     """
     We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."

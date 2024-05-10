@@ -53,9 +53,6 @@ _CONFIG_FOR_DOC = "RemBertConfig"
 _CHECKPOINT_FOR_DOC = "google/rembert"
 
 
-from ..deprecated._archive_maps import REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

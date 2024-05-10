@@ -101,7 +101,12 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import _find_disjoint, _find_identical, shard_checkpoint
+    from transformers.modeling_utils import (
+        _find_disjoint,
+        _find_identical,
+        dtype_byte_size,
+        shard_checkpoint,
+    )
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -464,6 +469,31 @@ class ModelUtilsTest(TestCasePlus):
                     self.assertEqual(
                         module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
                     )
+
+    def test_torch_dtype_byte_sizes(self):
+        torch_dtypes_and_bytes = [
+            (torch.double, 8),
+            (torch.float64, 8),
+            (torch.float, 4),
+            (torch.float32, 4),
+            (torch.half, 2),
+            (torch.float16, 2),
+            (torch.bfloat16, 2),
+            (torch.long, 8),
+            (torch.int64, 8),
+            (torch.int, 4),
+            (torch.int32, 4),
+            (torch.short, 2),
+            (torch.int16, 2),
+            (torch.uint8, 1),
+            (torch.int8, 1),
+            (torch.float8_e4m3fn, 1),
+            (torch.float8_e5m2, 1),
+            (torch.bool, 0.125),
+        ]
+
+        for torch_dtype, bytes_per_element in torch_dtypes_and_bytes:
+            self.assertEqual(dtype_byte_size(torch_dtype), bytes_per_element)
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
@@ -970,6 +1000,26 @@ class ModelUtilsTest(TestCasePlus):
             all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
             self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
             self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+
+        # test no model file found when use_safetensors=None (default when safetensors package available)
+        with self.assertRaises(OSError) as missing_model_file_error:
+            BertModel.from_pretrained("hf-internal-testing/config-no-model")
+
+        self.assertTrue(
+            "does not appear to have a file named pytorch_model.bin, model.safetensors,"
+            in str(missing_model_file_error.exception)
+        )
+
+        with self.assertRaises(OSError) as missing_model_file_error:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                    f.write("{}")
+                f.close()
+                BertModel.from_pretrained(tmp_dir)
+
+        self.assertTrue(
+            "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
+        )
 
     @require_safetensors
     def test_safetensors_save_and_load(self):

@@ -21,9 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class MixtralConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
@@ -83,7 +80,7 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to root per-token, can be also interpreted as the `top-p` routing
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.

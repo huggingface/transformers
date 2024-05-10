@@ -152,11 +152,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
 
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IDEA-Research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
-
 
 @dataclass
 class GroundingDinoDecoderOutput(ModelOutput):
@@ -2113,7 +2108,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
+        self.text_backbone = AutoModel.from_config(
+            config.text_config, add_pooling_layer=False, attn_implementation=config._attn_implementation
+        )
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
