@@ -707,12 +707,7 @@ class JetMoeFlashAttention2(JetMoeAttention):
             Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
         """
         output_attentions = False
-
-        (
-            bsz,
-            q_len,
-            hidden_size,
-        ) = hidden_states.size()  # batch size, sequence length, embedding dimensionality (hidden_size)
+        bsz, q_len, hidden_size = hidden_states.size()
 
         # calculate query, key, values
         query_states, router_logits = self.experts.map(hidden_states)
