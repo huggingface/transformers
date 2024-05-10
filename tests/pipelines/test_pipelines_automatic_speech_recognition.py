@@ -1179,7 +1179,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
 
         start_time = time.time()
-        transcription_ass = pipe(inputs=inputs)["text"]
+        transcription_ass = pipe(sample)["text"]
         total_time_non_assist = time.time() - start_time
 
         assert transcription_ass == transcription_non_ass
