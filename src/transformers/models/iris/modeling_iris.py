@@ -1598,6 +1598,10 @@ class IrisModel(IrisPreTrainedModel):
         all_hidden_states = (all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic) if output_hidden_states else None
         all_self_attentions = (all_attentions_tokenizer, all_attentions_world_model, all_attentions_actor_critic) if output_attentions else None
        
+        if not return_dict:
+            return tuple(v for v in [losses, tokenizer_outputs[2], actor_critic_outputs.logits_actions, world_model_outputs.logits_rewards, 
+                                     world_model_outputs.logits_ends, world_model_outputs.logits_observations, all_hidden_states, all_self_attentions] if v is not None)
+
         return IrisOutput(
             losses = losses,
             reconstructed_img = tokenizer_outputs[2],
