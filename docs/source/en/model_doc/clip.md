@@ -79,7 +79,36 @@ encode the text and prepare the images. The following example shows how to get t
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
-CLIP supports the usage of efficient algorithms for the attention mechanism through `torch.nn.functional.scaled_dot_product_attention` (SDPA). This can enhance both memory consumption and inference latency. You can expect a speed boost of ~30% when using SDPA along with `torch.float16` data-type, depending on the batch size and the model size. Refer to [this doc](../perf_infer_gpu_one.md) for more details on how to use SDPA. 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```
+from transformers import CLIPTextModel
+
+model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float16, attn_implementation="sdpa")
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+On a local benchmark (A100-80GB, PyTorch 2.2.0, OS Ubuntu 22.04) with `float16`, we saw the following speedups during inference.
+
+
+| batch_size | sequence_length | time eager (seconds) | time sdpa (seconds) |
+|------------|-----------------|-----------------------|----------------------|
+| 4          | 48              | 0.08                 | 0.07               |
+| 4          | 64              | 0.075                 | 0.07                |
+| 8          | 48              | 0.071                 | 0.067                |
+| 8          | 64              | 0.07                 | 0.062                |
+
 
 ## Resources
 
