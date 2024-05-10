@@ -104,7 +104,7 @@ class LlamaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    def comput_cos_sin(self, x, position_ids):
+    def compute_cos_sin(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -115,7 +115,7 @@ class LlamaRotaryEmbedding(nn.Module):
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos(). emb.sin()
+        return emb.cos(), emb.sin()
     
     def rotate_half(self, x):
         """Rotates half the hidden dims of the input."""
@@ -125,14 +125,12 @@ class LlamaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @add_start_docstrings("")
-    def forward(self, q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    def forward(self, q, k, position_ids=None, unsqueeze_dim=1):
         """Applies Rotary Position Embedding to the query and key tensors.
 
         Args:
             q (`torch.Tensor`): The query tensor.
             k (`torch.Tensor`): The key tensor.
-            cos (`torch.Tensor`): The cosine part of the rotary embedding.
-            sin (`torch.Tensor`): The sine part of the rotary embedding.
             position_ids (`torch.Tensor`, *optional*):
                 Deprecated and unused.
             unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -145,7 +143,7 @@ class LlamaRotaryEmbedding(nn.Module):
         Returns:
             `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
         """
-        cos, sin = self.comput_cos_sin(q, position_ids)
+        cos, sin = self.compute_cos_sin(q, position_ids)
         cos = cos.unsqueeze(unsqueeze_dim).to(dtype=q.dtype)
         sin = sin.unsqueeze(unsqueeze_dim).to(dtype=q.dtype)
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
@@ -296,12 +294,11 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_emb(query_states, key_states, position_ids)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -381,8 +378,8 @@ class LlamaFlashAttention2(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_emb(query_states, key_states, position_ids)
+
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -577,12 +574,12 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_emb(query_states, key_states, position_ids)
+
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
