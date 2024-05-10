@@ -561,7 +561,7 @@ class ProcessorMixin(PushToHubMixin):
         if chat_template is None:
             if self.chat_template is not None:
                 chat_template = self.chat_template
-            else:
+            elif getattr(self, "default_chat_template", None) is not None:
                 logger.warning_once(
                     "No chat template is set for this processor, falling back to a default class-level template. This is "
                     "very error-prone, because models are often trained with templates different from the class default! "
@@ -570,6 +570,12 @@ class ProcessorMixin(PushToHubMixin):
                     "then to ensure that this model continues working without issues."
                 )
                 chat_template = self.default_chat_template
+            else:
+                raise ValueError(
+                    "No chat template is set for this processor. Please either set the `chat_template` attribute, "
+                    "or provide a chat template as an argument. See "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
+                )
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
