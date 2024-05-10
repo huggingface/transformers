@@ -331,7 +331,7 @@ class QuantoQuantizedCache(DynamicCache):
     A cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
     It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
 
-    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for
+    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
     original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
     quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper. Current implementation
     supports `int2` and `int4` dtypes from `quanto` cache.
