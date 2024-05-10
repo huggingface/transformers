@@ -3846,7 +3846,10 @@ class ModelTesterMixin:
                                     if "attention_mask" in inspect.signature(model_eager.forward).parameters:
                                         processed_inputs["attention_mask"] = dummy_attention_mask
                                     # Otherwise fails for e.g. CLIPModelTest
-                                    if "pixel_values" in inspect.signature(model_eager.forward).parameters:
+                                    if (
+                                        "pixel_values" in inspect.signature(model_eager.forward).parameters
+                                        and model_class.__name__ == "CLIPModel"
+                                    ):
                                         processed_inputs["pixel_values"] = inputs_dict["pixel_values"]
 
                                 # TODO: test gradients as well (& for FA2 as well!)

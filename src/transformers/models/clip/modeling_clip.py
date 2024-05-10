@@ -413,10 +413,10 @@ class CLIPMLP(nn.Module):
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPConfig, attn_implementation="eager"):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = CLIP_ATTENTION_CLASSES[attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
