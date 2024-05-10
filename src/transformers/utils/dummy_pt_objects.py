@@ -4320,7 +4320,6 @@ class JambaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 class JetMoeForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
