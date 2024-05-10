@@ -37,9 +37,6 @@ _CONFIG_FOR_DOC = "TrOCRConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
 
 
-from ..deprecated._archive_maps import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->TrOCR
 class TrOCRLearnedPositionalEmbedding(nn.Embedding):
     """

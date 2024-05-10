@@ -68,9 +68,6 @@ _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 
 
-from ..deprecated._archive_maps import TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 FLAUBERT_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the

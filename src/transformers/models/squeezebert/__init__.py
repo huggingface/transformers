@@ -19,7 +19,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_squeezebert": [
-        "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SqueezeBertConfig",
         "SqueezeBertOnnxConfig",
     ],
@@ -41,7 +40,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_squeezebert"] = [
-        "SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SqueezeBertForMaskedLM",
         "SqueezeBertForMultipleChoice",
         "SqueezeBertForQuestionAnswering",
@@ -55,7 +53,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_squeezebert import (
-        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SqueezeBertConfig,
         SqueezeBertOnnxConfig,
     )
@@ -76,7 +73,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_squeezebert import (
-            SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SqueezeBertForMaskedLM,
             SqueezeBertForMultipleChoice,
             SqueezeBertForQuestionAnswering,

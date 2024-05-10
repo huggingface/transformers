@@ -46,9 +46,6 @@ _CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
 
 
-from ..deprecated._archive_maps import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:

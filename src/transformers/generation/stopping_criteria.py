@@ -470,29 +470,32 @@ class EosTokenCriteria(StoppingCriteria):
     By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
-        eos_token_id (`Union[int, List[int]]`):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+            The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int]]):
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        self.eos_token_id = torch.tensor(eos_token_id)
+    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor]):
+        if not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id)
+        self.eos_token_id = eos_token_id
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        self.eos_token_id = self.eos_token_id.to(input_ids.device)
         if input_ids.device.type == "mps":
             # https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
             is_done = (
                 input_ids[:, -1]
                 .tile(self.eos_token_id.shape[0], 1)
-                .eq(self.eos_token_id.unsqueeze(1).to(input_ids.device))
+                .eq(self.eos_token_id.unsqueeze(1))
                 .sum(dim=0)
                 .bool()
                 .squeeze()
             )
         else:
-            is_done = torch.isin(input_ids[:, -1], self.eos_token_id.to(input_ids.device))
+            is_done = torch.isin(input_ids[:, -1], self.eos_token_id)
         return is_done
 
 

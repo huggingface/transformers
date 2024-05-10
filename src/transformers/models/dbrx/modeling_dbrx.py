@@ -287,7 +287,6 @@ class DbrxAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -386,8 +385,6 @@ class DbrxFlashAttention2(DbrxAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -599,8 +596,6 @@ class DbrxSdpaAttention(DbrxAttention):
 
         cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, None)
-
-        past_key_value = getattr(self, "past_key_value", past_key_value)
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -1115,7 +1110,9 @@ class DbrxModel(DbrxPreTrainedModel):
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.emb_pdrop, training=self.training)
 
+        return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
@@ -1182,13 +1179,10 @@ class DbrxModel(DbrxPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache()
-                if isinstance(next_decoder_cache, DynamicCache)
-                else next_decoder_cache
-            )
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = next_cache.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v

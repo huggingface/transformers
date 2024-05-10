@@ -22,9 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig", "ResNetOnnxConfig"]
-}
+_import_structure = {"configuration_resnet": ["ResNetConfig", "ResNetOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -33,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_resnet"] = [
-        "RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ResNetForImageClassification",
         "ResNetModel",
         "ResNetPreTrainedModel",
@@ -47,7 +44,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_resnet"] = [
-        "TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFResNetForImageClassification",
         "TFResNetModel",
         "TFResNetPreTrainedModel",
@@ -66,7 +62,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig, ResNetOnnxConfig
+    from .configuration_resnet import ResNetConfig, ResNetOnnxConfig
 
     try:
         if not is_torch_available():
@@ -75,7 +71,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_resnet import (
-            RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ResNetBackbone,
             ResNetForImageClassification,
             ResNetModel,
@@ -89,7 +84,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_resnet import (
-            TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFResNetForImageClassification,
             TFResNetModel,
             TFResNetPreTrainedModel,

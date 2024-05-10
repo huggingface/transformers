@@ -20,7 +20,6 @@ from __future__ import annotations
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
-from ..deprecated._archive_maps import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class ErnieMConfig(PretrainedConfig):

@@ -52,9 +52,6 @@ _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class SegFormerImageClassifierOutput(ImageClassifierOutput):
     """
     Base class for outputs of image classification models.

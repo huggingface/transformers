@@ -57,9 +57,6 @@ _CONFIG_FOR_DOC = "LongformerConfig"
 LARGE_NEGATIVE = -1e8
 
 
-from ..deprecated._archive_maps import TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class TFLongformerBaseModelOutput(ModelOutput):
     """

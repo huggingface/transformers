@@ -24,7 +24,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig", "MBartOnnxConfig"]}
+_import_structure = {"configuration_mbart": ["MBartConfig", "MBartOnnxConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -49,7 +49,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_mbart"] = [
-        "MBART_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MBartForCausalLM",
         "MBartForConditionalGeneration",
         "MBartForQuestionAnswering",
@@ -86,7 +85,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBartOnnxConfig
+    from .configuration_mbart import MBartConfig, MBartOnnxConfig
 
     try:
         if not is_sentencepiece_available():
@@ -111,7 +110,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_mbart import (
-            MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
             MBartForCausalLM,
             MBartForConditionalGeneration,
             MBartForQuestionAnswering,

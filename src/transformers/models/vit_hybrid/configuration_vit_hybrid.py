@@ -24,9 +24,6 @@ from ..bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class ViTHybridConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTHybridModel`]. It is used to instantiate a ViT

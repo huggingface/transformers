@@ -59,9 +59,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "T5Config"
 
 
-from ..deprecated._archive_maps import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
 # - keras.layers.Layer for the layers and

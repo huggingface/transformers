@@ -35,9 +35,6 @@ from .configuration_tvp import TvpConfig
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import TVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class TvpVideoGroundingOutput(ModelOutput):
     """

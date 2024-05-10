@@ -21,10 +21,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "IDEA-Research/grounding-dino-tiny": "https://huggingface.co/IDEA-Research/grounding-dino-tiny/resolve/main/config.json",
-}
-
 
 class GroundingDinoConfig(PretrainedConfig):
     r"""
