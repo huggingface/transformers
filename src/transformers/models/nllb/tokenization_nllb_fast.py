@@ -171,14 +171,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
-    def lang_code_to_id(self):
-        logger.warning_once(
-            "the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
-        )
-        return self._lang_code_to_id
-
-    @property
     def can_save_slow_tokenizer(self) -> bool:
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 

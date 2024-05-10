@@ -15,7 +15,6 @@
 """PyTorch Falcon model."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import torch
@@ -395,11 +394,6 @@ class FalconAttention(nn.Module):
         output_attentions: bool = False,
         **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -551,14 +545,6 @@ class FalconFlashAttention2(FalconAttention):
         output_attentions: bool = False,
         **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
-
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -794,11 +780,6 @@ class FalconDecoderLayer(nn.Module):
         output_attentions: bool = False,
         **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         residual = hidden_states
 
         if self.config.new_decoder_architecture and self.config.num_ln_in_parallel_attn == 2:
