@@ -1362,7 +1362,6 @@ class GenerationMixin:
 
             if token is None or isinstance(token, torch.Tensor):
                 return token
-            # device = self.device if self.device.type != "meta" else torch.device("cpu")
             return torch.tensor(token, device=device, dtype=torch.long)
 
         bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
@@ -1520,7 +1519,8 @@ class GenerationMixin:
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
-        device = model_kwargs["input_ids"].device
+        if "input_ids" in model_kwargs:
+            device = model_kwargs["input_ids"].device
 
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
 
