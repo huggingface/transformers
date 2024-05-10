@@ -46,9 +46,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
 
 
-from ..deprecated._archive_maps import TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TimeSeriesFeatureEmbedder(nn.Module):
     """
     Embed a sequence of categorical features.

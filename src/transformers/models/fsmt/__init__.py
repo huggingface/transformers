@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig"],
+    "configuration_fsmt": ["FSMTConfig"],
     "tokenization_fsmt": ["FSMTTokenizer"],
 }
 
@@ -32,7 +32,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
+    from .configuration_fsmt import FSMTConfig
     from .tokenization_fsmt import FSMTTokenizer
 
     try:

@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Qwen/Qwen1.5-MoE-A2.7B": "https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B/resolve/main/config.json",
-}
-
 
 class Qwen2MoeConfig(PretrainedConfig):
     r"""

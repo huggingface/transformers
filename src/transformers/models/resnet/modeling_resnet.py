@@ -54,9 +54,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-from ..deprecated._archive_maps import RESNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class ResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"

@@ -53,9 +53,6 @@ _CONFIG_FOR_DOC = "BlenderbotConfig"
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot-400M-distill"
 
 
-from ..deprecated._archive_maps import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

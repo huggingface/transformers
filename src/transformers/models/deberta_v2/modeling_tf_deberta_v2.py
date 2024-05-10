@@ -53,9 +53,6 @@ _CONFIG_FOR_DOC = "DebertaV2Config"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-v2-xlarge"
 
 
-from ..deprecated._archive_maps import TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaContextPooler with Deberta->DebertaV2
 class TFDebertaV2ContextPooler(keras.layers.Layer):
     def __init__(self, config: DebertaV2Config, **kwargs):

@@ -54,8 +54,6 @@ _REAL_CHECKPOINT_FOR_DOC = "facebook/nllb-moe-54b"
 # for the pretrained weights provided with the models
 ####################################################
 
-from ..deprecated._archive_maps import NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
