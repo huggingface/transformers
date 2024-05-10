@@ -941,7 +941,6 @@ class JetMoeBlock(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            **kwargs,
         )
 
         hidden_states = hidden_states + attn_output
