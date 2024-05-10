@@ -937,7 +937,10 @@ class Mask4DTestHard(unittest.TestCase):
         position_ids_1b = position_ids_shared_prefix[:, part_a:]
         mask_1b = mask_shared_prefix[:, :, part_a:, :]
         outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, past_key_values=past_key_values_a
+            input_1b,
+            attention_mask=mask_1b,
+            position_ids=position_ids_1b,
+            past_key_values=past_key_values_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -1055,7 +1058,11 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(part_a, input_ids_shared_prefix.shape[-1], device=torch_device),
+            cache_position=torch.arange(
+                part_a,
+                input_ids_shared_prefix.shape[-1],
+                device=torch_device,
+            ),
             past_key_values=past_key_values,
         )
         decoded_1b = [
