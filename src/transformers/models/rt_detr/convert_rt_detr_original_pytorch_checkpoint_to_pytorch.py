@@ -678,13 +678,23 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             ]
         )
     elif model_name == "rtdetr_r101vd":
-        pass
+        expected_slice_logits = torch.tensor(
+            [[-4.6162, -4.9189, -4.6656], [-4.4701, -4.4997, -4.9659], [-5.6641, -7.9000, -5.0725]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7707, 0.4124, 0.4585], [0.2589, 0.5492, 0.4735], [0.1688, 0.1993, 0.2108]]
+        )
     elif model_name == "rtdetr_18vd_coco_o365":
         pass
     elif model_name == "rtdetr_r50vd_coco_o365":
         pass
     elif model_name == "rtdetr_r101vd_coco_o365":
-        pass
+        expected_slice_logits = torch.tensor(
+            [[-4.5152, -5.6811, -5.7311], [-4.5358, -7.2422, -5.0941], [-4.6919, -5.5834, -6.0145]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.7703, 0.4140, 0.4583], [0.1686, 0.1991, 0.2107], [0.2570, 0.5496, 0.4750]]
+        )
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
 
