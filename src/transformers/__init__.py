@@ -3114,6 +3114,7 @@ else:
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
+            "TableTransformerImageProcessor",
             "TableTransformerModel",
             "TableTransformerPreTrainedModel",
         ]
@@ -7300,6 +7301,7 @@ if TYPE_CHECKING:
         )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,
+            TableTransformerImageProcessor,
             TableTransformerModel,
             TableTransformerPreTrainedModel,
         )
