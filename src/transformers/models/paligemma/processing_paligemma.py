@@ -222,7 +222,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
             )
         else:
-            inputs = self.tokenizer(
+            text_inputs = self.tokenizer(
                 input_strings,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
