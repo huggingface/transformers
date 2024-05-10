@@ -310,7 +310,6 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         super().test_eager_matches_sdpa_generate()
 
     @parameterized.expand([(1, False), (1, True), (4, False)])
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_new_cache_format
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
