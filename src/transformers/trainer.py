@@ -2526,7 +2526,9 @@ class Trainer:
         # Load adapters following PR # 24096
         elif _is_peft_model(model):
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-            if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(model, "load_adapter"):
+            if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
+                model, "load_adapter"
+            ):
                 if os.path.exists(resume_from_checkpoint):
                     # For BC for older PEFT versions
                     if hasattr(model, "active_adapters"):
@@ -2536,7 +2538,7 @@ class Trainer:
                         active_adapter = active_adapters[0]
                     else:
                         active_adapter = model.active_adapter
-                    
+
                     if adapter_subdirs:
                         for subdir_name in adapter_subdirs:
                             peft_id = os.path.join(resume_from_checkpoint, subdir_name)
@@ -2617,7 +2619,9 @@ class Trainer:
             else:
                 if _is_peft_model(model):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-                    if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(model, "load_adapter"):
+                    if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
+                        model, "load_adapter"
+                    ):
                         # For BC for older PEFT versions
                         if hasattr(model, "active_adapters"):
                             active_adapter = model.active_adapters()[0]
@@ -2625,7 +2629,7 @@ class Trainer:
                                 logger.warning("Detected multiple active adapters, will only consider the first one")
                         else:
                             active_adapter = model.active_adapter
-                        
+
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             model.load_adapter(self.state.best_model_checkpoint, active_adapter)
                             # Load_adapter has no return value present, modify it when appropriate.
