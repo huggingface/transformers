@@ -220,8 +220,6 @@ that\'s a terrible feeling."']
 
 このデコーディング戦略を有効にするには、`num_beams`（追跡する仮説の数）を1よりも大きな値に指定します。
 
-希望されるテキストの翻訳がお手伝いできて嬉しいです！もしさらなる質問やサポートが必要な場合は、お気軽にお知らせください。
-
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
