@@ -146,7 +146,6 @@ class TestTrainerExt(TestCasePlus):
             "do_eval": False,
             "do_predict": False,
             "n_gpus_to_use": 2,
-            "report_to": "none",
         }
         log_info_string = "Running training"
         with CaptureStderr() as cl:

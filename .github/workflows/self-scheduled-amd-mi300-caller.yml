@@ -26,4 +26,5 @@ jobs:
     uses: ./.github/workflows/self-scheduled-amd.yml
     with:
       gpu_flavor: mi300
+      slack_report_channel: "#transformers-ci-daily-amd"
     secrets: inherit
