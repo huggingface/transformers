@@ -463,7 +463,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
         >>> processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
-        >>> prompt = "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
+        >>> prompt = "USER: <video>Why is this video funny? ASSISTANT:"
         >>> video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
         >>> container = av.open(video_path)
 
@@ -472,7 +472,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> indices = np.arange(0, total_frames, total_frames / 8).astype(int)
         >>> clip = read_video_pyav(container, indices)
 
-        >>> inputs = processor(text=prompt, visual_inputs=clip, return_tensors="pt")
+        >>> inputs = processor(text=prompt, videos=clip, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=80)
@@ -484,9 +484,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> prompt = [
                 "USER: <image> How many cats are there in the image? ASSISTANT:",
-                "USER: <image><image><image><image><image><image><image><image>Why is this video funny? ASSISTANT:"
+                "USER: <video>Why is this video funny? ASSISTANT:"
             ]
-        >>> inputs = processor(text=prompt, visual_inputs=[image, clip], padding=True, return_tensors="pt")
+        >>> inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=50)
