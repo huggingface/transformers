@@ -29,6 +29,8 @@ from ...utils import TensorType
 
 logger = logging.getLogger(__name__)
 
+IMAGE_TOKEN = "<image>"
+
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
 
@@ -88,6 +90,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
         
         self.image_seq_length = image_processor.image_seq_length
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -180,7 +184,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 prompt=prompt,
                 bos_token=self.tokenizer.bos_token,
                 image_seq_len=self.image_seq_length,
-                image_token="<image>",
+                image_token=IMAGE_TOKEN,
             )
             for prompt in text
         ]

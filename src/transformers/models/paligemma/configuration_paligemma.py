@@ -83,7 +83,7 @@ class PaliGemmaConfig(PretrainedConfig):
         text_config=None,
         ignore_index=-100,
         image_token_index=256000,
-        vocab_size=257152, # 
+        vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
         **kwargs,
@@ -110,7 +110,6 @@ class PaliGemmaConfig(PretrainedConfig):
                 num_hidden_layers=27,
                 num_attention_heads=16,
                 vocab_size=257152,
-                projection_dim=2048,
                 vision_use_head=False,
             )
         self.vocab_size = self.vocab_size
@@ -124,12 +123,12 @@ class PaliGemmaConfig(PretrainedConfig):
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["gemma"](
                 hidden_size=2048,
-                num_hidden_layers=18,  # similar to gemma-2b
+                num_hidden_layers=18,
                 intermediate_size=16384,
                 num_attention_heads=8,
                 num_key_value_heads=1,
                 is_encoder_decoder=False,
             )
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
-
+        self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)

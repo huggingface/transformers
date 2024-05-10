@@ -36,124 +36,63 @@ from transformers.utils import logging
 from transformers.tokenization_utils_base import AddedToken
 
 
-device = "cpu"
+device = "cuda" #"cpu"
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+# TODO add sequence length variations here
+
 PALIGEMMA_VARIANTS = ["2b-test", "2b-224px", "2b-448px", "2b-896px"]
 
-
 def get_paligemma_config(variant: str):
-    config = PaliGemmaConfig()
+    config = {
+        'image_token_index': None,
+        'pad_token_id': 0,
+        'bos_token_id': 2,
+        'eos_token_id': 1,
+        }
 
-    if variant == "2b-test":
-        vocab_size = 257152
-        image_size = 224
+    image_sizes = {
+        "2b-test": 224,
+        "2b-224px": 224,
+        "2b-448px": 448,
+        "2b-896px": 896
+    }
+
+    if variant in PALIGEMMA_VARIANTS:
+        image_size = image_sizes[variant]
         patch_size = 14
-        config.image_token_index = 256000
-        config.vision_config.image_size = image_size
-        config.vision_config.patch_size = patch_size
-        config.vision_config.num_image_tokens = int(
-            config.vision_config.image_size**2 / config.vision_config.patch_size**2
-        )
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
-        config.vision_config.projector_hidden_act = "gelu_fast"
-
-        config.text_config.vocab_size = vocab_size
-        config.text_config.num_hidden_layers = 18
-        config.text_config.num_key_value_heads = 1
-        config.text_config.head_dim = 256
-        config.text_config.torch_dtype = "float32"
-        config.text_config.hidden_size = 2048
-        config.text_config.hidden_act = "gelu_pytorch_tanh"
-        config.pad_token_id = 0
-        config.bos_token_id = 2
-        config.eos_token_id = 1
-    elif variant == "2b-224px":
-        vocab_size = 257152
-        image_size = 224
-        patch_size = 14
-        config.image_token_index = 257152
-        config.vision_config.image_size = image_size
-        config.vision_config.patch_size = patch_size
-        config.vision_config.num_image_tokens = int(
-            config.vision_config.image_size**2 / config.vision_config.patch_size**2
-        )
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
-        config.vision_config.projector_hidden_act = "gelu_fast"
-
-        config.text_config.vocab_size = vocab_size
-        config.text_config.num_hidden_layers = 18
-        config.text_config.num_key_value_heads = 1
-        config.text_config.head_dim = 256
-        config.text_config.torch_dtype = "float32"
-        config.text_config.hidden_size = 2048
-        config.text_config.hidden_act = "gelu_pytorch_tanh"
-        config.pad_token_id = 0
-        config.bos_token_id = 2
-        config.eos_token_id = 1
-    elif variant == "2b-448px":
-        vocab_size = 257152
-        image_size = 448
-        patch_size = 14
-        config.image_token_index = 257152
-        config.vision_config.image_size = image_size
-        config.vision_config.patch_size = patch_size
-        config.vision_config.num_image_tokens = int(
-            config.vision_config.image_size**2 / config.vision_config.patch_size**2
-        )
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
-        config.vision_config.projector_hidden_act = "gelu_fast"
-
-        config.text_config.vocab_size = vocab_size
-        config.text_config.num_hidden_layers = 18
-        config.text_config.num_key_value_heads = 1
-        config.text_config.head_dim = 256
-        config.text_config.torch_dtype = "float32"
-        config.text_config.hidden_size = 2048
-        config.text_config.hidden_act = "gelu_pytorch_tanh"
-        config.pad_token_id = 0
-        config.bos_token_id = 2
-        config.eos_token_id = 1  
-    elif variant == "2b-896px":
-        vocab_size = 257152
-        image_size = 896
-        patch_size = 14
-        config.image_token_index = 257152
-        config.vision_config.image_size = image_size
-        config.vision_config.patch_size = patch_size
-        config.vision_config.num_image_tokens = int(
-            config.vision_config.image_size**2 / config.vision_config.patch_size**2
-        )
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
-        config.vision_config.projector_hidden_act = "gelu_fast"
-
-        config.text_config.vocab_size = vocab_size
-        config.text_config.num_hidden_layers = 18
-        config.text_config.num_key_value_heads = 1
-        config.text_config.head_dim = 256
-        config.text_config.torch_dtype = "float32"
-        config.text_config.hidden_size = 2048
-        config.text_config.hidden_act = "gelu_pytorch_tanh"
-        config.pad_token_id = 0
-        config.bos_token_id = 2
-        config.eos_token_id = 1  
+        num_image_tokens = (image_size ** 2) // (patch_size ** 2)
+        
+        config['image_token_index'] = 257152 if variant != "2b-test" else 256000
+        text_config = {
+            'vocab_size': 257152,
+            'num_hidden_layers': 18,
+            'num_key_value_heads': 1,
+            'head_dim': 256,
+            'torch_dtype': 'float32',
+            'hidden_size': 2048,
+            'hidden_act': 'gelu_pytorch_tanh',
+            'num_attention_heads': 8,
+            'intermediate_size': 16384,
+            'is_encoder_decoder': False
+        }
+        vision_config = {
+            'image_size': image_size,
+            'patch_size': patch_size,
+            'num_image_tokens': num_image_tokens,
+            'hidden_size': 1152,
+            'intermediate_size': 4304,
+            'num_hidden_layers': 27,
+            'num_attention_heads': 16,
+            'projector_hidden_act': 'gelu_fast',
+            'vision_use_head': False
+        }
+        final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
     else:
         raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}")
-    return config
+    return final_config
 
 
 def slice_state_dict(state_dict, config):
@@ -198,7 +137,6 @@ def slice_state_dict(state_dict, config):
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc1.bias"] = encoderblock_mlp_dense0_bias[i]
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc2.weight"] = encoderblock_mlp_dense1_kernel[i].transpose()
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.mlp.fc2.bias"] = encoderblock_mlp_dense1_bias[i]
-
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = encoderblock_attention_0_key_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"] = encoderblock_attention_0_key_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = encoderblock_attention_0_value_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
@@ -207,7 +145,6 @@ def slice_state_dict(state_dict, config):
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = encoderblock_attention_0_query_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"] = encoderblock_attention_0_out_kernel[i].reshape(-1, config.vision_config.hidden_size).transpose()
         state_dict[f"vision_tower.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"] = encoderblock_attention_0_out_bias[i].reshape(-1, config.vision_config.hidden_size).reshape(-1)
-
 
     state_dict["vision_tower.vision_model.post_layernorm.weight"] = state_dict.pop("img/Transformer/encoder_norm/scale").transpose()
     state_dict["vision_tower.vision_model.post_layernorm.bias"] = state_dict.pop("img/Transformer/encoder_norm/bias")
@@ -236,30 +173,6 @@ def slice_state_dict(state_dict, config):
     llm_post_attention_layernorm = state_dict.pop("llm/layers/pre_ffw_norm/scale")
 
     for i in range(config.text_config.num_hidden_layers):
-        """
-        GemmaConfig {
-        "attention_bias": false,
-        "attention_dropout": 0.0,
-        "bos_token_id": 2,
-        "eos_token_id": 1,
-        "head_dim": 256,
-        "hidden_act": "gelu_fast",
-        "hidden_size": 2048,
-        "initializer_range": 0.02,
-        "intermediate_size": 16384,
-        "max_position_embeddings": 8192,
-        "model_type": "gemma",
-        "num_attention_heads": 8,
-        "num_hidden_layers": 18,
-        "num_key_value_heads": 1,
-        "pad_token_id": 0,
-        "rms_norm_eps": 1e-06,
-        "rope_theta": 10000.0,
-        "transformers_version": "4.39.0.dev0",
-        "use_cache": true,
-        "vocab_size": 257152
-        }
-        """
         # llm_attention_q_einsum[i].shape = (8, 2048, 256)
         q_proj_weight_reshaped = llm_attention_q_einsum[i].transpose(0, 2, 1).reshape(config.text_config.num_attention_heads * config.text_config.head_dim, config.text_config.hidden_size)
 
@@ -319,7 +232,7 @@ def verify_logits(model, processor):
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     
     # Test image captioning generation without padding
-    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt")
+    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt").to(device)
     captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
     if captioning_output[0] != "\ncow standing on the beach":
@@ -329,7 +242,7 @@ def verify_logits(model, processor):
 
 
     # Test image captioning generation with padding
-    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt")
+    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt").to(device)
     captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
     if captioning_output[0] != "\ncow standing on the beach":
@@ -341,7 +254,7 @@ def verify_logits(model, processor):
 
     prompt = ["answer en Where is the cow standing?", ""]
 
-    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt")
+    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt").to(device)
     with torch.inference_mode():        
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
@@ -362,8 +275,8 @@ def verify_logits(model, processor):
     big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?", "", "answer en Where is the cow standing?"]
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt')
-    single_inputs = [processor(text=t, images=i, padding="do_not_pad", return_tensors="pt") for t, i in zip(big_batch_inputs, list_images)]
+    batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt').to(device)
+    single_inputs = [processor(text=t, images=i, padding="do_not_pad", return_tensors="pt").to(device) for t, i in zip(big_batch_inputs, list_images)]
     with torch.inference_mode():
         batched_generation = model.generate(**batch_model_inputs, max_new_tokens=25)
         batched_output = processor.batch_decode(batched_generation, skip_special_tokens=True)
@@ -383,7 +296,6 @@ def convert_paligemma_checkpoint(
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
     config = get_paligemma_config(variant)
-
     if do_convert_weights:
         if variant == "2b-test":
             # for the test model, the vocabulary was smaller
@@ -417,8 +329,8 @@ def convert_paligemma_checkpoint(
 
     else:
         processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
-        model = PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path).eval()
-    model.config._attn_implementation = 'sdpa'
+        model = PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa").to(device).eval()
+    model.config.text_config._attn_implementation = 'sdpa'
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
