@@ -270,7 +270,6 @@ class TFViTMAEEmbeddings(keras.layers.Layer):
             method="bicubic",
         )
 
-        shape = shape_list(patch_pos_embed)
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 
@@ -1084,7 +1083,6 @@ class TFViTMAEDecoder(keras.layers.Layer):
             method="bicubic",
         )
 
-        shape = shape_list(patch_pos_embed)
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 
@@ -1236,7 +1234,11 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
                 Pixel values.
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
-        original_image_size = original_image_size if original_image_size is not None else (self.config.image_size, self.config.image_size)
+        original_image_size = (
+            original_image_size
+            if original_image_size is not None
+            else (self.config.image_size, self.config.image_size)
+        )
         original_height, original_width = original_image_size
         num_patches_h = original_height // patch_size
         num_patches_w = original_width // patch_size

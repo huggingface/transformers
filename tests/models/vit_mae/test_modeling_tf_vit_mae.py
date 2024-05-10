@@ -29,7 +29,7 @@ from importlib import import_module
 import numpy as np
 
 from transformers import ViTMAEConfig
-from transformers.file_utils import is_tf_available, is_vision_available,cached_property
+from transformers.file_utils import cached_property, is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, require_vision, slow
 
 from ...test_configuration_common import ConfigTester
@@ -422,7 +422,6 @@ def prepare_img():
 @require_tf
 @require_vision
 class TFViTMAEModelIntegrationTest(unittest.TestCase):
-
     @cached_property
     def default_image_processor(self):
         return ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
