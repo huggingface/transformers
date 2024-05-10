@@ -63,7 +63,8 @@ class ProcessorMixin(PushToHubMixin):
     This is a mixin used to provide saving/loading functionality for all processor classes.
     """
 
-    attributes = ["feature_extractor", "tokenizer", "chat_template"]
+    attributes = ["feature_extractor", "tokenizer"]
+    optional_attributes = ["chat_template"]
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
     tokenizer_class = None
@@ -71,6 +72,9 @@ class ProcessorMixin(PushToHubMixin):
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
+        # First, extract optional attributes from kwargs if present
+        for optional_attribute in self.optional_attributes:
+            setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
