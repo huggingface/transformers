@@ -116,6 +116,64 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     return (oh, ow)
 
 
+def _get_image_size_for_max_height_width(
+    image_size: Tuple[int, int], max_height: int, max_width: int
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_ratio = max_height / height
+    width_ratio = max_width / width
+    ratio = min(height_ratio, width_ratio)
+    new_height = int(height * ratio)
+    new_width = int(width * ratio)
+    return new_height, new_width
+
+
+def get_image_size_for_max_height_width(
+    input_image: np.ndarray,
+    max_height: int,
+    max_width: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        input_image (`np.ndarray`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+    """
+    image_size = get_image_size(input_image, input_data_format)
+    return _get_image_size_for_max_height_width(image_size, max_height, max_width)
+
+
 def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int]],
@@ -753,7 +811,15 @@ class DetrImageProcessor(BaseImageProcessor):
             overridden by the `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
             Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
-            in the `preprocess` method.
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -777,8 +843,10 @@ class DetrImageProcessor(BaseImageProcessor):
             Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True` will pad the images in the batch to the largest height and width in the batch.
-            Padding will be applied to the bottom and right of the image with zeros.
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `max_height` and `max_width` are provided in the `size` parameter, the image will be padded to the
+            `max_height` and `max_width` dimensions. Otherwise, the image will be padded to the maximum height and width
+            of the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -954,18 +1022,27 @@ class DetrImageProcessor(BaseImageProcessor):
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(
+            new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
             )
+        elif "max_height" in size and "max_width" in size:
+            new_size = get_image_size_for_max_height_width(
+                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+            )
         elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+            new_size = (size["height"], size["width"])
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
         image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            size=new_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
         return image
 
@@ -1104,6 +1181,7 @@ class DetrImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
+        padded_size: Optional[Tuple[int, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1133,8 +1211,12 @@ class DetrImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
+            padded_size (`List[int, int]`, *optional*):
+                The size to pad the images to. If not provided, the images will be padded to the largest height and
+                width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        if padded_size is None:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         annotation_list = annotations if annotations is not None else [None] * len(images)
         padded_images = []
@@ -1142,7 +1224,7 @@ class DetrImageProcessor(BaseImageProcessor):
         for image, annotation in zip(images, annotation_list):
             padded_image, padded_annotation = self._pad_image(
                 image,
-                pad_size,
+                padded_size,
                 annotation,
                 constant_values=constant_values,
                 data_format=data_format,
@@ -1156,7 +1238,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1397,6 +1479,10 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
+            if "max_height" in size and "max_width" in size:
+                padded_size = (size["max_height"], size["max_width"])
+            else:
+                padded_size = None
             encoded_inputs = self.pad(
                 images,
                 annotations=annotations,
@@ -1405,6 +1491,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,
                 return_tensors=return_tensors,
+                padded_size=padded_size,
             )
         else:
             images = [
