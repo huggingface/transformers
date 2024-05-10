@@ -9,13 +9,7 @@ Crear un motor de inferencia es un tema complejo, y la "mejor" solución probabl
 </Tip>
 
 
-Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](https://huggingface.co/docs/transformers/pipeline_tutorial#using-pipelines-on-a-dataset), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
-
-<!--
-To do:
-* Check the content of es/pipeline_tutorial.md
-* And update the link [en un conjunto de datos] -> (pipeline_tutorial#pipelines-en-un-conjunto-de-datos)
--->
+Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](pipeline_tutorial#uso-de-pipelines-en-un-conjunto-de-datos), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
 
 Por lo general, los servidores web están multiplexados (multihilo, asíncrono, etc.) para manejar varias solicitudes simultáneamente. Por otro lado, los flujos de trabajo (y principalmente los modelos subyacentes) no son realmente ideales para el paralelismo; consumen mucha RAM, por lo que es mejor darles todos los recursos disponibles cuando se están ejecutando o es un trabajo intensivo en cómputo.
 
