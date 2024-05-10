@@ -2617,7 +2617,7 @@ class Trainer:
             else:
                 if _is_peft_model(model):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-                    if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
+                    if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(model, "load_adapter"):
                         # For BC for older PEFT versions
                         if hasattr(model, "active_adapters"):
                             active_adapter = model.active_adapters()[0]
