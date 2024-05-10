@@ -1040,12 +1040,6 @@ JETMOE_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(n_layer, num_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
