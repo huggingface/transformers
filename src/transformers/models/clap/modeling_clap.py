@@ -45,9 +45,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "laion/clap-htsat-fused"
 
 
-from ..deprecated._archive_maps import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
 def interpolate(hidden_states, ratio):
     """

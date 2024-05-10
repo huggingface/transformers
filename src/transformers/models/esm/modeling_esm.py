@@ -41,9 +41,6 @@ _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
 
 
-from ..deprecated._archive_maps import ESM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def rotate_half(x):
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)

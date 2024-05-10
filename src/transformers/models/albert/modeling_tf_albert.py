@@ -66,9 +66,6 @@ _CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
 
 
-from ..deprecated._archive_maps import TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFAlbertPreTrainingLoss:
     """
     Loss function suitable for ALBERT pretraining, that is, the task of pretraining a language model by combining SOP +

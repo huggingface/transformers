@@ -757,6 +757,94 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
+    def test_whisper_large_timestamp_prediction(self):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        array = np.concatenate(
+            [ds[40]["audio"]["array"], ds[41]["audio"]["array"], ds[42]["audio"]["array"], ds[43]["audio"]["array"]]
+        )
+        pipe = pipeline(model="openai/whisper-large-v3", return_timestamps=True)
+
+        output = pipe(ds[40]["audio"])
+        self.assertDictEqual(
+            output,
+            {
+                "text": " A man said to the universe, Sir, I exist.",
+                "chunks": [{"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 4.08)}],
+            },
+        )
+
+        output = pipe(array, chunk_length_s=10)
+
+        self.assertDictEqual(
+            nested_simplify(output),
+            {
+                "chunks": [
+                    {"timestamp": (0.0, 2.0), "text": (" A man said to the universe,")},
+                    {"timestamp": (2.0, 4.1), "text": (" Sir, I exist.")},
+                    {"timestamp": (5.14, 5.96), "text": (" Sweat covered")},
+                    {"timestamp": (5.96, 8.02), "text": (" Breon's body, trickling into")},
+                    {"timestamp": (8.02, 10.67), "text": (" the tight loincloth that was the only garment he wore,")},
+                    {"timestamp": (10.67, 13.67), "text": (" the cut on his chest still dripping blood,")},
+                    {"timestamp": (13.67, 17.61), "text": (" the ache of his overstrained eyes.")},
+                    {
+                        "timestamp": (17.61, 24.0),
+                        "text": (
+                            " Even the soaring arena around him with thousands of spectators were trivialities not worth thinking about."
+                        ),
+                    },
+                    {
+                        "timestamp": (24.0, 29.94),
+                        "text": (" His instant of panic was followed by a small, sharp blow high on his chest."),
+                    },
+                ],
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Breon's"
+                    " body, trickling into the tight loincloth that was the only garment"
+                    " he wore, the cut on his chest still dripping blood, the ache of his"
+                    " overstrained eyes. Even the soaring arena around him with thousands"
+                    " of spectators were trivialities not worth thinking about. His "
+                    "instant of panic was followed by a small, sharp blow high on his chest."
+                ),
+            },
+        )
+
+        output = pipe(array)
+        self.assertDictEqual(
+            output,
+            {
+                "chunks": [
+                    {"timestamp": (0.0, 1.96), "text": " A man said to the universe,"},
+                    {"timestamp": (2.7, 4.1), "text": " Sir, I exist."},
+                    {"timestamp": (5.14, 6.84), "text": " Sweat covered Brion's body,"},
+                    {
+                        "timestamp": (7.4, 10.68),
+                        "text": " trickling into the tight loincloth that was the only garment he wore,",
+                    },
+                    {"timestamp": (11.6, 13.94), "text": " the cut on his chest still dripping blood,"},
+                    {"timestamp": (14.78, 16.72), "text": " the ache of his overstrained eyes,"},
+                    {
+                        "timestamp": (17.32, 21.16),
+                        "text": " even the soaring arena around him with the thousands of spectators",
+                    },
+                    {"timestamp": (21.16, 23.94), "text": " were trivialities not worth thinking about."},
+                    {
+                        "timestamp": (24.42, 29.94),
+                        "text": " His instant panic was followed by a small sharp blow high on his chest.",
+                    },
+                ],
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brion's body,"
+                    " trickling into the tight loincloth that was the only garment he wore, "
+                    "the cut on his chest still dripping blood, the ache of his overstrained "
+                    "eyes, even the soaring arena around him with the thousands of spectators "
+                    "were trivialities not worth thinking about. His instant panic was followed "
+                    "by a small sharp blow high on his chest."
+                ),
+            },
+        )
+
+    @slow
+    @require_torch
     def test_whisper_word_timestamps_batched(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
@@ -788,6 +876,49 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 {"text": " welcome", "timestamp": (4.3, 4.6)},
                 {"text": " his", "timestamp": (4.6, 4.94)},
                 {"text": " gospel.", "timestamp": (4.94, 5.82)},
+            ],
+        }
+
+        # batch size 1: copy the audio sample since pipeline consumes it
+        output = pipe(sample.copy(), batch_size=1)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
+        # batch size 2: input audio is chunked into smaller pieces so it's testing batching
+        output = pipe(sample, batch_size=2)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch
+    def test_whisper_large_word_timestamps_batched(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-large-v3",
+            return_timestamps="word",
+        )
+        data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = data[0]["audio"]
+
+        # not the same output as test_simple_whisper_asr because of chunking
+        EXPECTED_OUTPUT = {
+            "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+            "chunks": [
+                {"text": " Mr.", "timestamp": (0.0, 0.74)},
+                {"text": " Quilter", "timestamp": (0.74, 1.04)},
+                {"text": " is", "timestamp": (1.04, 1.3)},
+                {"text": " the", "timestamp": (1.3, 1.44)},
+                {"text": " apostle", "timestamp": (1.44, 1.74)},
+                {"text": " of", "timestamp": (1.74, 2.18)},
+                {"text": " the", "timestamp": (2.18, 2.28)},
+                {"text": " middle", "timestamp": (2.28, 2.5)},
+                {"text": " classes,", "timestamp": (2.5, 3.0)},
+                {"text": " and", "timestamp": (3.0, 3.4)},
+                {"text": " we", "timestamp": (3.4, 3.5)},
+                {"text": " are", "timestamp": (3.5, 3.6)},
+                {"text": " glad", "timestamp": (3.6, 3.84)},
+                {"text": " to", "timestamp": (3.84, 4.1)},
+                {"text": " welcome", "timestamp": (4.1, 4.4)},
+                {"text": " his", "timestamp": (4.4, 4.7)},
+                {"text": " gospel.", "timestamp": (4.7, 5.34)},
             ],
         }
 

@@ -133,6 +133,10 @@ class GenerationConfig(PushToHubMixin):
         top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
+        min_p (`float`, *optional*):
+            Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
+            value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
+            the 0.99-0.8 range (use the opposite of normal `top_p` values).
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -306,6 +310,7 @@ class GenerationConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.min_p = kwargs.pop("min_p", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
@@ -729,9 +734,9 @@ class GenerationConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -795,7 +800,7 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", "")

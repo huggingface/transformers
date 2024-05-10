@@ -55,9 +55,6 @@ _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
 
 
-from ..deprecated._archive_maps import PLBART_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"]}
+_import_structure = {"configuration_sew_d": ["SEWDConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,7 +25,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_sew_d"] = [
-        "SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SEWDForCTC",
         "SEWDForSequenceClassification",
         "SEWDModel",
@@ -33,7 +32,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+    from .configuration_sew_d import SEWDConfig
 
     try:
         if not is_torch_available():
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_sew_d import (
-            SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST,
             SEWDForCTC,
             SEWDForSequenceClassification,
             SEWDModel,

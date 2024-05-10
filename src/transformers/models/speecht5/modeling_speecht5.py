@@ -47,9 +47,6 @@ _HIDDEN_STATES_START_POSITION = 1
 _CONFIG_FOR_DOC = "SpeechT5Config"
 
 
-from ..deprecated._archive_maps import SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """

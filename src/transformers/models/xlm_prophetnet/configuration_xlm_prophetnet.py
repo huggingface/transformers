@@ -24,9 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class XLMProphetNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMProphetNetModel`]. It is used to instantiate a

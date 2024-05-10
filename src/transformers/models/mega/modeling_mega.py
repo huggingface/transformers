@@ -51,9 +51,6 @@ _CHECKPOINT_FOR_DOC = "mnaylor/mega-base-wikitext"
 _CONFIG_FOR_DOC = "MegaConfig"
 
 
-from ..deprecated._archive_maps import MEGA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class MegaEmbeddings(nn.Module):
     """
     Mega's basic implementation does not incorporate token type embeddings, so this is a stripped-down version of

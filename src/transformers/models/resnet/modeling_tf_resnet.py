@@ -50,9 +50,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-from ..deprecated._archive_maps import TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFResNetConvLayer(keras.layers.Layer):
     def __init__(
         self,

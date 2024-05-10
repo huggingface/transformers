@@ -25,4 +25,7 @@ torchaudio
 jiwer
 librosa
 evaluate >= 0.2.0
-albumentations
+timm
+albumentations >= 1.4.5
+torchmetrics
+pycocotools
