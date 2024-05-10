@@ -1177,10 +1177,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
         total_time_assist = time.time() - start_time
 
-        inputs = {
-            "sampling_rate": sample["audio"]["sampling_rate"],
-            "raw": np.array(sample["audio"]["array"]),
-        }
 
         start_time = time.time()
         transcription_ass = pipe(inputs=inputs)["text"]
