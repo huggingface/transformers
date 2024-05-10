@@ -580,7 +580,6 @@ class JetMoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value, router_logits
 
 
-# copied from transformers.models.llama.modeling_llama.JetMoeSdpaAttention with Llama->JetMoe
 class JetMoeSdpaAttention(JetMoeAttention):
     """
     JetMoe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
