@@ -467,7 +467,7 @@ class GenerationMixin:
             raise ValueError(
                 "Can't infer missing attention mask on `mps` device. Please provide an `attention_mask` or use a different device."
             )
-
+       
         is_pad_token_in_inputs = (pad_token_id is not None) and (
             torch.isin(elements=inputs, test_elements=pad_token_id).any()
         )
@@ -1341,10 +1341,7 @@ class GenerationMixin:
         return self._static_cache
 
     def _prepare_special_tokens(
-        self,
-        generation_config: GenerationConfig,
-        kwargs_has_attention_mask: Optional[bool] = None,
-        device: Optional[Union[torch.device, str]] = None,
+        self, generation_config: GenerationConfig, kwargs_has_attention_mask: Optional[bool] = None, device: Optional[Union[torch.device, str]] = None
     ):
         """
         Prepares the special tokens for generation, overwriting the generation config with their processed versions
@@ -1518,9 +1515,9 @@ class GenerationMixin:
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
-
+      
         device = None
-        if "input_ids" in model_kwargs:
+        if "input_ids" in model_kwargs and isinstance(model_kwargs["input_ids"], torch.Tensor):
             device = model_kwargs["input_ids"].device
 
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
@@ -2392,7 +2389,7 @@ class GenerationMixin:
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
                 next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
-
+            
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
