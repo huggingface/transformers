@@ -20,7 +20,6 @@ import unittest
 
 import pytest
 from packaging import version
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -470,11 +469,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Mistral flash attention does not support right padding")
-
-    @unittest.skip("TODO @gante fix this for Mistral")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch_gpu

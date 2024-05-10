@@ -107,22 +107,25 @@ class MistralRotaryEmbedding(nn.Module):
         self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.sin_cached with Llama->Mistral
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
+            "The sin_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `MistralAttention` class"
         )
         return self._sin_cached
 
     @property
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.cos_cached with Llama->Mistral
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
+            "The cos_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `MistralAttention` class"
         )
         return self._cos_cached
 
-    @torch.no_grad
+    @torch.no_grad()
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
     def forward(self, x, position_ids):
         # x: [bs, num_attention_heads, seq_len, head_size]
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
@@ -220,15 +223,15 @@ class MistralAttention(nn.Module):
                 "when creating this class."
             )
 
+        self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = config.head_dim
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.attention_dropout = config.attention_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -246,9 +249,7 @@ class MistralAttention(nn.Module):
             base=self.rope_theta,
         )
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
+    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward with Gemma->Mistral
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -270,21 +271,20 @@ class MistralAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
-
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attention_mask is not None:
+        if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
@@ -300,8 +300,8 @@ class MistralAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
+        attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -696,12 +696,13 @@ MISTRAL_ATTENTION_CLASSES = {
 }
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Mistral, LLAMA->MISTRAL
 class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -712,17 +713,17 @@ class MistralDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -745,7 +746,6 @@ class MistralDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
-            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -963,7 +963,7 @@ class MistralModel(MistralPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, use_cache
+            attention_mask, inputs_embeds, cache_position, past_key_values, use_cache, output_attentions
         )
 
         hidden_states = inputs_embeds
@@ -1036,6 +1036,7 @@ class MistralModel(MistralPreTrainedModel):
         cache_position: torch.Tensor,
         past_key_values: Cache,
         use_cache: bool,
+        output_attentions: bool,
     ):
         # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
         # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
@@ -1102,17 +1103,7 @@ class MistralModel(MistralPreTrainedModel):
                     "you may get unexpected results, use attention mask generated by tokenizer"
                     "or set model.config.sliding_window to None if you don't want sliding window"
                 )
-
-            #  can only happen in prefill phase, when the prompt length > sliding window length, we need to do this
-            #  manually because we are returning the whole prompt token sequence in `SlidingWindowCache`, maybe a better
-            #  way is to support chunked prefill instead
-            if sequence_length > self.config.sliding_window and using_sliding_window_cache:
-                exclude_mask |= torch.arange(target_length, device=device) <= (
-                    cache_position.reshape(-1, 1) - self.config.sliding_window
-                )
-
-            # not using `SlidingWindowCache` and attention mask supports sliding window
-            if (attention_mask is None or attention_mask.dim() == 2) and not using_sliding_window_cache:
+            elif not using_sliding_window_cache or sequence_length > self.config.sliding_window:
                 exclude_mask |= torch.arange(target_length, device=device) <= (
                     cache_position.reshape(-1, 1) - self.config.sliding_window
                 )
@@ -1123,29 +1114,17 @@ class MistralModel(MistralPreTrainedModel):
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
-            elif attention_mask.dim() == 4:
-                # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
-                # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
-                    logger.warning_once(
-                        "Passing a 4d mask shorter than the input lenght is deprecated and will be "
-                        "removed in transformers v4.42.0"
-                    )
-                    offset = cache_position[0]
-                else:
-                    offset = 0
-                mask_shape = attention_mask.shape
-                mask_slice = (attention_mask.eq(0.0)).to(dtype=dtype) * min_dtype
-                causal_mask[
-                    : mask_shape[0], : mask_shape[1], offset : mask_shape[2] + offset, : mask_shape[3]
-                ] = mask_slice
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
 
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type == "cuda"
+            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.

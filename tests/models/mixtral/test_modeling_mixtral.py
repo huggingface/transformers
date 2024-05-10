@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
@@ -505,11 +504,6 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
-    @unittest.skip("TODO @gante fix this for Mixtral")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch

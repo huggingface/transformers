@@ -522,8 +522,7 @@ def attention_mask_func(attention_scores, ltor_mask):
 
 
 class GPTNeoXRotaryEmbedding(nn.Module):
-    # copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
-    # TODO @longjie no longer copied from Mistral after static cache
+    # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -615,8 +614,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

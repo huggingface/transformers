@@ -20,7 +20,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
 from transformers.testing_utils import (
@@ -481,11 +480,6 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Qwen2 flash attention does not support right padding")
-
-    @unittest.skip("TODO @gante fix this for Qwen2")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch
