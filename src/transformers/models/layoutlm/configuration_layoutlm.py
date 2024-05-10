@@ -24,9 +24,6 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class LayoutLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a

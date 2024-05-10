@@ -230,6 +230,27 @@ class AlmostAccuracy:
         return {"accuracy": true.astype(np.float32).mean().item()}
 
 
+class AlmostAccuracyBatched:
+    def __init__(self, thresh=0.25):
+        self.thresh = thresh
+        self.batch_acc = []
+
+    def __call__(self, eval_pred, compute_result):
+        predictions, labels = eval_pred
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
+        if isinstance(labels, tuple):
+            labels = labels[0]
+        batch_size = len(predictions)
+        true = torch.abs(predictions - labels) <= self.thresh
+        acc = true.type(torch.FloatTensor).mean().item()
+        self.batch_acc.extend([acc] * batch_size)
+        if compute_result:
+            result = {"accuracy": np.mean(self.batch_acc).item()}
+            self.batch_acc = []
+            return result
+
+
 class RegressionModelConfig(PretrainedConfig):
     def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
@@ -964,6 +985,63 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with self.assertRaises(ValueError):
                 _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
 
+    @require_peft
+    def test_multiple_peft_adapters(self):
+        from peft import LoraConfig, get_peft_model
+
+        # Tests if resuming from checkpoint works if the model has multiple adapters
+
+        MODEL_ID = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        tiny_model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+
+        peft_config = LoraConfig(
+            r=4,
+            lora_alpha=16,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
+        tiny_model.add_adapter("adapter2", peft_config)
+
+        train_dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in train_dataset.examples:
+            example["labels"] = example["input_ids"]
+
+        tokenizer.pad_token = tokenizer.eos_token
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = TrainingArguments(
+                tmpdir,
+                per_device_train_batch_size=1,
+                learning_rate=1e-9,
+                save_steps=5,
+                logging_steps=5,
+                max_steps=10,
+                use_cpu=True,
+            )
+            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+
+            trainer.train()
+            parameters = dict(tiny_model.named_parameters())
+            state = dataclasses.asdict(trainer.state)
+
+            # Reinitialize trainer
+            trainer = Trainer(tiny_model, args, tokenizer=tokenizer, train_dataset=train_dataset)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            trainer.train(resume_from_checkpoint=checkpoint)
+            parameters1 = dict(tiny_model.named_parameters())
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(parameters, parameters1)
+            self.check_trainer_state_are_the_same(state, state1)
+
     @require_bitsandbytes
     def test_rmsprop_bnb(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
@@ -1467,6 +1545,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
         self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
+    def test_evaluate_with_batch_eval_metrics(self):
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+        # With a number of elements not a round multiple of the batch size
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+        # With logits preprocess
+        trainer = get_regression_trainer(
+            a=1.5,
+            b=2.5,
+            compute_metrics=AlmostAccuracyBatched(),
+            batch_eval_metrics=True,
+            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+        )
+        results = trainer.evaluate()
+
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        pred = 1.5 * x + 2.5
+        expected_loss = ((pred - y) ** 2).mean()
+        self.assertAlmostEqual(results["eval_loss"], expected_loss)
+        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
+        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
     def test_evaluate_with_jit(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True)
         results = trainer.evaluate()
@@ -1584,6 +1705,58 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # With more than one output/label of the model
         trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, label_names=["labels", "labels_2"])
+        outputs = trainer.predict(trainer.eval_dataset)
+        preds = outputs.predictions
+        labels = outputs.label_ids
+        x = trainer.eval_dataset.x
+        self.assertEqual(len(preds), 2)
+        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+        self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
+        self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    def test_predict_with_batch_eval_metrics(self):
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        results = trainer.predict(trainer.eval_dataset)
+        preds = results.predictions
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        gt = 1.5 * x + 2.5
+        self.assertTrue(np.allclose(preds, gt))
+        expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
+        self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+
+        # With a number of elements not a round multiple of the batch size
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        results = trainer.predict(trainer.eval_dataset)
+        preds = results.predictions
+        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+        expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
+        self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+
+        # With more than one output of the model
+        trainer = get_regression_trainer(
+            a=1.5, b=2.5, double_output=True, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
+        )
+        preds = trainer.predict(trainer.eval_dataset).predictions
+        x = trainer.eval_dataset.x
+        self.assertEqual(len(preds), 2)
+        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+
+        # With more than one output/label of the model
+        trainer = get_regression_trainer(
+            a=1.5,
+            b=2.5,
+            double_output=True,
+            label_names=["labels", "labels_2"],
+            compute_metrics=AlmostAccuracyBatched(),
+            batch_eval_metrics=True,
+        )
         outputs = trainer.predict(trainer.eval_dataset)
         preds = outputs.predictions
         labels = outputs.label_ids

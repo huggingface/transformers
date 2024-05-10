@@ -45,9 +45,6 @@ _CONFIG_FOR_DOC = "ErnieMConfig"
 _TOKENIZER_FOR_DOC = "ErnieMTokenizer"
 
 
-from ..deprecated._archive_maps import ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Adapted from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
 class ErnieMEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""

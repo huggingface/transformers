@@ -56,9 +56,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swin-tiny-patch4-window7-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 

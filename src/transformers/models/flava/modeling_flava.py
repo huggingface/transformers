@@ -55,10 +55,7 @@ _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
 _EXPECTED_IMAGE_OUTPUT_SHAPE = [1, 197, 768]
 
-from ..deprecated._archive_maps import FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
-
-FLAVA_CODEBOOK_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/flava-image-codebook"]
 LOGIT_SCALE_CLAMP_MIN = 0
 LOGIT_SCALE_CLAMP_MAX = 4.6052
 
@@ -1659,6 +1656,9 @@ class FlavaMaskedPredictionHead(nn.Module):
             self.decoder.weight = weight
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, x):

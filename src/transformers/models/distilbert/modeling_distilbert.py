@@ -63,9 +63,6 @@ _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 
 
-from ..deprecated._archive_maps import DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 
 

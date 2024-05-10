@@ -60,7 +60,7 @@ image
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/segmentation_input.jpg" alt="Segmentation Input"/>
 </div>
 
-We will use [nvidia/segformer-b1-finetuned-cityscapes-1024-1024](https://huggingface.co/nvidia/segformer-b1-finetuned-cityscapes-1024-1024). 
+We will use [nvidia/segformer-b1-finetuned-cityscapes-1024-1024](https://huggingface.co/nvidia/segformer-b1-finetuned-cityscapes-1024-1024).
 
 ```python
 semantic_segmentation = pipeline("image-segmentation", "nvidia/segformer-b1-finetuned-cityscapes-1024-1024")
@@ -68,7 +68,7 @@ results = semantic_segmentation(image)
 results
 ```
 
-The segmentation pipeline output includes a mask for every predicted class. 
+The segmentation pipeline output includes a mask for every predicted class.
 ```bash
 [{'score': None,
   'label': 'road',
@@ -111,11 +111,11 @@ results[-1]["mask"]
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
 
-In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. It works very similar to object detection, where there is a bounding box for every instance, there's a segmentation mask instead. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this. 
+In instance segmentation, the goal is not to classify every pixel, but to predict a mask for **every instance of an object** in a given image. It works very similar to object detection, where there is a bounding box for every instance, there's a segmentation mask instead. We will use [facebook/mask2former-swin-large-cityscapes-instance](https://huggingface.co/facebook/mask2former-swin-large-cityscapes-instance) for this.
 
 ```python
 instance_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-instance")
-results = instance_segmentation(Image.open(image))
+results = instance_segmentation(image)
 results
 ```
 
@@ -148,7 +148,7 @@ Panoptic segmentation combines semantic segmentation and instance segmentation, 
 
 ```python
 panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swin-large-cityscapes-panoptic")
-results = panoptic_segmentation(Image.open(image))
+results = panoptic_segmentation(image)
 results
 ```
 As you can see below, we have more classes. We will later illustrate to see that every pixel is classified into one of the classes.

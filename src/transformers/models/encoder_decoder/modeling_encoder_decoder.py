@@ -209,12 +209,12 @@ class EncoderDecoderModel(PreTrainedModel):
         if encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            encoder = AutoModel.from_config(config.encoder)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
 
         if decoder is None:
             from ..auto.modeling_auto import AutoModelForCausalLM
 
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
 
         self.encoder = encoder
         self.decoder = decoder

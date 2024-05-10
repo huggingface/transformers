@@ -142,6 +142,7 @@ _phonemizer_available = _is_package_available("phonemizer")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
+_pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
@@ -170,6 +171,7 @@ _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
+_hqq_available = _is_package_available("hqq")
 
 
 _torch_version = "N/A"
@@ -292,6 +294,14 @@ def is_torch_available():
     return _torch_available
 
 
+def is_hqq_available():
+    return _hqq_available
+
+
+def is_pygments_available():
+    return _pygments_available
+
+
 def get_torch_version():
     return _torch_version
 
@@ -368,7 +378,7 @@ def is_torch_mps_available():
         import torch
 
         if hasattr(torch.backends, "mps"):
-            return torch.backends.mps.is_available()
+            return torch.backends.mps.is_available() and torch.backends.mps.is_built()
     return False
 
 
@@ -1287,6 +1297,11 @@ NATTEN_IMPORT_ERROR = """
 {0} requires the natten library but it was not found in your environment. You can install it by referring to:
 shi-labs.com/natten . You can also install it with pip (may take longer to build):
 `pip install natten`. Please note that you may need to restart your runtime after installation.
+"""
+
+NUMEXPR_IMPORT_ERROR = """
+{0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
+https://numexpr.readthedocs.io/en/latest/index.html.
 """
 
 
