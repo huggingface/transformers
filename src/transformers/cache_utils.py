@@ -355,14 +355,15 @@ class QuantoQuantizedCache(DynamicCache):
         if nbits not in [2, 4]:
             raise ValueError(f"`nbits` has to be one of [`2`, `4`] but got {nbits}")
 
-        self._key_cache_quant: List[torch.Tensor] = []
-        self._value_cache_quant: List[torch.Tensor] = []
+        self._quantized_key_cache: List[torch.Tensor] = []
+        self._quantized_value_cache: List[torch.Tensor] = []
 
+        self.seen_token = 0
         self.residual_length = residual_length
         self.qtype = qint4 if nbits == 4 else qint2
         self.q_group_size = q_group_size
 
-        super.__init__()
+        super().__init__()
 
     def update(
         self,
@@ -373,25 +374,28 @@ class QuantoQuantizedCache(DynamicCache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Update the number of seen tokens
         if layer_idx == 0:
-            self.seen_token += key_states.shape[-2]
+            self._seen_tokens += key_states.shape[-2]
 
         if len(self.key_cache) <= layer_idx:
-            self._quantized_value_cache.append(self._quantize(key_states.contiguous()))
-            self._value_cache_quant.append(self._quantize(value_states.contiguous()))
+            self._quantized_key_cache.append(self._quantize(key_states.contiguous()))
+            self._quantized_value_cache.append(self._quantize(value_states.contiguous()))
             self.key_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
             self.value_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
             keys_to_return, values_to_return = key_states, value_states
         else:
-            dequant_key = self._key_cache_quant[layer_idx].dequantize()
-            dequant_value = self._value_cache_quant[layer_idx].dequantize()
-            keys_to_return = [dequant_key, self.key_cache[layer_idx],key_states]
-            keys_to_return = torch.cat(keys_to_returndim=-2)
+            dequant_key = self._quantized_key_cache[layer_idx].dequantize()
+            dequant_value = self._quantized_value_cache[layer_idx].dequantize()
+            keys_to_return = [dequant_key, self.key_cache[layer_idx], key_states]
+            values_to_return = [dequant_value, self.value_cache[layer_idx], value_states]
+
+            keys_to_return = torch.cat(keys_to_return, dim=-2)
+            values_to_return = torch.cat(values_to_return, dim=-2)
             if (
                 self.key_cache[layer_idx].dim() == 4
                 and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
             ):
-                self._key_cache_quant[layer_idx] = self._quantize(keys_to_return.contiguous())
-                self._value_cache_quant[layer_idx] = self._quantize(values_to_return.contiguous())
+                self._quantized_key_cache[layer_idx] = self._quantize(keys_to_return.contiguous())
+                self._quantized_value_cache[layer_idx] = self._quantize(values_to_return.contiguous())
                 self.key_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
                 self.value_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
             else:
@@ -404,7 +408,7 @@ class QuantoQuantizedCache(DynamicCache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.key_cache) <= layer_idx:
             return 0
-        return self.seen_token
+        return self._seen_tokens
 
     def _quantize(self, tensor):
         qtensor = QBitsTensor.quantize(tensor, axis=0, qtype=self.qtype, group_size=self.q_group_size)
