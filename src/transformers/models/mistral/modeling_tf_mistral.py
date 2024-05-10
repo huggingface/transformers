@@ -40,7 +40,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -162,12 +162,9 @@ class TFMistralRotaryEmbedding(keras.layers.Layer):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    end_index = shape_list(x)[-1]
-    mid_index = end_index // 2
-    indices1 = tf.range(mid_index)  # Indices for the first half
-    indices2 = tf.range(mid_index, end_index)  # Indices for the second half
-    x1 = tf.gather(x, indices1, axis=-1)
-    x2 = tf.gather(x, indices2, axis=-1)
+    mid_length = shape_list(x)[-1] // 2
+    x1 = x[..., :mid_length]
+    x2 = x[..., mid_length:]
     return tf.concat([-x2, x1], axis=-1)
 
 
@@ -579,6 +576,7 @@ class TFMistralMainLayer(keras.layers.Layer):
             position_ids = tf.cast(tf.reshape(position_ids, (-1, seq_length)), tf.int64)
 
         if inputs_embeds is None:
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
