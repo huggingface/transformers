@@ -171,7 +171,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {"type": "array", "items": {"type": ["integer", "number"]}, "description": "The input"},
                     "y": {
-                        "anyOf": [{"type": "integer"}, {"type": "string"}],
+                        "type": ["integer", "string"],
                         "nullable": True,
                         "description": "Also the input",
                     },

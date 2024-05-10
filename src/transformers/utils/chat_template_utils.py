@@ -3,7 +3,7 @@ import re
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 
-BASIC_TYPES = (int, float, str, bool, Any)
+BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 
 
 def get_json_schema(func):
