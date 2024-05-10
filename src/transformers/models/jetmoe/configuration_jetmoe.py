@@ -41,8 +41,6 @@ class JetMoeConfig(PretrainedConfig):
             Dimension of the hidden representations.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each key and value in the Transformer encoder.
         kv_channels (`int`, *optional*, defaults to 128):
