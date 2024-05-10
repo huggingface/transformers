@@ -94,6 +94,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
+        tokenize_newline_separately: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
@@ -126,6 +127,8 @@ class PaliGemmaProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            tokenize_newline_separately (`bool`, defaults to `True`):
+                Adds a separately tokenized '\n' at the end of the prompt.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -198,25 +201,36 @@ class PaliGemmaProcessor(ProcessorMixin):
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
 
-        inputs = self.tokenizer(
-            input_strings, 
-            add_special_tokens=False,
-            return_tensors=None,
-            padding="do_not_pad",
-            max_length=max_length,
-            truncation=truncation,
-        )
-        newline_token = self.tokenizer("\n", add_special_tokens=False, return_tensors=None)
+        if tokenize_newline_separately:
+            inputs = self.tokenizer(
+                input_strings, 
+                add_special_tokens=False,
+                return_tensors=None,
+                padding="do_not_pad",
+                max_length=max_length,
+                truncation=truncation,
+            )
+            newline_token = self.tokenizer("\n", add_special_tokens=False, return_tensors=None)
 
-        concatenated_ids = [ids + newline_token['input_ids'] for ids in inputs['input_ids']]
-        concatenated_attention_masks = [mask + newline_token['attention_mask'] for mask in inputs['attention_mask']]
+            concatenated_ids = [ids + newline_token['input_ids'] for ids in inputs['input_ids']]
+            concatenated_attention_masks = [mask + newline_token['attention_mask'] for mask in inputs['attention_mask']]
 
-        text_inputs = self.tokenizer.pad(
-            {'input_ids': concatenated_ids, 'attention_mask': concatenated_attention_masks},
-            max_length=max_length,
-            padding=padding,
-            return_tensors=return_tensors,
-        )
+            text_inputs = self.tokenizer.pad(
+                {'input_ids': concatenated_ids, 'attention_mask': concatenated_attention_masks},
+                max_length=max_length,
+                padding=padding,
+                return_tensors=return_tensors,
+            )
+        else:
+            inputs = self.tokenizer(
+                input_strings,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                padding=padding,
+                max_length=max_length,
+                truncation=truncation,
+            )   
+
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
     def batch_decode(self, *args, **kwargs):
