@@ -65,9 +65,6 @@ _CTC_EXPECTED_OUTPUT = "'mister quilter is the apposl of the midle classes and w
 _CTC_EXPECTED_LOSS = 17.17
 
 
-from ..deprecated._archive_maps import UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)

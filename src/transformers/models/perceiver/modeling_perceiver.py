@@ -52,9 +52,6 @@ _CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
 _CONFIG_FOR_DOC = "PerceiverConfig"
 
 
-from ..deprecated._archive_maps import PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class PerceiverModelOutput(ModelOutput):
     """

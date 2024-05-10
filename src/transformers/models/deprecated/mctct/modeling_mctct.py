@@ -52,9 +52,6 @@ _CTC_EXPECTED_OUTPUT = '"Mr. Quilter is the apostle of the middle classes, and w
 _CTC_EXPECTED_LOSS = 1885.65
 
 
-from .._archive_maps import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class MCTCTConv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation

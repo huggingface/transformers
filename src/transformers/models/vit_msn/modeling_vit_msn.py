@@ -38,8 +38,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViTMSNConfig"
 _CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
 
-from ..deprecated._archive_maps import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 class ViTMSNEmbeddings(nn.Module):
     """
@@ -421,6 +419,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ViTMSNAttention"]
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.

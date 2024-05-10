@@ -27,9 +27,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class MobileNetV1Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a

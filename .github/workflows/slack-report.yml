@@ -64,8 +64,8 @@ jobs:
         if: ${{ inputs.job == 'run_models_gpu' }}
         uses: actions/upload-artifact@v4
         with:
-          name: prev_ci_results
-          path: prev_ci_results
+          name: ci_results
+          path: ci_results
       
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

@@ -23,9 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class LongT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is

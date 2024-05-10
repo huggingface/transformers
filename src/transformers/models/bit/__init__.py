@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig", "BitOnnxConfig"]}
+_import_structure = {"configuration_bit": ["BitConfig", "BitOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -25,7 +25,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_bit"] = [
-        "BIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BitForImageClassification",
         "BitModel",
         "BitPreTrainedModel",
@@ -43,7 +42,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig, BitOnnxConfig
+    from .configuration_bit import BitConfig, BitOnnxConfig
 
     try:
         if not is_torch_available():
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_bit import (
-            BIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BitBackbone,
             BitForImageClassification,
             BitModel,

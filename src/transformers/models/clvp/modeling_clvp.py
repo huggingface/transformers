@@ -56,9 +56,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
 
 
-from ..deprecated._archive_maps import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
