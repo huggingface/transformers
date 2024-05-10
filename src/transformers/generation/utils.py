@@ -42,15 +42,8 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..tokenization_utils import Trie
-from ..utils import (
-    ModelOutput,
-    is_accelerate_available,
-    is_hqq_available,
-    is_quanto_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ..tokenization_utils import ExtensionsTrie
+from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -2013,7 +2006,7 @@ class GenerationMixin:
             )
 
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
-        vocab_trie = Trie(tokenizer.get_vocab())
+        vocab_trie = ExtensionsTrie(tokenizer.get_vocab())
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
 
         # assumption: leading/trailing whitespace is not meaningful, so the prompts are

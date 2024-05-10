@@ -280,6 +280,11 @@ class Trie:
 
         return tokens
 
+
+class ExtensionsTrie(Trie):
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def extensions(self, prefix: str):
         """
         Generates all extensions of a given prefix token in the Trie.
