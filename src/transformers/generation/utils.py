@@ -1109,7 +1109,7 @@ class GenerationMixin:
                     if not are_equal:
                         raise ValueError(
                             "The main model and the assistant don't have encoders of the same size. "
-                            "Load the assistant with AutoModelForSpeechSeq2Seq",
+                            "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                         )
 
                 if not self.config.vocab_size == assistant_model.config.vocab_size:
