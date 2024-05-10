@@ -1,6 +1,5 @@
 from typing import List, Tuple
 from torch import FloatTensor, LongTensor, Tensor
-from torch._C import FloatTensor, LongTensor
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import *
