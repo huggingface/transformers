@@ -129,33 +129,22 @@ class TFMistralRMSNorm(keras.layers.Layer):
 class TFMistralRotaryEmbedding(keras.layers.Layer):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
         super().__init__(**kwargs)
-
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         self.inv_freq = 1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
-        self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=tf.float32)
-
-    def _set_cos_sin_cache(self, seq_len, dtype):
-        self.max_seq_len_cached = seq_len
-        t = tf.cast(tf.range(self.max_seq_len_cached, dtype=tf.int64), self.inv_freq.dtype)
-
-        # freqs = tf.tensordot(t, self.inv_freq, axes=0)
-        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = tf.concat([freqs, freqs], axis=-1)
-
-        self.cos_cached = tf.cast(tf.cos(emb), dtype)
-        self.sin_cached = tf.cast(tf.sin(emb), dtype)
 
     def call(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
+        t = tf.cast(tf.range(seq_len, dtype=tf.int64), self.inv_freq.dtype)
+        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
+        emb = tf.concat([freqs, freqs], axis=-1)
+        cos_values = tf.cast(tf.cos(emb), x.dtype)
+        sin_values = tf.cast(tf.sin(emb), x.dtype)
 
-        cos_values = tf.gather(self.cos_cached, tf.range(seq_len))
+        cos_values = tf.gather(cos_values, tf.range(seq_len))
         cos_values = tf.cast(cos_values, dtype=x.dtype)
-        sin_values = tf.gather(self.sin_cached, tf.range(seq_len))
+        sin_values = tf.gather(sin_values, tf.range(seq_len))
         sin_values = tf.cast(sin_values, dtype=x.dtype)
         return (cos_values, sin_values)
 
