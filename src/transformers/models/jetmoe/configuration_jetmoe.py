@@ -102,7 +102,6 @@ class JetMoeConfig(PretrainedConfig):
         vocab_size=32000,
         hidden_size=2048,
         num_hidden_layers=12,
-        num_attention_heads=32,
         num_key_value_heads=16,
         kv_channels=128,
         intermediate_size=5632,
@@ -124,12 +123,10 @@ class JetMoeConfig(PretrainedConfig):
     ):
         if num_experts_per_tok > num_local_experts:
             raise ValueError("`num_experts_per_tok` must be less than or equal to `num_local_experts`")
-        if num_attention_heads != num_key_value_heads * num_experts_per_tok:
-            raise ValueError("`num_attention_heads` must be equal to `num_key_value_heads` * `num_experts_per_tok`")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.num_attention_heads = num_key_value_heads * num_experts_per_tok
         self.num_key_value_heads = num_key_value_heads
         self.kv_channels = kv_channels
         self.intermediate_size = intermediate_size

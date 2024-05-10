@@ -62,7 +62,6 @@ class JetMoeModelTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=4,
         num_key_value_heads=2,
         kv_channels=8,
         intermediate_size=37,
@@ -89,7 +88,7 @@ class JetMoeModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.kv_channels = kv_channels
-        self.num_attention_heads = num_attention_heads
+        self.num_attention_heads = num_key_value_heads * num_experts_per_tok
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -132,7 +131,6 @@ class JetMoeModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             kv_channels=self.kv_channels,
             intermediate_size=self.intermediate_size,
