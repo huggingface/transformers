@@ -1324,12 +1324,6 @@ class GenerationMixin:
             or self._cache.max_batch_size < max_batch_size
         )
         if cache_implementation == "sliding_window":
-            if not hasattr(self.config, "sliding_window") or self.config.sliding_window is None:
-                raise ValueError(
-                    "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
-                    "sliding window attention, please check if there is a `sliding_window` field in the model "
-                    "config and it's not set to None."
-                )
             need_new_cache = need_new_cache or (
                 self._cache.sliding_window_size < self._cache.model_sliding_window_size
                 and max_cache_len > self._cache.max_cache_len

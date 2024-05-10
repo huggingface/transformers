@@ -468,6 +468,13 @@ class SlidingWindowCache(Cache):
     """
 
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+        if not hasattr(config, "sliding_window") or config.sliding_window is None:
+            raise ValueError(
+                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                "sliding window attention, please check if there is a `sliding_window` field in the model "
+                "config and it's not set to None."
+            )
+
         super().__init__()
         self.max_batch_size = max_batch_size
         # take the minimum of max_cache_len and config.sliding_window so that we allocate less memory
