@@ -64,7 +64,11 @@ def batch_and_clip_ndarray(array, data_dim=1, dtype=np.float32):
     """
     Turns a possibly nested list of np.ndarrays into a batched and clipped output of type `List[List[np.ndarray]]`.
     """
-    if isinstance(array, (list, tuple)) and isinstance(array[0], (list, tuple)) and isinstance(array[0][0], np.ndarray):
+    if (
+        isinstance(array, (list, tuple))
+        and isinstance(array[0], (list, tuple))
+        and isinstance(array[0][0], np.ndarray)
+    ):
         if array[0][0].ndim == data_dim:
             return [[base_array.astype(dtype=dtype) for base_array in clip] for clip in array]
         else:
@@ -225,7 +229,7 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
                 - unbatched: `List[float]`, `np.ndarray` (`ndim=1`)
                 - batched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`)
                 - batched with clips: `List[List[List[float]]]`, `List[List[np.ndarray]]` (`ndim=1`), `List[np.ndarray]` (`ndim=2`), np.ndarray (`ndim=3`)
-                
+
                 The input will always be interpreted as mono channel audio, not stereo, i.e. a single float per timestep.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
@@ -250,12 +254,12 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
-        
+
         if not valid_batched_clipped_audio(raw_speech):
             raise ValueError(
                 f"Only unbatched, batched, and batched and clipped mono-channel audio is supported for input to {self}"
             )
-        
+
         # Handle the cases where there are no np.ndarrays in raw_speech
         if isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], float):
             raw_speech = [[np.asarray(raw_speech, dtype=np.float32)]]
@@ -271,7 +275,10 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
         raw_speech = batch_and_clip_ndarray(raw_speech, data_dim=1, dtype=np.float32)
 
         # extract fbank features and pad/truncate to max_length
-        features = [[self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in clip] for clip in raw_speech]
+        features = [
+            [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in clip]
+            for clip in raw_speech
+        ]
 
         # convert into BatchFeature
         padded_inputs = BatchFeature({"input_features": features})
@@ -279,7 +286,9 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
         # make sure spectrograms are in array format
         input_values = padded_inputs.get("input_features")
         if isinstance(input_values[0][0], list):
-            padded_inputs["input_features"] = [[np.asarray(feature, dtype=np.float32) for feature in clip] for clip in input_values]
+            padded_inputs["input_features"] = [
+                [np.asarray(feature, dtype=np.float32) for feature in clip] for clip in input_values
+            ]
 
         # normalization
         if self.do_normalize:

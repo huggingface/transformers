@@ -38,9 +38,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/imagebind-huge": "https://huggingface.co/facebook/imagebind-huge/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "facebook/imagebind-huge": (
-            "https://huggingface.co/facebook/imagebind-huge/resolve/main/tokenizer.json"
-        ),
+        "facebook/imagebind-huge": ("https://huggingface.co/facebook/imagebind-huge/resolve/main/tokenizer.json"),
     },
 }
 

@@ -28,11 +28,8 @@ _import_structure = {
         "IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ImageBindAudioConfig",
         "ImageBindConfig",
-        "ImageBindDepthConfig",
-        "ImageBindImuConfig",
         "ImageBindOnnxConfig",
         "ImageBindTextConfig",
-        "ImageBindThermalConfig",
         "ImageBindVisionConfig",
     ],
     "feature_extraction_imagebind": ["ImageBindImuFeatureExtractor"],
@@ -57,7 +54,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_imagebind"].extend(["ImageBindFeatureExtractor"])
-    _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor", "ImageBindDepthImageProcessor", "ImageBindThermalImageProcessor"]
+    _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor"]
 
 try:
     if not is_speech_available():
@@ -78,16 +75,10 @@ else:
         "IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ImageBindAudioModel",
         "ImageBindAudioModelWithProjection",
-        "ImageBindDepthModel",
-        "ImageBindDepthModelWithProjection",
-        "ImageBindImuModel",
-        "ImageBindImuModelWithProjection",
         "ImageBindModel",
         "ImageBindPreTrainedModel",
         "ImageBindTextModel",
         "ImageBindTextModelWithProjection",
-        "ImageBindThermalModel",
-        "ImageBindThermalModelWithProjection",
         "ImageBindVisionModel",
         "ImageBindVisionModelWithProjection",
     ]
@@ -97,11 +88,8 @@ if TYPE_CHECKING:
         IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ImageBindAudioConfig,
         ImageBindConfig,
-        ImageBindDepthConfig,
-        ImageBindImuConfig,
         ImageBindOnnxConfig,
         ImageBindTextConfig,
-        ImageBindThermalConfig,
         ImageBindVisionConfig,
     )
     from .feature_extraction_imagebind import ImageBindImuFeatureExtractor
@@ -123,7 +111,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_imagebind import ImageBindFeatureExtractor
-        from .image_processing_imagebind import ImageBindImageProcessor, ImageBindDepthImageProcessor, ImageBindThermalImageProcessor
+        from .image_processing_imagebind import ImageBindImageProcessor
 
     try:
         if not is_speech_available():
@@ -143,16 +131,10 @@ if TYPE_CHECKING:
             IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageBindAudioModel,
             ImageBindAudioModelWithProjection,
-            ImageBindDepthModel,
-            ImageBindDepthModelWithProjection,
-            ImageBindImuModel,
-            ImageBindImuModelWithProjection,
             ImageBindModel,
             ImageBindPreTrainedModel,
             ImageBindTextModel,
             ImageBindTextModelWithProjection,
-            ImageBindThermalModel,
-            ImageBindThermalModelWithProjection,
             ImageBindVisionModel,
             ImageBindVisionModelWithProjection,
         )

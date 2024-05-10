@@ -35,6 +35,7 @@ class ImageBindProcessor(ProcessorMixin):
         tokenizer ([`ImageBindTokenizerFast`]):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ImageBindImageProcessor"
     tokenizer_class = ("ImageBindTokenizer", "ImageBindTokenizerFast")

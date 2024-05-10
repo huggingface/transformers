@@ -15,18 +15,13 @@
 import argparse
 
 import torch
-# from imagebind import load
 
+# from imagebind import load
 from transformers import (
-    ImageBindAudioConfig,
     ImageBindConfig,
-    ImageBindDepthConfig,
-    ImageBindImuConfig,
     ImageBindModel,
-    ImageBindTextConfig,
-    ImageBindThermalConfig,
-    ImageBindVisionConfig,
 )
+
 
 SPATIOTEMPORAL_MODALITY_LIST = ["vision"]
 IMAGELIKE_MODALITY_LIST = ["vision", "audio", "depth", "thermal"]
@@ -130,13 +125,13 @@ def get_modality_config(config, modality):
 def convert_embeddings(config, model_state_dict):
     # Create position_ids buffer for text model]
     text_position_ids_buffer = torch.arange(config.text_config.max_position_embeddings).expand((1, -1))
-    model_state_dict[f"text_model.embeddings.position_ids"] = text_position_ids_buffer
+    model_state_dict["text_model.embeddings.position_ids"] = text_position_ids_buffer
 
     # Create position_ids buffer for IMU model
     imu_num_patches = config.imu_config.input_shape[1] // config.imu_config.kernel_size
     imu_num_positions = imu_num_patches + 1
     imu_position_ids_buffer = torch.arange(imu_num_positions).expand((1, -1))
-    model_state_dict[f"imu_model.embeddings.position_ids"] = imu_position_ids_buffer
+    model_state_dict["imu_model.embeddings.position_ids"] = imu_position_ids_buffer
 
     for modality in ["text", "imu"]:
         # Convert position embeddings for text and IMU modalities
@@ -218,7 +213,9 @@ def map_preprocessor_keys(prefix="modality_preprocessors"):
     # Image-like modalities common
     for modality in IMAGELIKE_MODALITY_LIST:
         mapping[f"{prefix}.{modality}.cls_token"] = f"{modality}_model.embeddings.class_embedding"
-        mapping[f"{prefix}.{modality}.pos_embedding_helper.pos_embed"] = f"{modality}_model.embeddings.position_embedding.weight"
+        mapping[
+            f"{prefix}.{modality}.pos_embedding_helper.pos_embed"
+        ] = f"{modality}_model.embeddings.position_embedding.weight"
 
     # Vision preprocessor specific
     mapping[f"{prefix}.vision.rgbt_stem.proj.1.weight"] = "vision_model.embeddings.patch_embedding.weight"
@@ -316,7 +313,7 @@ def map_transformer_head_keys(prefix="modality_heads"):
     mapping[f"{prefix}.text.proj.1.weight"] = "text_projection.weight"
     for modality in IMAGELIKE_MODALITY_LIST:
         if modality == "vision":
-            mapping[f"{prefix}.{modality}.2.weight"] = f"visual_projection.weight"
+            mapping[f"{prefix}.{modality}.2.weight"] = "visual_projection.weight"
         else:
             mapping[f"{prefix}.{modality}.2.weight"] = f"{modality}_projection.weight"
     mapping[f"{prefix}.imu.3.weight"] = "imu_projection.weight"
@@ -436,9 +433,13 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to ImageBind checkpoint")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument("--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub.")
+    parser.add_argument(
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+    )
     parser.add_argument("--test", action="store_true", help="Whether to use the test config for ImageBind models.")
-    parser.add_argument("--safe_serialization", action="store_true", help="Whether to save the model using `safetensors`.")
+    parser.add_argument(
+        "--safe_serialization", action="store_true", help="Whether to save the model using `safetensors`."
+    )
 
     args = parser.parse_args()
 
