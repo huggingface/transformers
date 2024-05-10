@@ -55,7 +55,7 @@ class RTDetrConfig(PretrainedConfig):
         backbone_kwargs (`dict`, *optional*, defaults to `{'features_only': True, 'out_indices': [2, 3, 4]}`):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
             e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        enconder_hidden_dim (`int`, *optional*, defaults to 256):
+        encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
             Multi level features input for encoder.
@@ -187,7 +187,7 @@ class RTDetrConfig(PretrainedConfig):
         use_pretrained_backbone=True,
         backbone_kwargs=None,
         # encoder HybridEncoder
-        enconder_hidden_dim=256,
+        encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
@@ -272,7 +272,7 @@ class RTDetrConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
 
         # encoder
-        self.enconder_hidden_dim = enconder_hidden_dim
+        self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
         self.encoder_attention_heads = encoder_attention_heads

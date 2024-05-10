@@ -611,17 +611,17 @@ class RTDetrEncoderLayer(nn.Module):
 
         # self-attention
         self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.enconder_hidden_dim,
+            embed_dim=config.encoder_hidden_dim,
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.enconder_hidden_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.encoder_activation_function]
         self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(config.enconder_hidden_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.enconder_hidden_dim)
-        self.final_layer_norm = nn.LayerNorm(config.enconder_hidden_dim, eps=config.layer_norm_eps)
+        self.fc1 = nn.Linear(config.encoder_hidden_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.encoder_hidden_dim)
+        self.final_layer_norm = nn.LayerNorm(config.encoder_hidden_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -696,7 +696,7 @@ class RTDetrRepVggBlock(nn.Module):
         super().__init__()
 
         activation = config.activation_function
-        hidden_channels = int(config.d_model * config.hidden_expansion)
+        hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
         self.conv1 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
         self.conv2 = RTDetrConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
@@ -714,8 +714,8 @@ class RTDetrCSPRepLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        in_channels = config.enconder_hidden_dim * 2
-        out_channels = config.enconder_hidden_dim
+        in_channels = config.encoder_hidden_dim * 2
+        out_channels = config.encoder_hidden_dim
         num_blocks = 3
         activation = config.activation_function
 
@@ -1265,11 +1265,11 @@ class RTDetrHybridEncoder(nn.Module):
         self.config = config
         self.in_channels = config.encoder_in_channels
         self.feat_strides = config.feat_strides
-        self.enconder_hidden_dim = config.enconder_hidden_dim
+        self.encoder_hidden_dim = config.encoder_hidden_dim
         self.encode_proj_layers = config.encode_proj_layers
         self.positional_encoding_temperature = config.positional_encoding_temperature
         self.eval_size = config.eval_size
-        self.out_channels = [self.enconder_hidden_dim for _ in self.in_channels]
+        self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
         activation_function = config.activation_function
 
@@ -1281,7 +1281,7 @@ class RTDetrHybridEncoder(nn.Module):
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(
                 RTDetrConvNormLayer(
-                    config, self.enconder_hidden_dim, self.enconder_hidden_dim, 1, 1, activation=activation_function
+                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1, activation=activation_function
                 )
             )
             self.fpn_blocks.append(RTDetrCSPRepLayer(config))
@@ -1292,7 +1292,7 @@ class RTDetrHybridEncoder(nn.Module):
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
                 RTDetrConvNormLayer(
-                    config, self.enconder_hidden_dim, self.enconder_hidden_dim, 3, 2, activation=activation_function
+                    config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2, activation=activation_function
                 )
             )
             self.pan_blocks.append(RTDetrCSPRepLayer(config))
@@ -1371,7 +1371,7 @@ class RTDetrHybridEncoder(nn.Module):
                 src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
                     pos_embed = self.build_2d_sincos_position_embedding(
-                        width, height, self.enconder_hidden_dim, self.positional_encoding_temperature
+                        width, height, self.encoder_hidden_dim, self.positional_encoding_temperature
                     ).to(src_flatten.device)
                 else:
                     pos_embed = None
@@ -1382,7 +1382,7 @@ class RTDetrHybridEncoder(nn.Module):
                     output_attentions=output_attentions,
                 )
                 hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.enconder_hidden_dim, height, width).contiguous()
+                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
                 )
 
                 if output_attentions:
@@ -1594,7 +1594,8 @@ class RTDetrModel(RTDetrPreTrainedModel):
             in_channels = intermediate_channel_sizes[_]
             encoder_input_proj_list.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False), nn.BatchNorm2d(config.d_model)
+                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
             )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)

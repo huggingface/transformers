@@ -55,13 +55,19 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     elif model_name == "rtdetr_r50vd":
         config.backbone = "resnet50d"
     elif model_name == "rtdetr_r101vd":
-        pass
+        config.backbone = "resnet101d"
+        config.encoder_ffn_dim = 2048
+        config.encoder_hidden_dim = 384
+        config.decoder_in_channels = [384, 384, 384]
     elif model_name == "rtdetr_18vd_coco_o365":
         pass
     elif model_name == "rtdetr_r50vd_coco_o365":
         pass
     elif model_name == "rtdetr_r101vd_coco_o365":
-        pass
+        config.backbone = "resnet101d"
+        config.encoder_ffn_dim = 2048
+        config.encoder_hidden_dim = 384
+        config.decoder_in_channels = [384, 384, 384]
 
     return config
 
@@ -87,7 +93,11 @@ def create_rename_keys(config):
         rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model._backbone.bn1.{last}"))
 
     # stages
-    layer = [3,4,6,3]
+    if config.backbone == "resnet50d":
+        layer = [3,4,6,3]
+    elif config.backbone == "resnet101d":
+        layer = [3,4,23,3]
+
     for stage_idx in range(4):
         for layer_idx in range(layer[stage_idx]):
             # shortcut
@@ -490,6 +500,7 @@ def rename_key(state_dict, old, new):
 
 def read_in_q_k_v(state_dict, config):
     prefix = ""
+    encoder_hidden_dim = config.encoder_hidden_dim
 
     # first: transformer encoder
     for i in range(config.encoder_layers):
@@ -497,12 +508,20 @@ def read_in_q_k_v(state_dict, config):
         in_proj_weight = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight")
         in_proj_bias = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[
+            :encoder_hidden_dim, :
+        ]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:encoder_hidden_dim]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[
+            encoder_hidden_dim : 2 * encoder_hidden_dim, :
+        ]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[
+            encoder_hidden_dim : 2 * encoder_hidden_dim
+        ]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[
+            -encoder_hidden_dim:, :
+        ]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-encoder_hidden_dim:]
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention

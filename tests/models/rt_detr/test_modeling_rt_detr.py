@@ -61,7 +61,7 @@ class RTDetrModelTester:
         use_pretrained_backbone=True,
         backbone_kwargs=None,
         # encoder HybridEncoder
-        enconder_hidden_dim=32,
+        encoder_hidden_dim=32,
         encoder_in_channels=[128, 256, 512],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
@@ -110,7 +110,7 @@ class RTDetrModelTester:
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.enconder_hidden_dim = enconder_hidden_dim
+        self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
         self.encoder_layers = encoder_layers
@@ -188,7 +188,7 @@ class RTDetrModelTester:
             backbone=None,
             use_pretrained_backbone=False,
             backbone_kwargs=self.backbone_kwargs,
-            enconder_hidden_dim=self.enconder_hidden_dim,
+            encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
             feat_strides=self.feat_strides,
             encoder_layers=self.encoder_layers,
