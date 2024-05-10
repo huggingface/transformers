@@ -2526,6 +2526,7 @@ class Trainer:
         # Load adapters following PR # 24096
         elif _is_peft_model(model):
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
+            # TODO: in the future support only specific min PEFT versions
             if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
                 model, "load_adapter"
             ):
