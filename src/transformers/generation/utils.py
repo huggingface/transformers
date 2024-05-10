@@ -470,17 +470,15 @@ class GenerationMixin:
             raise ValueError(
                 "Can't infer missing attention mask on `mps` device. Please provide an `attention_mask` or use a different device."
             )
-
+       
         is_pad_token_in_inputs = (pad_token_id is not None) and (
-            torch.isin(elements=inputs, test_elements=pad_token_id.to(inputs.device)).any()
+                torch.isin(elements=inputs, test_elements=pad_token_id.to(inputs.device)).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
-            torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
-        ).to(inputs.device)
+                torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
+                ).to(inputs.device)
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
-        attention_mask_from_padding = (
-            inputs.ne(pad_token_id.to(inputs.device)).long().to(default_attention_mask.device)
-        )
+        attention_mask_from_padding = inputs.ne(pad_token_id.to(inputs.device)).long().to(default_attention_mask.device)
         attention_mask = (
             attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
         )
@@ -1388,11 +1386,7 @@ class GenerationMixin:
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if (
-            eos_token_id is not None
-            and eos_token_id.device.type != "meta"
-            and (torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any())
-        ):
+        if eos_token_id is not None and (torch.is_floating_point(eos_token_id) or (eos_token_id < 0).any()):
             logger.warning(
                 f"`eos_token_id` should consist of positive integers, but is {eos_token_id}. Your generation will not "
                 "stop until the maximum length is reached. Depending on other flags, it may even crash."
@@ -2389,10 +2383,8 @@ class GenerationMixin:
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id.to(unfinished_sequences.device) * (
-                    1 - unfinished_sequences
-                )
-
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id.to(unfinished_sequences.device) * (1 - unfinished_sequences)
+            
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
