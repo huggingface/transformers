@@ -73,6 +73,7 @@ class ProcessorMixin(PushToHubMixin):
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
         # First, extract optional attributes from kwargs if present
+        # Optional attributes can never be positional arguments
         for optional_attribute in self.optional_attributes:
             setattr(self, optional_attribute, kwargs.pop(optional_attribute, None))
         # Sanitize args and kwargs
