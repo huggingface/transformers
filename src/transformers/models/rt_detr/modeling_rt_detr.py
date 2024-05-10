@@ -611,17 +611,17 @@ class RTDetrEncoderLayer(nn.Module):
 
         # self-attention
         self.self_attn = RTDetrMultiheadAttention(
-            embed_dim=config.d_model,
+            embed_dim=config.enconder_hidden_dim,
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
         )
-        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(config.enconder_hidden_dim, eps=config.layer_norm_eps)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.encoder_activation_function]
         self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.d_model)
-        self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.fc1 = nn.Linear(config.enconder_hidden_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, config.enconder_hidden_dim)
+        self.final_layer_norm = nn.LayerNorm(config.enconder_hidden_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -714,8 +714,8 @@ class RTDetrCSPRepLayer(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
 
-        in_channels = config.d_model * 2
-        out_channels = config.d_model
+        in_channels = config.enconder_hidden_dim * 2
+        out_channels = config.enconder_hidden_dim
         num_blocks = 3
         activation = config.activation_function
 
