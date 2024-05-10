@@ -14,7 +14,9 @@
 """ PyTorch ImageBind model."""
 
 
+import math
 from dataclasses import dataclass
+import collections.abc
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
@@ -406,6 +408,187 @@ class ImageBindOutput(ModelOutput):
             for k in self.keys()
         )
 
+class ImageBindGenericPatchEmbedding(nn.Module):
+    """Generic Patch Embedding class that can be used for Vision (image/video), Audio, Depth, Thermal modalities."""
+    def __init__(
+    self, 
+    config: Union[ImageBindVisionConfig, ImageBindAudioConfig, ImageBindDepthConfig, ImageBindThermalConfig], 
+    projection: nn.Module, 
+    use_layernorm: bool = False
+):
+        super().__init__()
+
+        if hasattr(config, "image_size"):
+            image_size = config.image_size
+        elif hasattr(config, "num_mel_bins") and hasattr(config, "target_len"):
+            image_size = (config.num_mel_bins, config.target_len)
+        else:
+            raise ValueError(
+                "Either `image_size` or `num_mel_bins` and `target_len` must be provided in the config."
+            )
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+
+        self.projection = projection
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if use_layernorm else None
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+    
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        if pixel_values.ndim not in [4, 5]:
+            raise ValueError(
+                f"Input tensor shape should have length 4 or 5 but got {pixel_values.ndim}."
+            )
+
+        _, num_channels, *spatial_shape = pixel_values.shape
+        height, width = spatial_shape[-2:]
+
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
+            
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        if self.layernorm is not None:
+            embeddings = self.layernorm(embeddings)
+
+        return embeddings
+
+class ImageBindVisionEmbeddings(nn.Module):
+    def __init__(self, config: ImageBindVisionConfig):
+        super().__init__()
+        self.config = config
+        num_patches = (config.image_size // config.patch_size) ** 2
+
+        proj = nn.Conv3d(
+            in_channels=config.num_channels,
+            out_channels=config.hidden_size,
+            kernel_size=(config.num_frames, config.patch_size, config.patch_size),
+            stride=(config.num_frames, config.patch_size, config.patch_size),
+            bias=False,
+        )
+        self.patch_embedding = ImageBindGenericPatchEmbedding(proj)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.position_embedding = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+    
+    # Copied from transformers.models.vit.moldeing_vit.ViTImageEmbeddings.interpolate_pos_encoding
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+        if num_patches == num_positions and height == width:
+            return self.position_embeddings
+        class_pos_embed = self.position_embeddings[:, 0]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+    
+    def image_to_video(self, pixel_values: torch.FloatTensor, time_dim: int = 2, ntimes: int = 2):
+        """
+        Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
+        time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
+        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `ntimes` to get
+        shape (B, N, C, H, W).
+        """
+        if pixel_values.ndim not in [4, 5]:
+            raise ValueError(
+                f"The input `image` tensor should be 4- or 5-dimensional but has {pixel_values.ndim} dimensions."
+            )
+
+        # Add time dimension at specified dim index
+        if pixel_values.ndim == 4:
+            image = image.unsqueeze(time_dim)
+
+        # Repeat image across the time dimension ntimes.
+        if pixel_values.shape[time_dim] == 1:
+            new_shape = [1] * len(pixel_values.shape)
+            new_shape[time_dim] = ntimes
+            pixel_values = pixel_values.repeat(new_shape)
+
+        return pixel_values
+    
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False,) -> torch.Tensor:
+        pixel_values = self.image_to_video(pixel_values, ntimes=self.num_frames)
+        batch_size, num_channels, num_frames, height, width = pixel_values.shape
+        
+        embeddings = self.patch_embedding(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # add positional encoding to each token
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embeddings
+
+        return embeddings
+
+
+class ImageBindAudioEmbeddings(nn.Module):
+    def __init__(self, config: ImageBindAudioConfig):
+        super().__init__()
+
+        num_patches_height = int((config.num_mel_bins - config.patch_size) / config.stride + 1)
+        num_patches_width = int((config.target_len - config.patch_size) / config.stride + 1)
+        num_patches = num_patches_height * num_patches_width
+
+        proj = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.stride,
+            bias=False
+        )
+
+        self.patch_embedding = ImageBindGenericPatchEmbedding(
+            projection=proj,
+            layernorm=nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        )
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.position_embedding = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+    
+    def forward(self, input_features: torch.FloatTensor) -> torch.Tensor:
+        embeddings = self.patch_embedding(input_features, interpolate_pos_encoding=False)
+
+        cls_tokens = self.cls_token.expand(embeddings.shape[0], -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # Could also add interpolation of position encoding as well
+        embeddings = embeddings + self.position_embedding
+
+        return embeddings
+        
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->ImageBind
 class ImageBindTextEmbeddings(nn.Module):
@@ -418,6 +601,7 @@ class ImageBindTextEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        
 
     def forward(
         self,
@@ -438,170 +622,14 @@ class ImageBindTextEmbeddings(nn.Module):
 
         return embeddings
 
+class ImageBindDepthEmbeddings(nn.Module):
+    ...
 
-class RGBDTPatchEmbedding(nn.Module):
-    """
-    Creates patch embeddings for spatiotemporal data (e.g. images, video, depth etc.). This handles patch embeddings
-    for all image-like modalities (image/video, depth, thermal).
-    """
-    def __init__(
-        self,
-        config: Union[ImageBindAudioConfig, ImageBindDepthConfig, ImageBindThermalConfig, ImageBindVisionConfig],
-        image_shape: Union[List[int], Tuple[int]],
-        norm_layer: Optional[nn.Module] = None,
-    ):
-        super().__init__()
-        self.config = config
-        self.image_shape = image_shape
-        self.embed_dim = config.hidden_size
-        self.patch_size = config.patch_size
-        self.stride = config.stride
-        self.num_frames = config.num_frames if hasattr(config, "num_frames") else None
-        self.is_temporal = self.num_frames is not None
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        if self.is_temporal:
-            patch_embedding_cls = nn.Conv3d
-        else:
-            patch_embedding_cls = nn.Conv2d
-        
-        self.patch_embedding = patch_embedding_cls(
-            in_channels=image_shape[0],
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.stride,
-            bias=False,
-        )
-        self.norm_layer = norm_layer if norm_layer is not None else nn.Identity()
-
-        if self.is_temporal:
-            patches_along_time_dim = (config.num_frames // self.patch_size[0])
-            patches_along_height_dim = ((self.image_shape[-2] - self.patch_size[-2]) // self.stride[-2]) + 1
-            patches_along_width_dim = ((self.image_shape[-1] - self.patch_size[-1]) // self.stride[-1]) + 1
-        else:
-            patches_along_time_dim = 1
-            patches_along_height_dim = ((self.image_shape[-2] - self.patch_size) // self.stride) + 1
-            patches_along_width_dim = ((self.image_shape[-1] - self.patch_size) // self.stride) + 1
-        self.num_patches = patches_along_height_dim * patches_along_width_dim * patches_along_time_dim
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
-    
-    def image_to_video(self, image: torch.FloatTensor, time_dim: int = 2, ntimes: int = 2, pad_type: str = "repeat"):
-        """
-        Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
-        time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
-        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `ntimes` to get
-        shape (B, N, C, H, W).
-        """
-        if image.ndim not in [4, 5]:
-            raise ValueError(
-                f"The input `image` tensor should be 4- or 5-dimensional but has {image.ndim} dimensions."
-            )
-
-        # Add time dimension at specified dim index
-        if image.ndim == 4:
-            image = image.unsqueeze(time_dim)
-
-        # Repeat image across the time dimension ntimes.
-        if image.shape[time_dim] == 1:
-            if pad_type == "repeat":
-                new_shape = [1] * len(image.shape)
-                new_shape[time_dim] = ntimes
-                video = image.repeat(new_shape)
-            elif pad_type == "zero":
-                pad_arg = [0, 0] * len(image.shape)
-                pad_arg[2 * time_dim + 1] = self.ntimes - image.shape[time_dim]
-                video = nn.functional.pad(image, pad_arg)
-        return video
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        if self.is_temporal:
-            pixel_values = self.image_to_video(pixel_values, time_dim=1, ntimes=self.num_frames)
-        
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        patch_embeds = self.norm_layer(patch_embeds)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
-
-
-class ImageBindVisionEmbeddings(RGBDTPatchEmbedding):
-    def __init__(self, config: ImageBindVisionConfig):
-        image_shape = (config.num_channels, config.image_size, config.image_size)
-        super().__init__(config, image_shape, norm_layer=None)
-
-
-class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
-    def __init__(self, config: ImageBindAudioConfig):
-        image_shape = (config.num_channels, config.num_mel_bins, config.target_len)
-        layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, image_shape, norm_layer=layer_norm)
-    
-    def forward(self, audio: torch.FloatTensor) -> torch.Tensor:
-        super().forward(pixel_values=audio)
-
-
-class ImageBindDepthEmbeddings(RGBDTPatchEmbedding):
-    def __init__(self, config: ImageBindDepthConfig):
-        image_shape = (config.num_channels, config.image_size, config.image_size)
-        layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, image_shape, norm_layer=layer_norm)
-    
-    def forward(self, depth: torch.FloatTensor) -> torch.Tensor:
-        super().forward(pixel_values=depth)
-
-
-class ImageBindThermalEmbeddings(RGBDTPatchEmbedding):
-    def __init__(self, config: ImageBindThermalConfig):
-        image_shape = (config.num_channels, config.image_size, config.image_size)
-        layer_norm = nn.LayerNorm(config.hidden_size)
-        super().__init__(config, image_shape, norm_layer=layer_norm)
-    
-    def forward(self, thermal: torch.FloatTensor) -> torch.Tensor:
-        super().forward(pixel_values=thermal)
-
+class ImageBindThermalEmbeddings(nn.Module):
+    ...
 
 class ImageBindImuEmbeddings(nn.Module):
-    def __init__(self, config: ImageBindImuConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.kernel_size = config.kernel_size
-        self.in_features = config.input_shape[0] * self.kernel_size
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Linear(self.in_features, self.embed_dim, bias=False)
-        self.norm_layer = nn.LayerNorm(self.embed_dim)
-
-        self.num_patches = config.input_shape[1] // self.kernel_size
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
-    
-    def forward(self, imu: torch.FloatTensor) -> torch.Tensor:
-        batch_size = imu.shape[0]
-
-        # Patchify
-        # (B, L, D) -> (B, L, D // K, K) -> (B, D // K, L, K)
-        patches = imu.unfold(-1, self.kernel_size, self.kernel_size).permute(0, 2, 1, 3)
-        patches = patches.reshape(batch_size, patches.shape[1], -1)
-
-        patch_embeds = self.patch_embedding(patches)
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        patch_embeds = self.norm_layer(patch_embeds)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
-
+    ...
 
 # CLIPAttention + key/value biases
 class ImageBindAttention(nn.Module):

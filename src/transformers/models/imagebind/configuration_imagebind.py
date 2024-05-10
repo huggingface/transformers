@@ -190,14 +190,8 @@ class ImageBindVisionConfig(PretrainedConfig):
             If using video (spatiotemporal) input, the number of video frames in the spatiotemporal data.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int` or `Tuple[int]`, *optional*, defaults to `(2, 14, 14)`):
-            The size (resolution) of each spatialtemporal patch. If `patch_size` is an int, spatial patches of shape
-            `(patch_size, patch_size)` will be used; otherwise, `patch_size` should be a tuple of shape
-            `(time_patch_size, height_patch_size, width_patch_size)`.
-        stride (`int` or `Tuple[int]`, *optional*, defaults to `(2, 14, 14)`):
-            The stride of the imate patch embedding. If `stride` is an int, spatial strides of shape
-            `(stride, stride)` will be used; otherwise, `patch_size` should be a tuple of shape
-            `(time_stride, height_stride, width_stride)`.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
@@ -248,8 +242,7 @@ class ImageBindVisionConfig(PretrainedConfig):
         num_channels=3,
         num_frames=2,
         image_size=224,
-        patch_size=(2, 14, 14),
-        stride=(2, 14, 14),
+        patch_size=14,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
         add_kv_bias=False,
@@ -271,7 +264,6 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.num_frames = num_frames
         self.patch_size = patch_size
-        self.stride = stride
         self.image_size = image_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
