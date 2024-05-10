@@ -2543,7 +2543,7 @@ class Trainer:
                             model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))
                         model.set_adapter(active_adapter)
                     else:
-                        model.load_adapter(resume_from_checkpoint, active_adapters, is_trainable=True)
+                        model.load_adapter(resume_from_checkpoint, active_adapter, is_trainable=True)
                 else:
                     logger.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
