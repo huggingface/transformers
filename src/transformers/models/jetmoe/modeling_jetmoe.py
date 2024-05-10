@@ -682,7 +682,6 @@ class JetMoeFlashAttention2(JetMoeAttention):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
     ) -> Union[
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
