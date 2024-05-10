@@ -470,15 +470,16 @@ class GenerationMixin:
             raise ValueError(
                 "Can't infer missing attention mask on `mps` device. Please provide an `attention_mask` or use a different device."
             )
-       
+
         is_pad_token_in_inputs = (pad_token_id is not None) and (
-                torch.isin(elements=inputs, test_elements=pad_token_id.to(inputs.device)).any()
+            torch.isin(elements=inputs, test_elements=pad_token_id).any()
         )
         is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~(
-                torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
-                ).to(inputs.device)
+            torch.isin(elements=eos_token_id, test_elements=pad_token_id).any()
+        )
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
-        attention_mask_from_padding = inputs.ne(pad_token_id.to(inputs.device)).long().to(default_attention_mask.device)
+        attention_mask_from_padding = inputs.ne(pad_token_id).long()
+
         attention_mask = (
             attention_mask_from_padding * can_infer_attention_mask + default_attention_mask * ~can_infer_attention_mask
         )
@@ -1343,7 +1344,10 @@ class GenerationMixin:
         return self._static_cache
 
     def _prepare_special_tokens(
-        self, generation_config: GenerationConfig, kwargs_has_attention_mask: Optional[bool] = None
+        self,
+        generation_config: GenerationConfig,
+        kwargs_has_attention_mask: Optional[bool] = None,
+        device: Optional[Union[torch.device, str]] = None,
     ):
         """
         Prepares the special tokens for generation, overwriting the generation config with their processed versions
@@ -1355,16 +1359,19 @@ class GenerationMixin:
         """
 
         # Convert special tokens to tensors (if they exist)
-        def _tensor_or_none(token):
+        def _tensor_or_none(token, device=None):
+            if device is None:
+                device = self.device
+
             if token is None or isinstance(token, torch.Tensor):
                 return token
-            device = self.device if self.device.type != "meta" else torch.device("cpu")
+            # device = self.device if self.device.type != "meta" else torch.device("cpu")
             return torch.tensor(token, device=device, dtype=torch.long)
 
-        bos_token_id = _tensor_or_none(generation_config.bos_token_id)
-        eos_token_id = _tensor_or_none(generation_config.eos_token_id)
-        pad_token_id = _tensor_or_none(generation_config.pad_token_id)
-        decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id)
+        bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
+        eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
+        pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
+        decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
         decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
@@ -1515,7 +1522,10 @@ class GenerationMixin:
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
-        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
+
+        device = model_kwargs["input_ids"].device
+
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
 
         # 3. Define model inputs
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
@@ -2383,8 +2393,8 @@ class GenerationMixin:
 
             # finished sentences should have their next token be a padding token
             if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id.to(unfinished_sequences.device) * (1 - unfinished_sequences)
-            
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
