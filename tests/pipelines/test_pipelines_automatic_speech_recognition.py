@@ -1145,7 +1145,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
-        sample = dataset[0]
+        sample = dataset[0]["audio"]
 
         # Load model:
         model_id = "openai/whisper-large-v2"
