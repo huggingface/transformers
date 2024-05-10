@@ -22,9 +22,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class ASTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ASTModel`]. It is used to instantiate an AST

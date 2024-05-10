@@ -25,7 +25,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_roberta_prelayernorm": [
-        "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "RobertaPreLayerNormConfig",
         "RobertaPreLayerNormOnnxConfig",
     ],
@@ -38,7 +37,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_roberta_prelayernorm"] = [
-        "ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RobertaPreLayerNormForCausalLM",
         "RobertaPreLayerNormForMaskedLM",
         "RobertaPreLayerNormForMultipleChoice",
@@ -56,7 +54,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_roberta_prelayernorm"] = [
-        "TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRobertaPreLayerNormForCausalLM",
         "TFRobertaPreLayerNormForMaskedLM",
         "TFRobertaPreLayerNormForMultipleChoice",
@@ -88,7 +85,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_roberta_prelayernorm import (
-        ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RobertaPreLayerNormConfig,
         RobertaPreLayerNormOnnxConfig,
     )
@@ -100,7 +96,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_roberta_prelayernorm import (
-            ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RobertaPreLayerNormForCausalLM,
             RobertaPreLayerNormForMaskedLM,
             RobertaPreLayerNormForMultipleChoice,
@@ -118,7 +113,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_roberta_prelayernorm import (
-            TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaPreLayerNormForCausalLM,
             TFRobertaPreLayerNormForMaskedLM,
             TFRobertaPreLayerNormForMultipleChoice,

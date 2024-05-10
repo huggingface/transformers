@@ -49,9 +49,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
 
 
-from ..deprecated._archive_maps import PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclasses.dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""

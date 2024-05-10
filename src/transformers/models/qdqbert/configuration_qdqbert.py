@@ -21,9 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class QDQBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`QDQBertModel`]. It is used to instantiate an

@@ -55,8 +55,6 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # for the pretrained weights provided with the models
 ####################################################
 
-from ..deprecated._archive_maps import SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""

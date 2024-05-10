@@ -28,9 +28,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PretrainedConfig):
     r"""
