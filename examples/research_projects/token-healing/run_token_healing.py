@@ -31,11 +31,9 @@ def main():
     completion_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         device_map="auto",
-        trust_remote_code=False,
-        revision="main",
         use_cache=True,
     )
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
 
     raw_output = generate(prompts, completion_model, tokenizer, token_healing=False)
     healed_output = generate(prompts, completion_model, tokenizer, token_healing=True)
