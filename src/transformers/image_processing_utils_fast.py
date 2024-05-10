@@ -35,7 +35,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Check if the current settings are the same as the current transforms.
         """
         if self._transform_settings is None:
-            raise ValueError("Transform settings have not been set.")
+            return False
 
         for key, value in kwargs.items():
             if value not in self._transform_settings or value != self._transform_settings[key]:

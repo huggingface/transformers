@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
@@ -476,19 +476,19 @@ class AutoImageProcessor:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
             raise ValueError("You passed a fast image processor in as the `slow_image_processor_class`.")
-        if fast_tokenizer_class is not None and issubclass(fast_image_processor_class, BaseImageProcessor):
+        if fast_image_processor_class is not None and issubclass(fast_image_processor_class, BaseImageProcessor):
             raise ValueError("You passed a slow image processor in as the `fast_image_processor_class`.")
 
         if (
             slow_image_processor_class is not None
             and fast_image_processor_class is not None
-            and issubclass(fast_image_processor_class, PreTrainedTokenizerFast)
+            and issubclass(fast_image_processor_class, BaseImageProcessorFast)
             and fast_image_processor_class.slow_image_processor_class != slow_image_processor_class
         ):
             raise ValueError(
-                "The fast tokenizer class you are passing has a `slow_tokenizer_class` attribute that is not "
+                "The fast tokenizer class you are passing has a `slow_image_processor_class` attribute that is not "
                 "consistent with the slow tokenizer class you passed (fast tokenizer has "
-                f"{fast_tokenizer_class.slow_tokenizer_class} and you passed {slow_tokenizer_class}. Fix one of those "
+                f"{fast_image_processor_class.slow_image_processor_class} and you passed {slow_image_processor_class}. Fix one of those "
                 "so they match!"
             )
 

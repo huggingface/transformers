@@ -31,8 +31,8 @@ from ...image_utils import (
     make_list_of_images,
 )
 from ...utils import TensorType, logging
-from ...utils.generic import ExplictEnum
-from ...utils.import_utils import is_torch_available, is_vision_available
+from ...utils.generic import ExplicitEnum
+from ...utils.import_utils import is_torch_available, is_vision_available, is_torchvision_available
 
 
 logger = logging.get_logger(__name__)
@@ -42,6 +42,9 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
+    from PIL import Image
+
+if is_torchvision_available():
     from torchvision.transforms import Compose, InterpolationMode, Lambda, Normalize, Resize, ToTensor
 
 
@@ -69,14 +72,14 @@ class SizeDict:
         raise KeyError(f"Key {key} not found in SizeDict.")
 
 
-class ImageType(ExplictEnum):
+class ImageType(ExplicitEnum):
     PIL = "pillow"
     TORCH = "torch"
     NUMPY = "numpy"
 
 
 def get_image_type(image):
-    if is_vision_available() and isinstance(image, PIL.Image.Image):
+    if is_vision_available() and isinstance(image, Image.Image):
         return ImageType.PIL
     if is_torch_available() and isinstance(image, torch.Tensor):
         return ImageType.TORCH
@@ -126,6 +129,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         "rescale_factor",
         "image_mean",
         "image_std",
+        "image_type",
     ]
 
     def __init__(
@@ -134,7 +138,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = None,
+        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -152,16 +156,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self._transform_settings = {}
-        self.set_transforms(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
 
     def _build_transforms(
         self,
@@ -302,7 +296,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
         images = make_list_of_images(images)
-
         image_type = get_image_type(images[0])
 
         self._validate_input_arguments(

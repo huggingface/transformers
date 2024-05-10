@@ -121,6 +121,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BeitImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = BeitImageProcessingTester(self)
 
     @property
