@@ -18,11 +18,10 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer, MistralConfig, is_tf_available, set_seed
+from transformers import AutoTokenizer, MistralConfig, is_tf_available
 from transformers.testing_utils import (
     require_tf,
     slow,
-    tooslow,
 )
 
 from ...generation.test_tf_utils import TFGenerationIntegrationTests
@@ -330,52 +329,35 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
 
 
 @require_tf
-@tooslow
 class TFMistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        input_ids = tf.constant([input_ids]).to(model.model.embed_tokens.weight.device)
+        model = TFMistralForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", from_pt=True
+        )
+        input_ids = tf.constant([input_ids])
         out = model(input_ids).logits
         # Expected mean on dim = -1
-        EXPECTED_MEAN = tf.constant([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        tf.test.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        EXPECTED_MEAN = tf.constant(
+            [[-1.281e-04, -2.869e-04, -9.989e-05, -8.995e-05, 2.494e-04, -3.083e-04, -2.672e-04, -1.239e-04]]
+        )
+        tf.debugging.assert_near(tf.reduce_mean(out, axis=-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = tf.constant([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
-        print(out[0, 0, :30])
-        np.allclose(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+        EXPECTED_SLICE = tf.constant([0.1033,  0.1493, -0.0041, -0.0021, -0.1686,  0.0356,  0.0812,  0.2218, -0.1257,  0.1920,  0.0929,  0.1181,  0.0111,  0.0395, -0.0064,  0.1712, -0.0751,  0.0625, -0.2409,  0.1541, -0.1271, -0.2296, -0.0099, -0.0160, 0.0311, -0.0824, -0.1518,  0.0722,  0.0187,  0.0484])  # fmt: skip
+        tf.debugging.assert_near(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
     @slow
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is  Werk a EgyadjustPrintfigiousPDFPHPct guns Ein motor conceti barSequ内 infrastructure millretval"""
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="tf").to(model.model.embed_tokens.weight.device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM", use_fast=False)
+        model = TFMistralForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", from_pt=True
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="tf")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
-        )
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = TFMistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1",
-            device_map="auto",
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="tf").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        set_seed(0)
-        generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
-        )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
