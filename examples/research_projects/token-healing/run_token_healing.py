@@ -1,4 +1,5 @@
 import argparse
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 
@@ -13,19 +14,24 @@ def generate(inputs, model, tokenizer, token_healing):
     output = model.generate(inputs=input_ids, generation_config=generation_config)
     return tokenizer.batch_decode(output, skip_special_tokens=True)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", type=str)
     parser.add_argument("--model_name_or_path", type=str, default="TheBloke/deepseek-llm-7B-base-GPTQ")
     args = parser.parse_args()
 
-    prompts = [args.prompt] if args.prompt else [
-        'An example ["like this"] and another example [',
-        'The link is <a href="http:',
-        'The link is <a href="http',  # test aggressive healing http->https
-        "I read a book about ",  # test trailing whitespace
-        "I read a book about",  # test nothing to heal
-    ]
+    prompts = (
+        [args.prompt]
+        if args.prompt
+        else [
+            'An example ["like this"] and another example [',
+            'The link is <a href="http:',
+            'The link is <a href="http',  # test aggressive healing http->https
+            "I read a book about ",  # test trailing whitespace
+            "I read a book about",  # test nothing to heal
+        ]
+    )
 
     model_name_or_path = args.model_name_or_path
     completion_model = AutoModelForCausalLM.from_pretrained(
@@ -50,6 +56,7 @@ def main():
     print("\nhealed prompts:")
     for p in healed_prompts:
         print(p)
+
 
 if __name__ == "__main__":
     main()
