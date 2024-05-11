@@ -576,6 +576,9 @@ TVP_INPUTS_DOCSTRING = r"""
 
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        interpolate_pos_encoding (`bool`, *Defaults* True):
+            Whether to interpolate the pre-trained image pad prompter encodings.
 """
 
 
@@ -629,7 +632,6 @@ class TvpFramePadPrompter(nn.Module):
         self.num_frames = config.num_frames
         self.max_img_size = config.max_img_size
         self.visual_prompter_apply = config.visual_prompter_apply
-
         self.base_size = config.max_img_size - config.visual_prompt_size * 2
         self.pad_up = nn.Parameter(
             torch.randn([1, config.num_frames, 3, config.visual_prompt_size, config.max_img_size])
@@ -660,20 +662,54 @@ class TvpFramePadPrompter(nn.Module):
             )
         )
 
-    def forward(self, pixel_values):
+    def interpolate_pos_encoding(self, prompt: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained pad weights , to be able to use the model on collection of high
+        resolution images (high resolution videos).
+
+        """
+
+        # creates scale factor from height and width of original image wrt to the config.max_img_size
+        h0, w0 = height / self.max_img_size, width / self.max_img_size
+
+        batch, num_frames, channels, prompt_height, prompt_width = prompt.shape
+
+        # reshaping the batch and num_frames dimension into a single one (i.e (b,frames,c,h,w)-->(b*frames,c,h,w)), to apply bicubic interpolation
+        prompt = prompt.reshape(batch * num_frames, channels, prompt_height, prompt_width)
+        prompt = nn.functional.interpolate(
+            prompt,
+            scale_factor=(h0, w0),
+            mode="bicubic",
+            align_corners=False,
+        )
+        # reversing back to (b,frames,c,h,w), where h and w is the new interpolated height and width
+        prompt = prompt.reshape(batch, num_frames, channels, height, width)
+        return prompt
+
+    def forward(self, pixel_values, interpolate_pos_encoding=False):
+        h, w = (
+            (pixel_values.shape[-2], pixel_values.shape[-1])
+            if interpolate_pos_encoding
+            else (self.max_img_size, self.max_img_size)
+        )
         if self.visual_prompter_apply not in ("add", "remove", "replace"):
             raise ValueError(f"Invalid visual_prompter_apply value {self.visual_prompter_apply}")
         if self.visual_prompter_apply in ("replace", "remove"):
-            visual_prompt_mask = torch.ones(
-                [self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device
+            visual_prompt_mask = torch.ones(  ##
+                [h, w], dtype=pixel_values.dtype, device=pixel_values.device
             )
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply in ("replace", "add"):
             base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size, device=pixel_values.device)
+
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
-            pixel_values = pixel_values + prompt.to(pixel_values.dtype)
+            ##
+            if interpolate_pos_encoding:
+                pixel_values = pixel_values + self.interpolate_pos_encoding(prompt, h, w).to(pixel_values.dtype)
+            else:
+                pixel_values = pixel_values + prompt.to(pixel_values.dtype)
         return pixel_values
 
 
@@ -728,6 +764,7 @@ class TvpModel(TvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ):
         r"""
         Returns:
@@ -746,9 +783,10 @@ class TvpModel(TvpPreTrainedModel):
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
-        pixel_values = self.vision_model(self.visual_prompter(pixel_values))
+        pixel_values = self.vision_model(
+            self.visual_prompter(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        )
         # (batch_size, sequence_length, hidden_size)
         text_embedding_output = self.embeddings(input_ids=input_ids)
         # (batch_size, visual_sequence_length, hidden_size)
@@ -831,6 +869,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
@@ -859,9 +898,9 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
         pooler_output = outputs[1]
-
         logits = self.video_grounding_head(pooler_output)
 
         loss = None
