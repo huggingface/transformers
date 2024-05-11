@@ -893,7 +893,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
         self.assertEqual(predictions[0].tolist(), [2, 102, 693, 8, 2335, 15, 5, 4105, 50118])
+        self.assertEqual(generated_text, "a woman and dog on the beach")
 
     def test_inference_opt_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")

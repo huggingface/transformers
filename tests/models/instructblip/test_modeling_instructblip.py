@@ -627,6 +627,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
         self.assertEqual(
             predictions[0].tolist(), [0, 37, 1023, 753, 3, 9, 2335, 3823, 30, 8, 2608, 28, 3, 9, 1782, 5, 1]
         )
+        self.assertEqual(generated_text, "The image features a woman sitting on the beach with a dog.")
