@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_torch_or_tf,
     slow,
     torch_device,
@@ -519,23 +520,38 @@ class PipelineUtilsTest(unittest.TestCase):
         actual_output = classifier("Test input.")
         self.assertEqual(expected_output, actual_output)
 
-    def test_pipeline_device_equal_model_device(self):
+    @require_torch_accelerator
+    def test_pipeline_should_not_move_model(self):
+        # Test when model is already on device, pipeline shouldn't move model
         import torch
 
         from transformers import AutoModelForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
-        # test no device passed to pipeline
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
         ).to(torch_device)
         model_device = model.device
+        # No device passed to pipeline
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-        self.assertEqual(model_device, pipe.model.device)
-        # test when device ids are different, pipeline should follow the passed device
-        model = model.to(f"{torch_device}:1")
-        pipe = pipeline("text-generation", model=model, device=f"{torch_device}:0", tokenizer=tokenizer)
-        assert pipe.device == torch.device(f"{torch_device}:0")
+        self.assertEqual(pipe.model.device, model_device)
+
+    @require_torch_multi_accelerator
+    def test_pipeline_should_move_model(self):
+        # Test when device ids are different, pipeline should move the model to the passed device id
+        import torch
+
+        from transformers import AutoModelForCausalLM
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model_device = f"{torch_device}:1"
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
+        ).to(model_device)
+        target_device = f"{torch_device}:0"
+        assert model_device != model_device
+        pipe = pipeline("text-generation", model=model, device=target_device, tokenizer=tokenizer)
+        assert pipe.model.device == torch.device(target_device)
 
     @slow
     @require_torch
