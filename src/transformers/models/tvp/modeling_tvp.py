@@ -183,8 +183,35 @@ class TvpVisualInputEmbedding(nn.Module):
         self.token_type_embeddings = nn.Embedding(1, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.max_grid_row_position_embeddings = config.max_grid_row_position_embeddings
+        self.max_grid_col_position_embeddings = config.max_grid_col_position_embeddings
 
-    def add_2d_positional_embeddings(self, grid):
+    def interpolate_pos_encoding(self, embedding: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained pad weights , to be able to use the model on collection of high
+        resolution images (high resolution videos).
+
+        """
+
+        if height > self.max_grid_row_position_embeddings:
+            h0 = height / self.max_grid_row_position_embeddings
+        else:
+            h0 = 1
+        if width > self.max_grid_col_position_embeddings:
+            w0 = width / self.max_grid_col_position_embeddings
+        else:
+            w0 = 1
+        embedding = embedding.permute(0, 3, 1, 2) # (batch_size, hidden_dim, height, width)
+        embedding = nn.functional.interpolate(
+            embedding,
+            scale_factor=(h0, w0),
+            mode="bicubic",
+            align_corners=False,
+        )
+        embedding = embedding.permute(0, 2, 3, 1) # (batch_size, height, width, hidden_dim)
+        return embedding
+
+    def add_2d_positional_embeddings(self, grid,interpolate_pos_encoding=False):
         """
         Args:
             grid: (batch_size, height, width, hidden_dim)
@@ -194,18 +221,24 @@ class TvpVisualInputEmbedding(nn.Module):
         batch_size, height, width, hidden_dim = grid.shape
 
         # add row-wise position embeddings
-        row_position_ids = torch.arange(height, dtype=torch.long, device=grid.device)  # (height, )
+        row_position_ids = torch.arange(min(self.max_grid_row_position_embeddings,height), dtype=torch.long, device=grid.device)  # (height, )
         row_position_embeddings = self.row_position_embeddings(row_position_ids)  # (height, hidden_dim)
-        row_shape = (1,) * (len(grid.shape) - 3) + (height, 1, hidden_dim)  # (1, height, 1, hidden_dim)
-        grid = grid + row_position_embeddings.view(*row_shape)  # broadcast automatically
-
+        row_shape = (1,) * (len(grid.shape) - 3) + (min(self.max_grid_row_position_embeddings,height), 1, hidden_dim)  # (1, height, 1, hidden_dim)
+        row_position_embeddings = row_position_embeddings.view(*row_shape)  # (1, height, 1, hidden_dim)
         # add column-wise position embeddings
-        col_position_ids = torch.arange(width, dtype=torch.long, device=grid.device)  # (width, )
+        col_position_ids = torch.arange(min(self.max_grid_col_position_embeddings,width), dtype=torch.long, device=grid.device)  # (width, )
         col_position_embeddings = self.col_position_embeddings(col_position_ids)  # (width, hidden_dim)
-        col_shape = (batch_size, 1, width, hidden_dim)  # (1, 1, width, hidden_dim)
-        return grid + col_position_embeddings.view(*col_shape)  # broadcast automatically
+        col_shape = (batch_size, 1, min(self.max_grid_col_position_embeddings,width), hidden_dim)  # (1, 1, width, hidden_dim)
+        col_position_embeddings = col_position_embeddings.view(*col_shape) # (1, 1, width, hidden_dim)
 
-    def forward(self, grid):
+        positional_embeddings = row_position_embeddings + col_position_embeddings # (1, height, width, hidden_dim)
+        if interpolate_pos_encoding and (height > self.max_grid_row_position_embeddings or width > self.max_grid_row_position_embeddings):
+            grid  = grid + self.interpolate_pos_encoding(positional_embeddings, height, width)
+        else:
+            grid = grid + positional_embeddings
+        return grid
+
+    def forward(self, grid,interpolate_pos_encoding=False):
         """
         Args:
             grid: Array of shape (batch_size, num_frames, height, width, num_channels).
@@ -219,7 +252,7 @@ class TvpVisualInputEmbedding(nn.Module):
         batch_size, num_frames, height, width, num_channels = grid.shape
         # temporal mean pooling, (batch_size, height, width, hidden_size)
         grid = grid.mean(1)
-        grid = self.add_2d_positional_embeddings(grid)
+        grid = self.add_2d_positional_embeddings(grid,interpolate_pos_encoding=interpolate_pos_encoding)
         # image token sequence, (batch_size, height*width, num_channels)
         visual_tokens = grid.view(batch_size, -1, num_channels)
         visual_tokens_shape = visual_tokens.shape[:-1]
@@ -682,7 +715,7 @@ class TvpFramePadPrompter(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        # reversing back to (b,frames,c,h,w), where h and w is the new interpolated height and width
+        # reversing back to (batch,frames,channels,height,width), where height and width is the new interpolated height and width
         prompt = prompt.reshape(batch, num_frames, channels, height, width)
         return prompt
 
@@ -790,7 +823,8 @@ class TvpModel(TvpPreTrainedModel):
         # (batch_size, sequence_length, hidden_size)
         text_embedding_output = self.embeddings(input_ids=input_ids)
         # (batch_size, visual_sequence_length, hidden_size)
-        visual_embedding_output = self.visual_embeddings(pixel_values)
+        visual_embedding_output = self.visual_embeddings(pixel_values,interpolate_pos_encoding=interpolate_pos_encoding)
+        
         if attention_mask is not None:
             # (batch_size, visual_sequence_length)
             visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])
