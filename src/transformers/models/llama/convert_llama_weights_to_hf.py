@@ -178,7 +178,6 @@ def write_model(
                 f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wk.weight"],
                     n_heads=num_key_value_heads,
-                    dim1=dim // num_local_key_value_heads,
                 ),
                 f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
                 f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
