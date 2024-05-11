@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
         SuperGlueForImageMatching,
     )
 
@@ -119,6 +118,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    from_pretrained_ids = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
 
     def setUp(self):
         self.model_tester = SuperGlueModelTester(self)
@@ -216,7 +216,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in self.pretrained_from_ids:
             model = SuperGlueForImageMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

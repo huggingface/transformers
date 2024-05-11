@@ -20,11 +20,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "stevenbucaille/superglue_indoor": "https://huggingface.co/stevenbucaille/superglue_indoor/blob/main/config.json",
-    "stevenbucaille/superglue_outdoor": "https://huggingface.co/stevenbucaille/superglue_outdoor/blob/main/config.json",
-}
-
 
 class SuperGlueConfig(PretrainedConfig):
     r"""

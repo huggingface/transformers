@@ -37,11 +37,6 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
-SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "stevenbucaille/superglue_indoor",
-    "stevenbucaille/superglue_outdoor",
-]
-
 
 def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     dim = query.shape[1]

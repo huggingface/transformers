@@ -19,12 +19,7 @@ from ... import is_vision_available
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {
-    "configuration_superglue": [
-        "SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SuperGlueConfig",
-    ]
-}
+_import_structure = {"configuration_superglue": ["SuperGlueConfig"]}
 
 try:
     if not is_vision_available():
@@ -41,14 +36,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_superglue"] = [
-        "SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SuperGlueForImageMatching",
         "SuperGluePreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_superglue import (
-        SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SuperGlueConfig,
     )
 
@@ -67,7 +60,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_superglue import (
-            SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperGlueForImageMatching,
             SuperGluePreTrainedModel,
         )
