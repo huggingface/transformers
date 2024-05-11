@@ -448,3 +448,95 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+class WhisperStaticCache(Cache):
+    def __init__(self, config, dtype, device, existing_cache):
+        self.key_cache = []
+        self.value_cache = []
+        self.e_key_cache = []
+        self.e_value_cache = []
+        cache_shape = (
+            1, 
+            config.decoder_attention_heads,
+            config.max_target_positions - 2,
+            config.d_model // config.encoder_attention_heads
+        )
+        self.dtype = dtype
+        self.device = device
+        self.max_cache_len = config.max_target_positions - 2
+        for k in range(config.num_hidden_layers):
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=self.device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
+            self.e_key_cache.append(existing_cache[k][2].clone())
+            self.e_value_cache.append(existing_cache[k][3].clone())
+            
+            self.update(
+                existing_cache[k][0].clone(),
+                existing_cache[k][1].clone(),
+                k,
+                cache_kwargs = {
+                    'cache_position': torch.arange(existing_cache[k][0].shape[2], device = self.device)
+                }
+            )
+                
+    def get_seq_length(self, layer_idx = 0) -> int:
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+
+    def get_max_length(self):
+        return self.max_cache_len
+            
+    def update(
+        self,
+        key_states,
+        value_states,
+        layer_idx: int,
+        cache_kwargs = None,
+    ):
+        cache_position = cache_kwargs.get("cache_position")
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        return k_out, v_out
+    
+    def reset(self, existing_cache = None):
+        for layer_idx in range(len(self.key_cache)):
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
+            self.e_key_cache[layer_idx].zero_()
+            self.e_value_cache[layer_idx].zero_()
+        
+        if existing_cache is not None:
+            for k in range(len(self.e_value_cache)):
+                self.e_key_cache[k] = existing_cache[k][2].clone()
+                self.e_value_cache[k] = existing_cache[k][3].clone()
+                
+                self.update(
+                    existing_cache[k][0].clone(),
+                    existing_cache[k][1].clone(),
+                    k,
+                    cache_kwargs = {
+                        'cache_position': torch.arange(existing_cache[k][0].shape[2], device = self.device)
+                    }
+                )
+                
+    
+    def __getitem__(self, layer_idx: int):
+        return (
+            self.key_cache[layer_idx], 
+            self.value_cache[layer_idx], 
+            self.e_key_cache[layer_idx],
+            self.e_value_cache[layer_idx],
+        )
+    
+    def delete(self):
+        del self.key_cache
+        del self.value_cache
+        del self.e_key_cache
+        del self.e_value_cache
