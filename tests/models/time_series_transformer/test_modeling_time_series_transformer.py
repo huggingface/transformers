@@ -553,6 +553,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.params["df"].snape, expected_shape)
         self.assertEqual(outputs.params["loc"].snape, expected_shape)
         self.assertEqual(outputs.params["scale"].snape, expected_shape)
+        self.assertEqual(len(outputs.scaling_params), 2)
 
         expected_slice = torch.tensor([2825.2749, 3584.9207, 6763.9951], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)

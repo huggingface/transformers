@@ -472,6 +472,7 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.params["df"].snape, expected_shape)
         self.assertEqual(outputs.params["loc"].snape, expected_shape)
         self.assertEqual(outputs.params["scale"].snape, expected_shape)
+        self.assertEqual(len(outputs.scaling_params), 2)
 
         expected_slice = torch.tensor([3130.6763, 4056.5293, 7053.0786], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)

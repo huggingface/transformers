@@ -2040,6 +2040,7 @@ class InformerForPrediction(InformerPreTrainedModel):
 
         concat_future_samples = torch.cat(future_samples, dim=1)
         concat_future_params = {key: torch.cat(params, dim=1) for key, params in future_params.items()}
+        scaling_params = {"loc": loc, "scale": scale}
 
         return SampleTSPredictionOutput(
             sequences=concat_future_samples.reshape(
@@ -2047,4 +2048,5 @@ class InformerForPrediction(InformerPreTrainedModel):
             ),
             params=concat_future_params,
             distribution=self.config.distribution_output,
+            scaling_params=scaling_params,
         )
