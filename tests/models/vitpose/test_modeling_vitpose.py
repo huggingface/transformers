@@ -27,6 +27,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
+    import torch
     from torch import nn
 
     from transformers import ViTPoseForPoseEstimation
@@ -35,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitPoseImageProcessor
+    from transformers import ViTPoseImageProcessor
 
 
 class ViTPoseModelTester:
@@ -213,7 +214,8 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = ""
+        # TODO update organization
+        model_name = "nielsr/vitpose-base-simple"
         model = ViTPoseForPoseEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -229,13 +231,28 @@ def prepare_img():
 class ViTPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            VitPoseImageProcessor.from_pretrained("google/vitpose-base-patch16-224") if is_vision_available() else None
-        )
+        # TODO update organization
+        return ViTPoseImageProcessor.from_pretrained("nielsr/vitpose-base-simple") if is_vision_available() else None
 
     @slow
     def test_inference(self):
-        raise NotImplementedError("To do")
+        image_processor = self.default_image_processor
+        # TODO update organization
+        model = ViTPoseForPoseEstimation.from_pretrained("nielsr/vitpose-base-simple")
+
+        image = prepare_img()
+        boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
+
+        inputs = image_processor(images=image, boxes=boxes, return_tensors="pt")
+
+        outputs = model(**inputs)
+        heatmaps = outputs.heatmaps
+
+        assert heatmaps.shape == (2, 17, 64, 48)
+
+        expected_slice = torch.tensor([[0.0003, 0.0003, 0.0003], [0.0005, 0.0007, 0.0007], [0.0006, 0.0007, 0.0007]])
+
+        assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
     @slow
     def test_batched_inference(self):
