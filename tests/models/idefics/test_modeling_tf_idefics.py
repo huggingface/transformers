@@ -509,6 +509,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
     def test_keras_fit(self):
         super().test_keras_fit()
 
+
 # Below is the expected output for the integration test TFIdeficsModelIntegrationTest.
 # Since we are using tiny-random to be able to fit it on the CI GPU,it is better to assert on the
 # ids because the generated text is gibberish
