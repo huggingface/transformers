@@ -65,6 +65,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
+
 # TODO: can use code already in transformers?
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ImageBind.html
@@ -504,9 +505,7 @@ class ImageBindAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.qkv_proj = nn.Linear(self.embed_dim, self.embed_dim * 3)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
         # Create bias parameters for key and value sequences.
@@ -517,8 +516,8 @@ class ImageBindAttention(nn.Module):
             self.k_bias = None
             self.v_bias = None
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -531,10 +530,10 @@ class ImageBindAttention(nn.Module):
 
         batch_size, seq_len, embed_dim = hidden_states.size()
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        qkv = self.qkv_proj(hidden_states).reshape(batch_size, seq_len, 3, -1).permute(2, 0, 1, 3)
+        query_states, key_states, value_states = qkv.unbind(0)
+
+        query_states = query_states * self.scale
 
         # Add key/value biases if necessary
         if self.k_bias is not None and self.v_bias is not None:
@@ -614,8 +613,10 @@ class ImageBindMlp(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        intermediate_size = int(config.hidden_size * config.mlp_ratio)
+
+        self.fc1 = nn.Linear(config.hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -780,9 +781,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
+            nn.init.normal_(module.qkv_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
             if module.k_bias is not None:
                 nn.init.normal_(module.k_bias, std=in_proj_std)
