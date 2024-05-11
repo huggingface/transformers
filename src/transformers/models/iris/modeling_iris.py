@@ -802,7 +802,7 @@ class Tokenizer(nn.Module):
     def compute_loss(self, batch: Batch, **kwargs: Any) -> LossWithIntermediateLosses:
         assert self.lpips is not None
         
-        observations = self.preprocess_input(batch['observations'].view(-1, batch['observations'].shape[2], batch['observations'].shape[3], batch['observations'].shape[4]).permute(0, 1, 2, 3))
+        observations = self.preprocess_input(torch.flatten(batch['observations'], end_dim=1).contiguous())
         z, z_quantized, reconstructions = self(observations, should_preprocess=False, should_postprocess=False)[0]
 
         # Codebook loss. Notes:
@@ -824,7 +824,7 @@ class Tokenizer(nn.Module):
         z, all_hidden_states,attentions = self.encoder(x, output_hidden_states, output_attentions)
         z = self.pre_quant_conv(z)
         b, e, h, w = z.shape
-        z_flattened = z.view(-1, z.shape[1])
+        z_flattened = torch.flatten(z.permute(0,2,3,1), end_dim=2).contiguous()
         dist_to_embeddings = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + torch.sum(self.embedding.weight**2, dim=1) - 2 * torch.matmul(z_flattened, self.embedding.weight.t())
 
         tokens = dist_to_embeddings.argmin(dim=-1)
@@ -1068,7 +1068,7 @@ class SelfAttention(nn.Module):
         att = self.attn_drop(att)
         y = att @ v
 
-        y = y.permute(0, 2, 1, 3).contiguous().view(y.shape[0], y.shape[2], y.shape[1] * y.shape[3])
+        y = torch.flatten(y.permute(0, 2, 1, 3), start_dim=2).contiguous()
 
         y = self.resid_drop(self.proj(y))
 
@@ -1152,14 +1152,15 @@ class WorldModelEnv:
     @torch.no_grad()
     def render_batch(self) -> List[Image.Image]:
         frames = self.decode_obs_tokens().detach().cpu()
-        frames = frames.permute(0,2,3,1).mul(255).numpy().astype(np.uint8)
+        frames = (frames.permute(0,2,3,1).contiguous()).mul(255).numpy().astype(np.uint8)
         return [Image.fromarray(frame) for frame in frames]
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
         embedded_tokens = self.tokenizer.embedding(self.obs_tokens)     # (B, K, E)
         h = int(np.sqrt(self.num_observations_tokens))
-        z = embedded_tokens.view(embedded_tokens.shape[0], h, -1, embedded_tokens.shape[-1]).permute(0, 3, 1, 2)
+        z = embedded_tokens.permute(0,2,1)
+        z = z.view(z.shape[0],z.shape[1], h,z.shape[2]//h).contiguous()
 
         rec = self.tokenizer.decode(z, should_postprocess=True)[0]         # (B, C, H, W)
         return torch.clamp(rec, 0, 1)
@@ -1250,28 +1251,28 @@ class WorldModel(nn.Module):
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, **kwargs: Any) -> LossWithIntermediateLosses:
 
         with torch.no_grad():
-            obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True)[0].tokens  # (BL, K)
+            obs_tokens = tokenizer.encode(batch['observations'], should_preprocess=True)[0].tokens  # (B, L, K)
 
-        act_tokens = batch['actions'].unsqueeze(-1)
+        act_tokens = batch['actions'].unsqueeze(-1).contiguous()
         
-        tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
+        tokens = torch.flatten(torch.cat((obs_tokens, act_tokens), dim=2), start_dim = 1).contiguous() # (B, L(K+1))
 
 
         outputs = self(tokens)[0]
 
         labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(obs_tokens, batch['rewards'], batch['ends'], batch['mask_padding'])
 
-        logits_observations = outputs.logits_observations[:, :-1].reshape(-1, outputs.logits_observations[:, :-1].shape[-1])
+        logits_observations = torch.flatten(outputs.logits_observations[:, :-1], end_dim=1).contiguous()
         loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        loss_rewards = F.cross_entropy((outputs.logits_rewards.reshape(-1, outputs.logits_rewards.shape[-1])),labels_rewards)
-        loss_ends = F.cross_entropy((outputs.logits_ends.reshape(-1, outputs.logits_ends.shape[-1])),labels_ends)
+        loss_rewards = F.cross_entropy((torch.flatten(outputs.logits_rewards, end_dim=1).contiguous()),labels_rewards)
+        loss_ends = F.cross_entropy((torch.flatten(outputs.logits_ends, end_dim=1).contiguous()),labels_ends)
 
         return LossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends)
 
     def compute_labels_world_model(self, obs_tokens: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor, mask_padding: torch.BoolTensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         assert torch.all(ends.sum(dim=1) <= 1)  # at most 1 done
         mask_fill = torch.logical_not(mask_padding)
-        labels_observations = obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).view(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100).shape[0],-1)[:, 1:]
+        labels_observations = torch.flatten(obs_tokens.masked_fill(mask_fill.unsqueeze(-1).expand_as(obs_tokens), -100), start_dim=1).contiguous()[:, 1:]
         labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1}
         labels_ends = ends.masked_fill(mask_fill, -100)
         return labels_observations.reshape(-1), labels_rewards.reshape(-1), labels_ends.reshape(-1)
@@ -1370,8 +1371,8 @@ class ActorCritic(nn.Module):
         
         hidden_states = hidden_states + (self.hx,) if output_hidden_states else None
 
-        logits_actions = self.actor_linear(self.hx).unsqueeze(1)
-        means_values = self.critic_linear(self.hx).unsqueeze(1)
+        logits_actions = self.actor_linear(self.hx).unsqueeze(1).contiguous()
+        means_values = self.critic_linear(self.hx).unsqueeze(1).contiguous()
 
         return ActorCriticOutput(logits_actions, means_values), hidden_states,None
 
@@ -1438,7 +1439,7 @@ class ActorCritic(nn.Module):
             observations=torch.stack(all_observations, dim=1).mul(255).byte(),      # (B, T, C, H, W) in [0, 255]
             actions=torch.cat(all_actions, dim=1),                                  # (B, T)
             logits_actions=torch.cat(all_logits_actions, dim=1),                    # (B, T, #actions)
-            values=torch.cat(all_values, dim=1).squeeze(dim =2),                    # (B, T)
+            values=torch.cat(all_values, dim=1).squeeze(2).contiguous(),                    # (B, T)
             rewards=torch.cat(all_rewards, dim=1).to(device),                       # (B, T)
             ends=torch.cat(all_ends, dim=1).to(device),                             # (B, T)
         )
@@ -1580,16 +1581,16 @@ class IrisModel(IrisPreTrainedModel):
         losses_actor_critic = self.component_losses(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
         losses = dict(tokenizer_losses = losses_tokenizer, world_model_losses = losses_world_model, actor_critic_losses = losses_actor_critic)
 
-        #tokenizer outputs : (outputs.z, outputs.z_quantized, reconstructions)
         tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, 
                                                                                                          output_attentions, observations[0], 
                                                                                                          should_preprocess= should_preprocess, should_postprocess= should_postprocess)
 
         with torch.no_grad():
-            obs_tokens = self.agent.tokenizer.encode(observations[1], should_preprocess=should_preprocess)[0].tokens
-        act_tokens = batch_world_model['actions'].unsqueeze(-1)
-        tokens = torch.cat((obs_tokens, act_tokens), dim=2).view(obs_tokens.shape[0], -1) # (B, L(K+1))
+            obs_tokens = self.agent.tokenizer.encode(batch_world_model['observations'], should_preprocess=should_preprocess)[0].tokens
+        act_tokens = batch_world_model['actions'].unsqueeze(-1).contiguous()
+        tokens = torch.flatten(torch.cat((obs_tokens, act_tokens), dim=2), start_dim = 1).contiguous() # (B, L(K+1))
         world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = self.forward_component(self.agent.world_model, output_hidden_states, output_attentions, tokens)
+        
         wm_env = WorldModelEnv(self.agent.tokenizer, self.agent.world_model, observations[2].device)
         obs = wm_env.reset_from_initial_observations(observations[2][:, -1])
         self.agent.actor_critic.reset(n=observations[2].size(0))

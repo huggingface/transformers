@@ -442,6 +442,7 @@ _import_structure = {
         "InstructBlipQFormerConfig",
         "InstructBlipVisionConfig",
     ],
+    "models.iris": ["IrisConfig"],
     "models.jamba": ["JambaConfig"],
     "models.jukebox": [
         "JukeboxConfig",
@@ -2185,6 +2186,12 @@ else:
             "InstructBlipPreTrainedModel",
             "InstructBlipQFormerModel",
             "InstructBlipVisionModel",
+        ]
+    )
+    _import_structure["models.iris"].extend(
+        [
+            "IrisModel",
+            "IrisPreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -4956,6 +4963,9 @@ if TYPE_CHECKING:
         InstructBlipQFormerConfig,
         InstructBlipVisionConfig,
     )
+    from .models.iris import (
+        IrisConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jukebox import (
         JukeboxConfig,
@@ -6566,6 +6576,10 @@ if TYPE_CHECKING:
             InstructBlipPreTrainedModel,
             InstructBlipQFormerModel,
             InstructBlipVisionModel,
+        )
+        from .models.iris import (
+            IrisModel,
+            IrisPreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,
