@@ -317,10 +317,10 @@ class TFViTMAEEmbeddings(keras.layers.Layer):
     def call(
         self, pixel_values: tf.Tensor, noise: tf.Tensor = None, interpolate_pos_encoding: bool = False
     ) -> tf.Tensor:
-        b, n, h, w = shape_list(pixel_values)
+        batch_size, num_channels, height, width = shape_list(pixel_values)
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         if interpolate_pos_encoding:
-            position_embeddings = self.interpolate_pos_encoding(embeddings, h, w)
+            position_embeddings = self.interpolate_pos_encoding(embeddings, height, width)
         else:
             position_embeddings = self.position_embeddings
         # add position embeddings w/o cls token
@@ -1098,7 +1098,6 @@ class TFViTMAEDecoder(keras.layers.Layer):
     ):
         # embed tokens
         x = self.decoder_embed(hidden_states)
-
         # append mask tokens to sequence
         mask_tokens = tf.tile(
             self.mask_token,
@@ -1107,16 +1106,13 @@ class TFViTMAEDecoder(keras.layers.Layer):
         x_ = tf.concat([x[:, 1:, :], mask_tokens], axis=1)  # no cls token
         x_ = tf.gather(x_, axis=1, batch_dims=1, indices=ids_restore)  # unshuffle
         x = tf.concat([x[:, :1, :], x_], axis=1)  # append cls token
-
         if interpolate_pos_encoding:
-            b, n, h, w = shape_list(pixel_values)
-            decoder_pos_embed = self.interpolate_pos_encoding(x, h, w)
+            _, _, height, width = shape_list(pixel_values)
+            decoder_pos_embed = self.interpolate_pos_encoding(x, height, width)
         else:
             decoder_pos_embed = self.decoder_pos_embed
-
         # add pos embed
         hidden_states = x + decoder_pos_embed
-
         # apply Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -1341,9 +1337,10 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
+        # [batch_size, num_patches, patch_size**2*3]
         decoder_outputs = self.decoder(
             latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding, pixel_values=pixel_values
-        )  # [batch_size, num_patches, patch_size**2*3]
+        )
         logits = decoder_outputs.logits
 
         loss = self.forward_loss(pixel_values, logits, mask, interpolate_pos_encoding=interpolate_pos_encoding)
