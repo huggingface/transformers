@@ -53,10 +53,8 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             The ratio of mlp hidden dim to embedding dim.
         depths (`list(int)`, *optional*, defaults to `[2, 3, 16, 3]`):
             Depth of each layer in the Transformer encoder.
-        initial_num_heads (`int`, *optional*, defaults to 1):
-            Initial number of attention heads in the first layer of the Transformer encoder.
-        num_head_multiplier (`float`, *optional*, defaults to 2.0):
-            The multiplier to the number of attention heads in each layer of the Transformer encoder.
+        num_heads (`list(int)`, *optional*, defaults to `[1, 2, 4, 8]`):
+            Number of attention heads in each layer of the Transformer encoder.
         embed_dim_multiplier (`float`, *optional*, defaults to 2.0):
             The multiplier to the dimensionality of patch embedding in each layer of the Transformer encoder.
         num_query_pool (`int`, *optional*, defaults to 3):
@@ -134,8 +132,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         patch_padding=[3, 3],
         mlp_ratio=4.0,
         depths=[2, 3, 16, 3],
-        initial_num_heads=1,
-        num_head_multiplier=2.0,
+        num_heads=[1, 2, 4, 8],
         embed_dim_multiplier=2.0,
         num_query_pool=3,
         query_stride=[2, 2],
@@ -176,9 +173,8 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self.patch_padding = patch_padding
         self.mlp_ratio = mlp_ratio
         self.depths = depths
+        self.num_heads = num_heads
         self.num_layers = len(depths)
-        self.initial_num_heads = initial_num_heads
-        self.num_head_multiplier = num_head_multiplier
         self.embed_dim_multiplier = embed_dim_multiplier
         self.num_query_pool = num_query_pool
         self.query_stride = query_stride

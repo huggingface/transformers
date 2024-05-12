@@ -189,11 +189,11 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
     elif model_name == "hiera-base-224":
         config = HieraConfig()
     elif model_name == "hiera-base-plus-224":
-        config = HieraConfig(embed_dim=112, initial_num_heads=2)
+        config = HieraConfig(embed_dim=112, num_heads=[2, 4, 8, 16])
     elif model_name == "hiera-large-224":
-        config = HieraConfig(embed_dim=144, initial_num_heads=2, depths=[2, 6, 36, 4])
+        config = HieraConfig(embed_dim=144, num_heads=[2, 4, 8, 16], depths=[2, 6, 36, 4])
     elif model_name == "hiera-huge-224":
-        config = HieraConfig(embed_dim=256, initial_num_heads=4, depths=[2, 6, 36, 4])
+        config = HieraConfig(embed_dim=256, num_heads=[4, 8, 16, 32], depths=[2, 6, 36, 4])
     elif model_name == "hiera-base-16x224":
         config = HieraConfig(
             image_size=(16, 224, 224),

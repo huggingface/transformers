@@ -731,7 +731,7 @@ class HieraEncoder(nn.Module):
                 depth=depth,
                 dim=embed_dim,
                 dim_out=dim_out,
-                num_heads=int(config.initial_num_heads * config.num_head_multiplier**idx_stage),
+                num_heads=config.num_heads[idx_stage],
                 drop_path=dpr[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
                 query_stride=query_strides[sum(config.depths[:idx_stage]) : sum(config.depths[: idx_stage + 1])],
                 window_size=int(math.prod(config.masked_unit_size) * math.prod(config.query_stride) ** -idx_stage),
