@@ -85,36 +85,41 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
 
 
 @dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Blip2ImageTextMatchingModel
 class Blip2ImageTextMatchingModelOutput(ModelOutput):
     """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states.
-
     Args:
-        itm_score (`torch.FloatTensor`):
-            The image-text similarity scores.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        question_embeds (`torch.FloatTensor`):
-            The question embeddings obtained by the Q-Former (Querying Transformer).
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for image-text similarity.
+        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            similarity scores.
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+            similarity scores.
+        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelTextModel`].
+        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The image embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelVisionModel`].
+        text_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`Blip2ImageTextMatchingModelTextModel`].
+        vision_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`Blip2ImageTextMatchingModelVisionModel`].
     """
 
-    itm_score: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    question_embeds: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
+    logits_per_image: torch.FloatTensor = None
+    logits_per_text: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 @dataclass
@@ -2334,13 +2339,27 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device, torch.float16)
         >>> itm_out = model(**inputs, use_image_text_matching_head=True)
-        >>> itm_scores = torch.nn.functional.softmax(itm_out.itm_score, dim=1)
-        >>> print(f"The image and text are matched with a probability of {itm_scores[:, 1].item():.3f}")
-        The image and text are matched with a probability of 0.999
+        >>> logits_per_image = torch.nn.functional.softmax(itm_out.logits_per_image, dim=1)
+        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 
+        >>> print(f"{probs[0][0]:.1%} that image 0 is not '{text}'")
+        26.9% that image 0 is not 'two cats laying on a pink blanket'
+
+        >>> print(f"{probs[0][1]:.1%} that image 0 is '{text}'")
+        73.0% that image 0 is 'two cats laying on a pink blanket'
+
+        >>> texts = ["a photo of a cat", "a photo of a dog"]
+
+        >>> inputs = processor(images=image, text=texts, return_tensors="pt").to(device, torch.float16)
         >>> itc_out = model(**inputs, use_image_text_matching_head=False)
-        >>> print(f"The image feature and text feature has a cosine similarity of {itc_out.itm_score.item():.4f}")
-        The image feature and text feature has a cosine similarity of 0.4500
+        >>> logits_per_image = itc_out.logits_per_image  # this is the image-text similarity score
+        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+
+        >>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+        55.3% that image 0 is 'a photo of a cat'
+
+        >>> print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
+        44.7% that image 0 is 'a photo of a dog'
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2369,7 +2388,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 query_embeds=query_tokens,
             )
 
-            qformer_outputs = self.qformer(
+            text_outputs = self.qformer(
                 query_embeds=query_embeds,
                 query_length=query_tokens.shape[1],
                 attention_mask=attention_mask,
@@ -2377,10 +2396,11 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 encoder_attention_mask=image_attention_mask,
                 return_dict=return_dict,
             )
-            question_embeds = qformer_outputs[0] if not return_dict else qformer_outputs.last_hidden_state
+            text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
 
-            output = self.itm_head(question_embeds[:, : query_tokens.size(1), :])
-            output = output.mean(dim=1)
+            output = self.itm_head(text_embeds[:, : query_tokens.size(1), :])
+            logits_per_image = output.mean(dim=1)
+            logits_per_text = logits_per_image.t()
         else:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
             query_outputs = self.qformer(
@@ -2394,28 +2414,33 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             query_embeds = self.embeddings(
                 input_ids=input_ids,
             )
-            text_output = self.qformer(
+            text_outputs = self.qformer(
                 query_embeds=query_embeds,
                 query_length=0,
                 attention_mask=attention_mask,
                 return_dict=return_dict,
             )
-            question_embeds = text_output[0] if not return_dict else text_output.last_hidden_state
+            question_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
 
-            image_feat = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)
-            text_feat = nn.functional.normalize(self.text_projection(question_embeds[:, 0, :]), dim=-1)
+            # normalized features
+            image_embeds = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)
+            text_embeds = nn.functional.normalize(self.text_projection(question_embeds[:, 0, :]), dim=-1)
 
-            output = torch.bmm(image_feat, text_feat.unsqueeze(-1))
-            output, _ = torch.max(output, dim=1)
+            # cosine similarity as logits
+            logits_per_image = torch.matmul(image_embeds, text_embeds.t())
+            logits_per_image, _ = logits_per_image.max(dim=1)
+
+            logits_per_text = logits_per_image.t()
 
         if not return_dict:
-            outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)
-            return tuple(output for output in outputs if output is not None)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return output
 
         return Blip2ImageTextMatchingModelOutput(
-            itm_score=output,
-            last_hidden_state=vision_outputs.last_hidden_state,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-            question_embeds=question_embeds,
+            logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            image_embeds=image_embeds,
+            text_model_output=text_outputs,
+            vision_model_output=vision_outputs,
         )

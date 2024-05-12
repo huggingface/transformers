@@ -249,17 +249,17 @@ def convert_blip2_checkpoint(
             )
             logits = hf_model(pixel_values=original_pixel_values, input_ids=input_ids, attention_mask=attention_mask)
 
-        assert original_logits.shape == logits.itm_score.shape
+        assert original_logits.shape == logits.logits_per_image.shape
         print("First values of original logits:", original_logits[0, :3])
-        print("First values of HF logits:", logits.itm_score[0, :3])
+        print("First values of HF logits:", logits.logits_per_image[0, :3])
 
         # assert values
         # cast to same type
-        target_dtype = logits.itm_score.dtype
-        assert torch.allclose(original_logits.to(target_dtype), logits.itm_score, atol=1e-4)
+        target_dtype = logits.logits_per_image.dtype
+        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
 
         original_itm_scores = torch.nn.functional.softmax(original_logits, dim=1)
-        itm_scores = torch.nn.functional.softmax(logits.itm_score, dim=1)
+        itm_scores = torch.nn.functional.softmax(logits.logits_per_image, dim=1)
         assert torch.allclose(original_itm_scores.to(target_dtype), itm_scores, atol=1e-4)
         print("Looks ok!")
 
@@ -274,14 +274,14 @@ def convert_blip2_checkpoint(
                 use_image_text_matching_head=False,
             )
 
-        assert original_logits.shape == logits.itm_score.shape
+        assert original_logits.shape == logits.logits_per_image.shape
         print("First values of original logits:", original_logits[0, :3])
-        print("First values of HF logits:", logits.itm_score[0, :3])
+        print("First values of HF logits:", logits.logits_per_image[0, :3])
 
         # assert values
         # cast to same type
-        target_dtype = logits.itm_score.dtype
-        assert torch.allclose(original_logits.to(target_dtype), logits.itm_score, atol=1e-4)
+        target_dtype = logits.logits_per_image.dtype
+        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
         print("Looks ok!")
 
     else:

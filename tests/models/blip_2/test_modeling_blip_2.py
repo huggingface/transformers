@@ -1212,25 +1212,20 @@ class Blip2TextRetrievalModelTester:
         with torch.no_grad():
             result = model(pixel_values, input_ids, attention_mask)
 
-        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
-        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-
         self.parent.assertEqual(
-            result.itm_score.shape,
+            result.logits_per_image.shape,
             (self.vision_model_tester.batch_size, 2),
         )
+
+        with torch.no_grad():
+            result = model(pixel_values, input_ids, attention_mask, use_image_text_matching_head=False)
+
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.vision_model_tester.batch_size, num_patches + 1, self.qformer_model_tester.hidden_size),
+            result.logits_per_image.shape,
+            (self.vision_model_tester.batch_size, self.qformer_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.question_embeds.shape,
-            (
-                self.vision_model_tester.batch_size,
-                self.vision_model_tester.hidden_size + input_ids.shape[1],
-                self.qformer_model_tester.hidden_size,
-            ),
+            result.logits_per_text.shape, (self.qformer_model_tester.batch_size, self.vision_model_tester.batch_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -1287,7 +1282,9 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["pixel_values", "input_ids", "attention_mask"]
-            expected_arg_names.extend(["use_image_text_matching_head"] if "use_image_text_matching_head" in arg_names else [])
+            expected_arg_names.extend(
+                ["use_image_text_matching_head"] if "use_image_text_matching_head" in arg_names else []
+            )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_load_vision_qformer_text_config(self):
@@ -1319,13 +1316,19 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
-        self.assertEqual(outputs.itm_score.shape, (self.model_tester.qformer_model_tester.batch_size, 2))
+        self.assertEqual(outputs.logits_per_image.shape, (self.model_tester.qformer_model_tester.batch_size, 2))
 
         with torch.no_grad():
             outputs = model(
-                pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, use_image_text_matching_head=False
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_image_text_matching_head=False,
             )
-        self.assertEqual(outputs.itm_score.shape, (self.model_tester.qformer_model_tester.batch_size, 1))
+        self.assertEqual(
+            outputs.logits_per_image.shape,
+            (self.model_tester.vision_model_tester.batch_size, self.model_tester.qformer_model_tester.batch_size),
+        )
 
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
