@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
+    "configuration_swin2sr": ["Swin2SRConfig"],
 }
 
 
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_swin2sr"] = [
-        "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Swin2SRForImageSuperResolution",
         "Swin2SRModel",
         "Swin2SRPreTrainedModel",
@@ -45,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
+    from .configuration_swin2sr import Swin2SRConfig
 
     try:
         if not is_torch_available():
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_swin2sr import (
-            SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST,
             Swin2SRForImageSuperResolution,
             Swin2SRModel,
             Swin2SRPreTrainedModel,

@@ -54,9 +54,6 @@ _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
 
 
-from ..deprecated._archive_maps import TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class TFLxmertModelOutput(ModelOutput):
     """
