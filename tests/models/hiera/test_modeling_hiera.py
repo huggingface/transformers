@@ -777,7 +777,9 @@ class HieraModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = HieraModel.from_pretrained("EduardoPacheco/hiera-tiny-224", torch_dtype=torch.float16, device_map="auto")
+        model = HieraModel.from_pretrained(
+            "EduardoPacheco/hiera-tiny-224", torch_dtype=torch.float16, device_map="auto"
+        )
         image_processor = self.default_image_processor
 
         image = prepare_img()

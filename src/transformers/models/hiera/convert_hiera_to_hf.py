@@ -205,7 +205,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         config.decoder_depth = 8
         config.decoder_num_heads = 16
         # Table 3b from Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles
-        config.mask_ratio = 0.6 
+        config.mask_ratio = 0.6
     else:
         id2label, label2id, num_labels = get_labels_for_classifier(model_name)
         config.id2label = id2label
@@ -271,9 +271,7 @@ def convert_hiera_checkpoint(args):
 
     original_image_preprocessor = transforms.Compose(
         [
-            transforms.Resize(
-                int((256 / 224) * 224), interpolation=transforms.functional.InterpolationMode.BICUBIC
-            ),
+            transforms.Resize(int((256 / 224) * 224), interpolation=transforms.functional.InterpolationMode.BICUBIC),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
