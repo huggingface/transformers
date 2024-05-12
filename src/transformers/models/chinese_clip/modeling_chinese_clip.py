@@ -49,9 +49,6 @@ _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
 
 
-from ..deprecated._archive_maps import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -1113,6 +1110,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config_class = ChineseCLIPTextConfig
+    _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1284,6 +1282,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config_class = ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
+    _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
     def __init__(self, config: ChineseCLIPVisionConfig):
         super().__init__(config)

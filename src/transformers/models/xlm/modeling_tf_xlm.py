@@ -67,9 +67,6 @@ _CHECKPOINT_FOR_DOC = "FacebookAI/xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
 
 
-from ..deprecated._archive_maps import TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out[:, 0::2] = tf.constant(np.sin(position_enc[:, 0::2]))

@@ -48,9 +48,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Salesforce/instructblip-flan-t5-xl"
 
 
-from ..deprecated._archive_maps import INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGenerationModelOutput with Blip2->InstructBlip
 class InstructBlipForConditionalGenerationModelOutput(ModelOutput):
@@ -1251,9 +1248,13 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
 
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(config.text_config)
+            language_model = AutoModelForCausalLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            language_model = AutoModelForSeq2SeqLM.from_config(
+                config.text_config, attn_implementation=config._attn_implementation
+            )
 
         if language_model._no_split_modules is not None:
             self._no_split_modules.extend(language_model._no_split_modules)

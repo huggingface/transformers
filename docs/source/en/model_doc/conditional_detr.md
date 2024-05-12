@@ -33,7 +33,8 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 ## Resources
 
-- [Object detection task guide](../tasks/object_detection)
+- Scripts for finetuning [`ConditionalDetrForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
+- See also: [Object detection task guide](../tasks/object_detection).
 
 ## ConditionalDetrConfig
 

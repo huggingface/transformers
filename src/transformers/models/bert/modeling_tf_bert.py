@@ -90,9 +90,6 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
-from ..deprecated._archive_maps import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFBertPreTrainingLoss:
     """
     Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining

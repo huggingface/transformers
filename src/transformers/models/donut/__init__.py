@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_donut_swin": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutSwinConfig"],
+    "configuration_donut_swin": ["DonutSwinConfig"],
     "processing_donut": ["DonutProcessor"],
 }
 
@@ -28,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_donut_swin"] = [
-        "DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DonutSwinModel",
         "DonutSwinPreTrainedModel",
     ]
@@ -44,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_donut_swin import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutSwinConfig
+    from .configuration_donut_swin import DonutSwinConfig
     from .processing_donut import DonutProcessor
 
     try:
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_donut_swin import (
-            DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
             DonutSwinModel,
             DonutSwinPreTrainedModel,
         )

@@ -17,7 +17,7 @@ from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_availab
 from ...utils import OptionalDependencyNotAvailable
 
 
-_import_structure = {"configuration_gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"]}
+_import_structure = {"configuration_gpt_neox": ["GPTNeoXConfig"]}
 
 try:
     if not is_tokenizers_available():
@@ -34,7 +34,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_gpt_neox"] = [
-        "GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoXForCausalLM",
         "GPTNeoXForQuestionAnswering",
         "GPTNeoXForSequenceClassification",
@@ -46,7 +45,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
+    from .configuration_gpt_neox import GPTNeoXConfig
 
     try:
         if not is_tokenizers_available():
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gpt_neox import (
-            GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXForCausalLM,
             GPTNeoXForQuestionAnswering,
             GPTNeoXForSequenceClassification,

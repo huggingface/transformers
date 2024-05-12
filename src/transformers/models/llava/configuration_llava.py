@@ -23,9 +23,6 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class LlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an

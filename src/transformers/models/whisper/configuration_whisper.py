@@ -30,9 +30,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 # fmt: off
 NON_SPEECH_TOKENS = [
     1, 2, 7, 8, 9, 10, 14, 25,

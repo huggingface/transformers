@@ -24,9 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class FlaubertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
