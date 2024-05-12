@@ -625,6 +625,12 @@ class TFModelTesterMixin:
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
         import transformers
 
+        import shutil
+        total, used, free = shutil.disk_usage('/tmp')
+        print(f"Total: {total / (1024**3):.2f} GB")
+        print(f"Used: {used / (1024**3):.2f} GB")
+        print(f"Free: {free / (1024**3):.2f} GB")
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
