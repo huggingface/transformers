@@ -623,9 +623,9 @@ class TFModelTesterMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        import transformers
-
         import shutil
+
+        import transformers
         total, used, free = shutil.disk_usage('/tmp')
         print(f"Total: {total / (1024**3):.2f} GB")
         print(f"Used: {used / (1024**3):.2f} GB")
