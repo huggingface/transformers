@@ -1382,8 +1382,8 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("namangarg110/hiera-tiny-224-mae")
-        >>> model = HieraForPreTraining.from_pretrained("namangarg110/hiera-tiny-224-mae")
+        >>> image_processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-mae")
+        >>> model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 

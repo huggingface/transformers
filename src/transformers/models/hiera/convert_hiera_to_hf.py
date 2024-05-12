@@ -185,7 +185,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
     if model_name == "hiera-tiny-224":
         config = HieraConfig(depths=[1, 2, 7, 2])
     elif model_name == "hiera-small-224":
-        HieraConfig(depths=[1, 2, 11, 2])
+        config = HieraConfig(depths=[1, 2, 11, 2])
     elif model_name == "hiera-base-224":
         config = HieraConfig()
     elif model_name == "hiera-base-plus-224":
@@ -194,54 +194,6 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         config = HieraConfig(embed_dim=144, num_heads=[2, 4, 8, 16], depths=[2, 6, 36, 4])
     elif model_name == "hiera-huge-224":
         config = HieraConfig(embed_dim=256, num_heads=[4, 8, 16, 32], depths=[2, 6, 36, 4])
-    elif model_name == "hiera-base-16x224":
-        config = HieraConfig(
-            image_size=(16, 224, 224),
-            query_stride=(1, 2, 2),
-            masked_unit_size=(1, 8, 8),
-            patch_size=(3, 7, 7),
-            patch_stride=(2, 4, 4),
-            patch_padding=(1, 3, 3),
-            use_separate_position_embedding=True,
-        )
-    elif model_name == "hiera-base-plus-16x224":
-        config = HieraConfig(
-            image_size=(16, 224, 224),
-            query_stride=(1, 2, 2),
-            masked_unit_size=(1, 8, 8),
-            patch_size=(3, 7, 7),
-            patch_stride=(2, 4, 4),
-            patch_padding=(1, 3, 3),
-            use_separate_position_embedding=True,
-            embed_dim=112,
-            initial_num_heads=2,
-        )
-    elif model_name == "hiera-large-16x224":
-        config = HieraConfig(
-            image_size=(16, 224, 224),
-            query_stride=(1, 2, 2),
-            masked_unit_size=(1, 8, 8),
-            patch_size=(3, 7, 7),
-            patch_stride=(2, 4, 4),
-            patch_padding=(1, 3, 3),
-            use_separate_position_embedding=True,
-            embed_dim=144,
-            initial_num_heads=2,
-            depths=[2, 6, 36, 4],
-        )
-    elif model_name == "hiera-huge-16x224":
-        config = HieraConfig(
-            input_size=(16, 224, 224),
-            query_stride=(1, 2, 2),
-            masked_unit_size=(1, 8, 8),
-            patch_size=(3, 7, 7),
-            patch_stride=(2, 4, 4),
-            patch_padding=(1, 3, 3),
-            use_separate_position_embedding=True,
-            embed_dim=256,
-            initial_num_heads=4,
-            depths=[2, 6, 36, 4],
-        )
     else:
         raise ValueError(f"Unrecognized model name: {model_name}")
 
@@ -253,7 +205,7 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
         config.decoder_depth = 8
         config.decoder_num_heads = 16
         # Table 3b from Hiera: A Hierarchical Vision Transformer without the Bells-and-Whistles
-        config.mask_ratio = 0.6 if not model_name.endswith("16x224") else 0.9
+        config.mask_ratio = 0.6 
     else:
         id2label, label2id, num_labels = get_labels_for_classifier(model_name)
         config.id2label = id2label
@@ -317,19 +269,16 @@ def convert_hiera_checkpoint(args):
 
     input_image = prepare_img()
 
-    if model_name.endswith("16x224"):
-        original_image_preprocessor = None
-    else:
-        original_image_preprocessor = transforms.Compose(
-            [
-                transforms.Resize(
-                    int((256 / 224) * 224), interpolation=transforms.functional.InterpolationMode.BICUBIC
-                ),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
-            ]
-        )
+    original_image_preprocessor = transforms.Compose(
+        [
+            transforms.Resize(
+                int((256 / 224) * 224), interpolation=transforms.functional.InterpolationMode.BICUBIC
+            ),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
+        ]
+    )
 
     image_processor = BitImageProcessor(
         image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size={"shortest_edge": 256}
@@ -374,7 +323,7 @@ def convert_hiera_checkpoint(args):
         elif mae_model:
             # get mask from noise to be able to compare outputs
             mask, _ = model.hiera.embeddings.patch_embeddings.random_masking(expected_pixel_values, noise)
-            expected_loss, _, _, _ = original_model(expected_pixel_values, mask=mask)
+            expected_loss, _, _, _ = original_model(expected_pixel_values, mask=mask.bool())
             assert torch.allclose(outputs.loss, expected_loss, atol=1e-4)
             print("MAE Model looks good as loss matches original implementation!")
         else:
@@ -398,7 +347,7 @@ def convert_hiera_checkpoint(args):
             hub_name = f"{model_name}-mae"
         else:
             hub_name = f"{model_name}-k400" if model_name.endswith("16x224") else f"{model_name}-in1k"
-        repo_id = f"namangarg110/{hub_name}"
+        repo_id = f"EduardoPacheco/{hub_name}"
         print(f"Pushing model and processor for {model_name} to hub at {repo_id}")
         model.push_to_hub(repo_id)
         image_processor.push_to_hub(repo_id)
@@ -418,10 +367,6 @@ if __name__ == "__main__":
             "hiera-base-plus-224",
             "hiera-large-224",
             "hiera-huge-224",
-            "hiera-base-16x224",
-            "hiera-base-plus-16x224",
-            "hiera-large-16x224",
-            "hiera-huge-16x224",
         ],
         help="Name of the Hiera model you'd like to convert.",
     )

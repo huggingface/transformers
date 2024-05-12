@@ -698,12 +698,12 @@ class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("namangarg110/hiera-tiny-224-in1k") if is_vision_available() else None
+            AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = HieraForImageClassification.from_pretrained("namangarg110/hiera-tiny-224-in1k").to(torch_device)
+        model = HieraForImageClassification.from_pretrained("EduardoPacheco/hiera-tiny-224-in1k").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -736,7 +736,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
         # make random mask reproducible
         np.random.seed(2)
 
-        model = HieraForPreTraining.from_pretrained("namangarg110/hiera-tiny-224-mae").to(torch_device)
+        model = HieraForPreTraining.from_pretrained("EduardoPacheco/hiera-tiny-224-mae").to(torch_device)
         image_processor = self.default_image_processor
 
         image = prepare_img()
@@ -777,7 +777,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = HieraModel.from_pretrained("namangarg110/hiera-tiny-224", torch_dtype=torch.float16, device_map="auto")
+        model = HieraModel.from_pretrained("EduardoPacheco/hiera-tiny-224", torch_dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
         image = prepare_img()
