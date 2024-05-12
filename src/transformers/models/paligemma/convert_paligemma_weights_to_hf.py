@@ -43,9 +43,9 @@ logger = logging.get_logger(__name__)
 
 # TODO add sequence length variations here
 
-PALIGEMMA_VARIANTS = ["2b-test", "2b-224px", "2b-448px", "2b-896px"]
+PALIGEMMA_VARIANTS = ["2b-test", "3b-224px", "3b-448px", "3b-896px"]
 
-def get_paligemma_config(variant: str):
+def get_paligemma_config(variant: str, precision: str):
     config = {
         'image_token_index': None,
         'pad_token_id': 0,
@@ -55,9 +55,9 @@ def get_paligemma_config(variant: str):
 
     image_sizes = {
         "2b-test": 224,
-        "2b-224px": 224,
-        "2b-448px": 448,
-        "2b-896px": 896
+        "3b-224px": 224,
+        "3b-448px": 448,
+        "3b-896px": 896
     }
 
     if variant in PALIGEMMA_VARIANTS:
@@ -71,7 +71,7 @@ def get_paligemma_config(variant: str):
             'num_hidden_layers': 18,
             'num_key_value_heads': 1,
             'head_dim': 256,
-            'torch_dtype': 'float32',
+            'torch_dtype': precision,
             'hidden_size': 2048,
             'hidden_act': 'gelu_pytorch_tanh',
             'num_attention_heads': 8,
@@ -79,6 +79,7 @@ def get_paligemma_config(variant: str):
             'is_encoder_decoder': False
         }
         vision_config = {
+            'torch_dtype': precision,
             'image_size': image_size,
             'patch_size': patch_size,
             'num_image_tokens': num_image_tokens,
@@ -217,7 +218,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
         new_key = parent_key + sep + k if parent_key else k
 
         if isinstance(v, collections.abc.MutableMapping):
-            items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
+            items.extend(flatten_nested_dict(v, parent_key=new_key, sep=sep).items())
         else:
             items.append((new_key, v))
     return dict(items)
@@ -231,6 +232,7 @@ def verify_logits(model, processor):
     cow_on_beach_path = "/home/pablo/cow_beach_1.png"
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
     
+
     # Test image captioning generation without padding
     image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt").to(device)
     captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
@@ -241,7 +243,7 @@ def verify_logits(model, processor):
         print("Image captioning works without padding.")
 
 
-    # Test image captioning generation with padding
+        # Test image captioning generation with padding
     image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt").to(device)
     captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
@@ -249,7 +251,6 @@ def verify_logits(model, processor):
         raise ValueError(fr"Image captioning with should match, got {captioning_output[0]}.")
     else:
         print("Image captioning works with padding.")
-
 
 
     prompt = ["answer en Where is the cow standing?", ""]
@@ -265,10 +266,6 @@ def verify_logits(model, processor):
             raise ValueError("Image captioning does not match.")
         else:
             print("Generation matches. You're almost done!")
-
-
-
- 
 
     
     print("Verifying that batched generation and single generation works.")
@@ -290,12 +287,14 @@ def verify_logits(model, processor):
 
 @torch.no_grad()
 def convert_paligemma_checkpoint(
-    checkpoint_path, tokenizer_model_file, pytorch_dump_folder_path, variant: str, do_verify_logits=True, do_convert_weights=False
+    checkpoint_path, tokenizer_model_file, pytorch_dump_folder_path, variant: str, precision: str, do_verify_logits=True, do_convert_weights=False
 ):
+    do_verify_logits = False
+    do_convert_weights = True
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
-    config = get_paligemma_config(variant)
+    config = get_paligemma_config(variant, precision=precision)
     if do_convert_weights:
         if variant == "2b-test":
             # for the test model, the vocabulary was smaller
@@ -310,7 +309,7 @@ def convert_paligemma_checkpoint(
         }
         tokenizer.add_special_tokens(tokens_to_add)
         
-        # tokenizer.padding_side = 'right' # commented out, activate for testing purposes. 
+        # tokenizer.padding_side = 'right' # uncomment for testing purposes only. 
 
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
@@ -354,77 +353,12 @@ def convert_paligemma_checkpoint(
         dim=0,
     )
 
-    #model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
-    #processor.save_pretrained(pytorch_dump_folder_path)
-
-
-
+    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    processor.save_pretrained(pytorch_dump_folder_path)
 # 
 
 
 
-
-"""
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--checkpoint_path",
-        default="/home/pablo/gv-hf/hf_test_ckpt.bv.params.npz",
-        type=str,
-        help="Path to the .npz checkpoint",
-    )
-
-    parser.add_argument(
-        "--tokenizer_model_file",
-        default="/home/pablo/paligemma/paligemma_tokenizer.model",
-        type=str,
-        help="Path to the sentencepiece model file",
-    )
-
-    parser.add_argument(
-        "--pytorch_dump_folder_path",
-        default="/home/pablo/paligemma/paligemma-test-hf ",
-        type=str,
-        help="Path to the output PyTorch model directory.",
-    )
-
-    parser.add_argument(
-        "--variant",
-        default="2b-test",
-        choices=PALIGEMMA_VARIANTS,
-        type=str,
-        help="String identifier of the paligemma variant to convert."
-    )
-
-    parser.add_argument(
-        "--do_verify_logits",
-        action="store_false",
-        help="Whether or not to run checks against original implementation.",
-    )
-    parser.add_argument(
-        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
-    )
-
-    args = parser.parse_args()
-    convert_paligemma_checkpoint(
-        checkpoint_path=args.checkpoint_path,
-        tokenizer_model_file=args.tokenizer_model_file,
-        pytorch_dump_folder_path=args.pytorch_dump_folder_path,
-        variant=args.variant,
-        do_verify_logits=args.do_verify_logits,
-        do_convert_weights=args.do_convert_weights,
-    )
-
-"""
-
-"""
-python src/transformers/models/paligemma/convert_paligemma_weights_to_hf.py 
---checkpoint_path="/raid/pablo/palma_files/test_model/hf_test_ckpt.bv.params.npz"
- --variant="2b-test" 
- --tokenizer_model_file="/raid/pablo/paligemma/paligemma_tokenizer.model" 
- --do_convert_weights --do_verify_logits 
- --pytorch_dump_folder_path="/raid/pablo/converted_224_test"
-"""
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -444,9 +378,16 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/raid/pablo/converted_224_test/",
+        default="/raid/pablo/converted_224_test_pre_release",
         type=str,
         help="Path to the output PyTorch model directory.",
+    )
+
+    parser.add_argument(
+        "--precision",
+        choices=['float32', 'bfloat16', 'float16'],
+        type=str,
+        help="Precision identifier for model conversion - should match the base checkpoint precision."
     )
 
     parser.add_argument(
@@ -459,11 +400,11 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--do_verify_logits",
-        action="store_false",
+        action="store_true",
         help="Whether or not to run checks against original implementation.",
     )
     parser.add_argument(
-        "--do_convert_weights", action="store_false", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
     )
 
     args = parser.parse_args()
@@ -472,6 +413,7 @@ if __name__ == "__main__":
         tokenizer_model_file=args.tokenizer_model_file,
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         variant=args.variant,
+        precision=args.precision,
         do_verify_logits=args.do_verify_logits,
         do_convert_weights=args.do_convert_weights,
     )
