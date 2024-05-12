@@ -626,7 +626,8 @@ class TFModelTesterMixin:
         import shutil
 
         import transformers
-        total, used, free = shutil.disk_usage('/tmp')
+
+        total, used, free = shutil.disk_usage("/tmp")
         print(f"Total: {total / (1024**3):.2f} GB")
         print(f"Used: {used / (1024**3):.2f} GB")
         print(f"Free: {free / (1024**3):.2f} GB")
