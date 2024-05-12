@@ -1513,11 +1513,11 @@ class IrisModel(IrisPreTrainedModel):
     @replace_return_docstrings(output_type=IrisOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        observations: Optional[torch.FloatTensor] = None,
-        actions: Optional[torch.FloatTensor] = None,
-        rewards: Optional[torch.FloatTensor] = None,
-        ends: Optional[torch.IntTensor] = None,
-        mask_padding: Optional[torch.BoolTensor] = None,
+        observations: torch.FloatTensor = None,
+        actions: torch.FloatTensor = None,
+        rewards: torch.FloatTensor = None,
+        ends: torch.IntTensor = None,
+        mask_padding: torch.BoolTensor = None,
         should_preprocess: Optional[bool] = None,
         should_postprocess: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

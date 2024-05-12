@@ -37,93 +37,120 @@ class IrisModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
-        act_dim=6,
-        state_dim=17,
-        hidden_size=23,
-        max_length=11,
+        batch_size_tokenizer=32,
+        batch_size_world_model=8,
+        batch_size_actor_critic=8,
+        seq_length_tokenizer=1,
+        seq_length_world_model=20,
+        seq_length_actor_critic=21,
+        num_actions=4,
         is_training=True,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.act_dim = act_dim
-        self.state_dim = state_dim
-        self.hidden_size = hidden_size
-        self.max_length = max_length
+        self.batch_size_tokenizer = batch_size_tokenizer
+        self.batch_size_world_model = batch_size_world_model
+        self.batch_size_actor_critic = batch_size_actor_critic
+        self.seq_length_tokenizer = seq_length_tokenizer
+        self.seq_length_world_model = seq_length_world_model
+        self.seq_length_actor_critic = seq_length_actor_critic
+        self.num_actions = num_actions
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        states = floats_tensor((self.batch_size, self.seq_length, self.state_dim))
-        actions = floats_tensor((self.batch_size, self.seq_length, self.act_dim))
-        rewards = floats_tensor((self.batch_size, self.seq_length, 1))
-        returns_to_go = floats_tensor((self.batch_size, self.seq_length, 1))
-        timesteps = ids_tensor((self.batch_size, self.seq_length), vocab_size=1000)
-        attention_mask = random_attention_mask((self.batch_size, self.seq_length))
-
         config = self.get_config()
+
+        observations_tokenizer = floats_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer,config.in_channels,config.resolution,config.resolution))
+        actions_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =4)
+        rewards_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =8)
+        zeros = torch.zeros_like(rewards_tokenizer)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards_tokenizer==7)|( rewards_tokenizer==4)|(rewards_tokenizer==1))]=1
+        rewards_tokenizer = torch.mul(zeros,rewards_tokenizer).float()
+        ends_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =2)
+        mask_padding_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =2).bool()
+
+        observations_world_model = floats_tensor((self.batch_size_world_model,self.seq_length_world_model,config.in_channels,config.resolution,config.resolution))
+        actions_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =4)
+        rewards_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =8)
+        zeros = torch.zeros_like(rewards_world_model)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards_world_model==7)|( rewards_world_model==4)|(rewards_world_model==1))]=1
+        rewards_world_model = torch.mul(zeros,rewards_world_model).float()
+        ends_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =2)
+        mask_padding_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =2).bool()
+
+        observations_actor_critic = floats_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic,config.in_channels,config.resolution,config.resolution))
+        actions__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =4)
+        rewards__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =8)
+        zeros = torch.zeros_like(rewards__actor_critic)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards__actor_critic==7)|( rewards__actor_critic==4)|(rewards__actor_critic==1))]=1
+        rewards__actor_critic = torch.mul(zeros,rewards__actor_critic).float()
+        ends__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =2)
+        mask_padding__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =2).bool()
+        
+        observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
+        actions = [actions_tokenizer,actions_world_model,actions__actor_critic]
+        rewards = [rewards_tokenizer,rewards_world_model,rewards__actor_critic]
+        ends = [ends_tokenizer,ends_world_model,ends__actor_critic]
+        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding__actor_critic]
 
         return (
             config,
-            states,
+            observations,
             actions,
             rewards,
-            returns_to_go,
-            timesteps,
-            attention_mask,
+            ends,
+            mask_padding,
         )
 
     def get_config(self):
         return IrisConfig(
-            batch_size=self.batch_size,
-            seq_length=self.seq_length,
-            act_dim=self.act_dim,
-            state_dim=self.state_dim,
-            hidden_size=self.hidden_size,
-            max_length=self.max_length,
+            num_actions = self.num_actions,
         )
 
     def create_and_check_model(
         self,
         config,
-        states,
+        observations,
         actions,
         rewards,
-        returns_to_go,
-        timesteps,
-        attention_mask,
+        ends,
+        mask_padding,
     ):
         model = IrisModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(states, actions, rewards, returns_to_go, timesteps, attention_mask)
+        result = model(observations, actions, rewards, ends, mask_padding)
 
-        self.parent.assertEqual(result.state_preds.shape, states.shape)
-        self.parent.assertEqual(result.action_preds.shape, actions.shape)
-        self.parent.assertEqual(result.return_preds.shape, returns_to_go.shape)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length * 3, self.hidden_size)
-        )  # seq length *3 as there are 3 modelities: states, returns and actions
+        act_pred_expected_shape = torch.Size((self.batch_size_actor_critic,1, self.num_actions))
+        reward_pred_expected_shape = torch.Size((self.batch_size_world_model,self.seq_length_world_model, 3))
+        ep_end_pred_expected_shape = torch.Size((self.batch_size_world_model,self.seq_length_world_model, 2))
+        obs_pred_expected_shape = torch.Size((self.batch_size_world_model,320,config.vocab_size))
+
+        self.parent.assertEqual(result.reconstructed_img.shape, observations[0].shape)
+        self.parent.assertEqual(result.action_preds.shape, act_pred_expected_shape)
+        self.parent.assertEqual(result.reward_preds.shape, reward_pred_expected_shape)
+        self.parent.assertEqual(result.epsiode_end.shape, ep_end_pred_expected_shape)
+        self.parent.assertEqual(result.obs_preds.shape, obs_pred_expected_shape)
+        
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            states,
+            observations,
             actions,
             rewards,
-            returns_to_go,
-            timesteps,
-            attention_mask,
+            ends,
+            mask_padding,
         ) = config_and_inputs
         inputs_dict = {
-            "states": states,
+            "observations": observations,
             "actions": actions,
             "rewards": rewards,
-            "returns_to_go": returns_to_go,
-            "timesteps": timesteps,
-            "attention_mask": attention_mask,
+            "ends": ends,
+            "mask_padding": mask_padding,
         }
         return config, inputs_dict
 
@@ -148,7 +175,7 @@ class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = IrisModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IrisConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IrisConfig, hidden_size=256)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -173,12 +200,11 @@ class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
-                "states",
+                "observations",
                 "actions",
                 "rewards",
-                "returns_to_go",
-                "timesteps",
-                "attention_mask",
+                "ends",
+                "mask_padding",
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -189,59 +215,75 @@ class IrisModelIntegrationTest(unittest.TestCase):
     @slow
     def test_autoregressive_prediction(self):
         """
-        An integration test that performs autoregressive prediction of state, action and return
-        from a sequence of state, actions and returns. Test is performed over two timesteps.
+        An integration test that performs reconstruction of images as observations, action prediction with policy and autoregressive prediction of 
+        new frame tokens, rewards and  potential episode termination from a sequence of interleaved frame and action tokens Test is performed over two timesteps.
 
         """
 
-        NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
-        TARGET_RETURN = 10  # defined by the RL environment, may be normalized
-        model = IrisModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-expert")
+        NUM_STEPS = 1  # number of steps of prediction with all the three components i.e., tokenizer, world model & actor critic we will perform
+        model = IrisModel.from_pretrained("ruffy369/iris-breakout")
         model = model.to(torch_device)
         config = model.config
         torch.manual_seed(0)
-        state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
+        # state = torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32)  # env.reset()
 
-        expected_outputs = torch.tensor(
-            [[0.242793, -0.28693074, 0.8742613], [0.67815274, -0.08101085, -0.12952147]], device=torch_device
-        )
+        expected_outputs = torch.tensor([[[-2.1720,  0.1622, -4.3326,  4.6579]],
+                                        [[-3.4466, -5.1955,  4.0899,  3.4191]],
+                                        [[-1.3850,  1.0004, -3.9815,  3.1493]],
+                                        [[-3.1353, -5.3218, -2.6076, 10.3681]]], device=torch_device)
 
-        returns_to_go = torch.tensor(TARGET_RETURN, device=torch_device, dtype=torch.float32).reshape(1, 1, 1)
-        states = state
-        actions = torch.zeros(1, 0, config.act_dim, device=torch_device, dtype=torch.float32)
-        rewards = torch.zeros(1, 0, device=torch_device, dtype=torch.float32)
-        timesteps = torch.tensor(0, device=torch_device, dtype=torch.long).reshape(1, 1)
+        observations_tokenizer = floats_tensor((16,1,config.in_channels,config.resolution,config.resolution))
+        actions_tokenizer = ids_tensor((16,1),vocab_size =4)
+        rewards_tokenizer = ids_tensor((16,1),vocab_size =8)
+        zeros = torch.zeros_like(rewards_tokenizer)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards_tokenizer==7)|( rewards_tokenizer==4)|(rewards_tokenizer==1))]=1
+        rewards_tokenizer = torch.mul(zeros,rewards_tokenizer).float()
+        ends_tokenizer = ids_tensor((16,1),vocab_size =2)
+        mask_padding_tokenizer = ids_tensor((16,1),vocab_size =2).bool()
+
+        observations_world_model = floats_tensor((4,20,config.in_channels,config.resolution,config.resolution))
+        actions_world_model = ids_tensor((4,20),vocab_size =4)
+        rewards_world_model = ids_tensor((4,20),vocab_size =8)
+        zeros = torch.zeros_like(rewards_world_model)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards_world_model==7)|( rewards_world_model==4)|(rewards_world_model==1))]=1
+        rewards_world_model = torch.mul(zeros,rewards_world_model).float()
+        ends_world_model = ids_tensor((4,20),vocab_size =2)
+        mask_padding_world_model = ids_tensor((4,20),vocab_size =2).bool()
+
+        observations_actor_critic = floats_tensor((4,21,config.in_channels,config.resolution,config.resolution))
+        actions__actor_critic = ids_tensor((4,21),vocab_size =4)
+        rewards__actor_critic = ids_tensor((4,21),vocab_size =8)
+        zeros = torch.zeros_like(rewards__actor_critic)
+        # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
+        zeros[((rewards__actor_critic==7)|( rewards__actor_critic==4)|(rewards__actor_critic==1))]=1
+        rewards__actor_critic = torch.mul(zeros,rewards__actor_critic).float()
+        ends__actor_critic = ids_tensor((4,21),vocab_size =2)
+        mask_padding__actor_critic = ids_tensor((4,21),vocab_size =2).bool()
+        
+        observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
+        actions = [actions_tokenizer,actions_world_model,actions__actor_critic]
+        rewards = [rewards_tokenizer,rewards_world_model,rewards__actor_critic]
+        ends = [ends_tokenizer,ends_world_model,ends__actor_critic]
+        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding__actor_critic]
 
         for step in range(NUM_STEPS):
-            actions = torch.cat([actions, torch.zeros(1, 1, config.act_dim, device=torch_device)], dim=1)
-            rewards = torch.cat([rewards, torch.zeros(1, 1, device=torch_device)], dim=1)
-
-            attention_mask = torch.ones(1, states.shape[1]).to(dtype=torch.long, device=states.device)
+            
 
             with torch.no_grad():
-                _, action_pred, _ = model(
-                    states=states,
-                    actions=actions,
-                    rewards=rewards,
-                    returns_to_go=returns_to_go,
-                    timesteps=timesteps,
-                    attention_mask=attention_mask,
-                    return_dict=False,
+                model_pred = model(
+                    observations = observations,
+                    actions = actions,
+                    rewards = rewards,
+                    ends = ends,
+                    mask_padding = mask_padding,
+                    should_preprocess = True,
+                    should_postprocess = True,
+                    return_dict = False
                 )
-
-            self.assertEqual(action_pred.shape, actions.shape)
-            self.assertTrue(torch.allclose(action_pred[0, -1], expected_outputs[step], atol=1e-4))
-            state, reward, _, _ = (  # env.step(action)
-                torch.randn(1, 1, config.state_dim).to(device=torch_device, dtype=torch.float32),
-                1.0,
-                False,
-                {},
-            )
-
-            actions[-1] = action_pred[0, -1]
-            states = torch.cat([states, state], dim=1)
-            pred_return = returns_to_go[0, -1] - reward
-            returns_to_go = torch.cat([returns_to_go, pred_return.reshape(1, 1, 1)], dim=1)
-            timesteps = torch.cat(
-                [timesteps, torch.ones((1, 1), device=torch_device, dtype=torch.long) * (step + 1)], dim=1
-            )
+            
+            act_pred_expected_shape = torch.Size((4,1, config.num_actions))
+            self.assertEqual(model_pred.action_preds.shape, act_pred_expected_shape)
+            self.assertTrue(torch.allclose(model_pred.action_preds, expected_outputs[step], atol=1e-4))
+            
