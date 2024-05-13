@@ -453,6 +453,18 @@ class StaticCache(Cache):
 class SlidingWindowCache(Cache):
     """
     Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
+    Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.config.sliding_window_size - 1`,
+    if true we need to do a cycle shift on the current cache to replace the old states by the new key value states passed in.
+    
+    The `to_shift` is only true once we are above sliding_window_size. Thus with `sliding_window_size==64`:
+
+    indices = (slicing + to_shift[-1].int()-1) % self.config.sliding_window_size
+    tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+        19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+        37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+        55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
+
+    We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window_size`)
 
     Parameters:
         config (`PretrainedConfig):
