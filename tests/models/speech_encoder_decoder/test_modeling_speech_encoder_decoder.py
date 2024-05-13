@@ -423,6 +423,8 @@ class EncoderDecoderMixin:
 
     @slow
     def test_real_model_save_load_from_pretrained(self):
+        if "xpu" in torch_device:
+            torch.use_deterministic_algorithms(True)
         model_2, inputs = self.get_pretrained_model_and_inputs()
         model_2.to(torch_device)
 

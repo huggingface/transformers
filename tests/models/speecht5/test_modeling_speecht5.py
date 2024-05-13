@@ -1072,6 +1072,8 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         )
 
     def test_one_to_many_generation(self):
+        if "xpu" in torch_device:
+            torch.use_deterministic_algorithms(True)
         model = self.default_model
         processor = self.default_processor
         vocoder = self.default_vocoder
