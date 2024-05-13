@@ -287,12 +287,11 @@ class ImageBindGenericPatchEmbedding(nn.Module):
         else:
             raise ValueError("Either `image_size` or `num_mel_bins` and `target_len` must be provided in the config.")
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        self.image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        self.num_channels = config.num_channels
 
         self.projection = projection
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if use_layernorm else None
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         if pixel_values.ndim not in [4, 5]:
@@ -324,6 +323,7 @@ class ImageBindVisionEmbeddings(nn.Module):
     def __init__(self, config: ImageBindVisionConfig):
         super().__init__()
         self.config = config
+        self.num_frames = config.num_frames
         num_patches = (config.image_size // config.patch_size) ** 2
 
         projection = nn.Conv3d(
@@ -350,11 +350,11 @@ class ImageBindVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
         if num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, 0]
+        patch_pos_embed = self.position_embedding[:, 1:]
         dim = embeddings.shape[-1]
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
@@ -414,7 +414,7 @@ class ImageBindVisionEmbeddings(nn.Module):
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + self.position_embedding
 
         return embeddings
 
@@ -538,8 +538,8 @@ class ImageBindAttention(nn.Module):
         # Add key/value biases if necessary
         if self.k_bias is not None and self.v_bias is not None:
             # Repeat bias along batch dimension (first)
-            key_states = torch.cat([key_states, self.k_bias.repeat(batch_size, 1, 1)])
-            value_states = torch.cat([value_states, self.v_bias.repeat(batch_size, 1, 1)])
+            key_states = torch.cat([key_states, self.k_bias.repeat(batch_size, 1, 1)], dim=1)
+            value_states = torch.cat([value_states, self.v_bias.repeat(batch_size, 1, 1)], dim=1)
 
         key_states = self._shape(key_states, -1, batch_size)
         value_states = self._shape(value_states, -1, batch_size)
@@ -964,6 +964,7 @@ class ImageBindEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [ImageBindEncoderLayer(config, drop_path_rate) for drop_path_rate in drop_path_rates]
         )
+        self.gradient_checkpointing = False
 
     def forward(
         self,
@@ -1602,8 +1603,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
 
-        num_clips = vision_outputs[-1]
-        if num_clips is not None:
+        if pixel_values.ndim >= 5:
+            num_clips = vision_outputs[-1]
             image_features = image_features.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             image_features = image_features.mean(dim=1)
@@ -1660,8 +1661,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         pooled_output = audio_outputs[1]  # pooled_output
         audio_features = self.audio_projection(pooled_output)
 
-        num_clips = audio_outputs[-1]
-        if num_clips is not None:
+        if input_features.ndim >= 5:
+            num_clips = audio_outputs[-1]
             audio_features = audio_features.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             audio_features = audio_features.mean(dim=1)
@@ -1736,7 +1737,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
             )
         else:
             other_outputs = other_model(
-                input_ids=input_features,
+                input_features,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1753,13 +1754,13 @@ class ImageBindModel(ImageBindPreTrainedModel):
         other_embeds = other_postprocessor(other_embeds)
 
         # If modality input was batched and clipped, reduce embedding over clips dimension
-        image_num_clips = vision_outputs[-1]
-        if image_num_clips is not None:
+        if pixel_values.ndim >= 5:
+            image_num_clips = vision_outputs[-1]
             image_embeds = image_embeds.reshape(image_batch_size, image_num_clips, -1)
             # Take mean over all clips
             image_embeds = image_embeds.mean(dim=1)
-        other_num_clips = other_outputs[-1]
-        if other_num_clips is not None:
+        if input_features.ndim >= 5:
+            other_num_clips = other_outputs[-1]
             other_embeds = other_embeds.reshape(other_batch_size, other_num_clips, -1)
             other_embeds = other_embeds.mean(dim=1)
 
@@ -1973,8 +1974,8 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         image_embeds = self.visual_projection(pooled_output)
         normalized_image_embeds = self.vision_postprocessor(image_embeds)
 
-        num_clips = vision_outputs[-1]
-        if num_clips is not None:
+        if pixel_values.ndim >= 5:
+            num_clips = vision_outputs[-1]
             image_embeds = image_embeds.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             image_embeds = image_embeds.mean(dim=1)
@@ -2067,8 +2068,8 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         audio_embeds = self.audio_projection(pooled_output)
         normalized_audio_embeds = self.audio_postprocessor(audio_embeds)
 
-        num_clips = audio_outputs[-1]
-        if num_clips is not None:
+        if input_features.ndim >= 5:
+            num_clips = audio_outputs[-1]
             audio_embeds = audio_embeds.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             audio_embeds = audio_embeds.mean(dim=1)

@@ -176,10 +176,11 @@ def prepare_input():
 
 
 @torch.no_grad()
-def convert_seggpt_checkpoint(args):
+def convert_imagebind_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     verify_logits = args.verify_logits
+    verify_inputs = args.verify_inputs
     push_to_hub = args.push_to_hub
 
     config = ImageBindConfig()
@@ -198,17 +199,64 @@ def convert_seggpt_checkpoint(args):
 
     # Load HF model
     model = ImageBindModel(config)
+
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("")
     print("Unexpected keys:", unexpected_keys)
 
-    prepare_input()
+    if verify_inputs:
+        prepare_input()
+        expected_output_vision = ...
+        expected_output_text = ...
+        expected_output_audio = ...
+    else:
+        torch.manual_seed(0)
+        input_ids = (torch.rand(3, 77) * 10).to(torch.long)
+        pixel_values = torch.rand(3, 3, 224, 224)
+        input_features = torch.rand(3, 3, 1, 128, 204)
+
+        expected_output_text = torch.tensor(
+            [
+                [-0.5316, -0.2157, -2.1864, -3.9650, 3.5471],
+                [0.2426, 0.3373, -2.1500, -4.1384, -0.1837],
+                [-0.5758, -3.9821, -2.7557, -2.5204, 1.4688],
+            ]
+        )
+        expected_output_vision = torch.tensor(
+            [
+                [-0.0059, -0.0323, -0.0267, 0.0090, 0.0060],
+                [-0.0097, -0.0341, -0.0280, 0.0094, 0.0012],
+                [-0.0090, -0.0299, -0.0225, 0.0066, 0.0039],
+            ]
+        )
+        expected_output_audio = torch.tensor(
+            [
+                [-0.0787, 0.5590, -0.3436, 0.8121, 0.0827],
+                [-0.0593, 0.4983, -0.3214, 0.7622, 0.1231],
+                [-0.1378, 0.5677, -0.3606, 0.8254, 0.0609],
+            ]
+        )
+
+    output_text_embeds = model.get_text_features(input_ids)
+    output_vision_embeds = model.get_image_features(pixel_values)
+    output_audio_embeds = model.get_audio_features(input_features)
+    outputs_text_vision = model(input_features=input_ids, pixel_values=pixel_values, modality="text")
+    outputs_audio_vision = model(input_features=input_features, pixel_values=pixel_values, modality="audio")
 
     if verify_logits:
-        expected_output = ...
-        print(expected_output)
+        assert torch.allclose(model.audio_postprocessor(output_audio_embeds)[:, :5], expected_output_audio, atol=1e-4)
+        assert torch.allclose(model.text_postprocessor(output_text_embeds)[:, :5], expected_output_text, atol=1e-4)
+        assert torch.allclose(
+            model.vision_postprocessor(output_vision_embeds)[:, :5], expected_output_vision, atol=1e-4
+        )
+
+        assert torch.allclose(outputs_text_vision.image_embeds, outputs_audio_vision.image_embeds, atol=1e-4)
+        assert torch.allclose(outputs_text_vision.text_embeds, output_text_embeds, atol=1e-4)
+        assert torch.allclose(outputs_audio_vision.audio_embeds, output_audio_embeds, atol=1e-4)
+        assert torch.allclose(outputs_text_vision.logits_per_image, outputs_audio_vision.logits_per_image, atol=1e-4)
+
         print("Looks good!")
     else:
         print("Converted without verifying logits")
@@ -226,23 +274,28 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
+        "--model-name",
         default="imagebind-huge",
         type=str,
         choices=["imagebind-huge"],
         help="Name of the ImageBind model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch-dump-folder-path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--verify_logits",
+        "--verify-logits",
         action="store_true",
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--verify-inputs",
+        action="store_true",
+        help="Whether or not to verify the inputs against the original implementation.",
+    )
+    parser.add_argument(
+        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
     args = parser.parse_args()
-    convert_seggpt_checkpoint(args)
+    convert_imagebind_checkpoint(args)
