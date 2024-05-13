@@ -92,7 +92,7 @@ itsdangerous==2.1.1
 jax==0.3.4
 jaxlib==0.3.2
 jedi==0.18.1
-Jinja2==3.1.3
+Jinja2==3.1.4
 jinja2-time==0.2.0
 jmespath==0.10.0
 joblib==1.2.0
@@ -220,7 +220,7 @@ toolz==0.11.2
 torch==1.13.1
 torchaudio==0.11.0
 torchvision==0.12.0
-tqdm==4.63.0
+tqdm==4.66.3
 traitlets==5.1.1
 -e git+git@github.com:edbeeching/transformers.git@77b90113ca0a0e4058b046796c874bdc98f1da61#egg=transformers
 typing-extensions==4.1.1
@@ -233,7 +233,7 @@ urllib3==1.26.18
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1
-Werkzeug==3.0.1
+Werkzeug==3.0.3
 wrapt==1.14.0
 xxhash==3.0.0
 yarl==1.7.2

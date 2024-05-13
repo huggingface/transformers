@@ -21,6 +21,7 @@ import os.path
 import random
 import re
 import tempfile
+import unittest
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -436,6 +437,91 @@ class ModelTesterMixin:
                     else:
                         max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @unittest.skip("Need to fix since we have a device mismatch")
+    def test_save_load_low_cpu_mem_usage(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with tempfile.TemporaryDirectory() as saved_model_path:
+            for model_class in self.all_model_classes:
+                model_to_save = model_class(config)
+                model_to_save.save_pretrained(saved_model_path)
+
+                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+
+    @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @unittest.skip("Need to fix since we have a device mismatch")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with tempfile.TemporaryDirectory() as saved_model_path:
+            for model_class in self.all_model_classes:
+                model_to_save = model_class(config)
+                model_to_save.config.save_pretrained(saved_model_path)
+                torch.save(model_to_save.state_dict(), os.path.join(saved_model_path, "pytorch_model.bin"))
+
+                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+
+    @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @unittest.skip("Need to fix since we have a device mismatch")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        with tempfile.TemporaryDirectory() as saved_model_path:
+            for model_class in self.all_model_classes:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                model_to_save = model_class(config)
+
+                model_to_save.save_pretrained(saved_model_path, safe_serialization=False)
+                self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
+
+    def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
+        # Load the low usage and the normal models.
+        model_low_usage, loading_info = model_class.from_pretrained(
+            saved_model_path,
+            low_cpu_mem_usage=True,
+            output_loading_info=True,
+        )
+        model_non_low_usage = model_class.from_pretrained(saved_model_path)
+
+        # Check that there were no missing keys.
+        self.assertEqual(loading_info["missing_keys"], [])
+
+        # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
+        # subsequently loaded with the correct values and onto the correct device. We check if there are any
+        # remaining params that were not properly loaded.
+        for name, param in model_low_usage.named_parameters():
+            self.assertNotEqual(
+                param.device,
+                torch.device("meta"),
+                "Parameter '" + name + "' has not been properly loaded and has device=meta.",
+            )
+
+        # Tests moving the model to a device other than meta.
+        model_low_usage.to(torch_device)
+
+        # Check that the parameters are equal.
+        for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
+            self.assertEquals(p1.data.ne(p2.data).sum(), 0)
+
+        # Check that the state dict keys are equal.
+        self.assertEqual(set(model_low_usage.state_dict().keys()), set(model_non_low_usage.state_dict().keys()))
+
+        # Check that the shared tensors are equal.
+        tensor_ptrs1 = collections.defaultdict(list)
+        for name, tensor in model_low_usage.state_dict().items():
+            tensor_ptrs1[id_tensor_storage(tensor)].append(name)
+        tied_params1 = [names for _, names in tensor_ptrs1.items() if len(names) > 1]
+
+        tensor_ptrs2 = collections.defaultdict(list)
+        for name, tensor in model_non_low_usage.state_dict().items():
+            tensor_ptrs2[id_tensor_storage(tensor)].append(name)
+        tied_params2 = [names for _, names in tensor_ptrs2.items() if len(names) > 1]
+
+        self.assertEqual(tied_params1, tied_params2)
 
     def test_fast_init_context_manager(self):
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
@@ -4194,6 +4280,80 @@ class ModelTesterMixin:
                         break
 
                 self.assertFalse(fa2_correctly_converted)
+
+    def _get_custom_4d_mask_test_data(self):
+        # Sequence in which all but the last token is the same
+        input_ids = torch.tensor(
+            [[10, 11, 12, 13], [10, 11, 12, 14], [10, 11, 12, 15]], device=torch_device, dtype=torch.int64
+        )
+        position_ids = torch.tensor([[0, 1, 2, 3]] * 3, device=torch_device, dtype=torch.int64)
+
+        # Combining common prefix with the unique ending tokens:
+        input_ids_shared_prefix = torch.cat([input_ids[0][:-1], input_ids[:, -1]]).unsqueeze(0)
+
+        # Creating a 4D mask where each of the last 3 tokens do not attend to each other.
+        mask_shared_prefix = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0],
+                        [1, 1, 1, 0, 1, 0],
+                        [1, 1, 1, 0, 0, 1],
+                    ]
+                ]
+            ],
+        )
+        # inverting the attention mask
+        mask_dtype = torch.float32
+        min_dtype = torch.finfo(mask_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=mask_dtype, device=torch_device) * min_dtype
+
+        # Creating a position_ids tensor. note the repeating figures in the end.
+        position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
+
+        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+
+    def test_custom_4d_attention_mask(self):
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_cache_class:
+                self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                position_ids,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                position_ids_shared_prefix,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(input_ids, position_ids=position_ids).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids_shared_prefix,
+                attention_mask=mask_shared_prefix,
+                position_ids=position_ids_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing greedily-chosen tokens:
+            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
 
 global_rng = random.Random()

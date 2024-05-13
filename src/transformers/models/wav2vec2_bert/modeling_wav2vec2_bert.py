@@ -64,9 +64,6 @@ _CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we 
 _CTC_EXPECTED_LOSS = 17.04
 
 
-from ..deprecated._archive_maps import WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """

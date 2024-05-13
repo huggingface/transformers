@@ -54,9 +54,6 @@ _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
 _CONFIG_FOR_DOC = "LayoutLMv2Config"
 
 
-from ..deprecated._archive_maps import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class LayoutLMv2Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 

@@ -26,9 +26,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class GPT2Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to

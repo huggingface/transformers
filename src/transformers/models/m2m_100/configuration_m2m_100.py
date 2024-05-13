@@ -26,9 +26,6 @@ from ...utils import TensorType, is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class M2M100Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`M2M100Model`]. It is used to instantiate an

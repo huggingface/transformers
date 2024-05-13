@@ -26,9 +26,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class Data2VecVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate

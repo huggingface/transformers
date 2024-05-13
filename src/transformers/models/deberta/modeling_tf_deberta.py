@@ -54,9 +54,6 @@ _CONFIG_FOR_DOC = "DebertaConfig"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-base"
 
 
-from ..deprecated._archive_maps import TF_DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFDebertaContextPooler(keras.layers.Layer):
     def __init__(self, config: DebertaConfig, **kwargs):
         super().__init__(**kwargs)
