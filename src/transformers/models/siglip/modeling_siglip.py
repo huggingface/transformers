@@ -916,6 +916,8 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 class SiglipVisionModel(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
+    _no_split_modules = ["SiglipVisionTransformer"]
+
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
