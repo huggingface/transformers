@@ -604,7 +604,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_lm_generate_falcon_10b(self):
+    def test_lm_generate_falcon_11b(self):
         tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
         model = FalconForCausalLM.from_pretrained(
             "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
