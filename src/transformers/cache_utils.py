@@ -196,7 +196,7 @@ class EfficientDynamicCache(Cache):
     `[batch_size, num_heads, seq_len, head_dim]`.
     """
 
-    def __init__(self, restack_limit: int | None = None) -> None:
+    def __init__(self, restack_limit: Optional[int] = None) -> None:
         self.key_cache: List[List[torch.Tensor]] = []
         self.value_cache: List[List[torch.Tensor]] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
@@ -382,8 +382,8 @@ class EfficientDynamicCache(Cache):
     @classmethod
     def from_legacy_cache(
         cls,
-        past_key_values: Tuple[Tuple[torch.Tensor]] | Tuple[Tuple[List[torch.Tensor]]] | None = None,
-        restack_limit: int | None = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]], Tuple[Tuple[List[torch.Tensor]]]] = None,
+        restack_limit: Optional[int] = None,
     ) -> "EfficientDynamicCache":
         """Converts a cache in the legacy cache format Tuple[Tuple[torch.Tensor]] or Tuple[Tuple[List[torch.Tensor]]] into an equivalent `EfficientDynamicCache`."""
         cache = cls(restack_limit=restack_limit)

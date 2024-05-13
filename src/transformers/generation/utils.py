@@ -3671,6 +3671,12 @@ class GenerationMixin:
     def _initialize_cache(self, generation_config, model_kwargs, batch_size):
         """This function handles the initialization of the cache based on `generation_config.cache_implementation"""
 
+        # Non default cache implementations (SinkCache does not seem to be released yet)
+        allowed_implementations = ("static", "efficient")
+
+        if generation_config.cache_implementation is not None and generation_config.cache_implementation not in allowed_implementations:
+            raise ValueError(f'If provided, `cache_implementation` must be one of: {*allowed_implementations,}')
+
         # Raise warning about efficient dynamic cache implementation
         if generation_config.cache_implementation is None:
             logger.warning(
