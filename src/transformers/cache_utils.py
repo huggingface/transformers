@@ -454,8 +454,9 @@ class SlidingWindowCache(Cache):
     """
     Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
     Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.config.sliding_window_size - 1`,
-    if true we need to do a cycle shift on the current cache to replace the old states by the new key value states passed in.
-    
+    if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
+    we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
+
     The `to_shift` is only true once we are above sliding_window_size. Thus with `sliding_window_size==64`:
 
     indices = (slicing + to_shift[-1].int()-1) % self.config.sliding_window_size

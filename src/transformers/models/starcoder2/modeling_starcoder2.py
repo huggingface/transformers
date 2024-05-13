@@ -1068,8 +1068,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
-# copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2ForCausalLM with QWEN2->STARCODER2,Qwen2->Starcoder2
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1102,6 +1101,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
