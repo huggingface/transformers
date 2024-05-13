@@ -562,9 +562,9 @@ class PipelineUtilsTest(unittest.TestCase):
             "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
         ).to(model_device)
         target_device = f"{torch_device}:0"
-        assert model_device != target_device
+        self.assertNotEqual(model_device, target_device)
         pipe = pipeline("text-generation", model=model, device=target_device, tokenizer=tokenizer)
-        assert pipe.model.device == torch.device(target_device)
+        self.assertEqual(pipe.model.device, torch.device(target_device))
 
     @slow
     @require_torch
