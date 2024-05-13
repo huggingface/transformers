@@ -8,17 +8,8 @@ on:
   push:
     branches:
       - run_amd_scheduled_ci_caller*
-      - mi300-ci
 
 jobs:
-  build-docker-containers:
-    # TODO: remove this
-    if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && (startsWith(github.ref_name, 'run_amd_push_ci_caller') || startsWith(github.ref_name, 'mi300-ci'))))
-    uses: ./.github/workflows/build-docker-images.yml
-    with:
-      image_postfix: ""
-    secrets: inherit
-
   run_amd_ci:
     name: AMD mi300
     needs: build-docker-containers
