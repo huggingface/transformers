@@ -184,8 +184,8 @@ else:
             (
                 "imagebind",
                 (
-                    "ImageBindTokenizer",
-                    "ImageBindTokenizerFast" if is_tokenizers_available() else None,
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
