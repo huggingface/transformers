@@ -1739,7 +1739,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self._greedy_search(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
@@ -2832,7 +2832,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 )
 
             # 11. run greedy search
-            outputs = self._greedy_search(
+            outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
