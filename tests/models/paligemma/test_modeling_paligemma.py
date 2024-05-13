@@ -14,13 +14,11 @@
 # limitations under the License.
 """ Testing suite for the PyTorch PaliGemma model. """
 
-from parameterized import parameterized
-
-
 import gc
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
@@ -29,7 +27,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device, require_torch_sdpa
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -59,7 +64,7 @@ class PaliGemmaVisionText2TextModelTester:
             "model_type": "gemma",
             "seq_length": 128,
             "is_training": True,
-            #"use_input_mask": True,
+            # "use_input_mask": True,
             "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
@@ -118,8 +123,8 @@ class PaliGemmaVisionText2TextModelTester:
         self.is_training = is_training
 
         self.batch_size = 3
-        self.num_channels = vision_config['num_channels']
-        self.image_size = vision_config['image_size']
+        self.num_channels = vision_config["num_channels"]
+        self.image_size = vision_config["image_size"]
         self.encoder_seq_length = seq_length
         self.use_cache = use_cache
 
@@ -154,7 +159,7 @@ class PaliGemmaVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
         # setting the 4 first tokens to be image
-        input_ids[:, :4] = config.image_token_index 
+        input_ids[:, :4] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -217,12 +222,16 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest("Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16.")
+        self.skipTest(
+            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
+        )
 
-    @unittest.skip(reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(
+        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
+    )
     def test_initialization(self):
         pass
-    
+
     # TODO extend valid outputs to include this test @Molbap
     @unittest.skip("PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):
@@ -233,11 +242,10 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     def test_determinism(self):
         pass
 
-
     @unittest.skip(reason="PaliGemma does not use feedforward chunking.")
     def test_feed_forward_chunking(self):
         pass
-        
+
     @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
@@ -245,10 +253,11 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
     @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
-    
+
     @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
+
 
 @slow
 @require_torch
