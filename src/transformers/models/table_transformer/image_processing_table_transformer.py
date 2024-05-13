@@ -245,7 +245,6 @@ def make_pixel_mask(
 
 
 # Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
-# inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
 def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
     """
     Convert a COCO polygon annotation to a mask.
@@ -281,7 +280,6 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
 
 
 # Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
-# inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -289,7 +287,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by TableTransformer.
+    Convert the target in COCO format into the format expected by DETR.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
@@ -386,7 +384,7 @@ def prepare_coco_panoptic_annotation(
     input_data_format: Union[ChannelDimension, str] = None,
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for TableTransformer.
+    Prepare a coco panoptic annotation for DETR.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -475,7 +473,7 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [`TableTransformerForSegmentation`] into panoptic segmentation predictions for a single sample.
+    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
 
     Args:
         out_logits (`torch.Tensor`):
@@ -603,7 +601,6 @@ def resize_annotation(
 
 
 # Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
-# TODO - (Amy) make compatible with other frameworks
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -627,7 +624,6 @@ def binary_mask_to_rle(mask):
 
 
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
-# TODO - (Amy) make compatible with other frameworks
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -763,7 +759,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
     Constructs a TableTransformer image processor.
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`):
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's `(height, width)` dimensions to the specified `size`. Can be
@@ -779,7 +775,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to True):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
@@ -1434,7 +1430,7 @@ class TableTransformerImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        # prepare (COCO annotations as a list of Dict -> T target as a single Dict per image)
+        # prepare (COCO annotations as a list of Dict -> TableTransromer target as a single Dict per image)
         if annotations is not None:
             prepared_images = []
             prepared_annotations = []

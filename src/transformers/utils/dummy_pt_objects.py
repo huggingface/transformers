@@ -7993,6 +7993,13 @@ class TableTransformerForObjectDetection(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TableTransformerImageProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TableTransformerModel(metaclass=DummyObject):
     _backends = ["torch"]
 
