@@ -69,7 +69,7 @@ AWQ_SCALES_MAPPINGS = {
 }
 
 
-def replace_scales(model, model_type):
+def replace_quantization_scales(model, model_type):
     from awq.modules.act import ScaledActivation
 
     if model_type not in AWQ_SCALES_MAPPINGS:
@@ -82,7 +82,7 @@ def replace_scales(model, model_type):
             size = layer_before_act.out_features
             scale_like = torch.ones(size)
             model._modules[name] = ScaledActivation(module, scale_like)
-        _ = replace_scales(module, model_type)
+        _ = replace_quantization_scales(module, model_type)
     return model
 
 
