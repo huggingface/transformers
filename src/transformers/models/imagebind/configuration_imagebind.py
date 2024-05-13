@@ -377,7 +377,7 @@ class ImageBindAudioConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        add_kv_bias (`bool`, *optional*, defaults to `False`):
+        add_kv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
             `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
