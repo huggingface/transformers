@@ -555,7 +555,7 @@ class HQQQuantizedCache(QuantizedCache):
 class EfficientDynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the same as DynamicCache but uses smarter
-    implementation and data structures to avoid copies during generate(). This allows to save a LOT of memory 
+    implementation and data structures to avoid copies during generate(). This allows to save a LOT of memory
     during generation (see https://github.com/huggingface/transformers/pull/30536 for benchmarks).
 
     It stores the Key and Value states as a list of list of tensors, one for each layer. The expected shape for each tensor is
@@ -567,7 +567,7 @@ class EfficientDynamicCache(Cache):
         self.value_cache: List[List[torch.Tensor]] = []
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         # We will restack the tensors in the list when we reach this number to create a tensor of this size instead
-        self.restack_limit = restack_limit if restack_limit is not None else 50 
+        self.restack_limit = restack_limit if restack_limit is not None else 50
 
     def __getitem__(self, layer_idx: int) -> Tuple[List[torch.Tensor]]:
         """
@@ -676,8 +676,8 @@ class EfficientDynamicCache(Cache):
 
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-         negative to remove `maximum_length` tokens."""
-        
+        negative to remove `maximum_length` tokens."""
+
         # In case it is negative
         if maximum_length < 0:
             maximum_length = self.get_seq_length() - abs(maximum_length)
@@ -702,7 +702,9 @@ class EfficientDynamicCache(Cache):
 
         for idx in range(len(self.key_cache)):
             self.key_cache[idx] = self.key_cache[idx][:last] + [self.key_cache[idx][last][..., :last_tensor_size, :]]
-            self.value_cache[idx] = self.value_cache[idx][:last] + [self.value_cache[idx][last][..., :last_tensor_size, :]]
+            self.value_cache[idx] = self.value_cache[idx][:last] + [
+                self.value_cache[idx][last][..., :last_tensor_size, :]
+            ]
 
     def split(self, full_batch_size: int, split_size: int) -> List["EfficientDynamicCache"]:
         """Split the current instance into a list of `EfficientDynamicCache` by the batch size. This will be used by
@@ -713,11 +715,13 @@ class EfficientDynamicCache(Cache):
                 (
                     [tensor[i : i + split_size] for tensor in self.key_cache[idx]],
                     [tensor[i : i + split_size] for tensor in self.value_cache[idx]],
-                ) for idx in range(len(self)))
-            
+                )
+                for idx in range(len(self))
+            )
+
             out.append(EfficientDynamicCache.from_legacy_cache(current_split, self.restack_limit))
         return out
-    
+
     @classmethod
     def from_splits(cls, splits: List["EfficientDynamicCache"]) -> "EfficientDynamicCache":
         """This is the opposite of the above `split()` method. This will be used by `stack_model_outputs` in
@@ -725,8 +729,14 @@ class EfficientDynamicCache(Cache):
         cache = cls(restack_limit=splits[0].restack_limit)
         cache._seen_tokens = splits[0]._seen_tokens
         for layer_idx in range(len(splits[0])):
-            layer_keys = [torch.cat([current.key_cache[layer_idx][tensor_idx] for current in splits], dim=0) for tensor_idx in range(len(splits[0].key_cache[layer_idx]))]
-            layer_values = [torch.cat([current.value_cache[layer_idx][tensor_idx] for current in splits], dim=0) for tensor_idx in range(len(splits[0].value_cache[layer_idx]))]
+            layer_keys = [
+                torch.cat([current.key_cache[layer_idx][tensor_idx] for current in splits], dim=0)
+                for tensor_idx in range(len(splits[0].key_cache[layer_idx]))
+            ]
+            layer_values = [
+                torch.cat([current.value_cache[layer_idx][tensor_idx] for current in splits], dim=0)
+                for tensor_idx in range(len(splits[0].value_cache[layer_idx]))
+            ]
             cache.key_cache.append(layer_keys)
             cache.value_cache.append(layer_values)
         return cache
@@ -736,7 +746,11 @@ class EfficientDynamicCache(Cache):
         return tuple((self.key_cache[layer_idx], self.value_cache[layer_idx]) for layer_idx in range(len(self)))
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Tuple[Tuple[torch.Tensor]] | Tuple[Tuple[List[torch.Tensor]]] | None = None, restack_limit: int | None = None) -> "EfficientDynamicCache":
+    def from_legacy_cache(
+        cls,
+        past_key_values: Tuple[Tuple[torch.Tensor]] | Tuple[Tuple[List[torch.Tensor]]] | None = None,
+        restack_limit: int | None = None,
+    ) -> "EfficientDynamicCache":
         """Converts a cache in the legacy cache format Tuple[Tuple[torch.Tensor]] or Tuple[Tuple[List[torch.Tensor]]] into an equivalent `EfficientDynamicCache`."""
         cache = cls(restack_limit=restack_limit)
         if past_key_values is not None:

@@ -2067,7 +2067,10 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            if model_kwargs.get("past_key_values") is None or (isinstance(model_kwargs["past_key_values"], Cache) and model_kwargs["past_key_values"].get_seq_length() == 0):
+            if model_kwargs.get("past_key_values") is None or (
+                isinstance(model_kwargs["past_key_values"], Cache)
+                and model_kwargs["past_key_values"].get_seq_length() == 0
+            ):
                 # prepare inputs
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -3745,17 +3748,20 @@ class GenerationMixin:
                 )
         else:
             return input_ids
-        
 
     def _initialize_cache(self, generation_config, model_kwargs, batch_size):
         """This function handles the initialization of the cache based on `generation_config.cache_implementation"""
 
         # Raise warning about efficient dynamic cache implementation
         if generation_config.cache_implementation is None:
-            logger.warning(('You are using the old version of `DynamicCache`. You should pass `cache_implementation="efficient"` '
-                            'in `model.generate(...)`. This will GREATLY reduce the memory usage of `generate()` as you generate more '
-                            'tokens. Results will be completely identical. For more details about expected memory gains, check '
-                            'https://github.com/huggingface/transformers/pull/30536'))
+            logger.warning(
+                (
+                    'You are using the old version of `DynamicCache`. You should pass `cache_implementation="efficient"` '
+                    "in `model.generate(...)`. This will GREATLY reduce the memory usage of `generate()` as you generate more "
+                    "tokens. Results will be completely identical. For more details about expected memory gains, check "
+                    "https://github.com/huggingface/transformers/pull/30536"
+                )
+            )
 
         # StaticCache
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
@@ -3772,17 +3778,23 @@ class GenerationMixin:
                     )
                 self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
-        # EfficientDynamicCache 
+        # EfficientDynamicCache
         if generation_config.cache_implementation == "efficient":
-            if model_kwargs.get("past_key_values", False) != False:
+            if model_kwargs.get("past_key_values", False) is not False:
                 if isinstance(model_kwargs["past_key_values"], EfficientDynamicCache):
                     pass
                 elif isinstance(model_kwargs["past_key_values"], DynamicCache):
-                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(model_kwargs["past_key_values"].to_legacy_cache(), generation_config.restack_limit)
+                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(
+                        model_kwargs["past_key_values"].to_legacy_cache(), generation_config.restack_limit
+                    )
                 elif isinstance(model_kwargs["past_key_values"], tuple):
-                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(model_kwargs["past_key_values"], generation_config.restack_limit)
+                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(
+                        model_kwargs["past_key_values"], generation_config.restack_limit
+                    )
                 else:
-                    raise ValueError('`cache_implementation="efficient"` does not support the format of past key-values you provided.')
+                    raise ValueError(
+                        '`cache_implementation="efficient"` does not support the format of past key-values you provided.'
+                    )
             else:
                 model_kwargs["past_key_values"] = EfficientDynamicCache(generation_config.restack_limit)
 
