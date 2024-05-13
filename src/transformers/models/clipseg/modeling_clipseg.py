@@ -818,7 +818,6 @@ class CLIPSegVisionTransformer(nn.Module):
 
     @add_start_docstrings_to_model_forward(CLIPSEG_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPSegVisionConfig)
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
