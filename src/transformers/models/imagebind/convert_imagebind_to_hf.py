@@ -27,72 +27,32 @@ logger = logging.get_logger(__name__)
 
 def rename_encoder_layers(config, modality):
     rename_keys = []
+    # fmt: off
     for layer_idx in range(config.num_hidden_layers):
         rename_keys.extend(
             [
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.bias",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.bias",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.bias",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.bias",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.bias",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.weight",
-                    f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.weight",
-                ),
-                (
-                    f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.bias",
-                    f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.bias",
-                ),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_weight",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.in_proj_bias",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.qkv_proj.bias"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.weight",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.out_proj.bias",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.out_proj.bias"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.weight",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_1.bias",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_before.bias"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.weight",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc1.bias",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc1.bias"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.weight",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.mlp.fc2.bias",f"{modality}_model.encoder.layers.{layer_idx}.mlp.fc2.bias"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.weight",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.weight"),
+                (f"modality_trunks.{modality}.blocks.{layer_idx}.norm_2.bias",f"{modality}_model.encoder.layers.{layer_idx}.layernorm_after.bias"),
             ]
         )
         if config.add_kv_bias:
             rename_keys.extend(
                 [
-                    (
-                        f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_k",
-                        f"{modality}_model.encoder.layers.{layer_idx}.self_attn.k_bias",
-                    ),
-                    (
-                        f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_v",
-                        f"{modality}_model.encoder.layers.{layer_idx}.self_attn.v_bias",
-                    ),
+                    (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_k",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.k_bias",),
+                    (f"modality_trunks.{modality}.blocks.{layer_idx}.attn.bias_v",f"{modality}_model.encoder.layers.{layer_idx}.self_attn.v_bias",),
                 ]
             )
+    # fmt: on
 
     return rename_keys
 
