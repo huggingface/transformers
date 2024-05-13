@@ -287,7 +287,7 @@ class GenerationConfig(PushToHubMixin):
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
-        cache_config (`Union[QuantizedCacheConfig, dict]`, *optional*, default to `None`):
+        cache_config (`Union[CacheConfig, dict]`, *optional*, default to `None`):
             Arguments used for quantized cache that stores keys and values in lower precision for memory efficiency.
             If passed as `Dict`, it will be converted to a `QuantizedCacheConfig` internally.
             Accepts the following keys:
