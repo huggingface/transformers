@@ -200,7 +200,7 @@ class JetMoeTopKGating(nn.Module):
 
     def forward(self, hidden_states):
         # compute the top_k routing decision
-        logits = self.layer(hidden_states).float()  # [num_tokens, num_experts]
+        logits = self.layer(hidden_states).float()  # [batch_size x seq_len, num_experts]
         top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)  # [num_tokens, top_k]
         top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)  # [num_tokens, top_k]
 
