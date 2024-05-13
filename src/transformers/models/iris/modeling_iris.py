@@ -73,7 +73,7 @@ class IrisOutput(ModelOutput):
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        losses (`Dict[torch.FloatTensor]` of shape `(1,)`):
+        losses (`tuple[torch.FloatTensor]` of shape `(1,)`):
             Agent's components' total loss (tokenizer, world model and actor critic).
         reconstructed_img (`torch.FloatTensor` of shape `(batch_size, time_steps, num_channels, height, width)`):
             Reconstructed image from input frame 
@@ -93,7 +93,7 @@ class IrisOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    losses: torch.FloatTensor = None
+    losses: Tuple[torch.FloatTensor] = None
     reconstructed_img: torch.FloatTensor = None
     action_preds: torch.FloatTensor = None
     reward_preds: torch.FloatTensor = None
@@ -222,7 +222,7 @@ class Head(Slicer):
         hidden_states = hidden_states + (x_sliced_hidden,) if output_hidden_states else None
         hidden_states = hidden_states+ (self.head_module[2](x_sliced_hidden),) if output_hidden_states else None
 
-        return self.head_module(x_sliced), hidden_states
+        return self.head_module(x_sliced), torch.stack(hidden_states) if output_hidden_states else hidden_states
 
 
 class Embedder(nn.Module):
@@ -352,7 +352,7 @@ class Encoder(nn.Module):
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
-        return h, hidden_states, attentions
+        return h, torch.stack(hidden_states) if output_hidden_states else hidden_states, torch.stack(attentions) if output_attentions else attentions
 
 
 
@@ -461,7 +461,7 @@ class Decoder(nn.Module):
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
-        return h, hidden_states, attentions
+        return h, torch.stack(hidden_states) if output_hidden_states else hidden_states, torch.stack(attentions) if output_attentions else attentions
 
 def nonlinearity(x: torch.Tensor) -> torch.Tensor:
     # swish
@@ -1007,7 +1007,7 @@ class Transformer(nn.Module):
 
         x = self.ln_f(x)
         hidden_states = hidden_states + (x,) if output_hidden_states else None
-        return x, hidden_states, attentions
+        return x, torch.stack(hidden_states) if output_hidden_states else hidden_states, torch.stack(attentions) if output_attentions else attentions
 
 
 class Block(nn.Module):
@@ -1374,7 +1374,7 @@ class ActorCritic(nn.Module):
         logits_actions = self.actor_linear(self.hx).unsqueeze(1).contiguous()
         means_values = self.critic_linear(self.hx).unsqueeze(1).contiguous()
 
-        return ActorCriticOutput(logits_actions, means_values), hidden_states,None
+        return ActorCriticOutput(logits_actions, means_values), torch.stack(hidden_states) if output_hidden_states else hidden_states,None
 
     def compute_loss(self, batch: Batch, tokenizer: Tokenizer, world_model: WorldModel, imagine_horizon: int, gamma: float, lambda_: float, entropy_weight: float, **kwargs: Any) -> LossWithIntermediateLosses:
         assert not self.use_original_obs
@@ -1522,7 +1522,7 @@ class IrisModel(IrisPreTrainedModel):
         should_postprocess: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.FloatTensor], IrisOutput]:
         r"""
         Returns:
@@ -1579,7 +1579,7 @@ class IrisModel(IrisPreTrainedModel):
         losses_tokenizer = self.component_losses(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
         losses_world_model = self.component_losses(self.agent.world_model, batch_world_model, **cfg_world_model)
         losses_actor_critic = self.component_losses(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
-        losses = dict(tokenizer_losses = losses_tokenizer, world_model_losses = losses_world_model, actor_critic_losses = losses_actor_critic)
+        losses = torch.stack((losses_tokenizer, losses_world_model, losses_actor_critic))
 
         tokenizer_outputs,all_hidden_states_tokenizer, all_attentions_tokenizer = self.forward_component(self.agent.tokenizer, output_hidden_states, 
                                                                                                          output_attentions, observations[0], 
@@ -1596,8 +1596,8 @@ class IrisModel(IrisPreTrainedModel):
         self.agent.actor_critic.reset(n=observations[2].size(0))
         actor_critic_outputs, all_hidden_states_actor_critic, all_attentions_actor_critic = self.forward_component(self.agent.actor_critic, output_hidden_states, output_attentions, obs)
 
-        all_hidden_states = (all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic) if output_hidden_states else None
-        all_self_attentions = (all_attentions_tokenizer, all_attentions_world_model, all_attentions_actor_critic) if output_attentions else None
+        all_hidden_states = torch.stack((all_hidden_states_tokenizer, all_hidden_states_world_model, all_hidden_states_actor_critic)) if output_hidden_states else None
+        all_self_attentions = torch.stack((all_attentions_tokenizer, all_attentions_world_model, all_attentions_actor_critic)) if output_attentions else None
        
         if not return_dict:
             return tuple(v for v in [losses, tokenizer_outputs[2], actor_critic_outputs.logits_actions, world_model_outputs.logits_rewards, 

@@ -37,9 +37,10 @@ class IrisModelTester:
     def __init__(
         self,
         parent,
-        batch_size_tokenizer=32,
-        batch_size_world_model=8,
-        batch_size_actor_critic=8,
+        batch_size = 16,
+        batch_size_tokenizer=16,
+        batch_size_world_model=4,
+        batch_size_actor_critic=4,
         seq_length_tokenizer=1,
         seq_length_world_model=20,
         seq_length_actor_critic=21,
@@ -47,6 +48,7 @@ class IrisModelTester:
         is_training=True,
     ):
         self.parent = parent
+        self.batch_size = batch_size
         self.batch_size_tokenizer = batch_size_tokenizer
         self.batch_size_world_model = batch_size_world_model
         self.batch_size_actor_critic = batch_size_actor_critic
@@ -59,41 +61,49 @@ class IrisModelTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
+        self.hidden_size = config.embed_dim_world_model
+        
         observations_tokenizer = floats_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer,config.in_channels,config.resolution,config.resolution))
-        actions_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =4)
+        actions_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =4).long()
         rewards_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =8)
         zeros = torch.zeros_like(rewards_tokenizer)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_tokenizer==7)|( rewards_tokenizer==4)|(rewards_tokenizer==1))]=1
         rewards_tokenizer = torch.mul(zeros,rewards_tokenizer).float()
-        ends_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =2)
-        mask_padding_tokenizer = ids_tensor((self.batch_size_tokenizer,self.seq_length_tokenizer),vocab_size =2).bool()
+        ends_tokenizer = torch.zeros(self.batch_size_tokenizer,self.seq_length_tokenizer).long()
+        for i in range(self.batch_size_tokenizer):
+            ends_tokenizer[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_tokenizer = torch.ones(self.batch_size_tokenizer,self.seq_length_tokenizer).bool()
 
         observations_world_model = floats_tensor((self.batch_size_world_model,self.seq_length_world_model,config.in_channels,config.resolution,config.resolution))
-        actions_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =4)
+        actions_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =4).long()
         rewards_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =8)
         zeros = torch.zeros_like(rewards_world_model)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_world_model==7)|( rewards_world_model==4)|(rewards_world_model==1))]=1
         rewards_world_model = torch.mul(zeros,rewards_world_model).float()
-        ends_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =2)
-        mask_padding_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =2).bool()
+        ends_world_model = torch.zeros(self.batch_size_world_model,self.seq_length_world_model).long()
+        for i in range(self.batch_size_world_model):
+            ends_world_model[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_world_model = torch.ones(self.batch_size_world_model,self.seq_length_world_model).bool()
 
         observations_actor_critic = floats_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic,config.in_channels,config.resolution,config.resolution))
-        actions__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =4)
-        rewards__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =8)
-        zeros = torch.zeros_like(rewards__actor_critic)
+        actions_actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =4).long()
+        rewards_actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =8)
+        zeros = torch.zeros_like(rewards_actor_critic)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
-        zeros[((rewards__actor_critic==7)|( rewards__actor_critic==4)|(rewards__actor_critic==1))]=1
-        rewards__actor_critic = torch.mul(zeros,rewards__actor_critic).float()
-        ends__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =2)
-        mask_padding__actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =2).bool()
+        zeros[((rewards_actor_critic==7)|( rewards_actor_critic==4)|(rewards_actor_critic==1))]=1
+        rewards_actor_critic = torch.mul(zeros,rewards_actor_critic).float()
+        ends_actor_critic = torch.zeros(self.batch_size_actor_critic,self.seq_length_actor_critic).long()
+        for i in range(self.batch_size_actor_critic):
+            ends_actor_critic[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_actor_critic = torch.ones(self.batch_size_actor_critic,self.seq_length_actor_critic).bool()
         
         observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
-        actions = [actions_tokenizer,actions_world_model,actions__actor_critic]
-        rewards = [rewards_tokenizer,rewards_world_model,rewards__actor_critic]
-        ends = [ends_tokenizer,ends_world_model,ends__actor_critic]
-        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding__actor_critic]
+        actions = [actions_tokenizer,actions_world_model,actions_actor_critic]
+        rewards = [rewards_tokenizer,rewards_world_model,rewards_actor_critic]
+        ends = [ends_tokenizer,ends_world_model,ends_actor_critic]
+        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding_actor_critic]
 
         return (
             config,
@@ -159,6 +169,7 @@ class IrisModelTester:
 class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IrisModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = {"feature-extraction": IrisModel} if is_torch_available() else {}
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
 
@@ -233,40 +244,46 @@ class IrisModelIntegrationTest(unittest.TestCase):
                                         [[-3.1353, -5.3218, -2.6076, 10.3681]]], device=torch_device)
 
         observations_tokenizer = floats_tensor((16,1,config.in_channels,config.resolution,config.resolution))
-        actions_tokenizer = ids_tensor((16,1),vocab_size =4)
+        actions_tokenizer = ids_tensor((16,1),vocab_size =4).long()
         rewards_tokenizer = ids_tensor((16,1),vocab_size =8)
         zeros = torch.zeros_like(rewards_tokenizer)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_tokenizer==7)|( rewards_tokenizer==4)|(rewards_tokenizer==1))]=1
         rewards_tokenizer = torch.mul(zeros,rewards_tokenizer).float()
-        ends_tokenizer = ids_tensor((16,1),vocab_size =2)
-        mask_padding_tokenizer = ids_tensor((16,1),vocab_size =2).bool()
+        ends_tokenizer = torch.zeros(16,1).long()
+        for i in range(16):
+            ends_tokenizer[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_tokenizer = torch.ones(16,1).bool()
 
         observations_world_model = floats_tensor((4,20,config.in_channels,config.resolution,config.resolution))
-        actions_world_model = ids_tensor((4,20),vocab_size =4)
+        actions_world_model = ids_tensor((4,20),vocab_size =4).long()
         rewards_world_model = ids_tensor((4,20),vocab_size =8)
         zeros = torch.zeros_like(rewards_world_model)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_world_model==7)|( rewards_world_model==4)|(rewards_world_model==1))]=1
         rewards_world_model = torch.mul(zeros,rewards_world_model).float()
-        ends_world_model = ids_tensor((4,20),vocab_size =2)
-        mask_padding_world_model = ids_tensor((4,20),vocab_size =2).bool()
+        ends_world_model = torch.zeros(4,20).long()
+        for i in range(4):
+            ends_world_model[i,ids_tensor((1,),vocab_size=20).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_world_model = torch.ones(4,20).bool()
 
         observations_actor_critic = floats_tensor((4,21,config.in_channels,config.resolution,config.resolution))
-        actions__actor_critic = ids_tensor((4,21),vocab_size =4)
-        rewards__actor_critic = ids_tensor((4,21),vocab_size =8)
-        zeros = torch.zeros_like(rewards__actor_critic)
+        actions_actor_critic = ids_tensor((4,21),vocab_size =4).long()
+        rewards_actor_critic = ids_tensor((4,21),vocab_size =8)
+        zeros = torch.zeros_like(rewards_actor_critic)
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
-        zeros[((rewards__actor_critic==7)|( rewards__actor_critic==4)|(rewards__actor_critic==1))]=1
-        rewards__actor_critic = torch.mul(zeros,rewards__actor_critic).float()
-        ends__actor_critic = ids_tensor((4,21),vocab_size =2)
-        mask_padding__actor_critic = ids_tensor((4,21),vocab_size =2).bool()
+        zeros[((rewards_actor_critic==7)|( rewards_actor_critic==4)|(rewards_actor_critic==1))]=1
+        rewards_actor_critic = torch.mul(zeros,rewards_actor_critic).float()
+        ends_actor_critic = torch.zeros(4,21).long()
+        for i in range(4):
+            ends_actor_critic[i,ids_tensor((1,),vocab_size=21).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
+        mask_padding_actor_critic = torch.ones(4,21).bool()
         
         observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
-        actions = [actions_tokenizer,actions_world_model,actions__actor_critic]
-        rewards = [rewards_tokenizer,rewards_world_model,rewards__actor_critic]
-        ends = [ends_tokenizer,ends_world_model,ends__actor_critic]
-        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding__actor_critic]
+        actions = [actions_tokenizer,actions_world_model,actions_actor_critic]
+        rewards = [rewards_tokenizer,rewards_world_model,rewards_actor_critic]
+        ends = [ends_tokenizer,ends_world_model,ends_actor_critic]
+        mask_padding = [mask_padding_tokenizer,mask_padding_world_model,mask_padding_actor_critic]
 
         for step in range(NUM_STEPS):
             
@@ -280,7 +297,7 @@ class IrisModelIntegrationTest(unittest.TestCase):
                     mask_padding = mask_padding,
                     should_preprocess = True,
                     should_postprocess = True,
-                    return_dict = False
+                    return_dict = True,
                 )
             
             act_pred_expected_shape = torch.Size((4,1, config.num_actions))
