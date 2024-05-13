@@ -142,9 +142,9 @@ class TFMistralRotaryEmbedding(keras.layers.Layer):
         cos_values = tf.cast(tf.cos(emb), x.dtype)
         sin_values = tf.cast(tf.sin(emb), x.dtype)
 
-        cos_values = tf.gather(cos_values, tf.range(seq_len))
+        cos_values = cos_values[:seq_len]
         cos_values = tf.cast(cos_values, dtype=x.dtype)
-        sin_values = tf.gather(sin_values, tf.range(seq_len))
+        sin_values = sin_values[:seq_len]
         sin_values = tf.cast(sin_values, dtype=x.dtype)
         return (cos_values, sin_values)
 
