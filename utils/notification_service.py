@@ -431,7 +431,7 @@ class Message:
             fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
-            # if the last run produces artifact named `ci_results`
+            # if the last run produces artifact named `ci_results_{job_name}`
             if (
                 f"ci_results_{job_name}" in self.prev_ci_artifacts
                 and "model_failures_report.txt" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
