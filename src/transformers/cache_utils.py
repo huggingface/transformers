@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
@@ -382,7 +382,7 @@ class EfficientDynamicCache(Cache):
     @classmethod
     def from_legacy_cache(
         cls,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]], Tuple[Tuple[List[torch.Tensor]]]] = None,
+        past_key_values: Optional[Union[Tuple[Tuple[torch.Tensor]], Tuple[Tuple[List[torch.Tensor]]]]] = None,
         restack_limit: Optional[int] = None,
     ) -> "EfficientDynamicCache":
         """Converts a cache in the legacy cache format Tuple[Tuple[torch.Tensor]] or Tuple[Tuple[List[torch.Tensor]]] into an equivalent `EfficientDynamicCache`."""
