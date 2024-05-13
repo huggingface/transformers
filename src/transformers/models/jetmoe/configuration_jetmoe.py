@@ -53,9 +53,9 @@ class JetMoeConfig(PretrainedConfig):
         activation_function (`string`, *optional*, defaults to `"silu"`):
             Defines the activation function for MLP experts.
         num_local_experts (`int`, *optional*, defaults to 8):
-            Defines the number of experts in the mixture of experts and mixture of attention heads.
+            Defines the number of experts in the MoE and MoA.
         num_experts_per_tok (`int, *optional*, defaults to 2):
-            The number of experts to root per-token.
+            The number of experts to route per-token and for MoE and MoA.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss.
