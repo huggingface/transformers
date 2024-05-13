@@ -283,3 +283,38 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    @require_tokenizers
+    def test_split_special_tokens(self):
+        tokenizer = PreTrainedTokenizerFast.from_pretrained('bert-base-cased', split_special_tokens=True)
+        text = 'Here is an example of bos token: [CLS]'
+
+        encoded_unsplit_val = {'input_ids': [101, 3446, 1110, 1126, 1859, 1104, 171, 2155, 22559, 131, 101, 102], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+        encoded_split_val = {'input_ids': [101, 3446, 1110, 1126, 1859, 1104, 171, 2155, 22559, 131, 164, 140, 15928, 166, 102], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+
+        tokens_split = tokenizer.tokenize(text)
+        self.assertEqual(tokens_split, ['Here', 'is', 'an', 'example', 'of', 'b', '##os', 'token', ':', '[', 'C', '##LS', ']'])
+
+        tokens_split_explicit = tokenizer.tokenize(text, split_special_tokens=True)
+        self.assertEqual(tokens_split_explicit, ['Here', 'is', 'an', 'example', 'of', 'b', '##os', 'token', ':', '[', 'C', '##LS', ']'])
+
+        tokens_unsplit = tokenizer.tokenize(text, split_special_tokens=False)
+        self.assertEqual(tokens_unsplit, ['Here', 'is', 'an', 'example', 'of', 'b', '##os', 'token', ':', '[CLS]'])
+
+        encoded_split = tokenizer(text)
+        self.assertEqual(encoded_split, encoded_split_val)
+
+        encoded_split_explicit = tokenizer(text, split_special_tokens=True)
+        self.assertEqual(encoded_split_explicit, encoded_split_val)
+
+        encoded_unsplit = tokenizer(text, split_special_tokens=False)
+        self.assertEqual(encoded_unsplit, encoded_unsplit_val)
+
+        tokenizer.save_pretrained('split_special_tokens_tokenizer')
+        tokenizer_reloaded = PreTrainedTokenizerFast.from_pretrained('split_special_tokens_tokenizer')
+
+        tokens_split_reloaded = tokenizer_reloaded.tokenize(text)
+        self.assertEqual(tokens_split_reloaded, ['Here', 'is', 'an', 'example', 'of', 'b', '##os', 'token', ':', '[', 'C', '##LS', ']'])
+
+        encoded_split_reloaded = tokenizer_reloaded(text)
+        self.assertEqual(encoded_split_reloaded, encoded_split_val)
