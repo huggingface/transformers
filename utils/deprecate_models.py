@@ -119,8 +119,8 @@ def update_relative_imports(filename, model):
 
     new_file_lines = []
     for line in filelines.split("\n"):
-        if line.startswith("from ."):
-            new_file_lines.append(line.replace("from .", "from .."))
+        if line.startswith("from .."):
+            new_file_lines.append(line.replace("from ..", "from ..."))
         else:
             new_file_lines.append(line)
 
