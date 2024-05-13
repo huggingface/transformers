@@ -1524,8 +1524,8 @@ class GenerationMixin:
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = inputs_tensor.shape[0]
-        device = inputs_tensor.device
 
+        device = inputs_tensor.device
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
 
         # decoder-only models must use left-padding for batched generation.
