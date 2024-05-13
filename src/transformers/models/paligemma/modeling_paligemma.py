@@ -302,9 +302,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         
         if labels is not None:
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
-
         return final_embedding, final_attention_mask_4d, final_labels, position_ids        
-        #return final_embedding, attention_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -367,6 +365,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        # the attention mask is turned 4d after, we keep track of the original one
+        input_attention_mask = attention_mask
 
         if inputs_embeds is None:
             # 1. Extra the input embeddings
@@ -436,14 +437,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         # in order to recover token-to-predict logits. 
         logits = outputs[0]
         loss = None
-        # ----- slice / repeat logits -----
-        # TODO this depends on input_ids existing, which might not be the case.
-        # You can safely ignore this part. 
-        # padding should be detected with another method.
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # we know if the batch is left padded or not
-        # logits and labels need to be sliced/padding logits need to be ignored
-        # rather, last logit should be repeated last valid logit, not pad token logit over and over
         if attention_mask.dim() == 4:
             # this is to identify input phase
             # else, we are in the cached situation and don't need to slice as just 1 token is passed
