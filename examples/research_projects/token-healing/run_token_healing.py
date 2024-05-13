@@ -1,7 +1,6 @@
 import argparse
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.testing_utils import torch_device
 
 
 def generate(inputs, model, tokenizer, token_healing):
