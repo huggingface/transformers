@@ -2876,6 +2876,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "return_special_tokens_mask": return_special_tokens_mask,
             "return_offsets_mapping": return_offsets_mapping,
             "return_length": return_length,
+            "split_special_tokens": kwargs.pop("split_special_tokens", self.split_special_tokens),
             "verbose": verbose,
         }
         all_kwargs.update(kwargs)
@@ -3036,7 +3037,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens: bool=False,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -3087,7 +3087,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
-            split_special_tokens=split_special_tokens,
+            split_special_tokens=kwargs.pop("split_special_tokens", self.split_special_tokens),
             **kwargs,
         )
 
