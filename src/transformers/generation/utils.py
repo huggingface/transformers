@@ -2769,23 +2769,9 @@ class GenerationMixin:
         Deprecated. Use `._beam_search()` instead, passing the same arguments.
         """
 
-<<<<<<< HEAD
-        batch_size = len(beam_scorer._beam_hyps)
-        num_beams = beam_scorer.num_beams
-
-        batch_beam_size, cur_len = input_ids.shape
-        model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
-
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        beam_indices = (
-            tuple(() for _ in range(batch_beam_size)) if (return_dict_in_generate and output_scores) else None
-=======
         logger.warning_once(
             "Calling `._beam_sample()` directly is deprecated and will be removed in v4.42. Use `._beam_search()` "
             "instead, passing the same arguments."
->>>>>>> 6e4d467bf (mvp?)
         )
         return self._beam_search(
             input_ids=input_ids,
