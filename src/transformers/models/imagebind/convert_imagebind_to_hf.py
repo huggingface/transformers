@@ -15,9 +15,17 @@
 import argparse
 
 import torch
+import torchaudio
+from datasets import load_dataset
 
-# from imagebind import load
-from transformers import ImageBindConfig, ImageBindModel
+from transformers import (
+    AutoTokenizer,
+    ImageBindConfig,
+    ImageBindFeatureExtractor,
+    ImageBindImageProcessor,
+    ImageBindModel,
+    ImageBindProcessor,
+)
 from transformers.utils import logging
 
 
@@ -130,9 +138,16 @@ def reshape_text_position_embedding(state_dict):
     return state_dict
 
 
-# We will verify our results on spongebob images
 def prepare_input():
-    ...
+    ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
+    images = ds["image"]
+    texts = ds["text"]
+    audios = [
+        torchaudio.functional.resample(audio["array"], orig_freq=audio["sample_rate"], new_freq=16000)
+        for audio in ds["audio"]
+    ]
+
+    return images, texts, audios
 
 
 @torch.no_grad()
@@ -167,10 +182,43 @@ def convert_imagebind_checkpoint(args):
     print("Unexpected keys:", unexpected_keys)
 
     if verify_inputs:
-        prepare_input()
-        expected_output_vision = ...
-        expected_output_text = ...
-        expected_output_audio = ...
+        texts, images, audios = prepare_input()
+        expected_input_ids = ...  # This won't matter for now
+        expected_pixel_values = ...
+        expected_input_features = ...
+
+        tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+        image_processor = ImageBindImageProcessor()
+        feature_extractor = ImageBindFeatureExtractor()
+        processor = ImageBindProcessor(tokenizer, image_processor, feature_extractor)
+
+        inputs = processor(texts, images, audios, return_tensors="pt")
+
+        assert torch.equal(inputs["input_ids"], expected_input_ids)
+        assert torch.equal(inputs["pixel_values"], expected_pixel_values)
+        assert torch.equal(inputs["input_features"], expected_input_features)
+
+        expected_output_vision = torch.tensor(
+            [
+                [0.0020, -0.0281, 0.0052, -0.0194, -0.0027],
+                [0.0259, 0.0054, 0.0399, 0.0211, -0.0232],
+                [0.0186, 0.0058, 0.0546, 0.0351, -0.0180],
+            ]
+        )
+        expected_output_text = torch.tensor(
+            [
+                [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
+                [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
+                [-1.3476, -1.5732, -0.7386, 9.7949, 0.5856],
+            ]
+        )
+        expected_output_audio = torch.tensor(
+            [
+                [-0.0282, -0.4923, 1.0058, 0.0459, -0.2271],
+                [0.7091, 0.2072, -1.0133, 0.4689, -0.2142],
+                [0.3245, -0.3749, 0.3955, 0.5600, -0.1932],
+            ]
+        )
     else:
         torch.manual_seed(0)
         input_ids = (torch.rand(3, 77) * 10).to(torch.long)
@@ -199,24 +247,14 @@ def convert_imagebind_checkpoint(args):
             ]
         )
 
-    output_text_embeds = model.get_text_features(input_ids)
-    output_vision_embeds = model.get_image_features(pixel_values)
-    output_audio_embeds = model.get_audio_features(input_features)
     outputs_text_vision = model(input_features=input_ids, pixel_values=pixel_values, modality="text")
     outputs_audio_vision = model(input_features=input_features, pixel_values=pixel_values, modality="audio")
 
     if verify_logits:
-        assert torch.allclose(model.audio_postprocessor(output_audio_embeds)[:, :5], expected_output_audio, atol=1e-4)
-        assert torch.allclose(model.text_postprocessor(output_text_embeds)[:, :5], expected_output_text, atol=1e-4)
-        assert torch.allclose(
-            model.vision_postprocessor(output_vision_embeds)[:, :5], expected_output_vision, atol=1e-4
-        )
-
+        assert torch.allclose(outputs_text_vision.image_embeds[:, :5], expected_output_vision, atol=1e-4)
+        assert torch.allclose(outputs_text_vision.text_embeds[:, :5], expected_output_text, atol=1e-4)
+        assert torch.allclose(outputs_audio_vision.audio_embeds[:, :5], expected_output_audio, atol=1e-4)
         assert torch.allclose(outputs_text_vision.image_embeds, outputs_audio_vision.image_embeds, atol=1e-4)
-        assert torch.allclose(outputs_text_vision.text_embeds, output_text_embeds, atol=1e-4)
-        assert torch.allclose(outputs_audio_vision.audio_embeds, output_audio_embeds, atol=1e-4)
-        assert torch.allclose(outputs_text_vision.logits_per_image, outputs_audio_vision.logits_per_image, atol=1e-4)
-
         print("Looks good!")
     else:
         print("Converted without verifying logits")
