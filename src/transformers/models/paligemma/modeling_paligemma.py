@@ -233,13 +233,15 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
+        self._attn_implementation = config._attn_implementation
 
         
-        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+        language_model = AutoModelForCausalLM.from_config(config=config.text_config, attn_implementation=self._attn_implementation)
 
         if language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
         self.language_model = language_model
+
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -444,15 +446,15 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        # we do not pass labels so output[0] correspond to logits
-        # however in the case of right-padding and 4d attn mask outputs need to be sliced
-        # in order to recover token-to-predict logits.
-        logits = outputs[0]
+
+        logits = outputs.logits
+        logits = logits.float()
         loss = None
         if labels is not None:
             shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
             if input_attention_mask is not None:
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
                 shift_attention_mask = input_attention_mask[..., 1:]
                 shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = shift_labels[shift_attention_mask.to(logits.device) != 0].contiguous()
