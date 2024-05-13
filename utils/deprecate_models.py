@@ -81,9 +81,7 @@ def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
     # Possible variants of the model name in the model doc path
     model_names = [model, model.replace("_", "-"), model.replace("_", "")]
 
-    model_doc_paths = [
-        REPO_PATH / f"docs/source/en/model_doc/{model_name}.md" for model_name in model_names
-    ]
+    model_doc_paths = [REPO_PATH / f"docs/source/en/model_doc/{model_name}.md" for model_name in model_names]
 
     for model_doc_path, model_name in zip(model_doc_paths, model_names):
         if os.path.exists(model_doc_path):
