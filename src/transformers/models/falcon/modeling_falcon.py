@@ -124,7 +124,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Mixtral->Qwen2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Qwen2->Falcon
 class FalconRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()

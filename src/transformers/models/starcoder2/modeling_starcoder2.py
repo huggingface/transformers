@@ -70,7 +70,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Mixtral->Qwen2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Qwen2->Starcoder2
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -599,7 +599,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         )
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Starcoder2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention with Qwen2->Starcoder2
 class Starcoder2SdpaAttention(Starcoder2Attention):
     """
     Starcoder2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
