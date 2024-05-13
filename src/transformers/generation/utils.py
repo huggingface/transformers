@@ -2657,7 +2657,7 @@ class GenerationMixin:
 
             # Beam token selection: pick 1 + eos_token_id.shape[0] next tokens for each beam so we have at least 1
             # non eos token per beam.
-            n_eos_tokens = eos_token_id.shape[0] if eos_token_id else 0
+            n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
             n_tokens_to_keep = max(2, 1 + n_eos_tokens) * num_beams
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
