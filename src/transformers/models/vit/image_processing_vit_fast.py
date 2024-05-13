@@ -32,7 +32,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging
 from ...utils.generic import ExplicitEnum
-from ...utils.import_utils import is_torch_available, is_vision_available, is_torchvision_available
+from ...utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
 
 logger = logging.get_logger(__name__)
@@ -181,20 +181,35 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             transforms.append(
                 Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
             )
+
+        # Regardless of whether we rescale, all PIL and numpy values need to be converted to a torch tensor
+        # to keep cross compatibility with slow image processors
+        convert_to_tensor = image_type in (ImageType.PIL, ImageType.NUMPY)
+        if convert_to_tensor:
+            transforms.append(ToTensor())
+
         if do_rescale:
-            # To maintain cross-compatibility between the slow and fast image processors, we need to
-            # be able to accept both PIL images as torch.Tensor or numpy images.
-            if image_type in (ImageType.PIL, ImageType.NUMPY):
-                transforms.append(ToTensor())
-                # ToTensor scales the pixel values to [0, 1]
+            if convert_to_tensor:
+                # ToTensor scales the pixel values to [0, 1] by dividing by the largest value in the image.
+                # By default, the rescale factor for the image processor is 1 / 255, i.e. assuming the maximum
+                # possible value is 255. Here, if it's different, we need to undo the (assumed) 1/255 scaling
+                # and then rescale again
+                #
+                # NB: This means that the final pixel values will be different in the torchvision transform
+                # depending on the pixels in the image as they become [min_val / max_value, max_value / max_value]
+                # whereas in the image processors they are [min_value * rescale_factor, max_value * rescale_factor]
                 if rescale_factor != 1 / 255:
                     rescale_factor = rescale_factor * 255
-                    transforms.append(Lambda(rescale_image))
-            # If do_rescale is `True`, we should still respect it
-            elif image_type == torch.Tensor:
-                transforms.append(Lambda(rescale_image))
+                    transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
             else:
-                raise ValueError(f"Unsupported image type {image_type}")
+                # If do_rescale is `True`, we should still respect it
+                transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
+        elif convert_to_tensor:
+            # If we've converted to a tensor and do_rescale=False, then we need to unscale.
+            # As with do_scale=True, we assume that the pixel values were rescaled by 1/255
+            rescale_factor = 255
+            transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
+
         if do_normalize:
             transforms.append(Normalize(image_mean, image_std))
         return Compose(transforms)
