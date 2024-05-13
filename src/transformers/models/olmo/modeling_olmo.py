@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1196,39 +1197,46 @@ class OlmoForCausalLM(OlmoPreTrainedModel):
         use_cache=True,
         **kwargs,
     ):
-        past_length = 0
-        if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
-                max_cache_length = (
-                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
-                    if past_key_values.get_max_length() is not None
-                    else None
-                )
-                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
-            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
-            else:
-                cache_length = past_length = past_key_values[0][0].shape[2]
-                max_cache_length = None
+        # with torch.compile, we only support the basic case where we assume `input_ids` has all tokens (prompt + generated tokens)
+        if is_torchdynamo_compiling():
+            input_ids = input_ids[:, cache_position]
 
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+        else:
+            past_length = 0
+            if past_key_values is not None:
+                if isinstance(past_key_values, Cache):
+                    past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                    max_cache_length = (
+                        torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                        if past_key_values.get_max_length() is not None
+                        else None
+                    )
+                    cache_length = (
+                        past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+                    )
+                # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
+                else:
+                    cache_length = past_length = past_key_values[0][0].shape[2]
+                    max_cache_length = None
 
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+                # Keep only the unprocessed tokens:
+                # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+                # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as input)
+                if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                    input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+                # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+                # input_ids based on the past_length.
+                elif past_length < input_ids.shape[1]:
+                    input_ids = input_ids[:, past_length:]
+                # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+                # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+                if (
+                    max_cache_length is not None
+                    and attention_mask is not None
+                    and cache_length + input_ids.shape[1] > max_cache_length
+                ):
+                    attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
