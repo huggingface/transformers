@@ -374,7 +374,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                image_outputs = self.vision_tower(pixel_values)
+                image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
                
