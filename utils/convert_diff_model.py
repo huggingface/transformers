@@ -1,3 +1,7 @@
+import importlib
+import argparse
+import glob
+from transformers import MODEL_NAMES_MAPPING
 import regex as re
 import inspect
 # pattern = re.compile(r'(class|def|XXXConverter\.register)\s+[\w.()]+\s*:(\s*(?:[^class|def|XXXConverter\.register]|\n)+)', re.MULTILINE)
@@ -7,7 +11,7 @@ import inspect
 # TODO in order to get everything from LLAMA we need to copy each line from Llama
 # only updating the attention classes. 
 # Need to keep the order correct
-
+# TODO the imports here are not correctly done. We should dynamically import what we need
 from transformers.models.llama.modeling_llama import *
 from transformers.models.cohere.diff_cohere import *
 from transformers.models.starcoder2.modeling_starcoder2 import *
@@ -42,20 +46,26 @@ def create_single_model_file(converter):
                     parent_class_def = inspect.getsource(eval(parent_class))
                     modeling.write(parent_class_def.split('\n')[0].replace(parent_class,class_name)+"\n")
 
+                    function_name_pattern = r"(?=    def ([\S]*)\()"
+                    function_body_pattern = r"(\ {4}(?:[\S\s\ \n]*?)(?=\n\ ^\)|\n\n|\Z))"
+
                     matches = pattern.finditer(parent_class_def)
-                    function_set = {}
+                    parent_function_set = {}
                     for match in matches:
                         full_function = match.group()
-                        function_set[full_function.split("(")[0]] = full_function
+                        parent_function_set[full_function.split("(")[0]] = full_function
 
+                    child_function_set = parent_function_set.copy()
                     class_def = inspect.getsource(eval(class_name))
                     matches = pattern.finditer(class_def)
                     for match in matches:
-                            # TODO handle call to super!
-                            full_function = match.group()
-                            function_set[full_function.split("(")[0]] = full_function
+                        # TODO handle call to super!
+                        full_function = match.group()
+                        function_name = full_function.split("(")[0]
+                        full_function = re.sub("return super().forward(", parent_function_set[function_name], full_function)
+                        child_function_set[function_name] = full_function
 
-                    modeling.write("".join(function_set.values())) # TODO we wrote the code, next lines shall be ignored
+                    modeling.write("".join(child_function_set.values())) # TODO we wrote the code, next lines shall be ignored
                     modeling.write("\n")
 
                 elif "= ModelConverter(__file__)" in line:
@@ -76,10 +86,6 @@ def dynamically_import_object(module_path, object_name):
 
 # 3. Apply ruff fix to remove unused imports
 # 4. Run a tiny test to import from this new file.
-import importlib
-import argparse
-import glob
-from transformers import MODEL_NAMES_MAPPING
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--files_to_parse", default="all", help="A list of `diff_xxxx` files that should be converted to single model file")
