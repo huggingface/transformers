@@ -166,7 +166,7 @@ class Qwen2MoeRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Qwen2Moe
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2RotaryEmbedding with Qwen2->Qwen2Moe
 class Qwen2MoeRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -211,7 +211,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
+# Copied from transformers.models.qwen2.modeling_qwen2.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -698,7 +698,7 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         )
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Qwen2Moe
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention with Qwen2->Qwen2Moe
 class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
     """
     Qwen2Moe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from

@@ -478,7 +478,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
+# Copied from transformers.models.qwen2.modeling_qwen2.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

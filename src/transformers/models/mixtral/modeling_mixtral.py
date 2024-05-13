@@ -20,7 +20,6 @@
 """ PyTorch Mixtral model."""
 import inspect
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -30,18 +29,14 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -50,7 +45,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_fx_available
 from .configuration_mixtral import MixtralConfig
 
 
@@ -59,14 +53,6 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-
-# This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
-# It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
-    if not is_torch_greater_or_equal_than_1_13:
-        import torch.fx
-
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
 logger = logging.get_logger(__name__)
@@ -181,8 +167,7 @@ class MixtralRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
 class MixtralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -192,31 +177,49 @@ class MixtralRotaryEmbedding(nn.Module):
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
-        )
-
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
+        # For BC we register cos and sin cached
+        self.max_seq_len_cached = max_position_embeddings
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
+        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+    @property
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.sin_cached with Llama->Mixtral
+    def sin_cached(self):
+        logger.warning_once(
+            "The sin_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `MixtralAttention` class"
         )
+        return self._sin_cached
+
+    @property
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.cos_cached with Llama->Mixtral
+    def cos_cached(self):
+        logger.warning_once(
+            "The cos_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "the forward method of RoPE from now on instead. It is not used in the `MixtralAttention` class"
+        )
+        return self._cos_cached
+
+    @torch.no_grad()
+    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
+    def forward(self, x, position_ids):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -227,9 +230,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
-# TODO @longjie no longer copied from Mistral after static cache
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -237,9 +239,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -250,8 +251,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -270,8 +271,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 class MixtralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -289,6 +289,7 @@ class MixtralAttention(nn.Module):
                 "when creating this class."
             )
 
+        self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -297,7 +298,6 @@ class MixtralAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        self.attention_dropout = config.attention_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -307,7 +307,7 @@ class MixtralAttention(nn.Module):
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
         self.rotary_emb = MixtralRotaryEmbedding(
             self.head_dim,
@@ -315,9 +315,7 @@ class MixtralAttention(nn.Module):
             base=self.rope_theta,
         )
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
+    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward with Gemma->Mixtral
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -326,12 +324,8 @@ class MixtralAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -342,41 +336,22 @@ class MixtralAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        cos, sin = self.rotary_emb(value_states, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-
-            attn_weights = attn_weights + attention_mask
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -390,8 +365,8 @@ class MixtralAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
+        attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -426,15 +401,14 @@ class MixtralFlashAttention2(MixtralAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,
+        cache_position: Optional[torch.LongTensor] = None,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
+                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
             )
 
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -447,18 +421,9 @@ class MixtralFlashAttention2(MixtralAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            if self.layer_idx is None:
-                raise ValueError(
-                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                    "with a layer index."
-                )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += cache_position[0]
 
-        # Because the input can be padded, the absolute sequence length depends on the max position id.
-        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
-        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
-
+        cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         use_sliding_windows = (
@@ -696,8 +661,7 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
-# copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
 class MixtralSdpaAttention(MixtralAttention):
     """
     Mixtral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -714,6 +678,7 @@ class MixtralSdpaAttention(MixtralAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -728,6 +693,7 @@ class MixtralSdpaAttention(MixtralAttention):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                cache_position=cache_position,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -740,41 +706,40 @@ class MixtralSdpaAttention(MixtralAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
+        causal_mask = attention_mask
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
+        if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+        # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+        is_causal = True if causal_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -880,8 +845,8 @@ class MixtralSparseMoeBlock(nn.Module):
             current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+            # the `top_x` tensor here. Use non-inplace version to make cudagraphs happy.
+            final_hidden_states.index_add(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
@@ -906,12 +871,8 @@ class MixtralDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        **kwargs,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -941,6 +902,7 @@ class MixtralDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            cache_position=cache_position,
         )
         hidden_states = residual + hidden_states
 
@@ -1079,8 +1041,7 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
-# TODO @longjie no longer copied from Mistral after static cache
+# Copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->MIXTRAL,Mistral->Mixtral
 class MixtralModel(MixtralPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
@@ -1125,6 +1086,7 @@ class MixtralModel(MixtralPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1138,73 +1100,37 @@ class MixtralModel(MixtralPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        past_key_values_length = 0
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
-
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-        else:
-            position_ids = position_ids.view(-1, seq_length).long()
+
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+            )
+            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
-            is_padding_right = attention_mask[:, -1].sum().item() != batch_size
-            if is_padding_right:
-                raise ValueError(
-                    "You are attempting to perform batched generation with padding_side='right'"
-                    " this may lead to unexpected behaviour for Flash Attention version of Mixtral. Make sure to "
-                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
-                )
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            return_legacy_cache = True
 
-        if self._attn_implementation == "flash_attention_2":
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._attn_implementation == "sdpa" and not output_attentions:
-            # output_attentions=True can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-                sliding_window=self.config.sliding_window,
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-                sliding_window=self.config.sliding_window,
-            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, use_cache, output_attentions
+        )
 
         hidden_states = inputs_embeds
 
@@ -1222,22 +1148,24 @@ class MixtralModel(MixtralPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
                     output_router_logits,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     output_router_logits=output_router_logits,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1257,9 +1185,9 @@ class MixtralModel(MixtralPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -1274,6 +1202,110 @@ class MixtralModel(MixtralPreTrainedModel):
             attentions=all_self_attns,
             router_logits=all_router_logits,
         )
+
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        use_cache: bool,
+        output_attentions: bool,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
+        if self._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and use_cache:
+                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                if is_padding_right:
+                    raise ValueError(
+                        "You are attempting to perform batched generation with padding_side='right'"
+                        " this may lead to unexpected behaviour for Flash Attention version of Mixtral. Make sure to "
+                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                    )
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+
+        # cache_position must be valid here no matter which cache we use
+        past_seen_tokens = cache_position[0] if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+        using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
+
+        if self.config._attn_implementation == "sdpa" and not (using_static_cache or using_sliding_window_cache):
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                sliding_window=self.config.sliding_window,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        # SlidingWindowCache
+        if using_sliding_window_cache:
+            target_length = max(sequence_length, self.config.sliding_window)
+        # StaticCache
+        elif using_static_cache:
+            target_length = past_key_values.get_max_length()
+        # DynamicCache or no cache
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+
+        exclude_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+
+        if self.config.sliding_window is not None:
+            if attention_mask is not None and attention_mask.dim() == 4:
+                logger.warning_once(
+                    "Sliding window will not take effect when passing 4d custom masks"
+                    "you may get unexpected results, use attention mask generated by tokenizer"
+                    "or set model.config.sliding_window to None if you don't want sliding window"
+                )
+            elif not using_sliding_window_cache or sequence_length > self.config.sliding_window:
+                exclude_mask |= torch.arange(target_length, device=device) <= (
+                    cache_position.reshape(-1, 1) - self.config.sliding_window
+                )
+
+        causal_mask *= exclude_mask
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
 
 class MixtralForCausalLM(MixtralPreTrainedModel):
@@ -1324,6 +1356,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1373,6 +1406,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1426,14 +1460,21 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         attention_mask=None,
         inputs_embeds=None,
         output_router_logits=False,
+        cache_position=None,
+        use_cache=True,
         **kwargs,
     ):
         # Omit tokens covered by past_key_values
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1466,17 +1507,33 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
+        # crop the attention_mask to sliding window size during decode phase if using SlidingWindowCache
+        if (
+            past_length > 0
+            and attention_mask is not None
+            and isinstance(past_key_values, SlidingWindowCache)
+            and attention_mask.shape[1] > past_key_values.sliding_window_size
+        ):
+            attention_mask = attention_mask[:, -past_key_values.sliding_window_size :]
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            model_inputs = {"input_ids": input_ids.contiguous()}
+
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        elif use_cache:
+            cache_position = cache_position[-input_length:]
 
         model_inputs.update(
             {
                 "position_ids": position_ids,
+                "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
             }
