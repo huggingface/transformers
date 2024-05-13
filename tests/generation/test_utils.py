@@ -1803,6 +1803,31 @@ class GenerationTesterMixin:
             with self.assertRaises(ValueError):
                 model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
+    @require_torch_gpu
+    @slow
+    def test_generate_compile_fullgraph(self):
+        """Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results"""
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_cache_class:
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device)
+            input_ids = inputs_dict["input_ids"].to(torch_device)
+
+            # dynamic cache
+            output_dynamic = model.generate(input_ids)
+
+            # eager static cache
+            model.generation_config.cache_implementation = "static"
+            output_static = model.generate(input_ids)
+            self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
+
+            # compiled static cache
+            compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
+            output_compiled = compiled_generate(input_ids)
+            self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
