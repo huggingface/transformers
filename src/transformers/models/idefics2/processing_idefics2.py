@@ -62,7 +62,7 @@ class Idefics2Processor(ProcessorMixin):
     image_processor_class = "Idefics2ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: str = None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -72,6 +72,7 @@ class Idefics2Processor(ProcessorMixin):
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         self.image_seq_len = image_seq_len
+        self.chat_template = chat_template
 
         tokens_to_add = {
             "additional_special_tokens": [self.fake_image_token, self.image_token, self.end_of_utterance_token]
