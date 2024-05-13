@@ -1,10 +1,11 @@
 import argparse
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.testing_utils import torch_device
 
 
 def generate(inputs, model, tokenizer, token_healing):
-    input_ids = tokenizer(inputs, return_tensors="pt", padding=True).input_ids.cuda()
+    input_ids = tokenizer(inputs, return_tensors="pt", padding=True, device_map="auto").input_ids
     generation_config = GenerationConfig(
         max_new_tokens=8,
         token_healing=token_healing,
