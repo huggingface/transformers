@@ -18,6 +18,7 @@ import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -148,13 +149,19 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             normed_input_values = []
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if isinstance(vector, np.ndarray):
+                    normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                elif isinstance(vector, torch.Tensor):
+                    normed_slice = (vector - vector[:length].mean()) / torch.sqrt(vector[:length].var() + 1e-7)
                 if length < normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
         else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+            if isinstance(input_values, np.ndarray):
+                normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+            elif isinstance(input_values, torch.Tensor):
+                normed_input_values = [(x - x.mean()) / torch.sqrt(x.var() + 1e-7) for x in input_values]
 
         return normed_input_values
 

@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
+from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging
 
 
 logger = logging.get_logger(__name__)
@@ -171,11 +171,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     "Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
-        for key, value in processed_features.items():
-            if isinstance(value[0], (int, float)):
-                processed_features[key] = to_numpy(value)
-            else:
-                processed_features[key] = [to_numpy(v) for v in value]
 
         # Convert padding_strategy in PaddingStrategy
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)

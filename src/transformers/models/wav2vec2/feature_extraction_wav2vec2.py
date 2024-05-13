@@ -19,6 +19,7 @@ Feature extractor class for Wav2Vec2
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -89,13 +90,19 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             normed_input_values = []
 
             for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if isinstance(vector, np.ndarray):
+                    normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                elif isinstance(vector, torch.Tensor):
+                    normed_slice = (vector - vector[:length].mean()) / torch.sqrt(vector[:length].var() + 1e-7)
                 if length < normed_slice.shape[0]:
                     normed_slice[length:] = padding_value
 
                 normed_input_values.append(normed_slice)
         else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+            if isinstance(input_values, np.ndarray):
+                normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+            elif isinstance(input_values, torch.Tensor):
+                normed_input_values = [(x - x.mean()) / torch.sqrt(x.var() + 1e-7) for x in input_values]
 
         return normed_input_values
 
@@ -205,23 +212,9 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
         )
 
-        # convert input values to correct format
-        input_values = padded_inputs["input_values"]
-        if not isinstance(input_values[0], np.ndarray):
-            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
-        elif (
-            not isinstance(input_values, np.ndarray)
-            and isinstance(input_values[0], np.ndarray)
-            and input_values[0].dtype is np.dtype(np.float64)
-        ):
-            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
-            padded_inputs["input_values"] = input_values.astype(np.float32)
 
         # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
-        if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         # zero-mean and unit-variance normalization
         if self.do_normalize:

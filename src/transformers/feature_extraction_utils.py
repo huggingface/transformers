@@ -138,7 +138,11 @@ class BatchFeature(UserDict):
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     value = np.array(value)
-                return torch.tensor(value)
+                    return torch.tensor(value)
+
+                elif isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], torch.Tensor):
+                    value = torch.stack(value, dim=0)
+                    return value
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
