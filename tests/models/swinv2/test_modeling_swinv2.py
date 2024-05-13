@@ -494,7 +494,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = image_processor(images=image, size={"height": 480, "width": 480}, return_tensors="pt")
+        inputs = image_processor(images=image, size={"height": 481, "width": 481}, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
@@ -502,8 +502,9 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
         # verify the logits
-        expected_shape = torch.Size((1, 225, 768))
+        expected_shape = torch.Size((1, 256, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
 
 @require_torch
 class Swinv2BackboneTest(unittest.TestCase, BackboneTesterMixin):
