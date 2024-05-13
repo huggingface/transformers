@@ -496,6 +496,11 @@ class GenerationConfig(PushToHubMixin):
                     greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
                     UserWarning,
                 )
+            if self.min_p is not None:
+                warnings.warn(
+                    greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p),
+                    UserWarning,
+                )
             if self.typical_p is not None and self.typical_p != 1.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
