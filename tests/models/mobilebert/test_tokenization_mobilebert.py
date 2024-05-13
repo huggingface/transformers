@@ -34,6 +34,7 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "mobilebert-uncased"
     tokenizer_class = MobileBertTokenizer
     rust_tokenizer_class = MobileBertTokenizerFast
     test_rust_tokenizer = True
@@ -258,7 +259,7 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     @slow
-    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_sequence_builders with bert-base-uncased->google/mobilebert-uncased
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_sequence_builders with google-bert/bert-base-uncased->google/mobilebert-uncased
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("google/mobilebert-uncased")
 

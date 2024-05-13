@@ -45,13 +45,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "YituTech/conv-bert-base"
 _CONFIG_FOR_DOC = "ConvBertConfig"
 
-CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "YituTech/conv-bert-base",
-    "YituTech/conv-bert-medium-small",
-    "YituTech/conv-bert-small",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-]
-
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -856,12 +849,13 @@ class ConvBertGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.activation = get_activation("gelu")
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
     def forward(self, generator_hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = get_activation("gelu")(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states

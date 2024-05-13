@@ -30,38 +30,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/vocab.json",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/vocab.json",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/vocab.json",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/vocab.json",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/merges.txt",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/merges.txt",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/merges.txt",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/merges.txt",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/tokenizer.json",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/tokenizer.json",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/tokenizer.json",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/tokenizer.json",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt2": 1024,
-    "gpt2-medium": 1024,
-    "gpt2-large": 1024,
-    "gpt2-xl": 1024,
-    "distilgpt2": 1024,
-}
-
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
     """
@@ -74,7 +42,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import GPT2TokenizerFast
 
-    >>> tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+    >>> tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
     >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
 
@@ -115,8 +83,6 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = GPT2Tokenizer
 
@@ -181,10 +147,5 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
+
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

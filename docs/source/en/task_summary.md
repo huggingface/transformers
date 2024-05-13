@@ -182,7 +182,7 @@ Like classification tasks in any modality, text classification labels a sequence
 
 ### Token classification
 
-In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](/glossary#token). Token classification assigns each token a label from a predefined set of classes. 
+In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](glossary#token). Token classification assigns each token a label from a predefined set of classes. 
 
 Two common types of token classification are:
 
@@ -268,7 +268,7 @@ In the early days, translation models were mostly monolingual, but recently, the
 >>> from transformers import pipeline
 
 >>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="t5-small")
+>>> translator = pipeline(task="translation", model="google-t5/t5-small")
 >>> translator(text)
 [{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
 ```
@@ -326,7 +326,7 @@ Document question answering is a task that answers natural language questions fr
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
+>>> url = "https://huggingface.co/datasets/hf-internal-testing/example-documents/resolve/main/jpeg_images/2.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")

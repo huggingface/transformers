@@ -202,7 +202,7 @@ provide its path. For instance: \[\`utils.ModelOutput\`\]. This will be converte
 `utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
 linking to in the description, add a ~: \[\`~utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
-The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
+The same works for methods so you can either use \[\`XXXClass.method\`\] or \[\`~XXXClass.method\`\].
 
 #### Defining arguments in a method
 
@@ -250,7 +250,7 @@ then its documentation should look like this:
 
 Note that we always omit the "defaults to \`None\`" when None is the default for any argument. Also note that even
 if the first line describing your argument type and its default gets long, you can't break it on several lines. You can
-however write as many lines as you want in the indented description (see the example above with `input_ids`).
+however, write as many lines as you want in the indented description (see the example above with `input_ids`).
 
 #### Writing a multi-line code block
 

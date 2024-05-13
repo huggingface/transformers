@@ -56,39 +56,6 @@ if not is_torch_greater_or_equal_than_1_12:
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -729,6 +696,9 @@ class TapasLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -1008,6 +978,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)

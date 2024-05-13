@@ -38,7 +38,6 @@ if is_torch_available():
         RemBertForTokenClassification,
         RemBertModel,
     )
-    from transformers.models.rembert.modeling_rembert import REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RemBertModelTester:
@@ -465,9 +464,9 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RemBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/rembert"
+        model = RemBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

@@ -53,11 +53,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
-RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/resnet-50",
-    # See all resnet models at https://huggingface.co/models?filter=resnet
-]
-
 
 class ResNetConvLayer(nn.Module):
     def __init__(
@@ -274,6 +269,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config_class = ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

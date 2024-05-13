@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -354,7 +354,7 @@ def main():
     )
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
     elif training_args.do_eval:
@@ -417,7 +417,12 @@ def main():
         for i, offsets in enumerate(offset_mapping):
             # We will label impossible answers with the index of the CLS token.
             input_ids = tokenized_examples["input_ids"][i]
-            cls_index = input_ids.index(tokenizer.cls_token_id)
+            if tokenizer.cls_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
+            else:
+                cls_index = 0
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -534,7 +539,12 @@ def main():
 
         for i, input_ids in enumerate(tokenized_examples["input_ids"]):
             # Find the CLS token in the input ids.
-            cls_index = input_ids.index(tokenizer.cls_token_id)
+            if tokenizer.cls_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
+            else:
+                cls_index = 0
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
@@ -647,7 +657,9 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
+    metric = evaluate.load(
+        "squad_v2" if data_args.version_2_with_negative else "squad", cache_dir=model_args.cache_dir
+    )
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)

@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mnaylor/mega-base-wikitext": "https://huggingface.co/mnaylor/mega-base-wikitext/resolve/main/config.json",
-}
-
 
 class MegaConfig(PretrainedConfig):
     r"""

@@ -26,32 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model"
-        ),
-        "microsoft/deberta-v2-xxlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-v2-xlarge": 512,
-    "microsoft/deberta-v2-xxlarge": 512,
-    "microsoft/deberta-v2-xlarge-mnli": 512,
-    "microsoft/deberta-v2-xxlarge-mnli": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-v2-xlarge": {"do_lower_case": False},
-    "microsoft/deberta-v2-xxlarge": {"do_lower_case": False},
-    "microsoft/deberta-v2-xlarge-mnli": {"do_lower_case": False},
-    "microsoft/deberta-v2-xxlarge-mnli": {"do_lower_case": False},
-}
 
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
 
@@ -106,9 +80,6 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,

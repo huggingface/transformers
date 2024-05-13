@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Swin model. """
 
 import collections
-import inspect
 import unittest
 
 from transformers import SwinConfig
@@ -33,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SwinBackbone, SwinForImageClassification, SwinForMaskedImageModeling, SwinModel
-    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -233,7 +231,7 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": SwinModel, "image-classification": SwinForImageClassification}
+        {"image-feature-extraction": SwinModel, "image-classification": SwinForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -299,18 +297,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -459,9 +445,9 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swin-tiny-patch4-window7-224"
+        model = SwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

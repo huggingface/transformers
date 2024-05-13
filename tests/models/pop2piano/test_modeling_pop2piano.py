@@ -44,11 +44,6 @@ if is_torch_available():
     import torch
 
     from transformers import Pop2PianoForConditionalGeneration
-    from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_1_8_0
-
-else:
-    is_torch_1_8_0 = False
 
 
 @require_torch
@@ -611,15 +606,11 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "sweetcocoa/pop2piano"
+        model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @require_onnx
-    @unittest.skipIf(
-        is_torch_1_8_0,
-        reason="Test has a segmentation fault on torch 1.8.0",
-    )
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = Pop2PianoForConditionalGeneration(config_and_inputs[0]).to(torch_device)

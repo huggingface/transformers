@@ -113,7 +113,7 @@ class TokenClassificationTask:
             for word, label in zip(example.words, example.labels):
                 word_tokens = tokenizer.tokenize(word)
 
-                # bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
+                # google-bert/bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
                 if len(word_tokens) > 0:
                     tokens.extend(word_tokens)
                     # Use the real label id for the first token of the word, and padding ids for the remaining tokens

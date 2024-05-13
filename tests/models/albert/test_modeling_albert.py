@@ -38,7 +38,6 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertModel,
     )
-    from transformers.models.albert.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class AlbertModelTester:
@@ -322,16 +321,16 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlbertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "albert/albert-base-v1"
+        model = AlbertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class AlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = AlbertModel.from_pretrained("albert-base-v2")
+        model = AlbertModel.from_pretrained("albert/albert-base-v2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():

@@ -40,7 +40,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         ImageGPTForCausalImageModeling,
         ImageGPTForImageClassification,
         ImageGPTModel,
@@ -271,7 +270,7 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     )
     all_generative_model_classes = (ImageGPTForCausalImageModeling,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
+        {"image-feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -336,9 +335,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/imagegpt-small"
+        model = ImageGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -466,6 +465,31 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    # override because ImageGPT main input name is `pixel_values`
+    # NOTE: in latest transformers this is deprecated, `input_ids` should be used. TODO
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            with torch.no_grad():
+                out_ids = model(**inputs)[0]
+
+            pixel_values = inputs["pixel_values"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(pixel_values)
+
+            with torch.no_grad():
+                out_embeds = model(**inputs)[0]
+
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

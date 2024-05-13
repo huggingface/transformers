@@ -25,10 +25,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "salesforce/blip2-opt-2.7b": "https://huggingface.co/salesforce/blip2-opt-2.7b/resolve/main/config.json",
-}
-
 
 class Blip2VisionConfig(PretrainedConfig):
     r"""

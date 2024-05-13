@@ -24,15 +24,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/config.json",
-    "YituTech/conv-bert-medium-small": (
-        "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json"
-    ),
-    "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-}
-
 
 class ConvBertConfig(PretrainedConfig):
     r"""
@@ -61,7 +52,7 @@ class ConvBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):

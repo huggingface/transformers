@@ -139,7 +139,7 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         dict_second = feat_extract_second.to_dict()
         self.assertEqual(dict_first, dict_second)
 
-    def test_call(self):
+    def test_call_numpy(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         # create three inputs of length 800, 1000, and 1200
@@ -170,6 +170,77 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def test_call_without_attention_mask(self):
+        feature_extractor_args = self.feat_extract_tester.prepare_feat_extract_dict()
+        feature_extractor = self.feature_extraction_class(**feature_extractor_args)
+
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test attention mask when passing no attention mask to forward call
+        output = feature_extractor(np_speech_inputs, padding=True, return_tensors="np", return_attention_mask=False)
+        self.assertTrue("attention_mask" not in output)
+
+        # Test attention mask when no attention mask by default
+        feature_extractor_args["return_attention_mask"] = False
+        feature_extractor = self.feature_extraction_class(**feature_extractor_args)
+        output = feature_extractor(np_speech_inputs, padding=True, return_tensors="np", return_attention_mask=False)
+        self.assertTrue("attention_mask" not in output)
+
+    def test_attention_mask(self):
+        # test attention mask has the right output shape
+        feature_extractor_args = self.feat_extract_tester.prepare_feat_extract_dict()
+
+        feature_extractor = self.feature_extraction_class(**feature_extractor_args)
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test attention mask when passing it to forward call
+        output = feature_extractor(np_speech_inputs, padding=True, return_tensors="np")
+        input_features = output.input_features
+
+        attention_mask = output.attention_mask
+        self.assertTrue(attention_mask.ndim == 2)
+        self.assertTrue(attention_mask.shape[0] == 3)
+        self.assertTrue(attention_mask.shape[-1] == input_features.shape[1])
+
+    @require_torch
+    def test_call_torch(self):
+        import torch
+
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        pt_speech_inputs = [torch.tensor(speech_input) for speech_input in speech_inputs]
+
+        # Test feature size
+        input_features = feature_extractor(pt_speech_inputs, padding=True, return_tensors="pt").input_features
+        self.assertTrue(input_features.ndim == 3)
+        self.assertTrue(input_features.shape[0] == 3)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size * feature_extractor.stride)
+
+        # Test not batched input
+        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="pt").input_features
+        encoded_sequences_2 = feature_extractor(pt_speech_inputs[0], return_tensors="pt").input_features
+        self.assertTrue(torch.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="pt").input_features
+        encoded_sequences_2 = feature_extractor(pt_speech_inputs, return_tensors="pt").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        pt_speech_inputs = torch.tensor(speech_inputs)
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="pt").input_features
+        encoded_sequences_2 = feature_extractor(pt_speech_inputs, return_tensors="pt").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     @require_torch
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad

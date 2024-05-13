@@ -59,17 +59,6 @@ _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
-
-
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
@@ -652,6 +641,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Nat model. """
 
 import collections
-import inspect
 import unittest
 
 from transformers import NatConfig
@@ -33,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import NatBackbone, NatForImageClassification, NatModel
-    from transformers.models.nat.modeling_nat import NAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -205,7 +203,7 @@ class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": NatModel, "image-classification": NatForImageClassification}
+        {"image-feature-extraction": NatModel, "image-classification": NatForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -260,18 +258,6 @@ class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
         self.skipTest("Nat's attention operation is handled entirely by NATTEN.")
@@ -340,9 +326,9 @@ class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NatModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "shi-labs/nat-mini-in1k-224"
+        model = NatModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

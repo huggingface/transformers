@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlm-base-uncased"
     tokenizer_class = LayoutLMTokenizer
     rust_tokenizer_class = LayoutLMTokenizerFast
     test_rust_tokenizer = True

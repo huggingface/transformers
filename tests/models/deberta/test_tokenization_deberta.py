@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/deberta-base"
     tokenizer_class = DebertaTokenizer
     test_rust_tokenizer = True
     rust_tokenizer_class = DebertaTokenizerFast

@@ -58,6 +58,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "TFGPTJModel"),
         ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
+        ("idefics", "TFIdeficsModel"),
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
@@ -81,6 +82,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("sam", "TFSamModel"),
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
+        ("swiftformer", "TFSwiftFormerModel"),
         ("swin", "TFSwinModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
@@ -111,6 +113,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("funnel", "TFFunnelForPreTraining"),
         ("gpt-sw3", "TFGPT2LMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
+        ("idefics", "TFIdeficsForVisionText2Text"),
         ("layoutlm", "TFLayoutLMForMaskedLM"),
         ("lxmert", "TFLxmertForPreTraining"),
         ("mobilebert", "TFMobileBertForPreTraining"),
@@ -213,6 +216,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("regnet", "TFRegNetForImageClassification"),
         ("resnet", "TFResNetForImageClassification"),
         ("segformer", "TFSegformerForImageClassification"),
+        ("swiftformer", "TFSwiftFormerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
     ]
@@ -621,7 +625,9 @@ class TFAutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 TFAutoModelForSeq2SeqLM = auto_class_update(
-    TFAutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    TFAutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="google-t5/t5-base",
 )
 
 

@@ -48,7 +48,7 @@ The benchmark classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] expect an
 ```py
 >>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
 
->>> args = PyTorchBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
+>>> args = PyTorchBenchmarkArguments(models=["google-bert/bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
 >>> benchmark = PyTorchBenchmark(args)
 ```
 </pt>
@@ -57,7 +57,7 @@ The benchmark classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] expect an
 >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
 >>> args = TensorFlowBenchmarkArguments(
-...     models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512]
+...     models=["google-bert/bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512]
 ... )
 >>> benchmark = TensorFlowBenchmark(args)
 ```
@@ -89,20 +89,20 @@ An instantiated benchmark object can then simply be run by calling `benchmark.ru
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length     Time in s                  
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             0.006     
-bert-base-uncased          8               32            0.006     
-bert-base-uncased          8              128            0.018     
-bert-base-uncased          8              512            0.088     
+google-bert/bert-base-uncased          8               8             0.006     
+google-bert/bert-base-uncased          8               32            0.006     
+google-bert/bert-base-uncased          8              128            0.018     
+google-bert/bert-base-uncased          8              512            0.088     
 --------------------------------------------------------------------------------
 
 ====================      INFERENCE - MEMORY - RESULT       ====================
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length    Memory in MB 
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             1227
-bert-base-uncased          8               32            1281
-bert-base-uncased          8              128            1307
-bert-base-uncased          8              512            1539
+google-bert/bert-base-uncased          8               8             1227
+google-bert/bert-base-uncased          8               32            1281
+google-bert/bert-base-uncased          8              128            1307
+google-bert/bert-base-uncased          8              512            1539
 --------------------------------------------------------------------------------
 
 ====================        ENVIRONMENT INFORMATION         ====================
@@ -146,20 +146,20 @@ An instantiated benchmark object can then simply be run by calling `benchmark.ru
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length     Time in s                  
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             0.005
-bert-base-uncased          8               32            0.008
-bert-base-uncased          8              128            0.022
-bert-base-uncased          8              512            0.105
+google-bert/bert-base-uncased          8               8             0.005
+google-bert/bert-base-uncased          8               32            0.008
+google-bert/bert-base-uncased          8              128            0.022
+google-bert/bert-base-uncased          8              512            0.105
 --------------------------------------------------------------------------------
 
 ====================      INFERENCE - MEMORY - RESULT       ====================
 --------------------------------------------------------------------------------
 Model Name             Batch Size     Seq Length    Memory in MB 
 --------------------------------------------------------------------------------
-bert-base-uncased          8               8             1330
-bert-base-uncased          8               32            1330
-bert-base-uncased          8              128            1330
-bert-base-uncased          8              512            1770
+google-bert/bert-base-uncased          8               8             1330
+google-bert/bert-base-uncased          8               32            1330
+google-bert/bert-base-uncased          8              128            1330
+google-bert/bert-base-uncased          8              512            1770
 --------------------------------------------------------------------------------
 
 ====================        ENVIRONMENT INFORMATION         ====================
@@ -197,7 +197,7 @@ when adding the argument `save_to_csv=True` to [`PyTorchBenchmarkArguments`] and
 [`TensorFlowBenchmarkArguments`] respectively. In this case, every section is saved in a separate
 _.csv_ file. The path to each _.csv_ file can optionally be defined via the argument data classes.
 
-Instead of benchmarking pre-trained models via their model identifier, _e.g._ `bert-base-uncased`, the user can
+Instead of benchmarking pre-trained models via their model identifier, _e.g._ `google-bert/bert-base-uncased`, the user can
 alternatively benchmark an arbitrary configuration of any available model class. In this case, a `list` of
 configurations must be inserted with the benchmark args as follows.
 

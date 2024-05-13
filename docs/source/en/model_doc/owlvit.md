@@ -55,7 +55,7 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 
 >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
 >>> target_sizes = torch.Tensor([image.size[::-1]])
->>> # Convert outputs (bounding boxes and class logits) to COCO API
+>>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
 >>> results = processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.1)
 >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
 >>> text = texts[i]

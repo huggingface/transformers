@@ -36,7 +36,13 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_peft_available,
+    logging,
+)
 from .configuration_wavlm import WavLMConfig
 
 
@@ -63,13 +69,6 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 # Speaker Verification docstring
 _XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
-
-WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/wavlm-base",
-    "microsoft/wavlm-base-plus",
-    "microsoft/wavlm-large",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-]
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -725,7 +724,7 @@ class WavLMEncoder(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -808,7 +807,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -1105,7 +1104,7 @@ class WavLMModel(WavLMPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = WavLMEncoderStableLayerNorm(config)
@@ -1674,16 +1673,21 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.unsqueeze(1)
-        hidden_states = nn.functional.unfold(
-            hidden_states,
-            (self.kernel_size, self.in_conv_dim),
-            stride=(1, self.in_conv_dim),
-            dilation=(self.dilation, 1),
-        )
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
+            if isinstance(self.kernel, LoraLayer):
+                warnings.warn(
+                    "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
+                    "You should exclude TDNNLayer from LoRA's target modules.",
+                )
+
+        # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.kernel(hidden_states)
+        weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
+        hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
+        hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.activation(hidden_states)
         return hidden_states

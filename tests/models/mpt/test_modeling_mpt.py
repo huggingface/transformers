@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoTokenizer,
         MptForCausalLM,
         MptForQuestionAnswering,
@@ -53,7 +52,7 @@ class MptModelTester:
         use_labels=True,
         use_mc_token_ids=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=48,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -385,6 +384,12 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpt_model(*config_and_inputs)
 
+    def test_mpt_model_alibi_tensor(self):
+        # test creation of alibi tensor when num heads is not a power of two
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].n_heads = 6
+        self.model_tester.create_and_check_mpt_model(*config_and_inputs)
+
     def test_mpt_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpt_model_past(*config_and_inputs)
@@ -423,9 +428,9 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "mosaicml/mpt-7b"
+        model = MptModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @slow

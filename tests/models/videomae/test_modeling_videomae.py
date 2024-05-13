@@ -16,7 +16,6 @@
 
 
 import copy
-import inspect
 import unittest
 
 import numpy as np
@@ -42,7 +41,6 @@ if is_torch_available():
         VideoMAEForVideoClassification,
         VideoMAEModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -228,18 +226,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -250,9 +236,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VideoMAEModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MCG-NJU/videomae-base"
+        model = VideoMAEModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

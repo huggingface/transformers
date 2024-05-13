@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch ResNet model. """
 
 
-import inspect
 import unittest
 
 from transformers import ResNetConfig
@@ -33,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ResNetBackbone, ResNetForImageClassification, ResNetModel
-    from transformers.models.resnet.modeling_resnet import RESNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -171,7 +169,7 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": ResNetModel, "image-classification": ResNetForImageClassification}
+        {"image-feature-extraction": ResNetModel, "image-classification": ResNetForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -205,18 +203,6 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ResNet does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -286,9 +272,9 @@ class ResNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ResNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/resnet-50"
+        model = ResNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -302,15 +288,11 @@ def prepare_img():
 class ResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ResNetForImageClassification.from_pretrained(RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = ResNetForImageClassification.from_pretrained("microsoft/resnet-50").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

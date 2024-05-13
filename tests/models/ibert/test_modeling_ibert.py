@@ -30,7 +30,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         IBertForMaskedLM,
         IBertForMultipleChoice,
         IBertForQuestionAnswering,
@@ -292,9 +291,9 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = IBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kssteven/ibert-roberta-base"
+        model = IBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
@@ -382,6 +381,10 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    @unittest.skip("ibert overrides scaling to None if inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
 
 @require_torch

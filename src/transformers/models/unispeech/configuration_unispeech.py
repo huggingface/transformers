@@ -23,13 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/unispeech-large-1500h-cv": (
-        "https://huggingface.co/microsoft/unispeech-large-1500h-cv/resolve/main/config.json"
-    ),
-    # See all UniSpeech models at https://huggingface.co/models?filter=unispeech
-}
-
 
 class UniSpeechConfig(PretrainedConfig):
     r"""
@@ -68,7 +61,7 @@ class UniSpeechConfig(PretrainedConfig):
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the feature encoder.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
+            The dropout probability for the output of the feature encoder that's used by the quantizer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`UniSpeechForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):

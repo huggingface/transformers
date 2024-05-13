@@ -792,7 +792,7 @@ class FlaxModelTesterMixin:
             types = flatten_dict(types)
 
             for name, type_ in types.items():
-                self.assertEquals(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
+                self.assertEqual(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
 
     def test_to_bf16(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -984,7 +984,7 @@ class FlaxModelTesterMixin:
 
             # Check if we params can be properly initialized when calling init_weights
             params = model.init_weights(model.key, model.input_shape)
-            self.assertIsInstance(params, FrozenDict)
+            assert isinstance(params, (dict, FrozenDict)), f"params are not an instance of {FrozenDict}"
             # Check if all required parmas are initialized
             keys = set(flatten_dict(unfreeze(params)).keys())
             self.assertTrue(all(k in keys for k in model.required_params))

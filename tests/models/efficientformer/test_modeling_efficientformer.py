@@ -15,13 +15,11 @@
 """ Testing suite for the PyTorch EfficientFormer model. """
 
 
-import inspect
 import unittest
 import warnings
 from typing import List
 
 from transformers import EfficientFormerConfig
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -34,14 +32,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_MAPPING,
         EfficientFormerForImageClassification,
         EfficientFormerForImageClassificationWithTeacher,
         EfficientFormerModel,
     )
-    from transformers.models.efficientformer.modeling_efficientformer import (
-        EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+        MODEL_MAPPING_NAMES,
     )
 
 
@@ -191,7 +188,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": EfficientFormerModel,
+            "image-feature-extraction": EfficientFormerModel,
             "image-classification": (
                 EfficientFormerForImageClassification,
                 EfficientFormerForImageClassificationWithTeacher,
@@ -222,18 +219,6 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     @unittest.skip(reason="EfficientFormer does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -321,7 +306,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         for model_class in self.all_model_classes:
             # EfficientFormerForImageClassificationWithTeacher supports inference-only
             if (
-                model_class in get_values(MODEL_MAPPING)
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
                 or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
             ):
                 continue
@@ -343,9 +328,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
         for model_class in self.all_model_classes:
             if (
-                model_class
+                model_class.__name__
                 not in [
-                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                    *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES.values(),
                 ]
                 or model_class.__name__ == "EfficientFormerForImageClassificationWithTeacher"
             ):
@@ -383,9 +368,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "snap-research/efficientformer-l1-300"
+        model = EfficientFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

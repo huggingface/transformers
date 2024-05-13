@@ -119,16 +119,16 @@ model = AutoModel.from_config(config)
 
 TFPreTrainedModel
 [[autodoc]] TFPreTrainedModel
-- push_to_hub
-- all
+    - push_to_hub
+    - all
 
 ## TFModelUtilsMixin
 [[autodoc]] modeling_tf_utils.TFModelUtilsMixin
 
 FlaxPreTrainedModel
 [[autodoc]] FlaxPreTrainedModel
-- push_to_hub
-- all
+    - push_to_hub
+    - all
 
 ## 推送到 Hub
 [[autodoc]] utils.PushToHubMixin

@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch VitMatte model. """
 
 
-import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
@@ -37,7 +36,6 @@ if is_torch_available():
     import torch
 
     from transformers import VitDetConfig, VitMatteForImageMatting
-    from transformers.models.vitmatte.modeling_vitmatte import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -112,6 +110,7 @@ class VitMatteModelTester:
     def get_config(self):
         return VitMatteConfig(
             backbone_config=self.get_backbone_config(),
+            backbone=None,
             hidden_size=self.hidden_size,
             fusion_hidden_sizes=self.fusion_hidden_sizes,
         )
@@ -189,27 +188,15 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_common_attributes(self):
         pass
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VitMatteForImageMatting.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hustvl/vitmatte-small-composition-1k"
+        model = VitMatteForImageMatting.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
     def test_retain_grad_hidden_states_attentions(self):

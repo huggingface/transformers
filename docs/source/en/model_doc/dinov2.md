@@ -55,6 +55,18 @@ with torch.no_grad():
 print((last_hidden_states - traced_outputs[0]).abs().max())
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DPT.
+
+- Demo notebooks for DINOv2 can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DINOv2). 🌎
+
+<PipelineTag pipeline="image-classification"/>
+
+- [`Dinov2ForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- See also: [Image classification task guide](../tasks/image_classification)
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## Dinov2Config
 

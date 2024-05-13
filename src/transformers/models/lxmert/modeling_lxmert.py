@@ -43,10 +43,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
 
-LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "unc-nlp/lxmert-base-uncased",
-]
-
 
 class GeLU(nn.Module):
     def __init__(self):

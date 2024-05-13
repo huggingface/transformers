@@ -87,7 +87,7 @@ DistilBertConfig {
 Pretrained model attributes can be modified in the [`~PretrainedConfig.from_pretrained`] function:
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+>>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
 Once you are satisfied with your model configuration, you can save it with [`~PretrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory:
@@ -128,13 +128,13 @@ This creates a model with random values instead of pretrained weights. You won't
 Create a pretrained model with [`~PreTrainedModel.from_pretrained`]:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
@@ -152,13 +152,13 @@ This creates a model with random values instead of pretrained weights. You won't
 Create a pretrained model with [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </tf>
 </frameworkcontent>
@@ -174,7 +174,7 @@ For example, [`DistilBertForSequenceClassification`] is a base DistilBERT model 
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`DistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
@@ -182,7 +182,7 @@ Easily reuse this checkpoint for another task by switching to a different model 
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
 
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
 <tf>
@@ -191,7 +191,7 @@ For example, [`TFDistilBertForSequenceClassification`] is a base DistilBERT mode
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
 
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`TFDistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
@@ -199,7 +199,7 @@ Easily reuse this checkpoint for another task by switching to a different model 
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </tf>
 </frameworkcontent>
@@ -232,7 +232,7 @@ It is important to remember the vocabulary from a custom tokenizer will be diffe
 ```py
 >>> from transformers import DistilBertTokenizer
 
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
@@ -240,7 +240,7 @@ Create a fast tokenizer with the [`DistilBertTokenizerFast`] class:
 ```py
 >>> from transformers import DistilBertTokenizerFast
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>
@@ -249,7 +249,7 @@ By default, [`AutoTokenizer`] will try to load a fast tokenizer. You can disable
 
 </Tip>
 
-## Image Processor
+## Image processor
 
 An image processor processes vision inputs. It inherits from the base [`~image_processing_utils.ImageProcessingMixin`] class.
 
@@ -311,7 +311,73 @@ ViTImageProcessor {
 }
 ```
 
-## Feature Extractor
+## Backbone
+
+<div style="text-align: center">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png">
+</div>
+
+Computer vision models consist of a backbone, neck, and head. The backbone extracts features from an input image, the neck combines and enhances the extracted features, and the head is used for the main task (e.g., object detection). Start by initializing a backbone in the model config and specify whether you want to load pretrained weights or load randomly initialized weights. Then you can pass the model config to the model head.
+
+For example, to load a [ResNet](../model_doc/resnet) backbone into a [MaskFormer](../model_doc/maskformer) model with an instance segmentation head:
+
+<hfoptions id="backbone">
+<hfoption id="pretrained weights">
+
+Set `use_pretrained_backbone=True` to load pretrained ResNet weights for the backbone.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=True) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+You could also load the backbone config separately and then pass it to the model config.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
+config = MaskFormerConfig(backbone_config=backbone_config)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+</hfoption>
+<hfoption id="random weights">
+
+Set `use_pretrained_backbone=False` to randomly initialize a ResNet backbone.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=False) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+You could also load the backbone config separately and then pass it to the model config.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+backbone_config = ResNetConfig()
+config = MaskFormerConfig(backbone_config=backbone_config)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+</hfoption>
+</hfoptions>
+
+[timm](https://hf.co/docs/timm/index) models are loaded with [`TimmBackbone`] and [`TimmBackboneConfig`].
+
+```python
+from transformers import TimmBackboneConfig, TimmBackbone
+
+backbone_config = TimmBackboneConfig("resnet50")
+model = TimmBackbone(config=backbone_config)
+```
+
+## Feature extractor
 
 A feature extractor processes audio inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may also inherit from the [`SequenceFeatureExtractor`] class for processing audio inputs.
 
@@ -356,7 +422,6 @@ Wav2Vec2FeatureExtractor {
   "sampling_rate": 8000
 }
 ```
-
 
 ## Processor
 

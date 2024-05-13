@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
-}
-
 
 class MobileBertConfig(PretrainedConfig):
     r"""
@@ -104,12 +100,8 @@ class MobileBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
 
-    pretrained_config_archive_map = MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "mobilebert"
 
     def __init__(

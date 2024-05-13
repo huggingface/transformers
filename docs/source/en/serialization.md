@@ -70,10 +70,10 @@ or view help in command line:
 optimum-cli export onnx --help
 ```
 
-To export a model's checkpoint from the 🤗 Hub, for example, `distilbert-base-uncased-distilled-squad`, run the following command: 
+To export a model's checkpoint from the 🤗 Hub, for example, `distilbert/distilbert-base-uncased-distilled-squad`, run the following command: 
 
 ```bash
-optimum-cli export onnx --model distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
 ```
 
 You should see the logs indicating progress and showing where the resulting `model.onnx` is saved, like this:
@@ -166,7 +166,7 @@ pip install transformers[onnx]
 Use `transformers.onnx` package as a Python module to export a checkpoint using a ready-made configuration:
 
 ```bash
-python -m transformers.onnx --model=distilbert-base-uncased onnx/
+python -m transformers.onnx --model=distilbert/distilbert-base-uncased onnx/
 ```
 
 This exports an ONNX graph of the checkpoint defined by the `--model` argument. Pass any checkpoint on the 🤗 Hub or one that's stored locally.
@@ -177,7 +177,7 @@ load and run the model with ONNX Runtime as follows:
 >>> from transformers import AutoTokenizer
 >>> from onnxruntime import InferenceSession
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 >>> session = InferenceSession("onnx/model.onnx")
 >>> # ONNX Runtime expects NumPy arrays as input
 >>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")

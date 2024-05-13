@@ -18,13 +18,13 @@ limitations under the License.
 
 This folder provide a template for adding a new example script implementing a training or inference task with the
 models in the 🤗 Transformers library. To use it, you will need to install cookiecutter:
-```
+```bash
 pip install cookiecutter
 ```
 or refer to the installation page of the [cookiecutter documentation](https://cookiecutter.readthedocs.io/).
 
 You can then run the following command inside the `examples` folder of the transformers repo:
-```
+```bash
 cookiecutter ../templates/adding_a_new_example_script/
 ```
 and answer the questions asked, which will generate a new folder where you will find a pre-filled template for your

@@ -20,7 +20,7 @@
 
     This script with default values fine-tunes and evaluate a pretrained OpenAI GPT on the RocStories dataset:
         python run_openai_gpt.py \
-          --model_name openai-gpt \
+          --model_name openai-community/openai-gpt \
           --do_train \
           --do_eval \
           --train_dataset "$ROC_STORIES_DIR/cloze_test_val__spring2016 - cloze_test_ALL_val.csv" \
@@ -104,7 +104,7 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="openai-gpt", help="pretrained model name")
+    parser.add_argument("--model_name", type=str, default="openai-community/openai-gpt", help="pretrained model name")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
     parser.add_argument(

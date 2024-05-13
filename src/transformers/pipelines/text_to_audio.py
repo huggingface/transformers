@@ -200,7 +200,10 @@ class TextToAudioPipeline(Pipeline):
 
     def postprocess(self, waveform):
         output_dict = {}
-
+        if isinstance(waveform, dict):
+            waveform = waveform["waveform"]
+        elif isinstance(waveform, tuple):
+            waveform = waveform[0]
         output_dict["audio"] = waveform.cpu().float().numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 

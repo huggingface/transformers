@@ -23,13 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/unispeech-sat-base-100h-libri-ft": (
-        "https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft/resolve/main/config.json"
-    ),
-    # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
-}
-
 
 class UniSpeechSatConfig(PretrainedConfig):
     r"""
@@ -69,7 +62,7 @@ class UniSpeechSatConfig(PretrainedConfig):
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the feature encoder.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
+            The dropout probability for the output of the feature encoder that's used by the quantizer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`UniSpeechSatForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):

@@ -36,11 +36,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "google/vivit-b-16x2-kinetics400"
 _CONFIG_FOR_DOC = "VivitConfig"
 
-VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vivit-b-16x2-kinetics400",
-    # See all Vivit models at https://huggingface.co/models?filter=vivit
-]
-
 
 class VivitTubeletEmbeddings(nn.Module):
     """
@@ -69,11 +64,12 @@ class VivitTubeletEmbeddings(nn.Module):
             config.num_channels, config.hidden_size, kernel_size=config.tubelet_size, stride=config.tubelet_size
         )
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        if height != self.image_size or width != self.image_size:
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+                f"Image image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
             )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
@@ -104,16 +100,50 @@ class VivitEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def forward(self, pixel_values):
-        batch_size = pixel_values.shape[0]
-        embeddings = self.patch_embeddings(pixel_values)
+    def interpolate_pos_encoding(self, embeddings, height, width):
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+        if num_patches == num_positions and height == width:
+            return self.position_embeddings
+        class_pos_embed = self.position_embeddings[:, 0]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         cls_tokens = self.cls_token.tile([batch_size, 1, 1])
-
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
 
@@ -389,6 +419,7 @@ class VivitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vivit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -438,6 +469,8 @@ VIVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -483,6 +516,7 @@ class VivitModel(VivitPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutputWithPooling]:
         r"""
@@ -572,7 +606,7 @@ class VivitModel(VivitPreTrainedModel):
 
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -597,8 +631,18 @@ class VivitModel(VivitPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the
-[CLS] token) e.g. for Kinetics-400.""",
+    """
+    ViViT Transformer model with a video classification head on top (a linear layer on top of the final hidden state of the
+[CLS] token) e.g. for Kinetics-400.
+
+    <Tip>
+
+        Note that it's possible to fine-tune ViT on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
+
+    </Tip>
+    """,
     VIVIT_START_DOCSTRING,
 )
 class VivitForVideoClassification(VivitPreTrainedModel):
@@ -623,6 +667,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], ImageClassifierOutput]:
         r"""
@@ -716,6 +761,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 

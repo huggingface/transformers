@@ -23,7 +23,7 @@ La generación de resúmenes (summarization, en inglés) crea una versión más 
 - Extractiva: Extrae la información más relevante de un documento.
 - Abstractiva: Genera un texto nuevo que captura la información más importante.
 
-Esta guía te mostrará cómo puedes hacer fine-tuning del modelo [T5](https://huggingface.co/t5-small) sobre el subset de proyectos de ley del estado de California, dentro del dataset [BillSum](https://huggingface.co/datasets/billsum) para hacer generación de resúmenes abstractiva.
+Esta guía te mostrará cómo puedes hacer fine-tuning del modelo [T5](https://huggingface.co/google-t5/t5-small) sobre el subset de proyectos de ley del estado de California, dentro del dataset [BillSum](https://huggingface.co/datasets/billsum) para hacer generación de resúmenes abstractiva.
 
 <Tip>
 
@@ -65,7 +65,7 @@ Carga el tokenizador T5 para procesar `text` y `summary`:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
 ```
 
 La función de preprocesamiento necesita:
@@ -122,7 +122,7 @@ Carga T5 con [`AutoModelForSeq2SeqLM`]:
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 ```
 
 <Tip>
@@ -140,7 +140,7 @@ En este punto, solo faltan tres pasos:
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="./results",
-...     evaluation_strategy="epoch",
+...     eval_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -200,7 +200,7 @@ Carga T5 con [`TFAutoModelForSeq2SeqLM`]:
 ```py
 >>> from transformers import TFAutoModelForSeq2SeqLM
 
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> model = TFAutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 ```
 
 Configura el modelo para entrenamiento con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):

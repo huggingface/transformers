@@ -109,7 +109,7 @@ def main(args):
     tokenizer.decoder = decoders.Metaspace()
 
     if args.export_to_hub:
-        logger.info("Exporting the trained tokenzier to Hub.")
+        logger.info("Exporting the trained tokenizer to Hub.")
         new_tokenizer = AlbertTokenizerFast(tokenizer_object=tokenizer)
         new_tokenizer.push_to_hub("unigram-tokenizer-dataset")
 

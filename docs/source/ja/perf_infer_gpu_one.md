@@ -44,7 +44,7 @@ Flash Attention 2は、モデルのdtypeが`fp16`または`bf16`の場合にの�
 
 ### Quick usage
 
-モデルでFlash Attention 2を有効にするには、`from_pretrained`の引数に`use_flash_attention_2`を追加します。
+モデルでFlash Attention 2を有効にするには、`from_pretrained`の引数に`attn_implementation="flash_attention_2"`を追加します。
 
 
 ```python
@@ -57,7 +57,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     torch_dtype=torch.bfloat16, 
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 ```
 
@@ -114,7 +114,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_8bit=True,
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 ```
 
@@ -132,7 +132,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_4bit=True,
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 ```
 
@@ -151,7 +151,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_4bit=True,
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 
 lora_config = LoraConfig(

@@ -46,16 +46,10 @@ from .configuration_xlm_roberta import XLMRobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-roberta-base"
 _CONFIG_FOR_DOC = "XLMRobertaConfig"
 
 remat = nn_partitioning.remat
-
-FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-roberta-base",
-    "xlm-roberta-large",
-    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
-]
 
 
 # Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
@@ -1359,7 +1353,7 @@ class FlaxXLMRobertaForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 

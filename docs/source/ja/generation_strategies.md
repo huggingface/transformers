@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 テキスト生成は、オープンエンドのテキスト生成、要約、翻訳など、多くの自然言語処理タスクに不可欠です。また、テキストを出力とするさまざまな混在モダリティアプリケーションにも影響を与えており、例えば音声からテキストへの変換や画像からテキストへの変換などがあります。テキストを生成できるいくつかのモデルには、GPT2、XLNet、OpenAI GPT、CTRL、TransformerXL、XLM、Bart、T5、GIT、Whisperが含まれます。
 
-[`~transformers.generation_utils.GenerationMixin.generate`] メソッドを使用して、異なるタスクのテキスト出力を生成するいくつかの例をご紹介します：
+[`~generation.GenerationMixin.generate`] メソッドを使用して、異なるタスクのテキスト出力を生成するいくつかの例をご紹介します：
 * [テキスト要約](./tasks/summarization#inference)
 * [画像のキャプション](./model_doc/git#transformers.GitForCausalLM.forward.example)
 * [音声の転記](./model_doc/whisper#transformers.WhisperForConditionalGeneration.forward.example)
@@ -41,7 +41,7 @@ generateメソッドへの入力は、モデルのモダリティに依存しま
 ```python
 >>> from transformers import AutoModelForCausalLM
 
->>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 >>> model.generation_config
 GenerationConfig {
     "bos_token_id": 50256,
@@ -94,8 +94,8 @@ GenerationConfig {
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
 
->>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 
 >>> translation_generation_config = GenerationConfig(
 ...     num_beams=4,
@@ -132,8 +132,8 @@ GenerationConfig {
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
->>> tok = AutoTokenizer.from_pretrained("gpt2")
->>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
 >>> streamer = TextStreamer(tok)
 
@@ -157,7 +157,7 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "I look forward to"
->>> checkpoint = "distilgpt2"
+>>> checkpoint = "distilbert/distilgpt2"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -177,7 +177,7 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -201,7 +201,7 @@ products or services, feel free to contact us at any time. We look forward to he
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> set_seed(0)  # For reproducibility
 
->>> checkpoint = "gpt2-large"
+>>> checkpoint = "openai-community/gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
@@ -226,7 +226,7 @@ that\'s a terrible feeling."']
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> prompt = "It is astonishing how one can"
->>> checkpoint = "gpt2-medium"
+>>> checkpoint = "openai-community/gpt2-medium"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -248,7 +248,7 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 >>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "t5-small"
+>>> checkpoint = "google-t5/t5-small"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")

@@ -27,11 +27,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/config.json",
-    # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
-}
-
 
 class BlenderbotConfig(PretrainedConfig):
     r"""

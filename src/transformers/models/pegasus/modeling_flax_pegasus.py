@@ -707,7 +707,7 @@ class FlaxPegasusEncoder(nn.Module):
 
         # embed positions
         embed_pos = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters
+        # explicitly cast the positions here, since self.embed_positions are not registered as parameters
         embed_pos = embed_pos.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + embed_pos
@@ -778,7 +778,7 @@ class FlaxPegasusDecoder(nn.Module):
 
         # embed positions
         positions = jnp.take(self.embed_positions, position_ids, axis=0)
-        # explictly cast the positions here, since self.embed_positions are not registered as parameters
+        # explicitly cast the positions here, since self.embed_positions are not registered as parameters
         positions = positions.astype(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds + positions

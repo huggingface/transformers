@@ -42,11 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
-CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "CIDAS/clipseg-rd64-refined",
-    # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
-]
-
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
@@ -738,6 +733,7 @@ class CLIPSegTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
+                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),
@@ -1292,7 +1288,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         output = output.view(batch_size, output.shape[1], size, size)
 
-        logits = self.transposed_convolution(output).squeeze()
+        logits = self.transposed_convolution(output).squeeze(1)
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_attentions] if v is not None)

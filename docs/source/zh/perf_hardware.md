@@ -64,7 +64,7 @@ rendered properly in your Markdown viewer.
 
 如果您使用多个GPU，则卡之间的互连方式可能会对总训练时间产生巨大影响。如果GPU位于同一物理节点上，您可以运行以下代码：
 
-```
+```bash
 nvidia-smi topo -m
 ```
 
@@ -135,8 +135,8 @@ GPU1    PHB      X      0-11            N/A
 ```bash
 # DDP w/ NVLink
 
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train \
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -144,8 +144,8 @@ rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch
 
 # DDP w/o NVLink
 
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 python -m torch.distributed.launch \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 torchrun \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 

@@ -64,11 +64,6 @@ except Exception:
 _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "sweetcocoa/pop2piano"
 
-POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sweetcocoa/pop2piano",
-    # See all Pop2Piano models at https://huggingface.co/models?filter=pop2piano
-]
-
 
 POP2PIANO_INPUTS_DOCSTRING = r"""
     Args:
@@ -589,7 +584,7 @@ class Pop2PianoBlock(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
@@ -1264,10 +1259,8 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
                 Since Pop2Piano is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+                    - [`~generation.GenerateEncoderDecoderOutput`],
+                    - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
 
         if generation_config is None:

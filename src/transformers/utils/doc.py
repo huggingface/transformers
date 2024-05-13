@@ -1075,6 +1075,7 @@ def add_code_sample_docstrings(
     expected_output=None,
     expected_loss=None,
     real_checkpoint=None,
+    revision=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1143,6 +1144,15 @@ def add_code_sample_docstrings(
         func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
+        if revision is not None:
+            if re.match(r"^refs/pr/\\d+", revision):
+                raise ValueError(
+                    f"The provided revision '{revision}' is incorrect. It should point to"
+                    " a pull request reference on the hub like 'refs/pr/6'"
+                )
+            built_doc = built_doc.replace(
+                f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
+            )
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 

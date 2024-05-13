@@ -11,7 +11,7 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
+from .base import ArgumentHandler, ChunkPipeline, Dataset, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -59,7 +59,7 @@ class AggregationStrategy(ExplicitEnum):
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         ignore_labels (`List[str]`, defaults to `["O"]`):
             A list of labels to ignore.
@@ -90,8 +90,7 @@ class AggregationStrategy(ExplicitEnum):
                   cannot end up with different tags. scores will be averaged first across tokens, and then the maximum
                   label is applied.
                 - "max" : (works only on word based models) Will use the `SIMPLE` strategy except that words, cannot
-                  end up with different tags. Word entity will simply be the token with the maximum score.
-    """,
+                  end up with different tags. Word entity will simply be the token with the maximum score.""",
 )
 class TokenClassificationPipeline(ChunkPipeline):
     """
@@ -503,7 +502,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             entities (`dict`): The entities predicted by the pipeline.
         """
         # Get the first entity in the entity group
-        entity = entities[0]["entity"].split("-")[-1]
+        entity = entities[0]["entity"].split("-", 1)[-1]
         scores = np.nanmean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 

@@ -33,6 +33,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_vision_available,
     logging,
@@ -48,6 +49,9 @@ if is_scipy_available():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -57,12 +61,6 @@ _CONFIG_FOR_DOC = "YolosConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
 _EXPECTED_OUTPUT_SHAPE = [1, 3401, 384]
-
-
-YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/yolos-small",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-]
 
 
 @dataclass
@@ -532,6 +530,7 @@ class YolosPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -756,7 +755,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
@@ -768,11 +767,11 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected remote with confidence 0.994 at location [46.96, 72.61, 181.02, 119.73]
-        Detected remote with confidence 0.975 at location [340.66, 79.19, 372.59, 192.65]
-        Detected cat with confidence 0.984 at location [12.27, 54.25, 319.42, 470.99]
-        Detected remote with confidence 0.922 at location [41.66, 71.96, 178.7, 120.33]
-        Detected cat with confidence 0.914 at location [342.34, 21.48, 638.64, 372.46]
+        Detected remote with confidence 0.991 at location [46.48, 72.78, 178.98, 119.3]
+        Detected remote with confidence 0.908 at location [336.48, 79.27, 368.23, 192.36]
+        Detected cat with confidence 0.934 at location [337.18, 18.06, 638.14, 373.09]
+        Detected cat with confidence 0.979 at location [10.93, 53.74, 313.41, 470.67]
+        Detected remote with confidence 0.974 at location [41.63, 72.23, 178.09, 119.99]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1074,11 +1073,12 @@ class YolosLoss(nn.Module):
         # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}

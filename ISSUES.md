@@ -152,7 +152,7 @@ You are not required to read the following guidelines before opening an issue. H
 
    ```bash
     cd examples/seq2seq
-    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
+    torchrun --nproc_per_node=2 ./finetune_trainer.py \
     --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --n_train 500 --num_train_epochs 1 \

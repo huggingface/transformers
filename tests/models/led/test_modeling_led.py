@@ -457,6 +457,20 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 ],
             )
 
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+        # overwrite because LED does not have (bs, num_heads, seq_len, seq_len) shape
+        encoder_expected_shape = (
+            batch_size,
+            config.num_attention_heads,
+            seq_length,
+            self.model_tester.attention_window // 2 * 2 + 1,
+        )
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""

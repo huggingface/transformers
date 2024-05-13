@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openbmb/cpm-ant-10b": "https://huggingface.co/openbmb/cpm-ant-10b/blob/main/config.json"
-    # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
-}
-
 
 class CpmAntConfig(PretrainedConfig):
     r"""
@@ -51,7 +46,7 @@ class CpmAntConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of layers of the Transformer encoder.
         dropout_p (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
+            The dropout probability for all fully connected layers in the embeddings, encoder.
         position_bias_num_buckets (`int`, *optional*, defaults to 512):
             The number of position_bias buckets.
         position_bias_max_distance (`int`, *optional*, defaults to 2048):

@@ -61,9 +61,9 @@ class OnnxConverterArgumentParser(ArgumentParser):
             "--model",
             type=str,
             required=True,
-            help="Model's id or path (ex: bert-base-cased)",
+            help="Model's id or path (ex: google-bert/bert-base-cased)",
         )
-        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
+        self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: google-bert/bert-base-cased)")
         self.add_argument(
             "--framework",
             type=str,
@@ -273,40 +273,22 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
-    from transformers.pytorch_utils import is_torch_less_than_1_11
-
     print(f"Using framework PyTorch: {torch.__version__}")
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
-        # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-        # so we check the torch version for backwards compatibility
-        if is_torch_less_than_1_11:
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                use_external_data_format=use_external_format,
-                enable_onnx_checker=True,
-                opset_version=opset,
-            )
-        else:
-            export(
-                nlp.model,
-                model_args,
-                f=output.as_posix(),
-                input_names=ordered_input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                do_constant_folding=True,
-                opset_version=opset,
-            )
+        export(
+            nlp.model,
+            model_args,
+            f=output.as_posix(),
+            input_names=ordered_input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            do_constant_folding=True,
+            opset_version=opset,
+        )
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):

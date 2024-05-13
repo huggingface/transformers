@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/hf-seamless-m4t-medium": "https://huggingface.co/facebook/hf-seamless-m4t-medium/resolve/main/config.json",
-    # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
-}
-
 
 class SeamlessM4TConfig(PretrainedConfig):
     r"""
@@ -223,7 +218,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the duration predictor. Applies to the vocoder only.
         var_pred_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
+            The dropout probability of the duration predictor. Applies to the vocoder only.
         vocoder_offset (`int`, *optional*, defaults to 4):
             Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
 

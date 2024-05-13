@@ -34,8 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.swin.modeling_tf_swin import (
-        TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFSwinForImageClassification,
         TFSwinForMaskedImageModeling,
         TFSwinModel,
@@ -237,9 +237,9 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            self.assertIsInstance(model.get_input_embeddings(), keras.layers.Layer)
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Dense))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Dense))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -373,9 +373,9 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swin-tiny-patch4-window7-224"
+        model = TFSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_vision

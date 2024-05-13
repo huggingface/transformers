@@ -178,7 +178,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 ```bash
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -201,7 +201,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 ```bash
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path t5-small --per_device_train_batch_size 1 \
+--model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
 --output_dir output_dir --overwrite_output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
@@ -249,7 +249,7 @@ recommend ZeRO-3 config as starting one. -->
 注意：
 
 - 如果您需要在特定的 GPU 上运行，而不是 GPU 0，则无法使用 `CUDA_VISIBLE_DEVICES` 来限制可用 GPU 的可见范围。相反，您必须使用以下语法：
-  
+
   ```bash
   deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
   ```
@@ -1628,7 +1628,7 @@ from transformers import T5ForConditionalGeneration, T5Config
 import deepspeed
 
 with deepspeed.zero.Init():
-    config = T5Config.from_pretrained("t5-small")
+    config = T5Config.from_pretrained("google-t5/t5-small")
     model = T5ForConditionalGeneration(config)
 ```
 
@@ -1640,7 +1640,7 @@ with deepspeed.zero.Init():
 from transformers import AutoModel, Trainer, TrainingArguments
 
 training_args = TrainingArguments(..., deepspeed=ds_config)
-model = AutoModel.from_pretrained("t5-small")
+model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
@@ -1690,7 +1690,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds
 ```bash
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path t5-small --output_dir output_dir \
+--model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
 --overwrite_output_dir --per_device_eval_batch_size 4 \
@@ -1845,7 +1845,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 ### 注意事项
 
-- DeepSpeed 与 PyTorch [`Trainer`] 一起工作，但不与 TF [`TFTrainer`] 一起工作。
 - 尽管 DeepSpeed 有一个可安装的 PyPI 包，但强烈建议从源代码安装它，以最好地匹配您的硬件，如果您需要启用某些功能，如 1-bit Adam，这些功能在 pypi 发行版中不可用。
 - 您不必使用🤗  Transformers的 [`Trainer`] 来使用 DeepSpeed   - 您可以使用任何模型与自己的训练器，您还需要根据 [DeepSpeed 集成说明](https://www.deepspeed.ai/getting-started/#writing-deepspeed-models) 调整后者。
 
@@ -1871,7 +1870,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-model = AutoModel.from_pretrained("gpt2")
+model = AutoModel.from_pretrained("openai-community/gpt2")
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
@@ -1885,7 +1884,7 @@ import deepspeed
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
 dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-config = AutoConfig.from_pretrained("gpt2")
+config = AutoConfig.from_pretrained("openai-community/gpt2")
 model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
@@ -1983,7 +1982,7 @@ train_batch_size = 1 * world_size
 # - if using `offload_param` you can manually finetune stage3_param_persistence_threshold to control
 # - which params should remain on gpus - the larger the value the smaller the offload size
 #
-# For indepth info on Deepspeed config see
+# For in-depth info on Deepspeed config see
 # https://huggingface.co/docs/transformers/main/main_classes/deepspeed
 
 # keeping the same format as json for consistency, except it uses lower case for true/false
@@ -2049,7 +2048,7 @@ print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 ```
 
 让我们保存它为 `t0.py`并运行：
-```
+```bash
 $ deepspeed --num_gpus 2 t0.py
 rank0:
    in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
@@ -2075,13 +2074,13 @@ rank1:
 
 要运行DeepSpeed测试，请至少运行以下命令：
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
 ```
 
 如果你更改了任何模型或PyTorch示例代码，请同时运行多模型测试。以下将运行所有DeepSpeed测试：
 
-```
+```bash
 RUN_SLOW=1 pytest tests/deepspeed
 ```
 

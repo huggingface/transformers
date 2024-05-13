@@ -189,13 +189,13 @@ class Jukebox1bModelTester(unittest.TestCase):
         self.assertListEqual(metadata.numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         audio_conditioning, metadata_conditioning, lyric_tokens = top_prior.get_cond(music_token_conds, metadata)
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             audio_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_AUDIO_COND), atol=1e-4, rtol=1e-4
         )
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             metadata_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_META_COND), atol=1e-4, rtol=1e-4
         )
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             lyric_tokens[0, :30].detach(), torch.tensor(self.EXPECTED_LYRIC_COND), atol=1e-4, rtol=1e-4
         )
 
@@ -213,21 +213,21 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = model._sample(
             zs, tokens, sample_levels=[0], save_results=False, sample_length=40 * model.priors[0].raw_to_tokens
         )
-        torch.testing.assert_allclose(zs[0][0][:40], torch.tensor(self.EXPECTED_PRIMED_0))
+        torch.testing.assert_close(zs[0][0][:40], torch.tensor(self.EXPECTED_PRIMED_0))
 
         upper_2 = torch.cat((zs[0], torch.zeros(1, 2048 - zs[0].shape[-1])), dim=-1).long()
         zs = [upper_2, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0], None]
         zs = model._sample(
             zs, tokens, sample_levels=[1], save_results=False, sample_length=40 * model.priors[1].raw_to_tokens
         )
-        torch.testing.assert_allclose(zs[1][0][:40], torch.tensor(self.EXPECTED_PRIMED_1))
+        torch.testing.assert_close(zs[1][0][:40], torch.tensor(self.EXPECTED_PRIMED_1))
 
         upper_1 = torch.cat((zs[1], torch.zeros(1, 2048 - zs[1].shape[-1])), dim=-1).long()
         zs = [upper_2, upper_1, model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0]]
         zs = model._sample(
             zs, tokens, sample_levels=[2], save_results=False, sample_length=40 * model.priors[2].raw_to_tokens
         )
-        torch.testing.assert_allclose(zs[2][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_2))
+        torch.testing.assert_close(zs[2][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_2))
 
     @slow
     def test_vqvae(self):
@@ -236,11 +236,11 @@ class Jukebox1bModelTester(unittest.TestCase):
         x = torch.rand((1, 5120, 1))
         with torch.no_grad():
             zs = model.vqvae.encode(x, start_level=2, bs_chunks=x.shape[0])
-        torch.testing.assert_allclose(zs[0][0], torch.tensor(self.EXPECTED_VQVAE_ENCODE))
+        torch.testing.assert_close(zs[0][0], torch.tensor(self.EXPECTED_VQVAE_ENCODE))
 
         with torch.no_grad():
             x = model.vqvae.decode(zs, start_level=2, bs_chunks=x.shape[0])
-        torch.testing.assert_allclose(x[0, :40, 0], torch.tensor(self.EXPECTED_VQVAE_DECODE), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(x[0, :40, 0], torch.tensor(self.EXPECTED_VQVAE_DECODE), atol=1e-4, rtol=1e-4)
 
 
 @require_torch
@@ -379,19 +379,19 @@ class Jukebox5bModelTester(unittest.TestCase):
         model.priors[0].to(torch_device)
         zs = [torch.zeros(1, 0, dtype=torch.long).to(torch_device) for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        torch.testing.assert_close(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
         model.priors[0].cpu()
 
         set_seed(0)
         model.priors[1].to(torch_device)
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[1].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
+        torch.testing.assert_close(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
         model.priors[1].cpu()
 
         set_seed(0)
         model.priors[2].to(torch_device)
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[2].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
+        torch.testing.assert_close(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 
     @slow
     @require_torch_accelerator

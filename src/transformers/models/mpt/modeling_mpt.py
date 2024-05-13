@@ -42,19 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "mosaicml/mpt-7b"
 _CONFIG_FOR_DOC = "MptConfig"
 
-MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mosaicml/mpt-7b",
-    "mosaicml/mpt-7b-storywriter",
-    "mosaicml/mpt-7b-instruct",
-    "mosaicml/mpt-7b-8k",
-    "mosaicml/mpt-7b-8k-instruct",
-    "mosaicml/mpt-7b-8k-chat",
-    "mosaicml/mpt-30b",
-    "mosaicml/mpt-30b-instruct",
-    "mosaicml/mpt-30b-chat",
-    # See all MPT models at https://huggingface.co/models?filter=mpt
-]
-
 
 def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=None):
     r"""
@@ -66,14 +53,14 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
     alibi = torch.arange(1 - sequence_length, 1, dtype=torch.int32, device=device).view(1, 1, 1, sequence_length)
     num_heads_power_of_2 = 2 ** math.ceil(math.log2(num_heads))
 
-    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.float32, device=device)
+    base = torch.arange(1, num_heads_power_of_2 + 1, dtype=torch.int64, device=device).float()
     base = base * (alibi_bias_max / num_heads_power_of_2)
 
     slopes = 1.0 / torch.pow(2, base)
-    slopes = slopes.view(1, num_heads, 1, 1)
+    slopes = slopes.view(1, num_heads_power_of_2, 1, 1)
 
     if num_heads_power_of_2 != num_heads:
-        slopes = torch.concat([slopes[1::2], slopes[::2]])[:num_heads]
+        slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[:, :num_heads, ...]
 
     alibi = alibi * slopes
     return alibi.squeeze(0)
@@ -265,7 +252,7 @@ class MptPreTrainedModel(PreTrainedModel):
 
     @staticmethod
     def _convert_to_mpt_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
+        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]],
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
@@ -729,7 +716,10 @@ class MptForSequenceClassification(MptPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

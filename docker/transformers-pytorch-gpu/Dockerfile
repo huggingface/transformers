@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu20.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,11 +11,11 @@ ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # If set to nothing, will install the latest version
-ARG PYTORCH='2.1.0'
+ARG PYTORCH='2.1.1'
 ARG TORCH_VISION=''
 ARG TORCH_AUDIO=''
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu118'
+ARG CUDA='cu121'
 
 RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA
 RUN [ ${#TORCH_VISION} -gt 0 ] && VERSION='torchvision=='TORCH_VISION'.*' ||  VERSION='torchvision'; python3 -m pip install --no-cache-dir -U $VERSION --extra-index-url https://download.pytorch.org/whl/$CUDA

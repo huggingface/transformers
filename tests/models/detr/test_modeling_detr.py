@@ -130,6 +130,8 @@ class DetrModelTester:
             num_labels=self.num_labels,
             use_timm_backbone=False,
             backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -180,7 +182,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": DetrModel,
+            "image-feature-extraction": DetrModel,
             "image-segmentation": DetrForSegmentation,
             "object-detection": DetrForObjectDetection,
         }
@@ -192,6 +194,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -242,6 +245,10 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="DETR does not have a get_input_embeddings method")
@@ -399,6 +406,22 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -425,6 +448,9 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -440,6 +466,14 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            elif model_class.__name__ == "DetrForSegmentation":
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 
@@ -606,7 +640,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
             torch_device
         )
         expected_number_of_segments = 5
-        expected_first_segment = {"id": 1, "label_id": 17, "was_fused": False, "score": 0.994096}
+        expected_first_segment = {"id": 1, "label_id": 17, "was_fused": False, "score": 0.994097}
 
         number_of_unique_segments = len(torch.unique(results["segmentation"]))
         self.assertTrue(

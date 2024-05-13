@@ -276,8 +276,8 @@ class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
                 from torch import nn
                 import torch
 
-                tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-                model = AlbertForSequenceClassificationWithPabee.from_pretrained('albert-base-v2')
+                tokenizer = AlbertTokenizer.from_pretrained('albert/albert-base-v2')
+                model = AlbertForSequenceClassificationWithPabee.from_pretrained('albert/albert-base-v2')
                 input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
                 labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
                 outputs = model(input_ids, labels=labels)

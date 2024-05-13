@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch MobileViTV2 model. """
 
 
-import inspect
 import unittest
 
 from transformers import MobileViTV2Config
@@ -32,7 +31,6 @@ if is_torch_available():
 
     from transformers import MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation, MobileViTV2Model
     from transformers.models.mobilevitv2.modeling_mobilevitv2 import (
-        MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST,
         make_divisible,
     )
 
@@ -191,7 +189,7 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileViTV2Model,
+            "image-feature-extraction": MobileViTV2Model,
             "image-classification": MobileViTV2ForImageClassification,
             "image-segmentation": MobileViTV2ForSemanticSegmentation,
         }
@@ -227,18 +225,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -292,9 +278,9 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileViTV2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "apple/mobilevitv2-1.0-imagenet1k-256"
+        model = MobileViTV2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

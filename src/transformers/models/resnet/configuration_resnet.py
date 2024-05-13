@@ -27,10 +27,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
-}
-
 
 class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
@@ -64,11 +60,13 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
     ```python

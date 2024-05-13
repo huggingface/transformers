@@ -23,12 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pix2struct-textcaps-base": (
-        "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json"
-    ),
-}
-
 
 class Pix2StructTextConfig(PretrainedConfig):
     r"""
@@ -59,7 +53,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -199,7 +193,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):

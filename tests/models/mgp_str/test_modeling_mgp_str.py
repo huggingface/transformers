@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch MGP-STR model. """
 
-import inspect
 import unittest
 
 import requests
@@ -32,7 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MgpstrForSceneTextRecognition
+    from transformers import MgpstrForSceneTextRecognition, MgpstrModel
 
 
 if is_vision_available():
@@ -119,7 +118,11 @@ class MgpstrModelTester:
 @require_torch
 class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": MgpstrForSceneTextRecognition} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": MgpstrForSceneTextRecognition, "image-feature-extraction": MgpstrModel}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
 
     test_pruning = False
@@ -150,18 +153,6 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @unittest.skip(reason="MgpstrModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):

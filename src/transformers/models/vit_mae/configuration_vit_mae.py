@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/vit-mae-base": "https://huggingface.co/facebook/vit-mae-base/resolve/main/config.json",
-    # See all ViT MAE models at https://huggingface.co/models?filter=vit-mae
-}
-
 
 class ViTMAEConfig(PretrainedConfig):
     r"""
@@ -50,7 +45,7 @@ class ViTMAEConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):

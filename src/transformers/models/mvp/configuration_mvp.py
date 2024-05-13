@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/config.json",
-}
-
 
 class MvpConfig(PretrainedConfig):
     r"""

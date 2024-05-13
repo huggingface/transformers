@@ -32,11 +32,6 @@ _CONFIG_FOR_DOC = "UnivNetConfig"
 
 _CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
 
-UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dg845/univnet-dev",
-    # See all UnivNet models at https://huggingface.co/models?filter=univnet
-]
-
 
 @dataclass
 class UnivNetModelOutput(ModelOutput):

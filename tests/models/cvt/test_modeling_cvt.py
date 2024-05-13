@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch CvT model. """
 
 
-import inspect
 import unittest
 from math import floor
 
@@ -32,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -152,7 +150,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
+        {"image-feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -190,18 +188,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Cvt does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -249,9 +235,9 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = CvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -265,11 +251,11 @@ def prepare_img():
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

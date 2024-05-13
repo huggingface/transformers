@@ -35,6 +35,8 @@ from ...image_utils import (
     is_scaled_image,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
 
@@ -111,6 +113,22 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -237,6 +255,8 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
 
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         if not is_batched(images):
             images = [images]
 
@@ -245,16 +265,18 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 

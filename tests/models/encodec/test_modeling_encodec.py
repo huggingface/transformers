@@ -33,11 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -105,6 +101,15 @@ class EncodecModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_model_class(self, model_class):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        inputs_dict["audio_codes"] = ids_tensor([1, self.batch_size, 1, self.num_channels], self.codebook_size).type(
+            torch.int32
+        )
+        inputs_dict["audio_scales"] = [None]
+
         return config, inputs_dict
 
     def get_config(self):
@@ -318,6 +323,18 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     def test_determinism(self):

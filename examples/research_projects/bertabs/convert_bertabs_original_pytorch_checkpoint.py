@@ -107,7 +107,7 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     # ----------------------------------
 
     logging.info("Make sure that the models' outputs are identical")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
     # prepare the model inputs
     encoder_input_ids = tokenizer.encode("This is sample éàalj'-.")

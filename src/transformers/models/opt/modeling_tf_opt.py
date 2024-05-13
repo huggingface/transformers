@@ -31,6 +31,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -91,7 +92,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFOPTLearnedPositionalEmbedding(tf.keras.layers.Embedding):
+class TFOPTLearnedPositionalEmbedding(keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -116,7 +117,7 @@ class TFOPTLearnedPositionalEmbedding(tf.keras.layers.Embedding):
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
-class TFOPTAttention(tf.keras.layers.Layer):
+class TFOPTAttention(keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -132,7 +133,7 @@ class TFOPTAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -142,10 +143,10 @@ class TFOPTAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
@@ -268,8 +269,25 @@ class TFOPTAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
 
-class TFOPTDecoderLayer(tf.keras.layers.Layer):
+
+class TFOPTDecoderLayer(keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
         super().__init__(**kwargs)
         self.do_layer_norm_before = config.do_layer_norm_before
@@ -281,13 +299,14 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
             is_decoder=True,
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.fc1 = keras.layers.Dense(config.ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -354,13 +373,33 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
 
         return (hidden_states, self_attn_weights, present_key_value)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 OPT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -461,7 +500,7 @@ OPT_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFOPTDecoder(tf.keras.layers.Layer):
+class TFOPTDecoder(keras.layers.Layer):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, **kwargs):
@@ -483,20 +522,20 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
-            self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+            self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
         else:
             self.final_layer_norm = None
 
         if config.word_embed_proj_dim != config.hidden_size:
-            self.project_out = tf.keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
-            self.project_in = tf.keras.layers.Dense(config.hidden_size, name="project_in", use_bias=False)
+            self.project_out = keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
+            self.project_in = keras.layers.Dense(config.hidden_size, name="project_in", use_bias=False)
 
         else:
             self.project_in = None
             self.project_out = None
 
         self.layers = [TFOPTDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -696,9 +735,33 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "project_out", None) is not None:
+            with tf.name_scope(self.project_out.name):
+                self.project_out.build([None, None, self.config.hidden_size])
+        if getattr(self, "project_in", None) is not None:
+            with tf.name_scope(self.project_in.name):
+                self.project_in.build([None, None, self.config.word_embed_proj_dim])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFOPTMainLayer(tf.keras.layers.Layer):
+class TFOPTMainLayer(keras.layers.Layer):
     config_class = OPTConfig
 
     def __init__(self, config: OPTConfig, **kwargs):
@@ -756,6 +819,14 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
 
 
 @add_start_docstrings(
@@ -840,6 +911,14 @@ class TFOPTModel(TFOPTPreTrainedModel):
             hidden_states=hs,
             attentions=attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 @add_start_docstrings(
@@ -1006,3 +1085,11 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             loss=output.loss,
             logits=output.logits,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)

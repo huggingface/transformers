@@ -796,8 +796,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
@@ -805,8 +803,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 

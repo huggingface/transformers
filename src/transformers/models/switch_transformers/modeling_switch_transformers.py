@@ -54,18 +54,6 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/switch-base-8",
-    "google/switch-base-16",
-    "google/switch-base-32",
-    "google/switch-base-64",
-    "google/switch-base-128",
-    "google/switch-base-256",
-    "google/switch-large-128",
-    "google/switch-xxl-128",
-    "google/switch-c-2048",
-    # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
-]
 
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -168,7 +156,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.jitter_noise > 0:
+        if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
 
@@ -898,7 +886,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         config.num_layers = config.num_decoder_layers if self.is_decoder else config.num_layers
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
-            is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
+            is_sparse = (i % sparse_step == 1 or sparse_step == 1) if sparse_step > 0 else False
 
             self.block.append(
                 SwitchTransformersBlock(config, has_relative_attention_bias=bool(i == 0), is_sparse=is_sparse)
@@ -1731,6 +1719,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             input_ids = input_ids[:, remove_prefix_length:]
 
+        output_router_logits = kwargs.get("output_router_logits", True)
+
         return {
             "decoder_input_ids": input_ids,
             "past_key_values": past_key_values,
@@ -1740,6 +1730,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
+            "output_router_logits": output_router_logits,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):

@@ -61,6 +61,7 @@ logger = logging.get_logger(__name__)
 @require_tokenizers
 @require_pandas
 class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlmv2-base-uncased"
     tokenizer_class = LayoutLMv2Tokenizer
     rust_tokenizer_class = LayoutLMv2TokenizerFast
     test_rust_tokenizer = True
@@ -193,6 +194,10 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]

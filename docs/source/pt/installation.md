@@ -144,10 +144,10 @@ O ambiente de Python que foi criado para a instalação do 🤗 Transformers enc
 
 ## Instalação usando o Conda
 
-É possível instalar o 🤗 Transformers a partir do canal conda `huggingface` com o seguinte comando:
+É possível instalar o 🤗 Transformers a partir do canal conda `conda-forge` com o seguinte comando:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Configuração do Cachê
@@ -166,7 +166,7 @@ No Windows, este diretório pré-definido é dado por `C:\Users\username\.cache\
     O 🤗 Transformers usará as variáveis de ambiente do shell `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE`
     se estiver vindo de uma versão anterior da biblioteca que tenha configurado essas variáveis de ambiente, a menos que
     você especifique a variável de ambiente do shell `TRANSFORMERS_CACHE`.
-    
+
 </Tip>
 
 
@@ -185,14 +185,14 @@ Você pode adicionar o [🤗 Datasets](https://huggingface.co/docs/datasets/) ao
 Segue um exemplo de execução do programa numa rede padrão com firewall para instâncias externas, usando o seguinte comando:
 
 ```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 Execute esse mesmo programa numa instância offline com o seguinte comando:
 
 ```bash
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 O script agora deve ser executado sem travar ou expirar, pois procurará apenas por arquivos locais.

@@ -32,22 +32,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "bpe.codes",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/vocab.txt",
-        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/vocab.txt",
-    },
-    "merges_file": {
-        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/bpe.codes",
-        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/bpe.codes",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "vinai/phobert-base": 256,
-    "vinai/phobert-large": 256,
-}
-
 
 def get_pairs(word):
     """
@@ -115,8 +99,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,

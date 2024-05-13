@@ -87,7 +87,7 @@ DistilBertConfig {
 预训练模型的属性可以在 [`~PretrainedConfig.from_pretrained`] 函数中进行修改：
 
 ```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
+>>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
 当你对模型配置满意时，可以使用 [`~PretrainedConfig.save_pretrained`] 来保存配置。你的配置文件将以 JSON 文件的形式存储在指定的保存目录中：
@@ -128,13 +128,13 @@ DistilBertConfig {
 使用 [`~PreTrainedModel.from_pretrained`] 创建预训练模型：
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 当加载预训练权重时，如果模型是由 🤗 Transformers 提供的，将自动加载默认模型配置。然而，如果你愿意，仍然可以将默认模型配置的某些或者所有属性替换成你自己的配置：
 
 ```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> model = DistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </pt>
 <tf>
@@ -152,13 +152,13 @@ DistilBertConfig {
 使用 [`~TFPreTrainedModel.from_pretrained`] 创建预训练模型：
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 当加载预训练权重时，如果模型是由 🤗 Transformers 提供的，将自动加载默认模型配置。然而，如果你愿意，仍然可以将默认模型配置的某些或者所有属性替换成自己的配置：
 
 ```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+>>> tf_model = TFDistilBertModel.from_pretrained("distilbert/distilbert-base-uncased", config=my_config)
 ```
 </tf>
 </frameworkcontent>
@@ -174,7 +174,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import DistilBertForSequenceClassification
 
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 通过切换到不同的模型头，可以轻松地将此检查点重复用于其他任务。对于问答任务，你可以使用 [`DistilBertForQuestionAnswering`] 模型头。问答头（question answering head）与序列分类头类似，不同点在于它是隐藏状态输出之上的线性层。
@@ -182,7 +182,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import DistilBertForQuestionAnswering
 
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </pt>
 <tf>
@@ -191,7 +191,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import TFDistilBertForSequenceClassification
 
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 通过切换到不同的模型头,可以轻松地将此检查点重复用于其他任务。对于问答任务，你可以使用 [`TFDistilBertForQuestionAnswering`] 模型头。问答头（question answering head）与序列分类头类似，不同点在于它是隐藏状态输出之上的线性层。
@@ -199,7 +199,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import TFDistilBertForQuestionAnswering
 
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+>>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 </tf>
 </frameworkcontent>
@@ -232,7 +232,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import DistilBertTokenizer
 
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+>>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 使用 [`DistilBertTokenizerFast`] 类创建快速分词器：
@@ -240,7 +240,7 @@ DistilBertConfig {
 ```py
 >>> from transformers import DistilBertTokenizerFast
 
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+>>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
 <Tip>

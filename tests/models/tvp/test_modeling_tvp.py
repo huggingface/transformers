@@ -124,6 +124,7 @@ class TVPModelTester:
         )
         return TvpConfig(
             backbone_config=resnet_config,
+            backbone=None,
             alpha=self.alpha,
             beta=self.beta,
             visual_prompter_type=self.visual_prompter_type,
@@ -176,6 +177,9 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    # TODO: Enable this once this model gets more usage
+    test_torchscript = False
+
     def setUp(self):
         self.model_tester = TVPModelTester(self)
 
@@ -227,10 +231,11 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt")
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
         encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -247,10 +252,11 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt")
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
         encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
