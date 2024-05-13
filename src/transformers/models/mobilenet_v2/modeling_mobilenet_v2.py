@@ -53,15 +53,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v2_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilenet_v2_1.4_224",
-    "google/mobilenet_v2_1.0_224",
-    "google/mobilenet_v2_0.37_160",
-    "google/mobilenet_v2_0.35_96",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-]
-
-
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     """
     A map of modules from TF to PyTorch.
@@ -459,6 +450,7 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""

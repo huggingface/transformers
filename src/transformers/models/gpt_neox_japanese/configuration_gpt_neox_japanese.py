@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
-}
-
 
 class GPTNeoXJapaneseConfig(PretrainedConfig):
     r"""

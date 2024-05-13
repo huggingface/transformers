@@ -26,6 +26,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 </Tip>
 
+## QuantoConfig
+
+[[autodoc]] QuantoConfig
+
 ## AqlmConfig
 
 [[autodoc]] AqlmConfig
@@ -33,6 +37,9 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## AwqConfig
 
 [[autodoc]] AwqConfig
+
+## EetqConfig
+[[autodoc]] EetqConfig
 
 ## GPTQConfig
 
@@ -45,3 +52,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## HfQuantizer
 
 [[autodoc]] quantizers.base.HfQuantizer
+
+## HqqConfig
+
+[[autodoc]] HqqConfig

@@ -49,28 +49,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Pix2StructConfig"
 
 
-PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pix2struct-textcaps-base",
-    "google/pix2struct-textcaps-large",
-    "google/pix2struct-base",
-    "google/pix2struct-large",
-    "google/pix2struct-ai2d-base",
-    "google/pix2struct-ai2d-large",
-    "google/pix2struct-widget-captioning-base",
-    "google/pix2struct-widget-captioning-large",
-    "google/pix2struct-screen2words-base",
-    "google/pix2struct-screen2words-large",
-    "google/pix2struct-docvqa-base",
-    "google/pix2struct-docvqa-large",
-    "google/pix2struct-ocrvqa-base",
-    "google/pix2struct-ocrvqa-large",
-    "google/pix2struct-chartqa-base",
-    "google/pix2struct-inforgraphics-vqa-base",
-    "google/pix2struct-inforgraphics-vqa-large",
-    # See all Pix2StructVision models at https://huggingface.co/models?filter=pix2struct
-]
-
-
 # Adapted from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
 class Pix2StructLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):

@@ -52,16 +52,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
 
-ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_small",
-    "junnyu/roformer_chinese_base",
-    "junnyu/roformer_chinese_char_small",
-    "junnyu/roformer_chinese_char_base",
-    "junnyu/roformer_small_discriminator",
-    "junnyu/roformer_small_generator",
-    # See all RoFormer models at https://huggingface.co/models?filter=roformer
-]
-
 
 # Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->RoFormer
 class RoFormerSinusoidalPositionalEmbedding(nn.Embedding):
@@ -664,6 +654,9 @@ class RoFormerLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self) -> None:
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -961,6 +954,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1060,6 +1054,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(ROFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)

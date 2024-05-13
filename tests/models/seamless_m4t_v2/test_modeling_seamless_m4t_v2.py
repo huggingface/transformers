@@ -45,9 +45,6 @@ if is_torch_available():
         SeamlessM4Tv2ForTextToText,
         SeamlessM4Tv2Model,
     )
-    from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2 import (
-        SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 if is_speech_available():
     from transformers import SeamlessM4TProcessor
@@ -395,9 +392,9 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = SeamlessM4Tv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/seamless-m4t-v2-large"
+        model = SeamlessM4Tv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -433,9 +430,11 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
         input_ids = (
             torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
-            + model._get_decoder_start_token_id()
+            + generation_config.decoder_start_token_id
         )
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
@@ -480,6 +479,10 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="SeamlessM4Tv2SpeechEncoder doesn't have an embedding layer")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(
@@ -662,9 +665,9 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = SeamlessM4Tv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/seamless-m4t-v2-large"
+        model = SeamlessM4Tv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

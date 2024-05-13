@@ -250,6 +250,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForVideoClassification
 
+### AutoModelForKeypointDetection
+
+[[autodoc]] AutoModelForKeypointDetection
+
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling

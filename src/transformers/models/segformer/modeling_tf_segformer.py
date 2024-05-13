@@ -55,11 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/segformer-b0-finetuned-ade-512-512",
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-]
-
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->Segformer
 class TFSegformerDropPath(keras.layers.Layer):

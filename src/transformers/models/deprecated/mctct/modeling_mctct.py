@@ -52,12 +52,6 @@ _CTC_EXPECTED_OUTPUT = '"Mr. Quilter is the apostle of the middle classes, and w
 _CTC_EXPECTED_LOSS = 1885.65
 
 
-MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "speechbrain/m-ctc-t-large",
-    # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
-]
-
-
 class MCTCTConv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation

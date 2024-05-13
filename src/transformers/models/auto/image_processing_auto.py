@@ -68,8 +68,10 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("fuyu", "FuyuImageProcessor"),
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
+        ("grounding-dino", "GroundingDinoImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("idefics", "IdeficsImageProcessor"),
+        ("idefics2", "Idefics2ImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
         ("kosmos-2", "CLIPImageProcessor"),
@@ -77,6 +79,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
         ("llava", "CLIPImageProcessor"),
+        ("llava_next", "LlavaNextImageProcessor"),
         ("mask2former", "Mask2FormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
         ("mgp-str", "ViTImageProcessor"),
@@ -156,7 +159,7 @@ def get_image_processor_config(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -181,8 +184,9 @@ def get_image_processor_config(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -294,9 +298,9 @@ class AutoImageProcessor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the image processor files and override the cached versions if
                 they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.

@@ -26,12 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilenet_v1_1.0_224": "https://huggingface.co/google/mobilenet_v1_1.0_224/resolve/main/config.json",
-    "google/mobilenet_v1_0.75_192": "https://huggingface.co/google/mobilenet_v1_0.75_192/resolve/main/config.json",
-    # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
-}
-
 
 class MobileNetV1Config(PretrainedConfig):
     r"""

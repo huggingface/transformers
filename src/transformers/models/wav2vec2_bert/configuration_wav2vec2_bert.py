@@ -21,10 +21,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/w2v-bert-2.0": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/main/config.json",
-}
-
 
 class Wav2Vec2BertConfig(PretrainedConfig):
     r"""

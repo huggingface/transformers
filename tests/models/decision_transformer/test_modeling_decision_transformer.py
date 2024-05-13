@@ -31,9 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import DecisionTransformerModel
-    from transformers.models.decision_transformer.modeling_decision_transformer import (
-        DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 class DecisionTransformerModelTester:
@@ -164,9 +161,9 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DecisionTransformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "edbeeching/decision-transformer-gym-hopper-medium"
+        model = DecisionTransformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

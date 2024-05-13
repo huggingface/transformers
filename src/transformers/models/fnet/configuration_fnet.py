@@ -20,12 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/config.json",
-    "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/config.json",
-    # See all FNet models at https://huggingface.co/models?filter=fnet
-}
-
 
 class FNetConfig(PretrainedConfig):
     r"""

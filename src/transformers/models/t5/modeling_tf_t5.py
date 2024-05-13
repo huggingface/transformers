@@ -58,14 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 
-TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google-t5/t5-small",
-    "google-t5/t5-base",
-    "google-t5/t5-large",
-    "google-t5/t5-3b",
-    "google-t5/t5-11b",
-    # See all T5 models at https://huggingface.co/models?filter=t5
-]
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
@@ -629,7 +621,7 @@ class TFT5Block(keras.layers.Layer):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}. "
+                    f"{'2 (key / value) for cross attention' if expected_num_past_key_values == 4 else ''}. "
                     f"Got {len(past_key_value)} past key / value states"
                 )
 

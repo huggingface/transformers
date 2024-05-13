@@ -23,19 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer": "https://huggingface.co/espnet/fastspeech2_conformer/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_hifigan/raw/main/config.json",
-}
-
-FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "espnet/fastspeech2_conformer_with_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_with_hifigan/raw/main/config.json",
-}
-
-
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to

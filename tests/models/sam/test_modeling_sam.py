@@ -34,7 +34,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SamModel, SamProcessor
-    from transformers.models.sam.modeling_sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -442,9 +441,9 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SAM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SamModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/sam-vit-huge"
+        model = SamModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 def prepare_image():
@@ -726,7 +725,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
-        torch.testing.assert_allclose(
+        torch.testing.assert_close(
             iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
         )
 
@@ -754,7 +753,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_allclose(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
 
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="facebook/sam-vit-base", device=torch_device)

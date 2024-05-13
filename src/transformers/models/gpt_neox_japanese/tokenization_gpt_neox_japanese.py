@@ -29,19 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "emoji_file": "emoji.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/vocab.txt",
-    },
-    "emoji_file": {
-        "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/emoji.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "abeja/gpt-neox-japanese-2.7b": 2048,
-}
-
 
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
@@ -112,8 +99,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -180,12 +165,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         return (
             "{% for message in messages %}"
             "{{ bos_token + eos_token + message.content + eos_token }}"

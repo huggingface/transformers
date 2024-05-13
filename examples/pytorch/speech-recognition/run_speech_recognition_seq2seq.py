@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.41.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -119,16 +119,16 @@ class ModelArguments:
     )
     forced_decoder_ids: List[List[int]] = field(
         default=None,
-        metadata={
-            "help": (
-                "A list of pairs of integers which indicates a mapping from generation indices to token indices "
-                "that will be forced before sampling. For example, [[0, 123]] means the first generated token "
-                "will always be a token of index 123."
-            )
-        },
+        metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
     )
     suppress_tokens: List[int] = field(
-        default=None, metadata={"help": "A list of tokens that will be suppressed at generation."}
+        default=None,
+        metadata={
+            "help": (
+                "Deprecated. The use of `suppress_tokens` should not be required for the majority of fine-tuning examples."
+                "Should you need to use `suppress_tokens`, please manually update them in the fine-tuning script directly."
+            )
+        },
     )
     apply_spec_augment: bool = field(
         default=False,
@@ -400,8 +400,6 @@ def main():
         trust_remote_code=model_args.trust_remote_code,
     )
 
-    config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
-
     # SpecAugment for whisper models
     if getattr(config, "model_type", None) == "whisper":
         config.update({"apply_spec_augment": model_args.apply_spec_augment})
@@ -440,9 +438,35 @@ def main():
         model.freeze_encoder()
         model.model.encoder.gradient_checkpointing = False
 
-    if data_args.language is not None:
-        # We only need to set the task id when the language is specified (i.e. in a multilingual setting)
+    if hasattr(model.generation_config, "is_multilingual") and model.generation_config.is_multilingual:
+        # We only need to set the language and task ids in a multilingual setting
         tokenizer.set_prefix_tokens(language=data_args.language, task=data_args.task)
+        model.generation_config.update(
+            **{
+                "language": data_args.language,
+                "task": data_args.task,
+            }
+        )
+    elif data_args.language is not None:
+        raise ValueError(
+            "Setting language token for an English-only checkpoint is not permitted. The language argument should "
+            "only be set for multilingual checkpoints."
+        )
+
+    # TODO (Sanchit): deprecate these arguments in v4.41
+    if model_args.forced_decoder_ids is not None:
+        logger.warning(
+            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
+            "Please use the `language` and `task` arguments instead"
+        )
+        model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
+
+    if model_args.suppress_tokens is not None:
+        logger.warning(
+            "The use of `suppress_tokens` is deprecated and will be removed in v4.41."
+            "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
+        )
+        model.generation_config.suppress_tokens = model_args.suppress_tokens
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate

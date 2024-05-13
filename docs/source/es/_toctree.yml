@@ -92,10 +92,14 @@
     title: Lo que 🤗 Transformers puede hacer
   - local: tasks_explained
     title: Como los 🤗 Transformers resuelven tareas
+  - local: attention
+    title: Mecanismos de atención
   - local: pad_truncation
     title: Relleno y truncamiento
   - local: bertology
     title: BERTología
   - local: perplexity
     title: Perplejidad de los modelos de longitud fija
+  - local: pipeline_webserver
+    title: Flujo de trabajo para la inferencia de los servidores web
   title: Guías conceptuales

@@ -53,12 +53,6 @@ _CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
 
 
-LED_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/led-base-16384",
-    # See all LED models at https://huggingface.co/models?filter=led
-]
-
-
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.

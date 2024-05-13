@@ -23,13 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/unispeech-sat-base-100h-libri-ft": (
-        "https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft/resolve/main/config.json"
-    ),
-    # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
-}
-
 
 class UniSpeechSatConfig(PretrainedConfig):
     r"""

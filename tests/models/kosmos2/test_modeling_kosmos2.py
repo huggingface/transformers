@@ -44,7 +44,6 @@ if is_torch_available():
     import torch
 
     from transformers import Kosmos2ForConditionalGeneration, Kosmos2Model
-    from transformers.models.kosmos2.modeling_kosmos2 import KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -425,9 +424,9 @@ class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Kosmos2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/kosmos-2-patch14-224"
+        model = Kosmos2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

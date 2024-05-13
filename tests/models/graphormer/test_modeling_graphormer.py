@@ -34,7 +34,6 @@ if is_torch_available():
     from torch import tensor
 
     from transformers import GraphormerForGraphClassification, GraphormerModel
-    from transformers.models.graphormer.modeling_graphormer import GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class GraphormerModelTester:
@@ -472,9 +471,9 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GraphormerForGraphClassification.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "clefourrier/graphormer-base-pcqm4mv1"
+        model = GraphormerForGraphClassification.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

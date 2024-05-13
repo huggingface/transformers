@@ -48,7 +48,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.39.0.dev0")
+check_min_version("4.41.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -265,7 +265,7 @@ def main():
     # Downloading and loading a dataset from the hub. In distributed training, the load_dataset function guarantee
     # that only one local process can concurrently download the dataset.
     datasets = load_dataset(
-        "glue",
+        "nyu-mll/glue",
         data_args.task_name,
         cache_dir=model_args.cache_dir,
         token=model_args.token,

@@ -46,11 +46,6 @@ _CONFIG_FOR_DOC = "GLPNConfig"
 _CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
 
-GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vinvino02/glpn-kitti",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-]
-
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
@@ -428,6 +423,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
     config_class = GLPNConfig
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     # Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel._init_weights
     def _init_weights(self, module):

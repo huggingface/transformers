@@ -54,11 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
 
-TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/layoutlm-base-uncased",
-    "microsoft/layoutlm-large-uncased",
-]
-
 
 class TFLayoutLMEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""

@@ -376,7 +376,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         inputs["table"] = table
         return inputs
 
-    def _forward(self, model_inputs, sequential=False):
+    def _forward(self, model_inputs, sequential=False, **generate_kwargs):
         table = model_inputs.pop("table")
 
         if self.type == "tapas":
@@ -385,7 +385,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
-            outputs = self.model.generate(**model_inputs)
+            outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs
 

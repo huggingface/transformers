@@ -32,7 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import NatBackbone, NatForImageClassification, NatModel
-    from transformers.models.nat.modeling_nat import NAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -327,9 +326,9 @@ class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NatModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "shi-labs/nat-mini-in1k-224"
+        model = NatModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

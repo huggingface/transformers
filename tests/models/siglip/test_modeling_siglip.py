@@ -48,7 +48,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -217,9 +216,9 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipTextModelTester:
@@ -374,9 +373,9 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipModelTester:
@@ -578,11 +577,10 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_from_pretrained with CLIPModel->SiglipModel, CLIP->SIGLIP
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
@@ -689,3 +687,25 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         probs = torch.sigmoid(logits_per_image)  # these are the probabilities
         expected_probs = torch.tensor([[3.1937e-01, 3.2463e-05]], device=torch_device)
         self.assertTrue(torch.allclose(probs, expected_probs, atol=1e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name).to(torch_device)
+
+        # 640 x 480 image
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height": 480, "width": 640})
+
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the shape
+        # patch size = 16
+        # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
+        expected_shape = torch.Size((1, 1200, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)

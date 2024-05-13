@@ -20,11 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/config.json",
-    # See all BioGPT models at https://huggingface.co/models?filter=biogpt
-}
-
 
 class BioGptConfig(PretrainedConfig):
     r"""

@@ -31,8 +31,6 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
 )
 
@@ -212,8 +210,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = LayoutXLMTokenizer
 

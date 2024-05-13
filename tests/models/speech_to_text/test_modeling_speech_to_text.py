@@ -284,6 +284,18 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     input_name = "input_features"
 
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, input_ids, attention_mask = GenerationTesterMixin._get_input_ids_and_config(self)
+
+        # `input_ids` is actually `input_features` which is a 3D tensor.
+        # We must overwrite the mask to make it 2D since the original `_get_input_ids_and_config` creates an
+        # attention mask of the same shape as `input_ids`.
+        if len(attention_mask.shape) > 2:
+            sequence_length = input_ids.shape[1]
+            attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=attention_mask.device)
+
+        return config, input_ids, attention_mask
+
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
@@ -633,7 +645,9 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 

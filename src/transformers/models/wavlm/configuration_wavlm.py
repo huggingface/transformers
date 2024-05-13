@@ -23,11 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/wavlm-base": "https://huggingface.co/microsoft/wavlm-base/resolve/main/config.json",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-}
-
 
 class WavLMConfig(PretrainedConfig):
     r"""

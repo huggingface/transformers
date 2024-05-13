@@ -23,13 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/unispeech-large-1500h-cv": (
-        "https://huggingface.co/microsoft/unispeech-large-1500h-cv/resolve/main/config.json"
-    ),
-    # See all UniSpeech models at https://huggingface.co/models?filter=unispeech
-}
-
 
 class UniSpeechConfig(PretrainedConfig):
     r"""

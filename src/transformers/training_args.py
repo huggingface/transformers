@@ -46,6 +46,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_mlu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -66,7 +67,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0, is_torch_greater_or_equal_than_2_3
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
@@ -83,12 +84,12 @@ if is_torch_neuroncore_available(check_device=False):
     if os.environ.get("TORCHELASTIC_RUN_ID"):
         if is_optimum_neuron_available():
             logger.info(
-                "Make sure that you are performing the training with the TrainiumTrainer from optimum[neuron], this "
+                "Make sure that you are performing the training with the NeuronTrainer from optimum[neuron], this "
                 "will fail otherwise."
             )
         else:
             logger.warning(
-                "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
+                "Please use the NeuronTrainer from optimum[neuron] instead of the Transformers library to perform "
                 "training on AWS Trainium instances. More information here: "
                 "https://github.com/huggingface/optimum-neuron"
             )
@@ -164,6 +165,43 @@ class OptimizerNames(ExplicitEnum):
     RMSPROP_BNB = "rmsprop_bnb"
     RMSPROP_8BIT = "rmsprop_bnb_8bit"
     RMSPROP_32BIT = "rmsprop_bnb_32bit"
+    GALORE_ADAMW = "galore_adamw"
+    GALORE_ADAMW_8BIT = "galore_adamw_8bit"
+    GALORE_ADAFACTOR = "galore_adafactor"
+    GALORE_ADAMW_LAYERWISE = "galore_adamw_layerwise"
+    GALORE_ADAMW_8BIT_LAYERWISE = "galore_adamw_8bit_layerwise"
+    GALORE_ADAFACTOR_LAYERWISE = "galore_adafactor_layerwise"
+
+
+# Sometimes users will pass in a `str` repr of a dict in the CLI
+# We need to track what fields those can be. Each time a new arg
+# has a dict type, it must be added to this list.
+# Important: These should be typed with Optional[Union[dict,str,...]]
+_VALID_DICT_FIELDS = [
+    "accelerator_config",
+    "fsdp_config",
+    "deepspeed",
+    "gradient_checkpointing_kwargs",
+    "lr_scheduler_kwargs",
+]
+
+
+def _convert_str_dict(passed_value: dict):
+    "Safely checks that a passed value is a dictionary and converts any string values to their appropriate types."
+    for key, value in passed_value.items():
+        if isinstance(value, dict):
+            passed_value[key] = _convert_str_dict(value)
+        elif isinstance(value, str):
+            # First check for bool and convert
+            if value.lower() in ("true", "false"):
+                passed_value[key] = value.lower() == "true"
+            # Check for digit
+            elif value.isdigit():
+                passed_value[key] = int(value)
+            elif value.replace(".", "", 1).isdigit():
+                passed_value[key] = float(value)
+
+    return passed_value
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
@@ -188,7 +226,7 @@ class TrainingArguments:
             by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
         do_eval (`bool`, *optional*):
-            Whether to run evaluation on the validation set or not. Will be set to `True` if `evaluation_strategy` is
+            Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
             training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
@@ -196,7 +234,7 @@ class TrainingArguments:
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
             intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-        evaluation_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
+        eval_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 - `"no"`: No evaluation is done during training.
@@ -225,7 +263,7 @@ class TrainingArguments:
             requires more memory).
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
-            evaluation_strategy.
+            eval_strategy.
         learning_rate (`float`, *optional*, defaults to 5e-5):
             The initial learning rate for [`AdamW`] optimizer.
         weight_decay (`float`, *optional*, defaults to 0):
@@ -319,6 +357,9 @@ class TrainingArguments:
             Note that when this is true, you won't be able to resume training from checkpoint.
             This enables you to save storage by not storing the optimizer, scheduler & rng state.
             You can only load the model using `from_pretrained` with this option set to `True`.
+        restore_callback_states_from_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to restore the callback states from the checkpoint. If `True`, will override
+            callbacks passed to the `Trainer` if they exist in the checkpoint."
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -368,7 +409,7 @@ class TrainingArguments:
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
         eval_steps (`int` or `float`, *optional*):
-            Number of update steps between two evaluations if `evaluation_strategy="steps"`. Will default to the same
+            Number of update steps between two evaluations if `eval_strategy="steps"`. Will default to the same
             value as `logging_steps` if not set. Should be an integer or a float in range `[0,1)`. If smaller than 1,
             will be interpreted as ratio of total training steps.
         dataloader_num_workers (`int`, *optional*, defaults to 0):
@@ -379,9 +420,9 @@ class TrainingArguments:
             the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
             use the corresponding output (usually index 2) as the past state and feed it to the model at the next
             training step under the keyword argument `mems`.
-        run_name (`str`, *optional*):
+        run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [wandb](https://www.wandb.com/) and
-            [mlflow](https://www.mlflow.org/) logging.
+            [mlflow](https://www.mlflow.org/) logging. If not specified, will be the same as `output_dir`.
         disable_tqdm (`bool`, *optional*):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             [`~notebook.NotebookTrainingTracker`] in Jupyter Notebooks. Will default to `True` if the logging level is
@@ -402,7 +443,7 @@ class TrainingArguments:
 
             <Tip>
 
-            When set to `True`, the parameters `save_strategy` needs to be the same as `evaluation_strategy`, and in
+            When set to `True`, the parameters `save_strategy` needs to be the same as `eval_strategy`, and in
             the case it is "steps", `save_steps` must be a round multiple of `eval_steps`.
 
             </Tip>
@@ -475,6 +516,11 @@ class TrainingArguments:
                 - sync_module_states (`bool`, *optional*, defaults to `True`)
                     If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
                     ensure they are the same across all ranks after initialization
+                - cpu_ram_efficient_loading (`bool`, *optional*, defaults to `False`)
+                    If `"True"`, only the first process loads the pretrained model checkpoint while all other processes
+                    have empty weights.  When this setting as `"True"`, `sync_module_states` also must to be `"True"`,
+                    otherwise all the processes except the main process would have random weights leading to unexpected
+                    behaviour during training.
                 - activation_checkpointing (`bool`, *optional*, defaults to `False`):
                     If `"True"`, activation checkpointing is a technique to reduce memory usage by clearing activations of
                     certain layers and recomputing them during a backward pass. Effectively, this trades extra
@@ -496,6 +542,11 @@ class TrainingArguments:
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
+
+            <Tip warning={true}>
+                If enabling any Zero-init, make sure that your model is not initialized until
+                *after* initializing the `TrainingArguments`, else it will not be applied.
+            </Tip>
 
         accelerator_config (`str`, `dict`, or `AcceleratorConfig`, *optional*):
             Config to be used with the internal `Accelerator` implementation. The value is either a location of
@@ -627,6 +678,9 @@ class TrainingArguments:
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
+        eval_do_concat_batches (`bool`, *optional*, defaults to `True`):
+            Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`,
+            will instead store them as lists, with each batch kept separate.
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
             Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
             CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -696,6 +750,18 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
+        optim_target_modules (`Union[str, List[str]]`, *optional*):
+            The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
+            https://arxiv.org/abs/2403.03507
+            See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
+            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
+            only.
+
+        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+            If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
+            rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
+            that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
+            summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
     """
 
     framework = "pt"
@@ -715,7 +781,7 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluation_strategy: Union[IntervalStrategy, str] = field(
+    eval_strategy: Union[IntervalStrategy, str] = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
@@ -764,7 +830,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Number of epochs or steps to wait for before the first evaluation can be performed, depending on the"
-                " evaluation_strategy."
+                " eval_strategy."
             )
         },
     )
@@ -785,11 +851,11 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Dict] = field(
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
         default_factory=dict,
         metadata={
             "help": (
-                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
             )
         },
     )
@@ -894,6 +960,12 @@ class TrainingArguments:
             )
         },
     )
+    restore_callback_states_from_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to restore the callback states from the checkpoint. If `True`, will override callbacks passed to the `Trainer` if they exist in the checkpoint."
+        },
+    )
     no_cuda: bool = field(
         default=False,
         metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."},
@@ -981,7 +1053,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl", "cncl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -1100,7 +1172,6 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
@@ -1119,8 +1190,7 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    accelerator_config: Optional[str] = field(
+    accelerator_config: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1129,8 +1199,7 @@ class TrainingArguments:
             )
         },
     )
-    # Do not touch this type annotation or it will stop working in CLI
-    deepspeed: Optional[str] = field(
+    deepspeed: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": (
@@ -1163,7 +1232,7 @@ class TrainingArguments:
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
-    report_to: Optional[List[str]] = field(
+    report_to: Union[None, str, List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     ddp_find_unused_parameters: Optional[bool] = field(
@@ -1234,7 +1303,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: Optional[dict] = field(
+    gradient_checkpointing_kwargs: Optional[Union[dict, str]] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -1243,6 +1312,12 @@ class TrainingArguments:
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
     )
+    eval_do_concat_batches: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
+        },
+    )
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -1250,6 +1325,10 @@ class TrainingArguments:
             "help": "Deprecated. Use half_precision_backend instead",
             "choices": ["auto", "apex", "cpu_amp"],
         },
+    )
+    evaluation_strategy: Union[IntervalStrategy, str] = field(
+        default=None,
+        metadata={"help": "Deprecated. Use `eval_strategy` instead"},
     )
     push_to_hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to which push the `Trainer`."}
@@ -1354,7 +1433,30 @@ class TrainingArguments:
         },
     )
 
+    optim_target_modules: Union[None, str, List[str]] = field(
+        default=None,
+        metadata={
+            "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
+        },
+    )
+
+    batch_eval_metrics: bool = field(
+        default=False,
+        metadata={"help": "Break eval metrics calculation into batches to save memory."},
+    )
+
     def __post_init__(self):
+        # Parse in args that could be `dict` sent in from the CLI as a string
+        for field in _VALID_DICT_FIELDS:
+            passed_value = getattr(self, field)
+            # We only want to do this if the str starts with a bracket to indiciate a `dict`
+            # else its likely a filename if supported
+            if isinstance(passed_value, str) and passed_value.startswith("{"):
+                loaded_dict = json.loads(passed_value)
+                # Convert str values to types if applicable
+                loaded_dict = _convert_str_dict(loaded_dict)
+                setattr(self, field, loaded_dict)
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         # see https://github.com/huggingface/transformers/issues/10628
@@ -1368,14 +1470,21 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
-        if isinstance(self.evaluation_strategy, EvaluationStrategy):
+        if self.evaluation_strategy is not None:
             warnings.warn(
-                "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5"
+                "`evaluation_strategy` is deprecated and will be removed in version 4.46 of 🤗 Transformers. Use `eval_strategy` instead",
+                FutureWarning,
+            )
+            self.eval_strategy = self.evaluation_strategy
+
+        if isinstance(self.eval_strategy, EvaluationStrategy):
+            warnings.warn(
+                "using `EvaluationStrategy` for `eval_strategy` is deprecated and will be removed in version 5"
                 " of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
             )
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
-            self.evaluation_strategy = self.evaluation_strategy.value
+            self.eval_strategy = self.eval_strategy.value
         if self.no_cuda:
             warnings.warn(
                 "using `no_cuda` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
@@ -1384,23 +1493,23 @@ class TrainingArguments:
             )
             self.use_cpu = self.no_cuda
 
-        self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
+        self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
         self.save_strategy = IntervalStrategy(self.save_strategy)
         self.hub_strategy = HubStrategy(self.hub_strategy)
 
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
-        if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:
+        if self.do_eval is False and self.eval_strategy != IntervalStrategy.NO:
             self.do_eval = True
 
         # eval_steps has to be defined and non-zero, fallbacks to logging_steps if the latter is non-zero
-        if self.evaluation_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
+        if self.eval_strategy == IntervalStrategy.STEPS and (self.eval_steps is None or self.eval_steps == 0):
             if self.logging_steps > 0:
                 logger.info(f"using `logging_steps` to initialize `eval_steps` to {self.logging_steps}")
                 self.eval_steps = self.logging_steps
             else:
                 raise ValueError(
-                    f"evaluation strategy {self.evaluation_strategy} requires either non-zero --eval_steps or"
+                    f"evaluation strategy {self.eval_strategy} requires either non-zero --eval_steps or"
                     " --logging_steps"
                 )
 
@@ -1412,7 +1521,7 @@ class TrainingArguments:
             if self.logging_steps != int(self.logging_steps):
                 raise ValueError(f"--logging_steps must be an integer if bigger than 1: {self.logging_steps}")
             self.logging_steps = int(self.logging_steps)
-        if self.evaluation_strategy == IntervalStrategy.STEPS and self.eval_steps > 1:
+        if self.eval_strategy == IntervalStrategy.STEPS and self.eval_steps > 1:
             if self.eval_steps != int(self.eval_steps):
                 raise ValueError(f"--eval_steps must be an integer if bigger than 1: {self.eval_steps}")
             self.eval_steps = int(self.eval_steps)
@@ -1423,12 +1532,12 @@ class TrainingArguments:
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
         if self.load_best_model_at_end:
-            if self.evaluation_strategy != self.save_strategy:
+            if self.eval_strategy != self.save_strategy:
                 raise ValueError(
                     "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
-                    f"strategy: {self.evaluation_strategy}\n- Save strategy: {self.save_strategy}"
+                    f"strategy: {self.eval_strategy}\n- Save strategy: {self.save_strategy}"
                 )
-            if self.evaluation_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
+            if self.eval_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
                 if self.eval_steps < 1 or self.save_steps < 1:
                     if not (self.eval_steps < 1 and self.save_steps < 1):
                         raise ValueError(
@@ -1506,7 +1615,7 @@ class TrainingArguments:
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
-            if self.evaluation_strategy == IntervalStrategy.NO:
+            if self.eval_strategy == IntervalStrategy.NO:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
@@ -1529,7 +1638,9 @@ class TrainingArguments:
         if (
             self.framework == "pt"
             and is_torch_available()
+            and (self.device.type == "cpu" and not is_torch_greater_or_equal_than_2_3)
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
@@ -1537,13 +1648,14 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
+                " (`--fp16_full_eval`) can only be used on CUDA or MLU devices or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "mlu")
             and (self.device.type != "npu")
             and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) not in ["GPU", "CUDA"])
@@ -1553,7 +1665,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU, MLU or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1739,9 +1851,20 @@ class TrainingArguments:
                         )
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
-            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefetch", "false")
-            os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+
+            sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
+            cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
+
+            if sync_module_states == "false" and cpu_ram_efficient_loading == "true":
+                # In this case, all the processes except the main process would have random weights leading
+                # to unexpected behaviour during training, thus throwing error here to prevent it.
+                raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
+
+            os.environ[f"{prefix}SYNC_MODULE_STATES"] = sync_module_states
+            os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
+
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
 
         if is_accelerate_available():
             if not isinstance(self.accelerator_config, (AcceleratorConfig)):
@@ -1749,6 +1872,13 @@ class TrainingArguments:
                     self.accelerator_config = AcceleratorConfig()
                 elif isinstance(self.accelerator_config, dict):
                     self.accelerator_config = AcceleratorConfig(**self.accelerator_config)
+                # Check that a user didn't pass in the class instantiator
+                # such as `accelerator_config = AcceleratorConfig`
+                elif isinstance(self.accelerator_config, type):
+                    raise NotImplementedError(
+                        "Tried passing in a callable to `accelerator_config`, but this is not supported. "
+                        "Please pass in a fully constructed `AcceleratorConfig` object instead."
+                    )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
             if self.dispatch_batches is not None:
@@ -1979,6 +2109,10 @@ class TrainingArguments:
             elif is_torch_xpu_available():
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
+                self._n_gpu = 1
+            elif is_torch_mlu_available():
+                device = torch.device("mlu:0")
+                torch.mlu.set_device(device)
                 self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
@@ -2357,7 +2491,7 @@ class TrainingArguments:
                 but requires more memory).
             delay (`float`, *optional*):
                 Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
-                evaluation_strategy.
+                eval_strategy.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
             jit_mode (`bool`, *optional*):
@@ -2374,10 +2508,10 @@ class TrainingArguments:
         100
         ```
         """
-        self.evaluation_strategy = IntervalStrategy(strategy)
-        if self.evaluation_strategy == IntervalStrategy.STEPS and steps == 0:
+        self.eval_strategy = IntervalStrategy(strategy)
+        if self.eval_strategy == IntervalStrategy.STEPS and steps == 0:
             raise ValueError("Setting `strategy` as 'steps' requires a positive value for `steps`.")
-        self.do_eval = self.evaluation_strategy != IntervalStrategy.NO
+        self.do_eval = self.eval_strategy != IntervalStrategy.NO
         self.eval_steps = steps
         self.per_device_eval_batch_size = batch_size
         self.eval_accumulation_steps = accumulation_steps

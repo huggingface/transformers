@@ -29,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xglm.modeling_tf_xglm import (
-        TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXGLMForCausalLM,
         TFXGLMModel,
     )
@@ -161,9 +160,9 @@ class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXGLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/xglm-564M"
+        model = TFXGLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently, model embeddings are going to undergo a major refactor.")
     def test_resize_token_embeddings(self):

@@ -22,10 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtsmixer-etth1-pretrain": "https://huggingface.co/ibm/patchtsmixer-etth1-pretrain/resolve/main/config.json",
-}
-
 
 class PatchTSMixerConfig(PretrainedConfig):
     r"""

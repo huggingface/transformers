@@ -56,12 +56,6 @@ _IMAGE_CLASS_CHECKPOINT = "microsoft/swinv2-tiny-patch4-window8-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
-SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/swinv2-tiny-patch4-window8-256",
-    # See all Swinv2 models at https://huggingface.co/models?filter=swinv2
-]
-
-
 # drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
@@ -457,7 +451,7 @@ class Swinv2SelfAttention(nn.Module):
         if pretrained_window_size[0] > 0:
             relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        else:
+        elif window_size > 1:
             relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
             relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
         relative_coords_table *= 8  # normalize to -8, 8
@@ -942,6 +936,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "swinv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Swinv2Stage"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

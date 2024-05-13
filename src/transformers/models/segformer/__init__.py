@@ -22,9 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig", "SegformerOnnxConfig"]
-}
+_import_structure = {"configuration_segformer": ["SegformerConfig", "SegformerOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -42,7 +40,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_segformer"] = [
-        "SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SegformerDecodeHead",
         "SegformerForImageClassification",
         "SegformerForSemanticSegmentation",
@@ -58,7 +55,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_segformer"] = [
-        "TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFSegformerDecodeHead",
         "TFSegformerForImageClassification",
         "TFSegformerForSemanticSegmentation",
@@ -68,7 +64,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig, SegformerOnnxConfig
+    from .configuration_segformer import SegformerConfig, SegformerOnnxConfig
 
     try:
         if not is_vision_available():
@@ -86,7 +82,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_segformer import (
-            SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegformerDecodeHead,
             SegformerForImageClassification,
             SegformerForSemanticSegmentation,
@@ -101,7 +96,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_segformer import (
-            TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSegformerDecodeHead,
             TFSegformerForImageClassification,
             TFSegformerForSemanticSegmentation,

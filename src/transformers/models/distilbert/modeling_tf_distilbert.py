@@ -62,16 +62,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 
-TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "distilbert-base-uncased",
-    "distilbert-base-uncased-distilled-squad",
-    "distilbert-base-cased",
-    "distilbert-base-cased-distilled-squad",
-    "distilbert-base-multilingual-cased",
-    "distilbert-base-uncased-finetuned-sst-2-english",
-    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
-]
-
 
 class TFEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""

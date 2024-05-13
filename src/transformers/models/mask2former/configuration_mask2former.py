@@ -20,13 +20,6 @@ from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
 
-MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/mask2former-swin-small-coco-instance": (
-        "https://huggingface.co/facebook/mask2former-swin-small-coco-instance/blob/main/config.json"
-    )
-    # See all Mask2Former models at https://huggingface.co/models?filter=mask2former
-}
-
 logger = logging.get_logger(__name__)
 
 

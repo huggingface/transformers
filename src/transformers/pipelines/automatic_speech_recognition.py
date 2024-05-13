@@ -311,14 +311,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
-            forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+            forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
-            forward_params["generate_kwargs"].update(generate_kwargs)
+            forward_params.update(generate_kwargs)
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -446,6 +446,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed = self.feature_extractor(
                     inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
                 )
+                if stride is None:
+                    extra["segment_size"] = len(inputs)
 
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
@@ -456,13 +458,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
-        if generate_kwargs is None:
-            generate_kwargs = {}
-
+    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
+        segment_size = model_inputs.pop("segment_size", None)
         is_last = model_inputs.pop("is_last")
+
+        if stride is not None and segment_size is not None:
+            raise ValueError("segment_size must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
             encoder = self.model.get_encoder()
@@ -490,6 +493,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
                         else:
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
+
+                    else:
+                        if isinstance(segment_size, int):
+                            generate_kwargs["num_frames"] = segment_size // self.feature_extractor.hop_length
+                        else:
+                            generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs

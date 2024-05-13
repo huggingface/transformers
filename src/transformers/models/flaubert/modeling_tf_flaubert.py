@@ -67,9 +67,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 
-TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
-]
 
 FLAUBERT_START_DOCSTRING = r"""
 

@@ -58,11 +58,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen2-7B-beta"
 _CONFIG_FOR_DOC = "Qwen2Config"
 
-QWEN2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Qwen/Qwen2-7B-beta",
-    # See all Qwen2 models at https://huggingface.co/models?filter=qwen2
-]
-
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -826,7 +821,6 @@ class Qwen2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1022,6 +1016,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                 (batch_size, seq_length),
                 inputs_embeds,
                 past_key_values_length,
+                sliding_window=self.config.sliding_window,
             )
         else:
             # 4d mask is passed through the layers

@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Falcon configuration"""
+"""Falcon configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tiiuae/falcon-40b": "https://huggingface.co/tiiuae/falcon-40b/resolve/main/config.json",
-    "tiiuae/falcon-7b": "https://huggingface.co/tiiuae/falcon-7b/resolve/main/config.json",
-}
 
 
 class FalconConfig(PretrainedConfig):
@@ -46,6 +42,9 @@ class FalconConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 71):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_ln_in_parallel_attn (`int`, *optional*):
+            Set to 2 if separate layer norms are to be used for the MLP and the attention output when using parallel
+            attention, otherwise, 1.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -89,6 +88,11 @@ class FalconConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
             The id of the "end-of-sequence" token.
+        ffn_hidden_size (`int`, *optional*):
+            The hidden size of the feedforward layer in the Transformer decoder.
+            defaults to 4x hidden dim
+        activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function used in the feedforward layer.
 
     Example:
 
@@ -114,6 +118,7 @@ class FalconConfig(PretrainedConfig):
         hidden_size=4544,
         num_hidden_layers=32,
         num_attention_heads=71,
+        num_ln_in_parallel_attn=None,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         use_cache=True,
@@ -130,6 +135,8 @@ class FalconConfig(PretrainedConfig):
         rope_scaling=None,
         bos_token_id=11,
         eos_token_id=11,
+        ffn_hidden_size=None,
+        activation="gelu",
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,7 +150,6 @@ class FalconConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.num_kv_heads = num_attention_heads if num_kv_heads is None else num_kv_heads
@@ -152,9 +158,15 @@ class FalconConfig(PretrainedConfig):
         self.multi_query = multi_query  # Ignored when new_decoder_architecture is True
         self.parallel_attn = parallel_attn
         self.bias = bias
+        self.num_ln_in_parallel_attn = num_ln_in_parallel_attn
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.activation = activation
+        if ffn_hidden_size is None:
+            self.ffn_hidden_size = hidden_size * 4
+        else:
+            self.ffn_hidden_size = ffn_hidden_size
         self._rope_scaling_validation()
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -179,8 +191,7 @@ class FalconConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
-                f"got {self.rope_scaling}"
+                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)

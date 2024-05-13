@@ -33,26 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "src_vocab_file": {
-        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-src.json"
-    },
-    "tgt_vocab_file": {
-        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-tgt.json"
-    },
-    "merges_file": {"stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
-PRETRAINED_INIT_CONFIGURATION = {
-    "stas/tiny-wmt19-en-de": {
-        "langs": ["en", "de"],
-        "model_max_length": 1024,
-        "special_tokens_map_file": None,
-        "full_tokenizer_file": None,
-    }
-}
-
 
 def get_pairs(word):
     """
@@ -179,9 +159,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -224,7 +201,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             raise ValueError(
                 f"arg `langs` needs to be a list of 2 langs, e.g. ['en', 'ru'], but got {langs}. "
                 "Usually that means that tokenizer can't find a mapping for the given model path "
-                "in PRETRAINED_VOCAB_FILES_MAP, and other maps of this tokenizer."
+                "in  and other maps of this tokenizer."
             )
 
         with open(src_vocab_file, encoding="utf-8") as src_vocab_handle:

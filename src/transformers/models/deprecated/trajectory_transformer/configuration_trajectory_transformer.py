@@ -20,13 +20,6 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "CarlCochet/trajectory-transformer-halfcheetah-medium-v2": (
-        "https://huggingface.co/CarlCochet/trajectory-transformer-halfcheetah-medium-v2/resolve/main/config.json"
-    ),
-    # See all TrajectoryTransformer models at https://huggingface.co/models?filter=trajectory_transformer
-}
-
 
 class TrajectoryTransformerConfig(PretrainedConfig):
     r"""
