@@ -610,11 +610,11 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             "tiiuae/falcon-10B", device_map={"": torch_device}, load_in_8bit=True
         )
         model.eval()
-        inputs = tokenizer("Two roads diverged in a yellow wood", return_tensors="pt", return_token_type_ids=False).to(
+        inputs = tokenizer("Two roads diverged in a yellow wood,", return_tensors="pt", return_token_type_ids=False).to(
             torch_device
         )
 
-        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both"
+        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\n"
 
         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=9)
         output_str = tokenizer.batch_decode(output_ids)[0]
