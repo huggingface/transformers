@@ -451,7 +451,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
         model = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
         )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False, cache_implementation="quantized")
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
