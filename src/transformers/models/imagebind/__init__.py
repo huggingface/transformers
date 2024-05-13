@@ -17,7 +17,6 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_speech_available,
-    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -25,27 +24,14 @@ from ...utils import (
 
 _import_structure = {
     "configuration_imagebind": [
-        "IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ImageBindAudioConfig",
         "ImageBindConfig",
-        "ImageBindOnnxConfig",
         "ImageBindTextConfig",
         "ImageBindVisionConfig",
     ],
-    "feature_extraction_imagebind": ["ImageBindImuFeatureExtractor"],
     "processing_imagebind": ["ImageBindProcessor"],
-    "tokenization_imagebind": ["ImageBindTokenizer"],
 }
 
-# TODO: add dependencies for other modalities, if necessary
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_imagebind_fast"] = ["ImageBindTokenizerFast"]
 
 try:
     if not is_vision_available():
@@ -53,7 +39,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_imagebind"].extend(["ImageBindFeatureExtractor"])
     _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor"]
 
 try:
@@ -62,7 +47,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_imagebind"].extend(["ImageBindAudioFeatureExtractor"])
+    _import_structure["feature_extraction_imagebind"] = ["ImageBindFeatureExtractor"]
 
 
 try:
@@ -72,7 +57,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_imagebind"] = [
-        "IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ImageBindAudioModel",
         "ImageBindAudioModelWithProjection",
         "ImageBindModel",
@@ -85,24 +69,12 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_imagebind import (
-        IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ImageBindAudioConfig,
         ImageBindConfig,
-        ImageBindOnnxConfig,
         ImageBindTextConfig,
         ImageBindVisionConfig,
     )
-    from .feature_extraction_imagebind import ImageBindImuFeatureExtractor
     from .processing_imagebind import ImageBindProcessor
-    from .tokenization_imagebind import ImageBindTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_imagebind_fast import ImageBindTokenizerFast
 
     try:
         if not is_vision_available():
@@ -110,7 +82,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_imagebind import ImageBindFeatureExtractor
         from .image_processing_imagebind import ImageBindImageProcessor
 
     try:
@@ -119,7 +90,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_imagebind import ImageBindAudioFeatureExtractor
+        from .feature_extraction_imagebind import ImageBindFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -128,7 +99,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_imagebind import (
-            IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageBindAudioModel,
             ImageBindAudioModelWithProjection,
             ImageBindModel,

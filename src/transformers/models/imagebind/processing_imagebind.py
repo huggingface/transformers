@@ -30,9 +30,9 @@ class ImageBindProcessor(ProcessorMixin):
     [`ImageBindProcessor`] offers all the functionalities of [`ImageBindImageProcessor`] and [`ImageBindTokenizerFast`]. See the
     [`~ImageBindProcessor.__call__`] and [`~ImageBindProcessor.decode`] for more information.
     Args:
-        image_processor ([`ImageBindImageProcessor`]):
+        image_processor ([`ImageBindImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`ImageBindTokenizerFast`]):
+        tokenizer ([`ImageBindTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
