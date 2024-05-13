@@ -2995,6 +2995,7 @@ else:
     )
     _import_structure["models.paligemma"].extend(
         [
+            "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PaliGemmaForConditionalGeneration",
             "PaliGemmaPreTrainedModel",
             "PaliGemmaProcessor",
@@ -7692,6 +7693,7 @@ if TYPE_CHECKING:
             OwlViTVisionModel,
         )
         from .models.paligemma import (
+            PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
             PaliGemmaForConditionalGeneration,
             PaliGemmaPreTrainedModel,
             PaliGemmaProcessor,

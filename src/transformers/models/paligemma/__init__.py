@@ -26,6 +26,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_paligemma"] = [
+        "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PaliGemmaForConditionalGeneration",
         "PaliGemmaPreTrainedModel",
     ]

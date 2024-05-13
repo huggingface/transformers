@@ -43,6 +43,11 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
+PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "gv-hf/paligemma-3b-pt-896",
+    # See all PaliGemma models at https://huggingface.co/models?filter=paligemma
+]
+
 
 @dataclass
 class PaliGemmaCausalLMOutputWithPast(ModelOutput):
@@ -235,8 +240,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = config.vocab_size
         self._attn_implementation = config._attn_implementation
 
-        
-        language_model = AutoModelForCausalLM.from_config(config=config.text_config, attn_implementation=self._attn_implementation)
+        language_model = AutoModelForCausalLM.from_config(
+            config=config.text_config, attn_implementation=self._attn_implementation
+        )
 
         if language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
