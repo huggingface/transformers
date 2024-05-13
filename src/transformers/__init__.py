@@ -739,19 +739,13 @@ _import_structure = {
         "VisionTextDualEncoderConfig",
         "VisionTextDualEncoderProcessor",
     ],
-    "models.visual_bert": [
-        "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VisualBertConfig",
-    ],
-    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
-    "models.vit_hybrid": [
-        "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ViTHybridConfig",
-    ],
-    "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
-    "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
-    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
-    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
+    "models.visual_bert": ["VisualBertConfig"],
+    "models.vit": ["ViTConfig"],
+    "models.vit_hybrid": ["ViTHybridConfig"],
+    "models.vit_mae": ["ViTMAEConfig"],
+    "models.vit_msn": ["ViTMSNConfig"],
+    "models.vitdet": ["VitDetConfig"],
+    "models.vitmatte": ["VitMatteConfig"],
     "models.vitpose": ["ViTPoseConfig"],
     "models.vitpose_backbone": ["ViTPoseBackboneConfig"],
     "models.vits": [
@@ -5324,10 +5318,10 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import (
         ViTHybridConfig,
     )
-    from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
-    from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
-    from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
-    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
+    from .models.vit_mae import ViTMAEConfig
+    from .models.vit_msn import ViTMSNConfig
+    from .models.vitdet import VitDetConfig
+    from .models.vitmatte import VitMatteConfig
     from .models.vitpose import ViTPoseConfig
     from .models.vitpose_backbone import ViTPoseBackboneConfig
     from .models.vits import (
