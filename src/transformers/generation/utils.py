@@ -1986,7 +1986,7 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            if model_kwargs.get("past_key_values") is None:
+            if model_kwargs.get("past_key_values") is None or (isinstance(model_kwargs["past_key_values"], Cache) and model_kwargs["past_key_values"].get_seq_length() == 0):
                 # prepare inputs
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -2077,7 +2077,7 @@ class GenerationMixin:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
-                    # New cache structure
+                    # New efficient cache structure
                     if isinstance(item, list):
                         if sequential:
                             items.append([x.repeat_interleave(1, dim=0) for x in item])
@@ -2090,7 +2090,7 @@ class GenerationMixin:
                         else:
                             items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(tuple(items))
-            if not isinstance(past, DynamicCache):
+            if not isinstance(past, (EfficientDynamicCache, DynamicCache)):
                 past = tuple(new_key_values)
             else:
                 for layer_idx in range(len(new_key_values)):
@@ -2111,17 +2111,13 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
-                    if isinstance(outputs['past_key_values'][0][0], list):
+                    if isinstance(outputs["past_key_values"], EfficientDynamicCache):
                         # Remove past K-V from output since we don't need to stack later
                         outputs['past_key_values'] = None
 
                         # Remove last token from past K-V since we don't want to append it at this point
-                        model_kwargs['past_key_values'] = tuple(
-                            tuple(
-                                x[:-1] if x[-1].shape[-2] == 1 else x[:-1] + [x[-1][..., :-1, :]] for x in inner_tuple
-                                ) for inner_tuple in model_kwargs['past_key_values']
-                        )
-                        next_model_inputs['past_key_values'] = model_kwargs['past_key_values']
+                        model_kwargs["past_key_values"] = model_kwargs["past_key_values"].crop(-1)
+                        next_model_inputs["past_key_values"] = model_kwargs["past_key_values"]
 
                     all_outputs.append(outputs)
                 outputs = stack_model_outputs(all_outputs)
@@ -2207,7 +2203,7 @@ class GenerationMixin:
                         items += [item]
                     new_key_values += [items]
 
-                if not isinstance(next_past_key_values, DynamicCache):
+                if not isinstance(next_past_key_values, (EfficientDynamicCache, DynamicCache)):
                     next_past_key_values = tuple(new_key_values)
                 else:
                     for layer_idx in range(len(new_key_values)):
@@ -3668,6 +3664,48 @@ class GenerationMixin:
                 )
         else:
             return input_ids
+        
+
+    def _initialize_cache(self, generation_config, model_kwargs, batch_size):
+        """This function handles the initialization of the cache based on `generation_config.cache_implementation"""
+
+        # Raise warning about efficient dynamic cache implementation
+        if generation_config.cache_implementation is None:
+            logger.warning(('You are using the old version of `DynamicCache`. You should pass `cache_implementation="efficient"` '
+                            'in `model.generate(...)`. This will GREATLY reduce the memory usage of `generate()` as you generate more '
+                            'tokens. Results will be completely identical. For more details about expected memory gains, check '
+                            'https://github.com/huggingface/transformers/pull/30536'))
+
+        # StaticCache
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation == "static":
+                if model_kwargs.get("past_key_values", False) is not False:
+                    raise ValueError(
+                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
+                    )
+                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
+                if not callable(getattr(self, "_setup_cache", None)):
+                    raise ValueError(
+                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                        " Make sure it has a `_setup_cache` function."
+                    )
+                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
+
+        # EfficientDynamicCache 
+        if generation_config.cache_implementation == "efficient":
+            if model_kwargs.get("past_key_values", False) != False:
+                if isinstance(model_kwargs["past_key_values"], EfficientDynamicCache):
+                    pass
+                elif isinstance(model_kwargs["past_key_values"], DynamicCache):
+                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(model_kwargs["past_key_values"].to_legacy_cache(), generation_config.restack_limit)
+                elif isinstance(model_kwargs["past_key_values"], tuple):
+                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(model_kwargs["past_key_values"], generation_config.restack_limit)
+                else:
+                    raise ValueError('`cache_implementation="efficient"` does not support the format of past key-values you provided.')
+            else:
+                model_kwargs["past_key_values"] = EfficientDynamicCache(generation_config.restack_limit)
+
+        return model_kwargs
 
 
 def _speculative_sampling(
@@ -3789,6 +3827,9 @@ def _split(data, full_batch_size: int, split_size: int = None):
         return [None] * (full_batch_size // split_size)
     if isinstance(data, torch.Tensor):
         return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
+    # New efficient cache
+    elif isinstance(data, EfficientDynamicCache):
+        return data.split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -3892,6 +3933,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
             return None
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
+        # New efficient cache
+        elif isinstance(data[0], EfficientDynamicCache):
+            return EfficientDynamicCache.from_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

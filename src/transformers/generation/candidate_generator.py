@@ -391,6 +391,8 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             if past_key_values.value_cache[idx].shape[-1] != 0:
                 past_key_values.key_cache[idx] = past_key_values.key_cache[idx][:, :, :maximum_length, :]
                 past_key_values.value_cache[idx] = past_key_values.value_cache[idx][:, :, :maximum_length, :]
+    elif isinstance(past_key_values, EfficientDynamicCache):
+        past_key_values.crop(maximum_length)   
 
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):

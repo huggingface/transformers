@@ -186,6 +186,200 @@ class DynamicCache(Cache):
         return cache
 
 
+class EfficientDynamicCache(Cache):
+    """
+    A cache that grows dynamically as more tokens are generated. This is the same as DynamicCache but uses smarter
+    implementation and data structures to avoid copies during generate(). This allows to save a LOT of memory 
+    during generation (see https://github.com/huggingface/transformers/pull/30536 for benchmarks).
+
+    It stores the Key and Value states as a list of list of tensors, one for each layer. The expected shape for each tensor is
+    `[batch_size, num_heads, seq_len, head_dim]`.
+    """
+
+    def __init__(self, restack_limit: int | None = None) -> None:
+        self.key_cache: List[List[torch.Tensor]] = []
+        self.value_cache: List[List[torch.Tensor]] = []
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        # We will restack the tensors in the list when we reach this number to create a tensor of this size instead
+        self.restack_limit = restack_limit if restack_limit is not None else 50 
+
+    def __getitem__(self, layer_idx: int) -> Tuple[List[torch.Tensor]]:
+        """
+        Return the key and value list for a given layer.
+        """
+        if layer_idx < len(self):
+            return (self.key_cache[layer_idx], self.value_cache[layer_idx])
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values lists.
+        """
+        for layer_idx in range(len(self)):
+            yield (self.key_cache[layer_idx], self.value_cache[layer_idx])
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.key_cache)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+
+        # Update the cache
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        # Whenever we have more than `self.restack_limit` new K-V value, cat() them. That way, we keep a relatively low number
+        # of tensors in self.key_cache[layer_idx], which is more efficient to later cat() them all, and we only
+        # copy a small subset into memory whenever we cat() the last `self.restack_limit` K-V states
+        index = None
+        for i, x in enumerate(self.key_cache[layer_idx]):
+            if x.shape[-2] == 1:
+                index = i
+                break
+        if index is not None and len(self.key_cache[layer_idx]) - 1 - index > self.restack_limit:
+            self.key_cache[layer_idx] = self.key_cache[layer_idx][:index] + [
+                torch.cat(self.key_cache[layer_idx][index:], dim=-2)
+            ]
+            self.value_cache[layer_idx] = self.value_cache[layer_idx][:index] + [
+                torch.cat(self.value_cache[layer_idx][index:], dim=-2)
+            ]
+
+        # Return cat()'ed tensors for use in attention layers
+        return torch.cat(self.key_cache[layer_idx], dim=-2), torch.cat(self.value_cache[layer_idx], dim=-2)
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # TODO: deprecate this function in favor of `cache_position`
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
+        return None
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        # Because index_select() performs a copy anyway, but is inefficient to run for each tensor in the list,
+        # we first cat() the tensors and then index_select(). This keeps the same memory footprint, but is much faster
+        for layer_idx in range(len(self.key_cache)):
+            self.key_cache[layer_idx] = [
+                torch.cat(self.key_cache[layer_idx], dim=-2).index_select(
+                    0, beam_idx.to(self.key_cache[layer_idx][0].device)
+                )
+            ]
+            self.value_cache[layer_idx] = [
+                torch.cat(self.value_cache[layer_idx], dim=-2).index_select(
+                    0, beam_idx.to(self.value_cache[layer_idx][0].device)
+                )
+            ]
+
+    def crop(self, maximum_length: int):
+        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
+         negative to remove `maximum_length` tokens."""
+        
+        # In case it is negative
+        if maximum_length < 0:
+            maximum_length = self.get_seq_length() - abs(maximum_length)
+
+        if self.get_seq_length() <= maximum_length:
+            return
+
+        # Compute limits
+        cumulative_length = 0
+        last = 0
+        for tensor in self.key_cache[0]:
+            current_length = tensor.shape[-2]
+            if cumulative_length + current_length < maximum_length:
+                last += 1
+                cumulative_length += current_length
+            elif cumulative_length + current_length == maximum_length:
+                last_tensor_size = current_length
+                break
+            else:
+                last_tensor_size = maximum_length - cumulative_length
+                break
+
+        for idx in range(len(self.key_cache)):
+            self.key_cache[idx] = self.key_cache[idx][:last] + [self.key_cache[idx][last][..., :last_tensor_size, :]]
+            self.value_cache[idx] = self.value_cache[idx][:last] + [self.value_cache[idx][last][..., :last_tensor_size, :]]
+
+    def split(self, full_batch_size: int, split_size: int) -> List["EfficientDynamicCache"]:
+        """Split the current instance into a list of `EfficientDynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
+        out = []
+        for i in range(0, full_batch_size, split_size):
+            current_split = tuple(
+                (
+                    [tensor[i : i + split_size] for tensor in self.key_cache[idx]],
+                    [tensor[i : i + split_size] for tensor in self.value_cache[idx]],
+                ) for idx in range(len(self)))
+            
+            out.append(EfficientDynamicCache.from_legacy_cache(current_split, self.restack_limit))
+        return out
+    
+    @classmethod
+    def from_splits(cls, splits: List["EfficientDynamicCache"]) -> "EfficientDynamicCache":
+        """This is the opposite of the above `split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
+        cache = cls(restack_limit=splits[0].restack_limit)
+        cache._seen_tokens = splits[0]._seen_tokens
+        for layer_idx in range(len(splits[0])):
+            layer_keys = [torch.cat([current.key_cache[layer_idx][tensor_idx] for current in splits], dim=0) for tensor_idx in range(len(splits[0].key_cache[layer_idx]))]
+            layer_values = [torch.cat([current.value_cache[layer_idx][tensor_idx] for current in splits], dim=0) for tensor_idx in range(len(splits[0].value_cache[layer_idx]))]
+            cache.key_cache.append(layer_keys)
+            cache.value_cache.append(layer_values)
+        return cache
+
+    def to_legacy_cache(self) -> Tuple[Tuple[List[torch.Tensor]], Tuple[List[torch.Tensor]]]:
+        """Converts the `EfficientDynamicCache` instance into the its equivalent in the Tuple[Tuple[List[torch.Tensor]]] cache format."""
+        return tuple((self.key_cache[layer_idx], self.value_cache[layer_idx]) for layer_idx in range(len(self)))
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Tuple[Tuple[torch.Tensor]] | Tuple[Tuple[List[torch.Tensor]]] | None = None, restack_limit: int | None = None) -> "EfficientDynamicCache":
+        """Converts a cache in the legacy cache format Tuple[Tuple[torch.Tensor]] or Tuple[Tuple[List[torch.Tensor]]] into an equivalent `EfficientDynamicCache`."""
+        cache = cls(restack_limit=restack_limit)
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.update(key_states, value_states, layer_idx)
+        return cache
+
+
 class SinkCache(Cache):
     """
     A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
