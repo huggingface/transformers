@@ -1519,17 +1519,14 @@ class GenerationMixin:
         requires_attention_mask = "encoder_outputs" not in model_kwargs
         kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
-        device = None
-        if "input_ids" in model_kwargs and isinstance(model_kwargs["input_ids"], torch.Tensor):
-            device = model_kwargs["input_ids"].device
-
-        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
-
         # 3. Define model inputs
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = inputs_tensor.shape[0]
+        device = inputs_tensor.device
+
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
 
         # decoder-only models must use left-padding for batched generation.
         if not self.config.is_encoder_decoder and not is_torchdynamo_compiling():
