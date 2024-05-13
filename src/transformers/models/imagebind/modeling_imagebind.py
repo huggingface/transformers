@@ -337,7 +337,7 @@ class ImageBindVisionEmbeddings(nn.Module):
             config=config, projection=projection, use_layernorm=False
         )
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.position_embedding = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
 
     # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -350,11 +350,11 @@ class ImageBindVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embedding.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
         if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embedding[:, 0]
-        patch_pos_embed = self.position_embedding[:, 1:]
+            return self.position_embeddingss
+        class_pos_embed = self.position_embeddings[:, 0]
+        patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
@@ -414,7 +414,7 @@ class ImageBindVisionEmbeddings(nn.Module):
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            embeddings = embeddings + self.position_embedding
+            embeddings = embeddings + self.position_embeddings
 
         return embeddings
 
@@ -439,7 +439,7 @@ class ImageBindAudioEmbeddings(nn.Module):
         self.patch_embedding = ImageBindGenericPatchEmbedding(config=config, projection=proj, use_layernorm=True)
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.position_embedding = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
 
     def forward(self, input_features: torch.FloatTensor) -> torch.Tensor:
         embeddings = self.patch_embedding(input_features, interpolate_pos_encoding=False)
@@ -448,7 +448,7 @@ class ImageBindAudioEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # Could also add interpolation of position encoding as well
-        embeddings = embeddings + self.position_embedding
+        embeddings = embeddings + self.position_embeddings
 
         return embeddings
 
@@ -460,7 +460,7 @@ class ImageBindTextEmbeddings(nn.Module):
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
@@ -481,7 +481,7 @@ class ImageBindTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        position_embeddings = self.position_embedding(position_ids)
+        position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
@@ -607,7 +607,6 @@ class ImageBindAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIPMLP->ImageBindMlp
 class ImageBindMlp(nn.Module):
     def __init__(self, config):
         super().__init__()

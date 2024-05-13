@@ -79,7 +79,7 @@ def create_rename_keys(config):
     rename_keys.extend([
         ("modality_preprocessors.vision.cls_token", "vision_model.embeddings.cls_token"),
         ("modality_preprocessors.vision.rgbt_stem.proj.1.weight", "vision_model.embeddings.patch_embedding.projection.weight"),
-        ("modality_preprocessors.vision.pos_embedding_helper.pos_embed", "vision_model.embeddings.position_embedding"),
+        ("modality_preprocessors.vision.pos_embedding_helper.pos_embed", "vision_model.embeddings.position_embeddings"),
         ("modality_heads.vision.0.weight", "vision_model.layernorm.weight"),
         ("modality_heads.vision.0.bias", "vision_model.layernorm.bias"),
         ("modality_heads.vision.2.weight", "visual_projection.weight"),
@@ -93,7 +93,7 @@ def create_rename_keys(config):
 
     # Convert Text
     rename_keys.extend([
-        ("modality_preprocessors.text.pos_embed", "text_model.embeddings.position_embedding.weight"),
+        ("modality_preprocessors.text.pos_embed", "text_model.embeddings.position_embeddings.weight"),
         ("modality_preprocessors.text.token_embedding.weight", "text_model.embeddings.token_embedding.weight"),
         ("modality_heads.text.proj.0.weight", "text_model.layernorm.weight"),
         ("modality_heads.text.proj.0.bias", "text_model.layernorm.bias"),
@@ -111,7 +111,7 @@ def create_rename_keys(config):
         ("modality_preprocessors.audio.rgbt_stem.proj.weight", "audio_model.embeddings.patch_embedding.projection.weight"),
         ("modality_preprocessors.audio.rgbt_stem.norm_layer.weight", "audio_model.embeddings.patch_embedding.layernorm.weight"),
         ("modality_preprocessors.audio.rgbt_stem.norm_layer.bias", "audio_model.embeddings.patch_embedding.layernorm.bias"),
-        ("modality_preprocessors.audio.pos_embedding_helper.pos_embed", "audio_model.embeddings.position_embedding"),
+        ("modality_preprocessors.audio.pos_embedding_helper.pos_embed", "audio_model.embeddings.position_embeddings"),
         ("modality_heads.audio.0.weight", "audio_model.layernorm.weight"),
         ("modality_heads.audio.0.bias", "audio_model.layernorm.bias"),
         ("modality_heads.audio.2.weight", "audio_projection.weight"),
@@ -130,10 +130,10 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-def reshape_text_position_embedding(state_dict):
+def reshape_text_position_embeddings(state_dict):
     # Need to convert from (1, contexc_length, hidden_size) -> (context_length, hidden_size)
-    position_embedding = state_dict["text_model.embeddings.position_embedding.weight"]
-    state_dict["text_model.embeddings.position_embedding.weight"] = position_embedding.squeeze(0)
+    position_embeddings = state_dict["text_model.embeddings.position_embeddings.weight"]
+    state_dict["text_model.embeddings.position_embeddings.weight"] = position_embeddings.squeeze(0)
 
     return state_dict
 
@@ -170,7 +170,7 @@ def convert_imagebind_checkpoint(args):
 
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
-    reshape_text_position_embedding(new_state_dict)
+    reshape_text_position_embeddings(new_state_dict)
 
     # Load HF model
     model = ImageBindModel(config)

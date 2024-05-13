@@ -111,25 +111,28 @@ class ImageBindTextConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        add_kv_bias(`bool`, *optional*, defaults to `False`):
             Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
             `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
+        add_kv_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        logit_scale_init_value (`float`, *optional*, defaults to `14.2857`):
+        logit_scale_init_value (`float`, *optional*, defaults to 14.2857):
             The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `True`):
             Whether the `logit_scale` is learnable or fixed.
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        bos_token_id (`<fill_type>`, *optional*, defaults to 49406): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 49407): <fill_docstring>
 
     Example:
 
@@ -372,21 +375,21 @@ class ImageBindAudioConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        add_kv_bias(`bool`, *optional*, defaults to `True`):
             Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
             `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
+        add_kv_bias (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        logit_scale_init_value (`float`, *optional*, defaults to `20.0`):
+        logit_scale_init_value (`float`, *optional*, defaults to 20.0):
             The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `False`):
@@ -484,10 +487,9 @@ class ImageBindConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ImageBindTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ImageBindVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
+        audio_config (`<fill_type>`, *optional*): <fill_docstring>
+        projection_dim (`int`, *optional*, defaults to 1024):
             Dimentionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original ImageBind implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 

@@ -254,6 +254,20 @@ class IdeficsImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ImageBindFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ImageBindImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ImageGPTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
