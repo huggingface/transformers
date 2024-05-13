@@ -159,6 +159,28 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.fairseq_offset = 1
         self.sp_model_size = len(self.sp_model)
 
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            legacy_behaviour=legacy_behaviour,
+            **kwargs,
+        )
+
+        self._src_lang = src_lang if src_lang is not None else "eng_Latn"
+        self.cur_lang_code_id = self.convert_tokens_to_ids(self._src_lang)
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
