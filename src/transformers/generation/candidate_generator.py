@@ -150,7 +150,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
 
-        # Disable sampling -- this implementation of assited generation/speculative decoding uses the assistant
+        # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
         # greedily to maximize matches. Disables sampling-related flags to prevent warnings
         self.generation_config.do_sample = False
         for attr in ("temperature", "top_p", "min_p", "typical_p", "top_k", "epsilon_cutoff", "eta_cutoff"):
