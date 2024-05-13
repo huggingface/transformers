@@ -705,10 +705,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
-    "models.paligemma": [
-        "PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PaliGemmaConfig",
-    ],
+    "models.paligemma": ["PaliGemmaConfig"],
     "models.patchtsmixer": [
         "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "PatchTSMixerConfig",
@@ -2998,7 +2995,6 @@ else:
     )
     _import_structure["models.paligemma"].extend(
         [
-            "PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PaliGemmaForConditionalGeneration",
             "PaliGemmaPreTrainedModel",
             "PaliGemmaProcessor",
@@ -5690,7 +5686,6 @@ if TYPE_CHECKING:
         OwlViTVisionConfig,
     )
     from .models.paligemma import (
-        PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PaliGemmaConfig,
     )
     from .models.patchtsmixer import (
@@ -7697,7 +7692,6 @@ if TYPE_CHECKING:
             OwlViTVisionModel,
         )
         from .models.paligemma import (
-            PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST,
             PaliGemmaForConditionalGeneration,
             PaliGemmaPreTrainedModel,
             PaliGemmaProcessor,

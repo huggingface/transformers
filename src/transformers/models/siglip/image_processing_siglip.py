@@ -18,9 +18,9 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
+    convert_to_rgb,
     resize,
     to_channel_dimension_format,
-    convert_to_rgb,
 )
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -74,6 +74,7 @@ class SiglipImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]

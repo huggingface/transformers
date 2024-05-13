@@ -873,7 +873,6 @@ class SiglipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        
         pooler_output = self.head(last_hidden_state) if self.use_head else None
         if not return_dict:
             return (last_hidden_state, pooler_output) + encoder_outputs[1:]

@@ -31,9 +31,11 @@ logger = logging.getLogger(__name__)
 
 IMAGE_TOKEN = "<image>"
 
+
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
+
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
 def is_image_or_image_url(elem):
@@ -64,6 +66,7 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
     """
     return f"{image_token * image_seq_len}{bos_token}{prompt}"
 
+
 class PaliGemmaProcessor(ProcessorMixin):
     r"""
     Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
@@ -89,7 +92,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
-        
+
         self.image_seq_length = image_processor.image_seq_length
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
@@ -104,8 +107,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: bool=None,
-        do_normalize: bool=None,
+        do_resize: bool = None,
+        do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
@@ -195,20 +198,20 @@ class PaliGemmaProcessor(ProcessorMixin):
             do_resize=do_resize,
             do_normalize=do_normalize,
             return_tensors=return_tensors,
-            image_mean=image_mean, 
+            image_mean=image_mean,
             image_std=image_std,
             input_data_format=input_data_format,
             data_format=data_format,
             resample=resample,
             do_convert_rgb=do_convert_rgb,
-            )["pixel_values"]
-        
+        )["pixel_values"]
+
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
 
         if tokenize_newline_separately:
             inputs = self.tokenizer(
-                input_strings, 
+                input_strings,
                 add_special_tokens=False,
                 return_tensors=None,
                 padding="do_not_pad",
@@ -217,11 +220,13 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
             newline_token = self.tokenizer("\n", add_special_tokens=False, return_tensors=None)
 
-            concatenated_ids = [ids + newline_token['input_ids'] for ids in inputs['input_ids']]
-            concatenated_attention_masks = [mask + newline_token['attention_mask'] for mask in inputs['attention_mask']]
+            concatenated_ids = [ids + newline_token["input_ids"] for ids in inputs["input_ids"]]
+            concatenated_attention_masks = [
+                mask + newline_token["attention_mask"] for mask in inputs["attention_mask"]
+            ]
 
             text_inputs = self.tokenizer.pad(
-                {'input_ids': concatenated_ids, 'attention_mask': concatenated_attention_masks},
+                {"input_ids": concatenated_ids, "attention_mask": concatenated_attention_masks},
                 max_length=max_length,
                 padding=padding,
                 return_tensors=return_tensors,
@@ -234,7 +239,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 padding=padding,
                 max_length=max_length,
                 truncation=truncation,
-            )   
+            )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 

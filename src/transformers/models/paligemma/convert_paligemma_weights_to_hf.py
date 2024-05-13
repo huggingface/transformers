@@ -25,18 +25,18 @@ from PIL import Image
 
 from transformers import (
     AutoTokenizer,
+    GemmaTokenizer,
+    GemmaTokenizerFast,
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
-    GemmaTokenizer,
-    GemmaTokenizerFast,
     SiglipImageProcessor,
 )
-from transformers.utils import logging
 from transformers.tokenization_utils_base import AddedToken
+from transformers.utils import logging
 
 
-device = "cuda" #"cpu"
+device = "cuda"  # "cpu"
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -45,50 +45,46 @@ logger = logging.get_logger(__name__)
 
 PALIGEMMA_VARIANTS = ["2b-test", "3b-224px", "3b-448px", "3b-896px"]
 
+
 def get_paligemma_config(variant: str, precision: str):
     config = {
-        'image_token_index': None,
-        'pad_token_id': 0,
-        'bos_token_id': 2,
-        'eos_token_id': 1,
-        }
-
-    image_sizes = {
-        "2b-test": 224,
-        "3b-224px": 224,
-        "3b-448px": 448,
-        "3b-896px": 896
+        "image_token_index": None,
+        "pad_token_id": 0,
+        "bos_token_id": 2,
+        "eos_token_id": 1,
     }
+
+    image_sizes = {"2b-test": 224, "3b-224px": 224, "3b-448px": 448, "3b-896px": 896}
 
     if variant in PALIGEMMA_VARIANTS:
         image_size = image_sizes[variant]
         patch_size = 14
-        num_image_tokens = (image_size ** 2) // (patch_size ** 2)
-        
-        config['image_token_index'] = 257152 if variant != "2b-test" else 256000
+        num_image_tokens = (image_size**2) // (patch_size**2)
+
+        config["image_token_index"] = 257152 if variant != "2b-test" else 256000
         text_config = {
-            'vocab_size': 257152,
-            'num_hidden_layers': 18,
-            'num_key_value_heads': 1,
-            'head_dim': 256,
-            'torch_dtype': precision,
-            'hidden_size': 2048,
-            'hidden_act': 'gelu_pytorch_tanh',
-            'num_attention_heads': 8,
-            'intermediate_size': 16384,
-            'is_encoder_decoder': False
+            "vocab_size": 257152,
+            "num_hidden_layers": 18,
+            "num_key_value_heads": 1,
+            "head_dim": 256,
+            "torch_dtype": precision,
+            "hidden_size": 2048,
+            "hidden_activation": "gelu_pytorch_tanh",
+            "num_attention_heads": 8,
+            "intermediate_size": 16384,
+            "is_encoder_decoder": False,
         }
         vision_config = {
-            'torch_dtype': precision,
-            'image_size': image_size,
-            'patch_size': patch_size,
-            'num_image_tokens': num_image_tokens,
-            'hidden_size': 1152,
-            'intermediate_size': 4304,
-            'num_hidden_layers': 27,
-            'num_attention_heads': 16,
-            'projector_hidden_act': 'gelu_fast',
-            'vision_use_head': False
+            "torch_dtype": precision,
+            "image_size": image_size,
+            "patch_size": patch_size,
+            "num_image_tokens": num_image_tokens,
+            "hidden_size": 1152,
+            "intermediate_size": 4304,
+            "num_hidden_layers": 27,
+            "num_attention_heads": 16,
+            "projector_hidden_act": "gelu_fast",
+            "vision_use_head": False,
         }
         final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
     else:
@@ -231,32 +227,35 @@ def verify_logits(model, processor):
 
     cow_on_beach_path = "/home/pablo/cow_beach_1.png"
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    
 
     # Test image captioning generation without padding
-    image_captioning_inputs_unpad = processor(text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt").to(device)
+    image_captioning_inputs_unpad = processor(
+        text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt"
+    ).to(device)
     captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
     if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning without padding should match, got {captioning_output[0]}.")
+        raise ValueError(rf"Image captioning without padding should match, got {captioning_output[0]}.")
     else:
         print("Image captioning works without padding.")
 
-
         # Test image captioning generation with padding
-    image_captioning_inputs = processor(text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt").to(device)
+    image_captioning_inputs = processor(
+        text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt"
+    ).to(device)
     captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
     captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
     if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(fr"Image captioning with should match, got {captioning_output[0]}.")
+        raise ValueError(rf"Image captioning with should match, got {captioning_output[0]}.")
     else:
         print("Image captioning works with padding.")
 
-
     prompt = ["answer en Where is the cow standing?", ""]
 
-    model_inputs = processor(text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt").to(device)
-    with torch.inference_mode():        
+    model_inputs = processor(
+        text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt"
+    ).to(device)
+    with torch.inference_mode():
         raw_generation = model.generate(**model_inputs, max_new_tokens=10)
         generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
 
@@ -267,13 +266,21 @@ def verify_logits(model, processor):
         else:
             print("Generation matches. You're almost done!")
 
-    
     print("Verifying that batched generation and single generation works.")
-    big_batch_inputs = ["answer en What is that, isn't int a very strange happenstance? Most confusinglicious?", "", "answer en Where is the cow standing?"]
+    big_batch_inputs = [
+        "answer en What is that, isn't int a very strange happenstance? Most confusinglicious?",
+        "",
+        "answer en Where is the cow standing?",
+    ]
 
     list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    batch_model_inputs = processor(text=big_batch_inputs, images=list_images, padding="longest", return_tensors='pt').to(device)
-    single_inputs = [processor(text=t, images=i, padding="do_not_pad", return_tensors="pt").to(device) for t, i in zip(big_batch_inputs, list_images)]
+    batch_model_inputs = processor(
+        text=big_batch_inputs, images=list_images, padding="longest", return_tensors="pt"
+    ).to(device)
+    single_inputs = [
+        processor(text=t, images=i, padding="do_not_pad", return_tensors="pt").to(device)
+        for t, i in zip(big_batch_inputs, list_images)
+    ]
     with torch.inference_mode():
         batched_generation = model.generate(**batch_model_inputs, max_new_tokens=25)
         batched_output = processor.batch_decode(batched_generation, skip_special_tokens=True)
@@ -287,10 +294,14 @@ def verify_logits(model, processor):
 
 @torch.no_grad()
 def convert_paligemma_checkpoint(
-    checkpoint_path, tokenizer_model_file, pytorch_dump_folder_path, variant: str, precision: str, do_verify_logits=True, do_convert_weights=False
+    checkpoint_path,
+    tokenizer_model_file,
+    pytorch_dump_folder_path,
+    variant: str,
+    precision: str,
+    do_verify_logits=True,
+    do_convert_weights=False,
 ):
-    do_verify_logits = False
-    do_convert_weights = True
     """
     Read checkpoints from flax npz files, rename/reshape, send result to state dict and verify logits if needed.
     """
@@ -304,12 +315,10 @@ def convert_paligemma_checkpoint(
             tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
             tokenizer = tokenizer_class(tokenizer_model_file)
         image_token = AddedToken("<image>", normalized=False, special=True)
-        tokens_to_add = {
-            "additional_special_tokens": [image_token]
-        }
+        tokens_to_add = {"additional_special_tokens": [image_token]}
         tokenizer.add_special_tokens(tokens_to_add)
-        
-        # tokenizer.padding_side = 'right' # uncomment for testing purposes only. 
+
+        # tokenizer.padding_side = 'right' # uncomment for testing purposes only.
 
         image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
         image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
@@ -328,14 +337,18 @@ def convert_paligemma_checkpoint(
 
     else:
         processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
-        model = PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa").to(device).eval()
-    model.config.text_config._attn_implementation = 'sdpa'
+        model = (
+            PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa")
+            .to(device)
+            .eval()
+        )
+    model.config.text_config._attn_implementation = "sdpa"
     if do_verify_logits:
         print("Verifying logits...")
         verify_logits(model, processor)
 
     # model expansion to get random embeds of image tokens
-    pad_shape = 64 # for performance reasons
+    pad_shape = 64  # for performance reasons
     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
@@ -355,39 +368,39 @@ def convert_paligemma_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
     processor.save_pretrained(pytorch_dump_folder_path)
-# 
 
 
+#
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_path",
-        default="/raid/pablo/palma_files/test_model/hf_test_ckpt.bv.params.npz",
+        default="./hf_test_ckpt.bv.params.npz",
         type=str,
         help="Path to the .npz checkpoint",
     )
 
     parser.add_argument(
         "--tokenizer_model_file",
-        default="/raid/pablo/paligemma/paligemma_tokenizer.model",
+        default="./paligemma_tokenizer.model",
         type=str,
         help="Path to the sentencepiece model file",
     )
 
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/raid/pablo/converted_224_test_pre_release",
+        default="./converted_224_model",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
 
     parser.add_argument(
         "--precision",
-        choices=['float32', 'bfloat16', 'float16'],
+        choices=["float32", "bfloat16", "float16"],
         type=str,
-        help="Precision identifier for model conversion - should match the base checkpoint precision."
+        help="Precision identifier for model conversion - should match the base checkpoint precision.",
     )
 
     parser.add_argument(
@@ -395,7 +408,7 @@ if __name__ == "__main__":
         default="2b-test",
         choices=PALIGEMMA_VARIANTS,
         type=str,
-        help="String identifier of the paligemma variant to convert."
+        help="String identifier of the paligemma variant to convert.",
     )
 
     parser.add_argument(

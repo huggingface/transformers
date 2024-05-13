@@ -20,10 +20,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-PALIGEMMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Molbap/model7": "https://huggingface.co/Molbap/model7/resolve/main/config.json",
-}
-
 
 class PaliGemmaConfig(PretrainedConfig):
     r"""
@@ -43,7 +39,7 @@ class PaliGemmaConfig(PretrainedConfig):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 257152):
+        image_token_index (`int`, *optional*, defaults to 256000):
             The image token index to encode the image prompt.
         vocab_size (`int`, *optional*, defaults to 257152):
             Vocabulary size of the PaliGemmamodel. Defines the number of different tokens that can be represented by the
