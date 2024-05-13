@@ -30,9 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
 from .configuration_paligemma import PaliGemmaConfig
-from ...activations import ACT2FN
 
 
 if is_flash_attn_2_available():
@@ -44,6 +42,7 @@ from ..auto import AutoModel, AutoModelForCausalLM
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
+
 
 @dataclass
 class PaliGemmaCausalLMOutputWithPast(ModelOutput):
@@ -123,7 +122,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     config_class = PaliGemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PaliGemmaVisionAttention"]
+    _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
     _supports_sdpa = True
@@ -234,7 +233,13 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+
+        
+        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+
+        if language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+        self.language_model = language_model
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -267,20 +272,23 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        scaled_image_features = image_features /  (self.config.hidden_size ** 0.5)
-        final_embedding = torch.zeros(batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+        scaled_image_features = image_features / (self.config.hidden_size**0.5)
+        final_embedding = torch.zeros(
+            batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+        )
         if labels is not None:
-            final_labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device)
+            final_labels = torch.full(
+                (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+            )
         else:
             final_labels = None
 
         text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.pad_token_id)
-        image_mask = (input_ids == self.config.image_token_index)
-        pad_mask = (input_ids == self.pad_token_id)
+        image_mask = input_ids == self.config.image_token_index
+        pad_mask = input_ids == self.pad_token_id
 
         # expand masks to match embedding dimension
         text_mask_expanded = text_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
@@ -289,20 +297,23 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         final_embedding = torch.where(text_mask_expanded, inputs_embeds, final_embedding)
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
         # insert image embeddings - the image mask is always less or equal to the sentence in length
-        final_embedding = final_embedding.masked_scatter(image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features)
+        final_embedding = final_embedding.masked_scatter(
+            image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features
+        )
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
 
         final_attention_mask_4d = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
-        final_attention_mask_4d = final_attention_mask_4d.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
+        final_attention_mask_4d = final_attention_mask_4d.float().expand(
+            -1, self.config.text_config.num_key_value_heads, -1, -1
+        )
 
-        #position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
-        #position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
+        # position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
+        # position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
         position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
 
-        
         if labels is not None:
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
-        return final_embedding, final_attention_mask_4d, final_labels, position_ids        
+        return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -359,13 +370,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds.")
 
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # the attention mask is turned 4d after, we keep track of the original one
         input_attention_mask = attention_mask
 
@@ -378,17 +388,19 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
-               
+
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
-                              
+
                 if labels is None:
                     if attention_mask.dim() == 4:
                         batch_size, sequence_length = attention_mask.size(0), attention_mask.size(2)
                     elif attention_mask.dim() == 2:
                         batch_size, sequence_length = attention_mask.size(0), attention_mask.size(1)
-                    labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=torch.long).to(attention_mask.device)
+                    labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=torch.long).to(
+                        attention_mask.device
+                    )
             else:
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation with cache
@@ -434,33 +446,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         )
         # we do not pass labels so output[0] correspond to logits
         # however in the case of right-padding and 4d attn mask outputs need to be sliced
-        # in order to recover token-to-predict logits. 
+        # in order to recover token-to-predict logits.
         logits = outputs[0]
         loss = None
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        if attention_mask.dim() == 4:
-            # this is to identify input phase
-            # else, we are in the cached situation and don't need to slice as just 1 token is passed
-            attention_mask_2d = attention_mask[:, 0, -1] if left_padding else attention_mask[:, 0, 0]
-            last_valid_indices = attention_mask_2d.sum(dim=1).int() -1
-            batch_indices = torch.arange(logits.size(0), device=logits.device)
-            last_valid_logits = logits[batch_indices, last_valid_indices]
-            expanded_selected_logits = last_valid_logits.unsqueeze(1).expand(-1, logits.size(1), -1)
-            padding_mask = attention_mask_2d == 0
-            updated_logits = torch.where(padding_mask.unsqueeze(-1), expanded_selected_logits, logits)       
-            logits = updated_logits
-        # -----  end slice   -----      
         if labels is not None:
-            shift_logits = logits[..., :-1, :] 
+            shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                if attention_mask.dim() == 4:
-                    # take top or bottom row of the 4d mask.
-                    # this should only be used in the initial pass with full attention on prefix.
-                    shift_attention_mask = attention_mask[:, 0, 0, 1:].squeeze(1) if not left_padding else attention_mask[:, 0, -1, 1:].squeeze(1)
-                elif attention_mask.dim() == 2:
-                    # take normal slice of the attn mask
-                    shift_attention_mask = attention_mask[..., 1:]                
+            if input_attention_mask is not None:
+                shift_attention_mask = input_attention_mask[..., 1:]
                 shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = shift_labels[shift_attention_mask.to(logits.device) != 0].contiguous()
             else:
@@ -471,9 +464,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
             flat_logits = shift_logits.view(-1, self.config.vocab_size)
             flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(
-                flat_logits, flat_labels
-            )
+            loss = loss_fct(flat_logits, flat_labels)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
@@ -487,7 +478,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, cache_position=None, pixel_values=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        cache_position=None,
+        pixel_values=None,
+        attention_mask=None,
+        **kwargs,
     ):
         past_length = 0
         if past_key_values is not None:
@@ -522,7 +520,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
