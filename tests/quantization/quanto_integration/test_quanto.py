@@ -17,7 +17,14 @@ import tempfile
 import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, QuantoConfig
-from transformers.testing_utils import require_accelerate, require_quanto, require_read_token, require_torch_gpu, slow
+from transformers.testing_utils import (
+    require_accelerate,
+    require_quanto,
+    require_read_token,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_accelerate_available, is_quanto_available, is_torch_available
 
 

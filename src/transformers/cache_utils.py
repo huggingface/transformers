@@ -116,11 +116,17 @@ class CacheConfig:
             kwargs.pop(key, None)
         return config
 
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_json_file
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
         """
         Save this instance to a JSON file.
+
         Args:
-            json_file_path (Union[str, os.PathLike]): Path to the JSON file in which this configuration instance's parameters will be saved.
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default
+                `QuantizationConfig()` is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             config_dict = self.to_dict()
@@ -128,19 +134,21 @@ class CacheConfig:
 
             writer.write(json_string)
 
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
     def to_dict(self) -> Dict[str, Any]:
         """
-        Serializes this instance to a Python dictionary.
-        Returns:
-            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        output = copy.deepcopy(self.__dict__)
-        return output
+        return copy.deepcopy(self.__dict__)
 
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__iter__
     def __iter__(self):
+        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
         for attr, value in copy.deepcopy(self.__dict__).items():
             yield attr, value
 
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__repr__
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
@@ -152,15 +160,28 @@ class CacheConfig:
         """
         return json.dumps(self.__dict__, indent=2) + "\n"
 
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
     def update(self, **kwargs):
         """
-        Update the configuration attributes with new values.
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        returning all the unused kwargs.
+
         Args:
-            **kwargs: Keyword arguments representing configuration attributes and their new values.
+            kwargs (`Dict[str, Any]`):
+                Dictionary of attributes to tentatively update this class.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
         """
+        to_remove = []
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+                to_remove.append(key)
+
+        # Remove all the attributes that were updated, without modifying the input dict
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        return unused_kwargs
 
 
 @dataclass

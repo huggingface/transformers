@@ -1604,11 +1604,8 @@ class GenerationMixin:
                     if generation_config.cache_config is not None
                     else QuantizedCacheConfig()
                 )
-                model_kwargs["past_key_values"] = QuantoQuantizedCache(
-                    nbits=cache_config.nbits,
-                    q_group_size=cache_config.q_group_size,
-                    residual_length=cache_config.residual_length,
-                )
+
+                model_kwargs["past_key_values"] = QuantoQuantizedCache(**cache_config.to_dict())
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 

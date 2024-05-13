@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
+NEEDS_CACHE_CONFIG = {"quantized": QuantizedCacheConfig}
 
 
 class GenerationMode(ExplicitEnum):
@@ -288,17 +289,9 @@ class GenerationConfig(PushToHubMixin):
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
         cache_config (`Union[CacheConfig, dict]`, *optional*, default to `None`):
-            Arguments used for quantized cache that stores keys and values in lower precision for memory efficiency.
-            If passed as `Dict`, it will be converted to a `QuantizedCacheConfig` internally.
-            Accepts the following keys:
-            - nbits (`int`, *optional*, defaults to 2):
-                Number of bits, can be 2 or 4. Defaults to 2.
-            - q_group_size (`int`, *optional*, defaults to 64):
-                Size of the quantization group, should be a divisor of the model's hidden dimension.
-                Defaults to 64.
-            - residual_length (`int`, *optional*, defaults to 128):
-                Length of the residual cache which will always be stored in full/half presicion.
-                Defaults to 128.
+            Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
+            it will be converted to its repsective `CacheConfig` internally.
+            Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
 
         > Wild card
 
@@ -634,8 +627,15 @@ class GenerationConfig(PushToHubMixin):
 
         # 5. check `cache_config`
         if self.cache_config is not None:
-            if not isinstance(self.cache_config, QuantizedCacheConfig):
-                self.cache_config = QuantizedCacheConfig.from_dict(self.cache_config)
+            cache_Class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
+            if cache_Class is None:
+                raise ValueError(
+                    "You provided a `cache_config` but the cache implementation you are using "
+                    f"({self.cache_implementation}) does not require any config. Make sure to use the "
+                    "correct cache implementation matching your cache config."
+                )
+            if not isinstance(self.cache_config, cache_Class):
+                self.cache_config = cache_Class.from_dict(self.cache_config)
             self.cache_config.validate()
 
         # 6. check common issue: passing `generate` arguments inside the generation config
