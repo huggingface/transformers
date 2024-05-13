@@ -457,7 +457,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 if attention_mask.dim() == 4:
                     # take top or bottom row of the 4d mask.
                     # this should only be used in the initial pass with full attention on prefix.
-                    shift_attention_mask = attention_mask[:, 0, 0, :-1].squeeze(1) if not left_padding else attention_mask[:, 0, -1, :-1].squeeze(1) 
+                    shift_attention_mask = attention_mask[:, 0, 0, 1:].squeeze(1) if not left_padding else attention_mask[:, 0, -1, 1:].squeeze(1)
                 elif attention_mask.dim() == 2:
                     # take normal slice of the attn mask
                     shift_attention_mask = attention_mask[..., 1:]                
