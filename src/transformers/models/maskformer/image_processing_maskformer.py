@@ -413,6 +413,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ):
+        if "reduce_labels" in kwargs:
+            raise ValueError("The `reduce_labels` parameter has been deprecated. Use `do_reduce_labels` instead.")
         if "size_divisibility" in kwargs:
             warnings.warn(
                 "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
@@ -478,6 +480,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "size_divisibility" in kwargs:
             image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
