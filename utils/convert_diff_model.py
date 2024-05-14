@@ -41,20 +41,24 @@ def create_single_model_file(converter):
 
                 elif match:=re.match(r"class (\w+)\((\w+)\):", line):
                     class_name, parent_class = match.groups()
-                    pattern = re.compile( r"(\ {4}([\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    def|\Z))", re.MULTILINE)
+                    pattern = re.compile( r"(\ {4}(?:[\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    (?:def|@)|\Z))", re.MULTILINE)
 
                     parent_class_def = inspect.getsource(eval(parent_class))
                     modeling.write(parent_class_def.split('\n')[0].replace(parent_class,class_name)+"\n")
 
                     function_name_pattern = r"(?=    def ([\S]*)\()"
-                    function_body_pattern = r"(\ {4}([\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    def|\Z))"
+                    function_body_pattern = r"(\ {4}(?:[\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    (?:def|@)|\Z))"
 
                     pattern = re.compile(function_body_pattern)
                     matches = pattern.finditer(parent_class_def)
                     parent_function_set = {}
                     for match in matches:
                         full_function = match.group()
-                        parent_function_set[full_function.split("(")[0]] = full_function
+                        print(full_function.split("def"))
+                        if "def" in full_function:
+                            parent_function_set[full_function.split("def")[1].split("(")[0]] = full_function
+                        else:
+                            parent_function_set[full_function] = full_function
 
                     child_function_set = parent_function_set.copy()
                     class_def = inspect.getsource(eval(class_name))
@@ -62,11 +66,11 @@ def create_single_model_file(converter):
                     for match in matches:
                         # TODO handle call to super!
                         full_function = match.group()
-                        function_name = full_function.split("(")[0]
-                        full_function = re.sub("return super().forward(", parent_function_set[function_name], full_function)
+                        function_name = full_function.split("def")[1].split("(")[0]
+                        full_function = re.sub(r"return super\(\).forward\(", parent_function_set.get(function_name,""), full_function)
                         child_function_set[function_name] = full_function
 
-                    modeling.write("".join(child_function_set.values())) # TODO we wrote the code, next lines shall be ignored
+                    modeling.write("\n".join(child_function_set.values())) # TODO we wrote the code, next lines shall be ignored
                     modeling.write("\n")
 
                 elif "= ModelConverter(__file__)" in line:
@@ -97,8 +101,5 @@ if __name__ == '__main__':
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/",".").replace(".py","").replace("src.","")
         model_name = MODEL_NAMES_MAPPING[module_path.split('_')[-1]]
-        try:
-            converter = dynamically_import_object(module_path, f"{model_name}Converter")
-            create_single_model_file(converter)
-        except Exception as e:
-            pass
+        converter = dynamically_import_object(module_path, f"{model_name}Converter")
+        create_single_model_file(converter)
