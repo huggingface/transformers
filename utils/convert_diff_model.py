@@ -41,14 +41,15 @@ def create_single_model_file(converter):
 
                 elif match:=re.match(r"class (\w+)\((\w+)\):", line):
                     class_name, parent_class = match.groups()
-                    pattern = re.compile(r"((    [\s\S]*?)\n(\n)?(?=    \S))|((    [\s\S]*?)(?=\Z))", re.MULTILINE)
+                    pattern = re.compile( r"(\ {4}([\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    def|\Z))", re.MULTILINE)
 
                     parent_class_def = inspect.getsource(eval(parent_class))
                     modeling.write(parent_class_def.split('\n')[0].replace(parent_class,class_name)+"\n")
 
                     function_name_pattern = r"(?=    def ([\S]*)\()"
-                    function_body_pattern = r"(\ {4}(?:[\S\s\ \n]*?)(?=\n\ ^\)|\n\n|\Z))"
+                    function_body_pattern = r"(\ {4}([\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    def|\Z))"
 
+                    pattern = re.compile(function_body_pattern)
                     matches = pattern.finditer(parent_class_def)
                     parent_function_set = {}
                     for match in matches:
