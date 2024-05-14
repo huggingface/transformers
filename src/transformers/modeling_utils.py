@@ -1327,6 +1327,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+    def dequantize(self):
+        hf_quantizer = getattr(self, "hf_quantizer", None)
+
+        if hf_quantizer is None:
+            raise ValueError("You need to first quantize your model in order to dequantize it")
+
+        return hf_quantizer.dequantize(self)
+
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()

@@ -1,4 +1,5 @@
 import importlib.metadata
+import inspect
 import warnings
 from copy import deepcopy
 from inspect import signature
@@ -16,7 +17,9 @@ if is_bitsandbytes_available():
     from ..pytorch_utils import Conv1D
 
 if is_accelerate_available():
+    import accelerate
     from accelerate import init_empty_weights
+    from accelerate.hooks import add_hook_to_module, remove_hook_from_module
     from accelerate.utils import find_tied_parameters
 
 logger = logging.get_logger(__name__)
@@ -322,3 +325,118 @@ def get_keys_to_not_convert(model):
         filtered_module_names.append(name)
 
     return filtered_module_names
+
+
+# Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
+def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
+    """
+    Helper function to dequantize 4bit or 8bit bnb weights.
+
+    If the weight is not a bnb quantized weight, it will be returned as is.
+    """
+    if not isinstance(weight, torch.nn.Parameter):
+        raise TypeError(f"Input weight should be of type nn.Parameter, got {type(weight)} instead")
+
+    cls_name = weight.__class__.__name__
+    if cls_name not in ("Params4bit", "Int8Params"):
+        return weight
+
+    import bitsandbytes as bnb
+
+    if cls_name == "Params4bit":
+        return bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
+
+    if state.SCB is None:
+        state.SCB = weight.SCB
+
+    im = torch.eye(weight.data.shape[-1]).contiguous().half().to(weight.device)
+    im, imt, SCim, SCimt, coo_tensorim = bnb.functional.double_quant(im)
+    im, Sim = bnb.functional.transform(im, "col32")
+    if state.CxB is None:
+        state.CxB, state.SB = bnb.functional.transform(weight.data, to_order=state.formatB)
+    out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
+    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
+
+
+def _create_new_hook(old_hook):
+    r"""
+    Creates a new hook based on the old hook. Use it only if you know what you are doing !
+    """
+    old_hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
+    old_hook_attr = old_hook.__dict__
+    filtered_old_hook_attr = {}
+    old_hook_init_signature = inspect.signature(old_hook_cls.__init__)
+    for k in old_hook_attr.keys():
+        if k in old_hook_init_signature.parameters:
+            filtered_old_hook_attr[k] = old_hook_attr[k]
+    new_hook = old_hook_cls(**filtered_old_hook_attr)
+    return new_hook
+
+
+def unquantize_and_replace(
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    has_been_replaced=False,
+):
+    """
+    Private method that wraps the recursion for module replacement.
+
+    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    """
+    import bitsandbytes as bnb
+
+    quant_method = quantization_config.quantization_method()
+
+    target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
+
+    for name, module in model.named_children():
+        if current_key_name is None:
+            current_key_name = []
+        current_key_name.append(name)
+
+        if isinstance(module, target_cls) and name not in modules_to_not_convert:
+            # Check if the current key is not in the `modules_to_not_convert`
+            current_key_name_str = ".".join(current_key_name)
+
+            if not any(
+                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
+            ):
+                bias = getattr(module, "bias", None)
+
+                device = module.weight.device
+                with init_empty_weights():
+                    new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
+
+                if quant_method == "llm_int8":
+                    state = module.state
+                else:
+                    state = None
+
+                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+
+                if bias is not None:
+                    new_module.bias = bias
+
+                # Create a new hook and attach it in case we use accelerate
+                if hasattr(module, "_hf_hook"):
+                    old_hook = module._hf_hook
+                    new_hook = _create_new_hook(old_hook)
+
+                    remove_hook_from_module(module)
+                    add_hook_to_module(new_module, new_hook)
+
+                new_module.to(device)
+                model._modules[name] = new_module
+        if len(list(module.children())) > 0:
+            _, has_been_replaced = unquantize_and_replace(
+                module,
+                modules_to_not_convert,
+                current_key_name,
+                quantization_config,
+                has_been_replaced=has_been_replaced,
+            )
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
+    return model, has_been_replaced
