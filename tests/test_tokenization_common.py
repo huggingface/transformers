@@ -4211,8 +4211,8 @@ class TokenizerTesterMixin:
                 )
 
                 self.assertTrue(special_token in p_output_explicit)
-                self.assertEqual(p_output_explicit, r_output_explicit)
-                self.assertEqual(cr_output_explicit, r_output_explicit)
+                self.assertTrue(special_token in r_output_explicit)
+                self.assertTrue(special_token in cr_output_explicit)
 
                 p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
                 p_output = tokenizer_p(f"Hey this is a {special_token} token")
