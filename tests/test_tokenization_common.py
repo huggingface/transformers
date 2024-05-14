@@ -4176,14 +4176,19 @@ class TokenizerTesterMixin:
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
                 tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs,
-                    from_slow=True
+                    pretrained_name,
+                    additional_special_tokens=[special_token],
+                    split_special_tokens=True,
+                    **kwargs,
+                    from_slow=True,
                 )
                 tokenizer_p = self.tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
 
-                encoded_special_token = tokenizer_p.encode(special_token, add_special_tokens=False, split_special_tokens=False)
+                encoded_special_token = tokenizer_p.encode(
+                    special_token, add_special_tokens=False, split_special_tokens=False
+                )
                 self.assertEqual(len(encoded_special_token), 1)
 
                 encoded_split_special_token = tokenizer_p.encode(special_token, add_special_tokens=False)
@@ -4196,9 +4201,15 @@ class TokenizerTesterMixin:
                 self.assertEqual(cr_output, r_output)
                 self.assertTrue(special_token not in p_output)
 
-                p_output_explicit = tokenizer_p.tokenize(f"Hey this is a {special_token} token", split_special_tokens=False)
-                r_output_explicit = tokenizer_r.tokenize(f"Hey this is a {special_token} token", split_special_tokens=False)
-                cr_output_explicit = tokenizer_cr.tokenize(f"Hey this is a {special_token} token", split_special_tokens=False)
+                p_output_explicit = tokenizer_p.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+                r_output_explicit = tokenizer_r.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+                cr_output_explicit = tokenizer_cr.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
 
                 self.assertTrue(special_token in p_output_explicit)
                 self.assertEqual(p_output_explicit, r_output_explicit)
@@ -4220,7 +4231,9 @@ class TokenizerTesterMixin:
                 output_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token")
                 self.assertTrue(special_token not in output_reloaded)
 
-                output_explicit_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token", split_special_tokens=False)
+                output_explicit_reloaded = fast_from_saved.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
                 self.assertTrue(special_token in output_explicit_reloaded)
 
     def test_added_tokens_serialization(self):

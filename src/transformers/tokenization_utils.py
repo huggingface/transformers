@@ -763,7 +763,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens:bool = False,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
@@ -842,7 +842,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens:bool = False,
+        split_special_tokens: bool = False,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
