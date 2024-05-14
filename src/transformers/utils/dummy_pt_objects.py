@@ -6485,7 +6485,6 @@ class OwlViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class PaliGemmaForConditionalGeneration(metaclass=DummyObject):
