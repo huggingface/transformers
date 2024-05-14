@@ -524,7 +524,7 @@ class SlidingWindowCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Dict[str, Any] | None = None,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
@@ -556,12 +556,12 @@ class SlidingWindowCache(Cache):
 
         return k_out, v_out
 
-    def get_seq_length(self, layer_idx: int | None = 0) -> int:
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         # assume this will be called only in the first generation step
         # `cache_postion` will be used in other cases
         return 0
 
-    def get_max_length(self) -> int | None:
+    def get_max_length(self) -> Optional[int]:
         # in theory there is no limit because the sliding window size is fixed
         # no matter how long the sentence is
         return None
