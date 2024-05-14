@@ -402,7 +402,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
 
-                batch_size, _ = inputs_embeds.shape
+                batch_size = inputs_embeds.shape[0]
 
                 if labels is None:
                     if attention_mask.dim() == 4:
