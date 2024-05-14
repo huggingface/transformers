@@ -61,14 +61,6 @@ class Cache:
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
             return max_length - new_seq_length
         return previous_seq_length
-    
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -192,7 +184,7 @@ class DynamicCache(Cache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
-    
+
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
         negative to remove `maximum_length` tokens."""
@@ -298,15 +290,22 @@ class EfficientDynamicCache(Cache):
         """
         # Update the number of seen tokens
         if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
+            if isinstance(key_states, list):
+                self._seen_tokens += sum(x.shape[-2] for x in key_states)
+            else:
+                self._seen_tokens += key_states.shape[-2]
 
         # Update the cache
         if len(self.key_cache) <= layer_idx:
-            self.key_cache.append(key_states)
-            self.value_cache.append(value_states)
+            if isinstance(key_states, list):
+                self.key_cache.append(key_states)
+                self.value_cache.append(value_states)
+            else:
+                self.key_cache.append([key_states])
+                self.value_cache.append([value_states])
         else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+            self.key_cache[layer_idx].append(key_states)
+            self.value_cache[layer_idx].append(value_states)
 
         # Whenever we have more than `self.restack_limit` new K-V value, cat() them. That way, we keep a relatively low number
         # of tensors in self.key_cache[layer_idx], which is more efficient to later cat() them all, and we only
@@ -329,10 +328,9 @@ class EfficientDynamicCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
         if len(self.key_cache) <= layer_idx:
             return 0
-        return self.key_cache[layer_idx].shape[-2]
+        return sum(x.shape[-2] for x in self.key_cache[layer_idx])
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
@@ -432,11 +430,29 @@ class EfficientDynamicCache(Cache):
         restack_limit: Optional[int] = None,
     ) -> "EfficientDynamicCache":
         """Converts a cache in the legacy cache format Tuple[Tuple[torch.Tensor]] or Tuple[Tuple[List[torch.Tensor]]] into an equivalent `EfficientDynamicCache`."""
+        # Small check to ensure that model implementation will not use `from_legacy_cache()` with an already existing EfficientDynamicCache instance.
+        # That would result in a copy that would annihilate the purpose of this class, and given that the old implementation
+        # would trigger this case, it could arise again in the future when adding Cache classes to more models
+        if isinstance(past_key_values, Cache):
+            raise ValueError("Cannot use `from_legacy_cache()` with a Cache instance.")
+
         cache = cls(restack_limit=restack_limit)
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
-                cache.update(key_states, value_states, layer_idx)
+                if layer_idx == 0:
+                    if isinstance(key_states, list):
+                        cache._seen_tokens += sum(x.shape[-2] for x in key_states)
+                    else:
+                        cache._seen_tokens += key_states.shape[-2]
+
+                # Update the cache
+                if isinstance(key_states, list):
+                    cache.key_cache.append(key_states)
+                    cache.value_cache.append(value_states)
+                else:
+                    cache.key_cache.append([key_states])
+                    cache.value_cache.append([value_states])
         return cache
 
 
