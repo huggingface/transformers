@@ -1748,10 +1748,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         using_default_template = False
 
+        using_default_template = False
+
         # First, handle the cases when the model has a dict of multiple templates
         if isinstance(self.chat_template, dict) or (
             self.chat_template is None and isinstance(self.default_chat_template, dict)
         ):
+            if self.chat_template is not None:
+                template_dict = self.chat_template
+                using_default_dict = False
+            else:
+                template_dict = self.default_chat_template
+                using_default_dict = True
             if self.chat_template is not None:
                 template_dict = self.chat_template
                 using_default_dict = False
@@ -1763,8 +1771,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = template_dict[chat_template]
                 if using_default_dict:
                     using_default_template = True
+                if using_default_dict:
+                    using_default_template = True
             elif chat_template is None and "default" in template_dict:
                 chat_template = template_dict["default"]
+                if using_default_dict:
+                    using_default_template = True
                 if using_default_dict:
                     using_default_template = True
             elif chat_template is None:
@@ -1907,6 +1919,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -1961,6 +1976,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"
         ```"""
+        resume_download = kwargs.pop("resume_download", None)
         resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
