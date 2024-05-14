@@ -55,8 +55,8 @@ from ...utils import (
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
-    is_vision_available,
     logging,
+    requires_backends,
 )
 from ...utils.generic import TensorType
 
@@ -967,7 +967,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backend(self, ["torch"])
+        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)
