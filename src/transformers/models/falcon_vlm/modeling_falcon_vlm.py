@@ -24,6 +24,7 @@ from torch import nn
 from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -43,6 +44,62 @@ FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "tiiuae/falcon-10B-vlm",
     # See all FalconVlm models at https://huggingface.co/models?filter=falcon_vlm
 ]
+
+
+def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
+    """
+    Calculate the shape of the image patch grid after the preprocessing for images of any resolution.
+
+    Args:
+        image_size (`tuple`):
+            The size of the input image in the format (width, height).
+        grid_pinpoints (`List`):
+            A list containing possible resolutions. Each item in the list should be a tuple or list
+            of the form `(height, width)`.
+        patch_size (`int`):
+            The size of each image patch.
+
+    Returns:
+        tuple: The shape of the image patch grid in the format (width, height).
+    """
+    if not isinstance(grid_pinpoints, list):
+        raise ValueError("grid_pinpoints should be a list of tuples or lists")
+
+    height, width = select_best_resolution(image_size, grid_pinpoints)
+    return height // patch_size, width // patch_size
+
+
+def unpad_image(tensor, original_size):
+    """
+    Unpads a PyTorch tensor of a padded and resized image.
+
+    Args:
+        tensor (`torch.Tensor`):
+            The image tensor, assumed to be of shape (num_channels, height, width).
+        original_size (`tuple`):
+            The original size of the image (height, width).
+
+    Returns:
+        `torch.Tensor`: The unpadded image tensor.
+    """
+    original_height, original_width = original_size
+    current_height, current_width = tensor.shape[1:]
+
+    original_aspect_ratio = original_width / original_height
+    current_aspect_ratio = current_width / current_height
+
+    if original_aspect_ratio > current_aspect_ratio:
+        scale_factor = current_width / original_width
+        new_height = int(original_height * scale_factor)
+        padding = (current_height - new_height) // 2
+        unpadded_tensor = tensor[:, padding : current_height - padding, :]
+    else:
+        scale_factor = current_height / original_height
+        new_width = int(original_width * scale_factor)
+        padding = (current_width - new_width) // 2
+        unpadded_tensor = tensor[:, :, padding : current_width - padding]
+
+    return unpadded_tensor
 
 
 @dataclass
@@ -180,6 +237,8 @@ FALCON_VLM_INPUTS_DOCSTRING = r"""
             [`AutoImageProcessor`]. See [`FalconImageProcessor.__call__`] for details. [`FalconVLProcessor`] uses
             [`FalconImageProcessor`] for processing images.
             The sizes of the images in the batch, being (height, width) for each image.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
+            The sizes of the images in the batch, being (height, width) for each image.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -251,6 +310,8 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
         self.mm_projector = FalconVlmMultiModalProjector(config)
+
+        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype))
 
         self.vocab_size = config.text_config.vocab_size
 
@@ -380,6 +441,7 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -410,14 +472,62 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            # 1. Get input emebeddings
+            # 1. Extract the input embeddings
             inputs_embeds = self.get_input_embeds(input_ids)
 
+            # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
-                # 2. Get image features
-                image_features = self.get_image_features(pixel_values)
+                batch_size, num_patches, num_channels, height, width = pixel_values.shape
+                reshaped_pixel_values = pixel_values.view(batch_size * num_patches, num_channels, height, width)
+                image_features = self.vision_tower(reshaped_pixel_values, output_hidden_states=True)
 
-                # 3. Merge text and images embeddings
+                selected_image_feature = image_features.hidden_states[-2]
+
+                selected_image_feature = selected_image_feature[:, 1:]
+
+                image_features = self.mm_projector(selected_image_feature)
+
+                # split up image_features for each of the individual images
+                # hence we get a list of image_features, each of shape (5, num_patches, hidden_size)
+                # if we assume each image has 5 image features (base image + 4 patches)
+                split_sizes = [image.shape[0] for image in pixel_values]
+                image_features = torch.split(image_features, split_sizes, dim=0)
+
+                # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
+                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+
+                new_image_features = []
+                for image_idx, image_feature in enumerate(image_features):
+                    if image_feature.shape[0] > 1:
+                        base_image_feature = image_feature[0]
+                        image_feature = image_feature[1:]
+
+                        if height * width != base_image_feature.shape[0]:
+                            raise ValueError("The number of patches is not consistent with the image size.")
+                        num_patch_height, num_patch_width = get_anyres_image_grid_shape(
+                            image_sizes[image_idx],
+                            self.config.image_grid_pinpoints,
+                            self.config.vision_config.image_size,
+                        )
+                        image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                        image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                        image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                        image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                        image_feature = torch.cat(
+                            (
+                                image_feature,
+                                self.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1),
+                            ),
+                            dim=-1,
+                        )
+                        image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+                        image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+                    else:
+                        image_feature = image_feature[0]
+                        image_feature = torch.cat((image_feature, self.image_newline[None]), dim=0)
+                    new_image_features.append(image_feature)
+                image_features = torch.stack(new_image_features, dim=0)
+
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
@@ -504,6 +614,7 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
+        image_sizes=None,
         attention_mask=None,
         **kwargs,
     ):
@@ -553,6 +664,7 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "image_sizes": image_sizes,
             }
         )
         return model_inputs
@@ -560,25 +672,6 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
-
-    # Ignore copy
-    def encode_images(self, images):
-        image_features = self.vision_tower(images, output_hidden_states=True).last_hidden_state[:, 1:]
-        image_features = self.mm_projector(image_features)
-        return image_features
-
-    # Ignore copy
-    def get_image_features(self, images):
-        concat_images = torch.cat(list(images), dim=0)
-
-        image_features = self.encode_images(concat_images)
-
-        split_sizes = [image.shape[0] for image in images]
-        image_features = torch.split(image_features, split_sizes, dim=0)
-        image_features = [x.flatten(0, 1) for x in image_features]
-        image_features = torch.stack(image_features, dim=0)
-
-        return image_features
 
     # Ignore copy
     def get_input_embeds(self, input_ids):

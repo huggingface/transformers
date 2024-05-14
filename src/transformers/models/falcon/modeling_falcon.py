@@ -1200,7 +1200,7 @@ class FalconModel(FalconPreTrainedModel):
     FALCON_START_DOCSTRING,
 )
 class FalconForCausalLM(FalconPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = None  # ["lm_head.weight"]
 
     def __init__(self, config: FalconConfig):
         super().__init__(config)
