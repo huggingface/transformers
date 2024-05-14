@@ -6135,6 +6135,27 @@ class OwlViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PaliGemmaForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PaliGemmaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PaliGemmaProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PatchTSMixerForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
