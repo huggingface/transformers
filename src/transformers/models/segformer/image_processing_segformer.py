@@ -129,7 +129,7 @@ class SegformerImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-    
+
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """

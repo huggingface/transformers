@@ -132,7 +132,9 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processor.size, {"height": 30, "width": 30})
         self.assertEqual(image_processor.do_reduce_labels, False)
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, do_reduce_labels=True)
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size=42, do_reduce_labels=True
+        )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
         self.assertEqual(image_processor.do_reduce_labels, True)
 
