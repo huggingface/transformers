@@ -1710,7 +1710,15 @@ class GenerationMixin:
                     )
 
                 model_kwargs["past_key_values"] = cache_class(cache_config)
-
+        # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
+        # keeps copying the cache thus using much more memory
+        elif generation_config.cache_implementation is None and self._supports_cache_class:
+            past = model_kwargs.get('past_key_values', None)
+            if past is None:
+                model_kwargs["past_key_values"] = DynamicCache()
+            elif isinstance(past, tuple):
+                model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past)
+                
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
@@ -2154,34 +2162,26 @@ class GenerationMixin:
             # Otherwise a reference to outputs.logits is kept all along until after the next call to self.forward()
             del outputs
 
-            # Replicates the new past_key_values to match the `top_k` candidates
-            new_key_values = []
-            past = model_kwargs["past_key_values"]
-            for layer in past:
-                items = []
-                # item is either the key or the value matrix
-                for item in layer:
-                    # New efficient cache structure
-                    if isinstance(item, list):
-                        if sequential:
-                            items.append([x.repeat_interleave(1, dim=0) for x in item])
-                        else:
-                            items.append([x.repeat_interleave(top_k, dim=0) for x in item])
-                    # Old cache structure
-                    else:
-                        if sequential:
-                            items.append(item.repeat_interleave(1, dim=0))
-                        else:
+            if not sequential:
+                # Replicates the new past_key_values to match the `top_k` candidates
+                past = model_kwargs["past_key_values"]
+                # If it is a static cache, modify it in-place layer after layer to save memory
+                if isinstance(past, DynamicCache):
+                    for layer_idx in range(len(past)):
+                        past.key_cache[layer_idx] = past.key_cache[layer_idx].repeat_interleave(top_k, dim=0)
+                        past.value_cache[layer_idx] = past.value_cache[layer_idx].repeat_interleave(top_k, dim=0)
+                else:
+                    new_key_values = []
+                    for layer in past:
+                        items = []
+                        # item is either the key or the value matrix
+                        for item in layer:
                             items.append(item.repeat_interleave(top_k, dim=0))
-                new_key_values.append(tuple(items))
-            if not isinstance(past, (EfficientDynamicCache, DynamicCache)):
-                past = tuple(new_key_values)
-            else:
-                for layer_idx in range(len(new_key_values)):
-                    past.key_cache[layer_idx] = new_key_values[layer_idx][0]
-                    past.value_cache[layer_idx] = new_key_values[layer_idx][1]
+                        new_key_values.append(tuple(items))
+                
+                    past = tuple(new_key_values)
 
-            model_kwargs["past_key_values"] = past
+                model_kwargs["past_key_values"] = past
 
             if sequential:
                 all_outputs = []
@@ -2195,13 +2195,11 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
-                    if isinstance(outputs["past_key_values"], EfficientDynamicCache):
+                    if isinstance(outputs["past_key_values"], DynamicCache):
                         # Remove past K-V from output since we don't need to stack later
-                        outputs['past_key_values'] = None
-
+                        outputs["past_key_values"] = None
                         # Remove last token from past K-V since we don't want to append it at this point
-                        model_kwargs["past_key_values"] = model_kwargs["past_key_values"].crop(-1)
-                        next_model_inputs["past_key_values"] = model_kwargs["past_key_values"]
+                        model_kwargs["past_key_values"].crop(-1)
 
                     all_outputs.append(outputs)
                 outputs = stack_model_outputs(all_outputs)
@@ -2271,28 +2269,22 @@ class GenerationMixin:
 
             else:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
-                new_key_values = []
-                for layer in next_past_key_values:
-                    items = []
-                    # item is either the key or the value matrix
-                    for item in layer:
-                        if isinstance(item, list):
-                            # This is equivalent to the old torch.stack(torch.split(x, top_k, dim=0))[range(batch_size), selected_idx, ...]
-                            # but much more efficient
-                            item = [x[augmented_idx, ...] for x in item]
-                        else:
-                            # item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
-                            # item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
-                            item = item[augmented_idx, ...]
-                        items += [item]
-                    new_key_values += [items]
-
-                if not isinstance(next_past_key_values, (EfficientDynamicCache, DynamicCache)):
-                    next_past_key_values = tuple(new_key_values)
+                # Do it in-place layer per layer to save memory
+                if isinstance(next_past_key_values, DynamicCache):
+                    for layer_idx in range(len(next_past_key_values)):
+                        next_past_key_values.key_cache[layer_idx] = next_past_key_values.key_cache[layer_idx][augmented_idx, ...]
+                        next_past_key_values.value_cache[layer_idx] = next_past_key_values.value_cache[layer_idx][augmented_idx, ...]
                 else:
-                    for layer_idx in range(len(new_key_values)):
-                        next_past_key_values.key_cache[layer_idx] = new_key_values[layer_idx][0]
-                        next_past_key_values.value_cache[layer_idx] = new_key_values[layer_idx][1]
+                    new_key_values = []
+                    for layer in next_past_key_values:
+                        items = []
+                        # item is either the key or the value matrix
+                        for item in layer:
+                            items.append(item[augmented_idx, ...])
+                        new_key_values.append(tuple(items))
+
+                    next_past_key_values = tuple(new_key_values)
+
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
@@ -2354,16 +2346,16 @@ class GenerationMixin:
             # Contrastive search works by forward looking at the next token, so we need to exclude it from
             # `past_key_values` to be consistent with the other decoding methods
             if model_kwargs.get("past_key_values") is not None:
-                past_key_values = []
-                for layer in model_kwargs["past_key_values"]:
-                    layer_past_key_values = []
-                    for item in layer:
-                        if isinstance(item, list):
-                            layer_past_key_values.append([x[..., :-1, :] for x in item])
-                        else:
+                if isinstance(model_kwargs["past_key_values"], DynamicCache):
+                    model_kwargs["past_key_values"].crop(-1)
+                else:
+                    past_key_values = []
+                    for layer in model_kwargs["past_key_values"]:
+                        layer_past_key_values = []
+                        for item in layer:
                             layer_past_key_values.append(item[..., :-1, :])
-                    past_key_values.append(tuple(layer_past_key_values))
-                model_kwargs["past_key_values"] = tuple(past_key_values)
+                        past_key_values.append(tuple(layer_past_key_values))
+                    model_kwargs["past_key_values"] = tuple(past_key_values)
 
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
@@ -3749,67 +3741,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-    def _initialize_cache(self, generation_config, model_kwargs, batch_size):
-        """This function handles the initialization of the cache based on `generation_config.cache_implementation"""
-
-        # Non default cache implementations (SinkCache does not seem to be released yet)
-        allowed_implementations = ("static", "efficient")
-
-        if (
-            generation_config.cache_implementation is not None
-            and generation_config.cache_implementation not in allowed_implementations
-        ):
-            raise ValueError(f"If provided, `cache_implementation` must be one of: {*allowed_implementations,}")
-
-        # Raise warning about efficient dynamic cache implementation
-        if generation_config.cache_implementation is None:
-            logger.warning(
-                (
-                    'You are using the old version of `DynamicCache`. You should pass `cache_implementation="efficient"` '
-                    "in `model.generate(...)`. This will GREATLY reduce the memory usage of `generate()` as you generate more "
-                    "tokens. Results will be completely identical. For more details about expected memory gains, check "
-                    "https://github.com/huggingface/transformers/pull/30536"
-                )
-            )
-
-        # StaticCache
-        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if generation_config.cache_implementation == "static":
-                if model_kwargs.get("past_key_values", False) is not False:
-                    raise ValueError(
-                        "Using `past_key_values` argument with `generate()` when using a static KV cache is not supported. Please open an issue in Transformers GitHub repository."
-                    )
-                cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING["static"]
-                if not callable(getattr(self, "_setup_cache", None)):
-                    raise ValueError(
-                        "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
-                        " Make sure it has a `_setup_cache` function."
-                    )
-                self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
-
-        # EfficientDynamicCache
-        if generation_config.cache_implementation == "efficient":
-            if model_kwargs.get("past_key_values", False) is not False:
-                if isinstance(model_kwargs["past_key_values"], EfficientDynamicCache):
-                    pass
-                elif isinstance(model_kwargs["past_key_values"], DynamicCache):
-                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(
-                        model_kwargs["past_key_values"].to_legacy_cache(), generation_config.restack_limit
-                    )
-                elif isinstance(model_kwargs["past_key_values"], tuple):
-                    model_kwargs["past_key_values"] = EfficientDynamicCache.from_legacy_cache(
-                        model_kwargs["past_key_values"], generation_config.restack_limit
-                    )
-                else:
-                    raise ValueError(
-                        '`cache_implementation="efficient"` does not support the format of past key-values you provided.'
-                    )
-            else:
-                model_kwargs["past_key_values"] = EfficientDynamicCache(generation_config.restack_limit)
-
-        return model_kwargs
-
-
 def _speculative_sampling(
     candidate_input_ids,
     candidate_logits,
@@ -3930,7 +3861,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
     if isinstance(data, torch.Tensor):
         return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
     # New efficient cache
-    elif isinstance(data, EfficientDynamicCache):
+    elif isinstance(data, DynamicCache):
         return data.split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
@@ -4036,8 +3967,8 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
         # New efficient cache
-        elif isinstance(data[0], EfficientDynamicCache):
-            return EfficientDynamicCache.from_splits(data)
+        elif isinstance(data[0], DynamicCache):
+            return DynamicCache.from_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

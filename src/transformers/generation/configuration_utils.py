@@ -310,9 +310,6 @@ class GenerationConfig(PushToHubMixin):
             Arguments used in the key-value cache class can be passed in `cache_config`. Can be passed as a `Dict` and
             it will be converted to its repsective `CacheConfig` internally.
             Otherwise can be passed as a `CacheConfig` class matching the indicated `cache_implementation`.
-        restack_limit (`int`, *optional*, default to `None`):
-            Only used if `cache_implementation="efficient"`. Controls how many tokens will be generated before
-            a restack in the list of past key values.
             
         > Wild card
 
@@ -403,7 +400,6 @@ class GenerationConfig(PushToHubMixin):
                 self.cache_config = cache_config_class()
             elif isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
-        self.restack_limit = kwargs.pop("restack_limit", None)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

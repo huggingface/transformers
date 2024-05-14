@@ -70,6 +70,14 @@ class Cache:
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
             return max_length - new_seq_length
         return previous_seq_length
+    
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -387,6 +395,44 @@ class DynamicCache(Cache):
             for layer_idx in range(len(past_key_values)):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
+        return cache
+    
+    def crop(self, maximum_length: int):
+        """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
+        negative to remove `maximum_length` tokens."""
+
+        # In case it is negative
+        if maximum_length < 0:
+            maximum_length = self.get_seq_length() - abs(maximum_length)
+
+        if self.get_seq_length() <= maximum_length:
+            return
+
+        for idx in range(len(self.key_cache)):
+            self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
+            self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
+
+    def split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
+        `_split_model_inputs()` in `generation.utils`"""
+        out = []
+        for i in range(0, full_batch_size, split_size):
+            current_split = DynamicCache()
+            current_split._seen_tokens = self._seen_tokens
+            current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
+            current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
+            out.append(current_split)
+        return out
+
+    @classmethod
+    def from_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+        """This is the opposite of the above `split()` method. This will be used by `stack_model_outputs` in
+        `generation.utils`"""
+        cache = cls()
+        for idx in range(len(splits[0])):
+            layer_keys = torch.cat([current.key_cache[idx] for current in splits], dim=0)
+            layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
+            cache.update(layer_keys, layer_values, idx)
         return cache
 
 
