@@ -2300,6 +2300,7 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -2312,6 +2313,7 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
+            
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
