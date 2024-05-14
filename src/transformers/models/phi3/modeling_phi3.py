@@ -921,9 +921,6 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = False
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-
     _version = "0.0.5"
 
     def _init_weights(self, module):
