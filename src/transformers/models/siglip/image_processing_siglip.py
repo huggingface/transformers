@@ -74,7 +74,8 @@ class SiglipImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*): <fill_docstring>
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
     """
 
     model_input_names = ["pixel_values"]

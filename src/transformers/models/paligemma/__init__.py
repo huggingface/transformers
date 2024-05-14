@@ -30,7 +30,6 @@ else:
         "PaliGemmaPreTrainedModel",
     ]
     _import_structure["processing_paligemma"] = ["PaliGemmaProcessor"]
-    _import_structure["language_modeling_paligemma"] = ["PaliGemmaLanguageModel", "PaliGemmaLanguageForCausalLM"]
 
 
 if TYPE_CHECKING:

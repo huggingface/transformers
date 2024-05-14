@@ -44,7 +44,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
 
-
 @dataclass
 class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     """
@@ -270,7 +269,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder with Llava->PaliGemma
     def get_decoder(self):
         return self.language_model.get_decoder()
-    
+
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights with Llava->PaliGemma
     def tie_weights(self):
         return self.language_model.tie_weights()
@@ -434,7 +433,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-                    
+
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,

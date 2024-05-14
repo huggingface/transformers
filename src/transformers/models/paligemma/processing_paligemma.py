@@ -224,9 +224,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
             newline_token = self.tokenizer.convert_tokens_to_ids("\n")
             concatenated_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
-            concatenated_attention_masks = [
-                mask + [1] for mask in inputs["attention_mask"]
-            ]
+            concatenated_attention_masks = [mask + [1] for mask in inputs["attention_mask"]]
 
             text_inputs = self.tokenizer.pad(
                 {"input_ids": concatenated_ids, "attention_mask": concatenated_attention_masks},
@@ -245,25 +243,25 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
-    
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->PaliGemma
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->PaliGemma
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names

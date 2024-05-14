@@ -21,7 +21,6 @@ import collections
 
 import torch
 from numpy import load
-from PIL import Image
 
 from transformers import (
     AutoTokenizer,
@@ -270,9 +269,6 @@ def convert_paligemma_checkpoint(
             .eval()
         )
     model.config.text_config._attn_implementation = "sdpa"
-    if do_verify_logits:
-        print("Verifying logits...")
-        verify_logits(model, processor)
 
     # model expansion to get random embeds of image tokens
     pad_shape = 64  # for performance reasons
@@ -318,7 +314,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        required=True
+        required=True,
         type=str,
         help="Path to the output directory where model and processor will be saved.",
     )
@@ -349,6 +345,5 @@ if __name__ == "__main__":
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         variant=args.variant,
         precision=args.precision,
-        do_verify_logits=args.do_verify_logits,
         do_convert_weights=args.do_convert_weights,
     )
