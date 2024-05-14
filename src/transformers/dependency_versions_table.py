@@ -11,7 +11,7 @@ deps = {
     "dataclasses": "dataclasses",
     "datasets": "datasets!=2.5.0",
     "decord": "decord==0.6.0",
-    "deepspeed": "deepspeed>=0.9.3",
+    "deepspeed": "deepspeed>=0.9.3,<=0.14.0",
     "diffusers": "diffusers",
     "dill": "dill<0.3.5",
     "evaluate": "evaluate>=0.2.0",
