@@ -350,9 +350,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
-        model.padding_side = "left"
-
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
@@ -404,9 +401,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
         pixel_values = inputs["pixel_values"]
-
-        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
-        model.padding_side = "left"
 
         # verify pixel values are padded correctly with 0 when one image has more num_patches than the other
         image_num_patches = [
@@ -460,8 +454,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
         ).to(torch_device)
 
-        # set padding side to 'left' for generation because the prompts are equal length but we need to pad images inside the modeling logic
-        model.padding_side = "left"
         inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
             torch_device
         )
