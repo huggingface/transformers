@@ -358,7 +358,7 @@ def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
     return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
 
 
-def _create_new_hook(old_hook):
+def _create_accelerate_new_hook(old_hook):
     r"""
     Creates a new hook based on the old hook. Use it only if you know what you are doing !
     """
@@ -422,7 +422,7 @@ def unquantize_and_replace(
                 # Create a new hook and attach it in case we use accelerate
                 if hasattr(module, "_hf_hook"):
                     old_hook = module._hf_hook
-                    new_hook = _create_new_hook(old_hook)
+                    new_hook = _create_accelerate_new_hook(old_hook)
 
                     remove_hook_from_module(module)
                     add_hook_to_module(new_module, new_hook)
