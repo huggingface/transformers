@@ -4170,32 +4170,50 @@ class TokenizerTesterMixin:
             return
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            special_token = "[SPECIAL_TOKEN]"
+            special_token = "<my_new_token>"
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs,
+                    from_slow=True
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
 
-                if not tokenizer.is_fast:
-                    # bloom, gptneox etc only have a fast
-                    tokenizer.add_special_tokens(
-                        {
-                            "additional_special_tokens": [
-                                AddedToken(special_token, rstrip=True, lstrip=True, normalized=True, special=True)
-                            ]
-                        }
-                    )
-                    encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-                    self.assertEqual(len(encoded_special_token), 1)
+                encoded_special_token = tokenizer_p.encode(special_token, add_special_tokens=False, split_special_tokens=False)
+                self.assertEqual(len(encoded_special_token), 1)
 
-                    encoded_split_special_token = tokenizer.encode(
-                        special_token, add_special_tokens=False, split_special_tokens=True
-                    )
-                    if len(encoded_split_special_token) == 1:
-                        # if we have subword tokenization or special vocab
-                        self.assertTrue(
-                            encoded_split_special_token[0] != tokenizer.convert_tokens_to_ids(special_token)
-                        )
-                    else:
-                        self.assertTrue(len(encoded_split_special_token) > 1)
+                encoded_split_special_token = tokenizer_p.encode(special_token, add_special_tokens=False)
+                self.assertTrue(len(encoded_split_special_token) > 1)
+                p_output = tokenizer_p.tokenize(f"Hey this is a {special_token} token")
+                r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
+                cr_output = tokenizer_cr.tokenize(f"Hey this is a {special_token} token")
+
+                self.assertEqual(p_output, r_output)
+                self.assertEqual(cr_output, r_output)
+                self.assertTrue(special_token not in p_output)
+
+                p_output_explicit = tokenizer_p.tokenize(f"Hey this is a {special_token} token",
+                                                         split_special_tokens=False)
+                self.assertTrue(special_token in p_output_explicit)
+
+                special_token_id = tokenizer_r.encode(special_token, add_special_tokens=False)[0]
+                p_output = tokenizer_p(f"Hey this is a {special_token} token")
+                self.assertTrue(special_token_id not in p_output)
+
+                tmpdirname = tempfile.mkdtemp()
+                tokenizer_p.save_pretrained(tmpdirname)
+                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
+
+                output_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token")
+                self.assertTrue(special_token not in output_reloaded)
+
+                output_explicit_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token",
+                                                                    split_special_tokens=False)
+                self.assertTrue(special_token in output_explicit_reloaded)
 
     def test_added_tokens_serialization(self):
         # Utility to test the added vocab
