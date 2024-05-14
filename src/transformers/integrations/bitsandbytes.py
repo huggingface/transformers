@@ -361,6 +361,8 @@ def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
 def _create_accelerate_new_hook(old_hook):
     r"""
     Creates a new hook based on the old hook. Use it only if you know what you are doing !
+    This method is a copy of: https://github.com/huggingface/peft/blob/748f7968f3a31ec06a1c2b0328993319ad9a150a/src/peft/utils/other.py#L245
+    with some changes
     """
     old_hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
     old_hook_attr = old_hook.__dict__
@@ -381,7 +383,9 @@ def unquantize_and_replace(
     has_been_replaced=False,
 ):
     """
-    Private method that wraps the recursion for module replacement.
+    Converts a quantized model into its unquantized original version. The newly converted model will have
+    some performance drop compared to the original model before quantization - use it only for specific usecases
+    such as QLoRA adapters merging.
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
