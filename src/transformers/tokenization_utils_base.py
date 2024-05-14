@@ -1968,7 +1968,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
-        from_gguf = kwargs.get("from_gguf", False)
+        from_gguf = kwargs.get("from_gguf", None)
 
         if use_auth_token is not None:
             warnings.warn(
