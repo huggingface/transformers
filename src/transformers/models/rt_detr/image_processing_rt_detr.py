@@ -65,10 +65,6 @@ if is_torch_available():
     import torch
 
 
-if is_vision_available():
-    pass
-
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION,)
