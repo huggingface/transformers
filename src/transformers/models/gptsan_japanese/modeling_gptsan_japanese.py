@@ -45,8 +45,6 @@ _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 # for the pretrained weights provided with the models
 ####################################################
 
-from ..deprecated._archive_maps import GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
 def router_z_loss_func(router_logits: torch.Tensor) -> float:

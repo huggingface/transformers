@@ -260,7 +260,15 @@ extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachip
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
-extras["tf-cpu"] = deps_list("keras", "tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp", "tensorflow-probability")
+extras["tf-cpu"] = deps_list(
+    "keras",
+    "tensorflow-cpu",
+    "onnxconverter-common",
+    "tf2onnx",
+    "tensorflow-text",
+    "keras-nlp",
+    "tensorflow-probability",
+)
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
@@ -380,12 +388,7 @@ extras["dev-tensorflow"] = (
     + extras["tf-speech"]
 )
 extras["dev"] = (
-    extras["all"]
-    + extras["testing"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
+    extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["sklearn"] + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
