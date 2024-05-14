@@ -22,10 +22,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sbchoi/rtdetr_r50vd": "https://huggingface.co/sbchoi/rtdetr_r50vd/blob/main/config.json",
-}
-
 
 class RTDetrConfig(PretrainedConfig):
     r"""
