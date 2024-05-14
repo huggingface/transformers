@@ -968,11 +968,11 @@ class RTDetrMultiheadAttention(nn.Module):
 
         # get queries, keys and values
         query_states = self.q_proj(hidden_states) * self.scaling
-        key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-        value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+        key_states = self._reshape(self.k_proj(hidden_states), -1, batch_size)
+        value_states = self._reshape(self.v_proj(hidden_states_original), -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
+        query_states = self._reshape(query_states, target_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
