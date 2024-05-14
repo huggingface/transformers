@@ -2313,7 +2313,7 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            
+
             # pre-process distribution
             next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
