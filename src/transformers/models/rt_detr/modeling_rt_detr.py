@@ -1228,13 +1228,7 @@ class RTDetrEncoder(nn.Module):
 
         self.layers = nn.ModuleList([RTDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-    def forward(
-        self,
-        src,
-        src_mask=None,
-        pos_embed=None,
-        output_attentions: bool = False,
-    ) -> torch.Tensor:
+    def forward(self, src, src_mask=None, pos_embed=None, output_attentions: bool = False) -> torch.Tensor:
         hidden_states = src
         for layer in self.layers:
             hidden_states = layer(
