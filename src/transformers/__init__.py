@@ -635,7 +635,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
-    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"],
+    "models.rt_detr": ["RTDetrConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
