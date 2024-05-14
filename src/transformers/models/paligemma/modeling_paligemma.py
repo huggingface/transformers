@@ -43,10 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
 
-PALIGEMMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gv-hf/paligemma-3b-pt-896",
-    # See all PaliGemma models at https://huggingface.co/models?filter=paligemma
-]
 
 
 @dataclass
@@ -371,12 +367,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         "answer en Where is the cow standing?\nbeach"
         ```"""
 
-        if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds.")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
+            )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -441,6 +435,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+                    
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
