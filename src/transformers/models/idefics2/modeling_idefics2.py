@@ -1591,9 +1591,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
-        if use_cache:
-            if not isinstance(past_key_values, Cache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_seen_tokens = past_key_values.get_usable_length(seq_length)
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1666,6 +1667,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if return_legacy_cache:
+            outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
