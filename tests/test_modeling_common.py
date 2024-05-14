@@ -4321,7 +4321,7 @@ class ModelTesterMixin:
             self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
+            if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
