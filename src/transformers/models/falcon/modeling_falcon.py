@@ -59,8 +59,6 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-from ..deprecated._archive_maps import FALCON_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
@@ -769,15 +767,20 @@ class FalconDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
         self.config = config
 
-        if config.new_decoder_architecture:
-            # The layer norm before self-attention
-            self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            # The layer norm before the MLP
-            self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        else:
+        if config.num_ln_in_parallel_attn is None and config.new_decoder_architecture:
+            config.num_ln_in_parallel_attn = 2
+
+        if not config.parallel_attn:
+            self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            if not config.parallel_attn:
-                self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        else:
+            if config.num_ln_in_parallel_attn == 2:
+                # The layer norm before self-attention
+                self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+                # The layer norm before the MLP
+                self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            else:
+                self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
@@ -798,7 +801,7 @@ class FalconDecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        if self.config.new_decoder_architecture:
+        if self.config.new_decoder_architecture and self.config.num_ln_in_parallel_attn == 2:
             attention_layernorm_out = self.ln_attn(hidden_states)
             mlp_layernorm_out = self.ln_mlp(hidden_states)
         else:
@@ -827,6 +830,13 @@ class FalconDecoderLayer(nn.Module):
                     attention_output, residual, self.config.attention_dropout, training=self.training
                 )
                 mlp_layernorm_out = self.post_attention_layernorm(residual)
+
+        if (
+            self.config.new_decoder_architecture
+            and self.config.parallel_attn
+            and self.config.num_ln_in_parallel_attn == 1
+        ):
+            mlp_layernorm_out = attention_layernorm_out
 
         outputs = attn_outputs[1:]
 

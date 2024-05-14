@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Qwen/Qwen1.5-MoE-A2.7B": "https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B/resolve/main/config.json",
-}
-
 
 class Qwen2MoeConfig(PretrainedConfig):
     r"""
@@ -95,6 +91,10 @@ class Qwen2MoeConfig(PretrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
+            Indicate which layers use Qwen2MoeMLP rather than Qwen2MoeSparseMoeBlock
+            The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
+            If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
 
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
@@ -139,6 +139,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        mlp_only_layers=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -168,6 +169,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

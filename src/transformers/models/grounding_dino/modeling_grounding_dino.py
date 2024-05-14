@@ -73,7 +73,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -151,11 +151,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "IDEA-Research/grounding-dino-tiny"
-
-GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "IDEA-Research/grounding-dino-tiny",
-    # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
-]
 
 
 @dataclass

@@ -49,9 +49,6 @@ _IMAGE_CLASS_CHECKPOINT = "openai/clip-vit-base-patch32"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
 
 
-from ..deprecated._archive_maps import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/2021-03-07-clip.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:

@@ -39,14 +39,6 @@ else:
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "microsoft/udop-large": "https://huggingface.co/microsoft/udop-large/resolve/main/tokenizer.json",
-    },
-}
 
 logger = logging.get_logger(__name__)
 
@@ -202,7 +194,6 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = UdopTokenizer
 

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig"],
+    "configuration_oneformer": ["OneFormerConfig"],
     "processing_oneformer": ["OneFormerProcessor"],
 }
 
@@ -36,14 +36,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_oneformer"] = [
-        "ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "OneFormerForUniversalSegmentation",
         "OneFormerModel",
         "OneFormerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig
+    from .configuration_oneformer import OneFormerConfig
     from .processing_oneformer import OneFormerProcessor
 
     try:
@@ -60,7 +59,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_oneformer import (
-            ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             OneFormerForUniversalSegmentation,
             OneFormerModel,
             OneFormerPreTrainedModel,

@@ -12,17 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LLaMA model. """
+"""Testing suite for the PyTorch LLaMA model."""
 
+import gc
 import tempfile
 import unittest
 
 import pytest
+from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, logging, set_seed
+from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
-    CaptureLogger,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -591,11 +592,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
-    @unittest.skip("TODO @gante fix this for Llama")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
-
 
 @require_torch_gpu
 class LlamaIntegrationTest(unittest.TestCase):
@@ -684,15 +680,28 @@ class LlamaIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @require_read_token
     def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
         NUM_TOKENS_TO_GENERATE = 40
+        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
+        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
         EXPECTED_TEXT_COMPLETION = {
-            7: [
-                "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-            ],
             8: [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            7: [
+                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
+                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
+                "be.\nThe theory of relativity",
+                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
+                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
             ],
         }
 
@@ -706,38 +715,25 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        def decode_one_tokens(model, cur_token, input_pos, cache_position):
-            logits = model(
-                cur_token, position_ids=input_pos, cache_position=cache_position, return_dict=False, use_cache=True
-            )[0]
-            new_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            return new_token
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
 
-        batch_size, seq_length = inputs["input_ids"].shape
-        with torch.no_grad():
-            model._setup_cache(StaticCache, 2, max_cache_len=4096)
-            cache_position = torch.arange(seq_length, device=torch_device)
-            generated_ids = torch.zeros(
-                batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
-            )
-            generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
 
-            logits = model(**inputs, cache_position=cache_position, return_dict=False, use_cache=True)[0]
-            next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
-            generated_ids[:, seq_length] = next_token[:, 0]
-
-            decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-            cache_position = torch.tensor([seq_length + 1], device=torch_device)
-            for _ in range(1, NUM_TOKENS_TO_GENERATE):
-                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    with CaptureLogger(logging.get_logger(__name__)) as cl:
-                        next_token = decode_one_tokens(model, next_token.clone(), None, cache_position)
-                        self.assertNotIn("skipping cudagraphs due to", cl.out)
-                    generated_ids[:, cache_position] = next_token.int()
-                cache_position += 1
-
-        text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
 
 
 @require_torch
@@ -809,7 +805,7 @@ end
             '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
             '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
         ]
-        EXPECTED_IDS = torch.tensor([[    1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995, 29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941, 1661, 29899, 28599, 2687, 4890, 515, 263, 1347, 29889, 13, 13, 1678, 826, 3174, 29901, 13, 4706, 269, 29901, 450, 1347, 304, 3349, 1661, 29899, 28599, 2687, 4890, 515, 29889, 13, 13, 1678, 16969, 29901, 13, 4706, 450, 1347, 411, 1661, 29899, 28599, 2687, 4890, 6206, 29889, 13, 1678, 9995, 13, 1678, 1121, 353, 5124, 13, 1678, 363, 274, 297, 269, 29901, 13, 4706, 565, 4356, 29898, 29883, 29897, 529, 29871, 29896, 29906, 29947, 29901, 13, 9651, 1121, 4619, 274, 32010, 2]])
+        EXPECTED_IDS = torch.tensor([[1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898, 29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995, 29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941, 1661, 29899, 28599, 2687, 4890, 515, 263, 1347, 29889, 13, 13, 1678, 826, 3174, 29901, 13, 4706, 269, 29901, 450, 1347, 304, 3349, 1661, 29899, 28599, 2687, 4890, 515, 29889, 13, 13, 1678, 16969, 29901, 13, 4706, 450, 1347, 411, 1661, 29899, 28599, 2687, 4890, 6206, 29889, 13, 1678, 9995, 13, 1678, 1121, 353, 5124, 13, 1678, 363, 274, 297, 269, 29901, 13, 4706, 565, 4356, 29898, 29883, 29897, 529, 29871, 29896, 29906, 29947, 29901, 13, 9651, 1121, 4619, 274, 32010, 2]])
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
         input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
@@ -821,3 +817,253 @@ end
         ]
         infilling = tokenizer.batch_decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
+
+
+@slow
+@require_torch_gpu
+class Mask4DTestHard(unittest.TestCase):
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def setUp(self):
+        model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self.model_dtype = torch.float32
+        self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
+        self.model = LlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+
+    def get_test_data(self):
+        template = "my favorite {}"
+        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
+
+        batch_separate = [template.format(x) for x in items]  # 3 separate lines
+        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
+
+        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
+        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
+
+        mask_shared_prefix = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0],
+                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+                    ]
+                ]
+            ],
+            device=torch_device,
+        )
+
+        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
+
+        # building custom positions ids based on custom mask
+        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
+        # effectively: position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
+
+        # inverting the mask
+        min_dtype = torch.finfo(self.model_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
+
+        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+
+    def test_stacked_causal_mask(self):
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self.get_test_data()
+
+        # regular batch
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+        # single forward run with 4D custom mask
+        logits_shared_prefix = self.model.forward(
+            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
+        ).logits
+        logits_shared_prefix_last = logits_shared_prefix[
+            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+        ]  # last three tokens
+        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+
+        self.assertEqual(decoded, decoded_shared_prefix)
+
+    def test_partial_stacked_causal_mask(self):
+        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
+
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self.get_test_data()
+
+        # regular batch
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+        # 2 forward runs with custom 4D masks
+        part_a = 3  # split point
+
+        input_1a = input_ids_shared_prefix[:, :part_a]
+        position_ids_1a = position_ids_shared_prefix[:, :part_a]
+        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
+
+        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
+        past_key_values_a = outs_1a["past_key_values"]
+
+        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
+        input_1b = input_ids_shared_prefix[:, part_a:]
+        position_ids_1b = position_ids_shared_prefix[:, part_a:]
+        mask_1b = mask_shared_prefix[:, :, part_a:, :]
+        outs_1b = self.model.forward(
+            input_1b,
+            attention_mask=mask_1b,
+            position_ids=position_ids_1b,
+            past_key_values=past_key_values_a,
+        )
+        decoded_1b = [
+            self.tokenizer.decode(t)
+            for t in outs_1b.logits.argmax(-1)[
+                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+            ]
+        ]
+        self.assertEqual(decoded, decoded_1b)
+
+    def test_stacked_causal_mask_static_cache(self):
+        """same as above but with StaticCache"""
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self.get_test_data()
+
+        # regular batch
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+        # upgrade the model with StaticCache
+        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        past_key_values = StaticCache(
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=max_cache_len,
+            device=torch_device,
+            dtype=self.model.dtype,
+        )
+
+        padded_attention_mask = torch.nn.functional.pad(
+            input=mask_shared_prefix,
+            pad=(0, max_cache_len - mask_shared_prefix.shape[-1]),
+            mode="constant",
+            value=torch.finfo(self.model_dtype).min,
+        )
+
+        # single forward run with 4D custom mask
+        logits_shared_prefix = self.model.forward(
+            input_ids_shared_prefix,
+            attention_mask=padded_attention_mask,
+            position_ids=position_ids_shared_prefix,
+            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
+            past_key_values=past_key_values,
+        ).logits
+        logits_shared_prefix_last = logits_shared_prefix[
+            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
+        ]  # last three tokens
+        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
+
+        self.assertEqual(decoded, decoded_shared_prefix)
+
+    def test_partial_stacked_causal_mask_static_cache(self):
+        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
+        # we pass a 4D attention mask shaped [..., seq_len, full_static_cache_len])
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self.get_test_data()
+
+        # regular batch
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+        # upgrade the model with StaticCache
+        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
+        past_key_values = StaticCache(
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=max_cache_len,
+            device=torch_device,
+            dtype=self.model.dtype,
+        )
+
+        # forward run for the first part of input
+        part_a = 3  # split point
+
+        input_1a = input_ids_shared_prefix[:, :part_a]
+        position_ids_1a = position_ids_shared_prefix[:, :part_a]
+        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
+
+        padded_mask_1a = torch.nn.functional.pad(
+            input=mask_1a,
+            pad=(0, max_cache_len - mask_1a.shape[-1]),
+            mode="constant",
+            value=torch.finfo(self.model_dtype).min,
+        )
+
+        _ = self.model.forward(
+            input_1a,
+            attention_mask=padded_mask_1a,
+            position_ids=position_ids_1a,
+            cache_position=torch.arange(part_a, device=torch_device),
+            past_key_values=past_key_values,
+        )
+
+        # forward run for the second part of input
+        input_1b = input_ids_shared_prefix[:, part_a:]
+        position_ids_1b = position_ids_shared_prefix[:, part_a:]
+        mask_1b = mask_shared_prefix[:, :, part_a:, :]
+
+        padded_mask_1b = torch.nn.functional.pad(
+            input=mask_1b, pad=(0, max_cache_len - mask_1b.shape[-1]), mode="constant", value=0
+        )
+
+        outs_1b = self.model.forward(
+            input_1b,
+            attention_mask=padded_mask_1b,
+            position_ids=position_ids_1b,
+            cache_position=torch.arange(
+                part_a,
+                input_ids_shared_prefix.shape[-1],
+                device=torch_device,
+            ),
+            past_key_values=past_key_values,
+        )
+        decoded_1b = [
+            self.tokenizer.decode(t)
+            for t in outs_1b.logits.argmax(-1)[
+                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+            ]
+        ]
+        self.assertEqual(decoded, decoded_1b)

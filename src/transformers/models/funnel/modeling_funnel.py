@@ -50,9 +50,6 @@ _CONFIG_FOR_DOC = "FunnelConfig"
 _CHECKPOINT_FOR_DOC = "funnel-transformer/small"
 
 
-from ..deprecated._archive_maps import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 INF = 1e6
 
 
@@ -972,8 +969,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,
@@ -1048,8 +1044,7 @@ class FunnelModel(FunnelPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # TODO: deal with head_mask
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+        inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds,

@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "configuration_graphormer": ["GraphormerConfig"],
 }
 
 try:
@@ -27,7 +27,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_graphormer"] = [
-        "GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GraphormerForGraphClassification",
         "GraphormerModel",
         "GraphormerPreTrainedModel",
@@ -35,7 +34,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .configuration_graphormer import GraphormerConfig
 
     try:
         if not is_torch_available():
@@ -44,7 +43,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_graphormer import (
-            GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,

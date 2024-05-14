@@ -42,9 +42,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VitDetConfig"
 
 
-from ..deprecated._archive_maps import VITDET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class VitDetEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
