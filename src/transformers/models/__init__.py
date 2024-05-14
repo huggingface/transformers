@@ -173,6 +173,7 @@ from . import (
     opt,
     owlv2,
     owlvit,
+    paligemma,
     patchtsmixer,
     patchtst,
     pegasus,
