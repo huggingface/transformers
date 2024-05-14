@@ -6156,9 +6156,6 @@ class PaliGemmaProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class PatchTSMixerForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 

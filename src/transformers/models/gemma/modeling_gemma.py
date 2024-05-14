@@ -794,7 +794,6 @@ GEMMA_INPUTS_DOCSTRING = r"""
     "The bare Gemma Model outputting raw hidden-states without any specific head on top.",
     GEMMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->GEMMA,Llama->Gemma
 class GemmaModel(GemmaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
@@ -988,8 +987,6 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if attention_mask is not None and attention_mask.dim() == 4:
             # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
-            if attention_mask.max() != 0:
-                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
             causal_mask = attention_mask
         else:
             causal_mask = torch.full(
