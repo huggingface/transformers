@@ -57,13 +57,13 @@ class PaliGemmaConfig(PretrainedConfig):
     >>> # Initializing a Siglip-like vision config
     >>> vision_config = SiglipVisionConfig()
 
-    >>> # Initializing a Gemma config
+    >>> # Initializing a PaliGemma config
     >>> text_config = GemmaConfig()
 
-    >>> # Initializing a PaliGemma paligemma-1.5-7b style configuration
-    >>> configuration = GemmaConfig(vision_config, text_config)
+    >>> # Initializing a PaliGemma paligemma-3b-224 style configuration
+    >>> configuration = PaliGemmaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the paligemma-1.5-7b style configuration
+    >>> # Initializing a model from the paligemma-3b-224 style configuration
     >>> model = PaliGemmaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
