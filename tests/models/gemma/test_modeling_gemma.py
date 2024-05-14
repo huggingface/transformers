@@ -20,6 +20,7 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.testing_utils import (
+    IS_ROCM_SYSTEM,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
@@ -570,16 +571,24 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = {
-            7: [
-                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
-            ],
-            8: [
-                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-            ],
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_TEXTS = {
+                9: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
+        else:
+            EXPECTED_TEXTS = {
+                7: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+                ],
+                8: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device
@@ -596,16 +605,24 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_eager(self):
         model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = {
-            7: [
-                "Hello I am doing a project on the 1990s and I am looking for some information on the ",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-            ],
-            8: [
-                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-            ],
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_TEXTS = {
+                9: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
+        else:
+            EXPECTED_TEXTS = {
+                7: [
+                    "Hello I am doing a project on the 1990s and I am looking for some information on the ",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+                8: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
@@ -624,16 +641,24 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_2b_sdpa(self):
         model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = {
-            7: [
-                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
-            ],
-            8: [
-                "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-                "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-            ],
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_TEXTS = {
+                9: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
+        else:
+            EXPECTED_TEXTS = {
+                7: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+                ],
+                8: [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+            }
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
@@ -732,16 +757,24 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_bf16(self):
         model_id = "google/gemma-7b"
-        EXPECTED_TEXTS = {
-            7: [
-                """Hello I am doing a project on a 1991 240sx and I am trying to find""",
-                "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
-            ],
-            8: [
-                "Hello I am doing a project for my school and I am trying to make a program that will read a .txt file",
-                "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
-            ],
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_TEXTS = {
+                9: [
+                    "Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees",
+                    "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",
+                ],
+            }
+        else:
+            EXPECTED_TEXTS = {
+                7: [
+                    """Hello I am doing a project on a 1991 240sx and I am trying to find""",
+                    "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+                ],
+                8: [
+                    "Hello I am doing a project for my school and I am trying to make a program that will read a .txt file",
+                    "Hi today I am going to show you how to make a very simple and easy to make a very simple and",
+                ],
+            }
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
             torch_device

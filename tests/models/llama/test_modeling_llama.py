@@ -24,6 +24,7 @@ from parameterized import parameterized
 
 from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
+    IS_ROCM_SYSTEM,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -688,22 +689,32 @@ class LlamaIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-        EXPECTED_TEXT_COMPLETION = {
-            8: [
-                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-                "theory of relativ",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-            ],
-            7: [
-                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
-                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
-                "be.\nThe theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
-                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
-            ],
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_TEXT_COMPLETION = {
+                9: [
+                    "Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed"
+                    " of lightis the same for all observers, and 3) the laws of physics are the same for all observers.",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs,"
+                    " my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+                ],
+            }
+        else:
+            EXPECTED_TEXT_COMPLETION = {
+                8: [
+                    "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+                    "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                    "theory of relativ",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+                    "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+                ],
+                7: [
+                    "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
+                    "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
+                    "be.\nThe theory of relativity",
+                    "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
+                    "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+                ],
+            }
 
         prompts = [
             "Simply put, the theory of relativity states that ",

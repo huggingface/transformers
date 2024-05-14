@@ -22,6 +22,7 @@ import pytest
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
+    IS_ROCM_SYSTEM,
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -529,14 +530,21 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks impelmentation.
-        EXPECTED_LOGITS = {
-            7: torch.Tensor([[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
-                torch_device
-            ),
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_LOGITS = {
+                9: torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8945, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(
+                    torch_device
+                ),
+            }
+        else:
+            EXPECTED_LOGITS = {
+                7: torch.Tensor([[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]).to(
+                    torch_device
+                ),
+                8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
+                    torch_device
+                ),
+            }
         with torch.no_grad():
             logits = model(dummy_input).logits
 
@@ -559,32 +567,51 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
-        EXPECTED_LOGITS_LEFT = {
-            7: torch.Tensor(
-                [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
-                torch_device
-            ),
-        }
+        if IS_ROCM_SYSTEM:
+            EXPECTED_LOGITS_LEFT = {
+                9: torch.Tensor([[0.1904, 0.0513, 0.7227], [0.1943, 0.0518, 0.7227], [0.1982, 0.0557, 0.7148]]).to(
+                    torch_device
+                ),
+            }
 
-        EXPECTED_LOGITS_LEFT_UNPADDED = {
-            7: torch.Tensor(
-                [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
-                torch_device
-            ),
-        }
+            EXPECTED_LOGITS_LEFT_UNPADDED = {
+                9: torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(
+                    torch_device
+                ),
+            }
 
-        EXPECTED_LOGITS_RIGHT_UNPADDED = {
-            7: torch.Tensor([[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
-                torch_device
-            ),
-        }
+            EXPECTED_LOGITS_RIGHT_UNPADDED = {
+                9: torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(
+                    torch_device
+                ),
+            }
+        else:
+            EXPECTED_LOGITS_LEFT = {
+                7: torch.Tensor(
+                    [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+                ).to(torch_device),
+                8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
+                    torch_device
+                ),
+            }
+
+            EXPECTED_LOGITS_LEFT_UNPADDED = {
+                7: torch.Tensor(
+                    [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+                ).to(torch_device),
+                8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
+                    torch_device
+                ),
+            }
+
+            EXPECTED_LOGITS_RIGHT_UNPADDED = {
+                7: torch.Tensor([[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]).to(
+                    torch_device
+                ),
+                8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
+                    torch_device
+                ),
+            }
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits

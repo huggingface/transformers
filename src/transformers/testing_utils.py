@@ -38,6 +38,7 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
+import torch
 import urllib3
 
 from transformers import logging as transformers_logging
@@ -163,6 +164,9 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+IS_ROCM_SYSTEM = torch.version.hip is not None
+IS_CUDA_SYSTEM = torch.version.cuda is not None
 
 
 def parse_flag_from_env(key, default=False):
