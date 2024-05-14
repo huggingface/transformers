@@ -14,7 +14,6 @@
 # limitations under the License.
 """Image processor class for Beit."""
 
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -109,12 +108,7 @@ class BeitImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
+            raise ValueError("The `reduce_labels` parameter has been deprecated. Use `do_reduce_labels` instead.")
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
@@ -153,12 +147,11 @@ class BeitImageProcessor(BaseImageProcessor):
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
-        is created using from_dict and kwargs e.g. `BeitImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
+        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
         """
         image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in kwargs:
-            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
