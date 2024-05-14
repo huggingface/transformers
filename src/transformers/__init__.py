@@ -7158,7 +7158,6 @@ if TYPE_CHECKING:
             load_tf_weights_in_roformer,
         )
         from .models.rt_detr import (
-            RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             RTDetrForObjectDetection,
             RTDetrModel,
             RTDetrPreTrainedModel,
