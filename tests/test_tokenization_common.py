@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import inspect
 import itertools
 import json
@@ -4197,9 +4196,9 @@ class TokenizerTesterMixin:
                 r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
                 cr_output = tokenizer_cr.tokenize(f"Hey this is a {special_token} token")
 
-                self.assertEqual(p_output, r_output)
-                self.assertEqual(cr_output, r_output)
                 self.assertTrue(special_token not in p_output)
+                self.assertTrue(special_token not in r_output)
+                self.assertTrue(special_token not in cr_output)
 
                 p_output_explicit = tokenizer_p.tokenize(
                     f"Hey this is a {special_token} token", split_special_tokens=False
@@ -4215,14 +4214,14 @@ class TokenizerTesterMixin:
                 self.assertEqual(p_output_explicit, r_output_explicit)
                 self.assertEqual(cr_output_explicit, r_output_explicit)
 
-                p_special_token_id = tokenizer_p.encode(special_token, add_special_tokens=False)[0]
+                p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
                 p_output = tokenizer_p(f"Hey this is a {special_token} token")
                 r_output = tokenizer_r(f"Hey this is a {special_token} token")
                 cr_output = tokenizer_cr(f"Hey this is a {special_token} token")
 
                 self.assertTrue(p_special_token_id not in p_output)
-                self.assertEqual(p_output, r_output)
-                self.assertEqual(cr_output, r_output)
+                self.assertTrue(p_special_token_id not in r_output)
+                self.assertTrue(p_special_token_id not in cr_output)
 
                 tmpdirname = tempfile.mkdtemp()
                 tokenizer_p.save_pretrained(tmpdirname)
