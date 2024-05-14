@@ -401,16 +401,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                     image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
 
-                batch_size = inputs_embeds.shape[0]
-
-                if labels is None:
-                    if attention_mask.dim() == 4:
-                        batch_size, sequence_length = attention_mask.size(0), attention_mask.size(2)
-                    elif attention_mask.dim() == 2:
-                        batch_size, sequence_length = attention_mask.size(0), attention_mask.size(1)
-                    labels = torch.full((batch_size, sequence_length), self.config.ignore_index, dtype=torch.long).to(
-                        attention_mask.device
-                    )
             else:
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation with cache
