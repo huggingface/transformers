@@ -22,8 +22,8 @@ from functools import partial
 from pathlib import Path
 
 import albumentations as A
-import evaluate
 import datasets
+import evaluate
 import numpy as np
 import torch
 from accelerate import Accelerator
