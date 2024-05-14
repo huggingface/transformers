@@ -5177,7 +5177,7 @@ if TYPE_CHECKING:
         RoFormerConfig,
         RoFormerTokenizer,
     )
-    from .models.rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig
+    from .models.rt_detr import RTDetrConfig
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,
