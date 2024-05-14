@@ -299,9 +299,7 @@ class GenerationConfig(PushToHubMixin):
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
-        restack_limit (`int`, *optional*, default to `None`):
-            Only used if `cache_implementation="efficient"`. Controls how many tokens will be generated before
-            a restack in the list of past key values.
+
         > Wild card
 
         generation_kwargs:
@@ -384,7 +382,6 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
-        self.restack_limit = kwargs.pop("restack_limit", None)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
