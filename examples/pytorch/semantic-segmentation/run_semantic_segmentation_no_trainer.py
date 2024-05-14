@@ -22,6 +22,7 @@ from functools import partial
 from pathlib import Path
 
 import albumentations as A
+import evaluate
 import datasets
 import numpy as np
 import torch
@@ -34,7 +35,6 @@ from huggingface_hub import HfApi, hf_hub_download
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,

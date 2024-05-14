@@ -22,6 +22,7 @@ from functools import partial
 from typing import Optional
 
 import albumentations as A
+import evaluate
 import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
@@ -29,7 +30,6 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from torch import nn
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
