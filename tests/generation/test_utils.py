@@ -1810,23 +1810,29 @@ class GenerationTesterMixin:
         """Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results"""
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_cache_class:
-                continue
+                self.skipTest("This model doesn't support static cache")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config).to(torch_device)
             input_ids = inputs_dict["input_ids"].to(torch_device)
+            generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 10,
+            }
 
             # dynamic cache
-            output_dynamic = model.generate(input_ids)
+            output_dynamic = model.generate(input_ids, **generation_kwargs)
 
             # eager static cache
             model.generation_config.cache_implementation = "static"
-            output_static = model.generate(input_ids)
+            output_static = model.generate(input_ids, **generation_kwargs)
             self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
 
             # compiled static cache
+            generation_config = copy.deepcopy(model.generation_config)
+            generation_config.update(**generation_kwargs)
             compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
-            output_compiled = compiled_generate(input_ids)
+            output_compiled = compiled_generate(input_ids, generation_config=generation_config)
             self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
