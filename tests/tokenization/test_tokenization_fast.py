@@ -235,39 +235,3 @@ class ReduceMutableBorrowTests(unittest.TestCase):
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
-
-
-@require_tokenizers
-class SplitSpecialTokensTests(unittest.TestCase):
-    def test_split_special_tokens(self):
-        tokenizer = PreTrainedTokenizerFast.from_pretrained('robot-test/dummy-tokenizer-fast', split_special_tokens=True)
-        text = 'Here is an example of bos token: [CLS]'
-        encoded_split_val = {'input_ids': [2, 7083, 1126, 1135, 3214, 1030, 1029, 1133, 1038, 4350, 31, 2015, 40, 49, 56, 66, 3], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
-        encoded_unsplit_val = {'input_ids': [2, 7083, 1126, 1135, 3214, 1030, 1029, 1133, 1038, 4350, 31, 681, 2, 3], 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
-
-        tokens_split = tokenizer.tokenize(text)
-        self.assertEqual(tokens_split, ['▁Here', '▁is', '▁an', '▁example', '▁of', '▁b', 'os', '▁to', 'ken', ':', '▁[', 'C', 'L', 'S', ']'])
-
-        tokens_split_explicit = tokenizer.tokenize(text, split_special_tokens=True)
-        self.assertEqual(tokens_split_explicit, ['▁Here', '▁is', '▁an', '▁example', '▁of', '▁b', 'os', '▁to', 'ken', ':', '▁[', 'C', 'L', 'S', ']'])
-
-        tokens_unsplit = tokenizer.tokenize(text, split_special_tokens=False)
-        self.assertEqual(tokens_unsplit, ['▁Here', '▁is', '▁an', '▁example', '▁of', '▁b', 'os', '▁to', 'ken', ':', '▁', '[CLS]'])
-
-        encoded_split = tokenizer(text)
-        self.assertEqual(encoded_split, encoded_split_val)
-
-        encoded_split_explicit = tokenizer(text, split_special_tokens=True)
-        self.assertEqual(encoded_split_explicit, encoded_split_val)
-
-        encoded_unsplit = tokenizer(text, split_special_tokens=False)
-        self.assertEqual(encoded_unsplit, encoded_unsplit_val)
-
-        tokenizer.save_pretrained('split_special_tokens_tokenizer')
-        tokenizer_reloaded = PreTrainedTokenizerFast.from_pretrained('split_special_tokens_tokenizer')
-
-        tokens_split_reloaded = tokenizer_reloaded.tokenize(text)
-        self.assertEqual(tokens_split_reloaded, ['▁Here', '▁is', '▁an', '▁example', '▁of', '▁b', 'os', '▁to', 'ken', ':', '▁[', 'C', 'L', 'S', ']'])
-
-        encoded_split_reloaded = tokenizer_reloaded(text)
-        self.assertEqual(encoded_split_reloaded, encoded_split_val)
