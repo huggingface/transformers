@@ -1805,6 +1805,7 @@ class GenerationTesterMixin:
 
     @require_torch_gpu
     @slow
+    @is_flaky()  # compilation may result in equivalent (!= same) FP ops, causing the argmax in generate to be flaky
     def test_generate_compile_fullgraph(self):
         """Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results"""
         for model_class in self.all_generative_model_classes:
