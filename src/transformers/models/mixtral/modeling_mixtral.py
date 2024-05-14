@@ -985,7 +985,7 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Mixtral
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"

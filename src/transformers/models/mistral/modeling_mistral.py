@@ -107,19 +107,17 @@ class MistralRotaryEmbedding(nn.Module):
         self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
 
     @property
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.sin_cached with Llama->Mistral
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
             "the forward method of RoPE from now on instead. It is not used in the `MistralAttention` class"
         )
         return self._sin_cached
 
     @property
-    # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.cos_cached with Llama->Mistral
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
             "the forward method of RoPE from now on instead. It is not used in the `MistralAttention` class"
         )
         return self._cos_cached
@@ -790,6 +788,7 @@ class MistralPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

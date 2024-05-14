@@ -791,7 +791,7 @@ STARCODER2_START_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Starcoder2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Starcoder2
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"

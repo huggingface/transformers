@@ -111,7 +111,7 @@ class OlmoRotaryEmbedding(nn.Module):
     @property
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
             "the forward method of RoPE from now on instead. It is not used in the `OlmoAttention` class"
         )
         return self._sin_cached
@@ -119,7 +119,7 @@ class OlmoRotaryEmbedding(nn.Module):
     @property
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
+            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
             "the forward method of RoPE from now on instead. It is not used in the `OlmoAttention` class"
         )
         return self._cos_cached
