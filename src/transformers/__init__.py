@@ -284,6 +284,7 @@ _import_structure = {
     ],
     "models.cohere": ["CohereConfig"],
     "models.conditional_detr": ["ConditionalDetrConfig"],
+    "models.dab_detr": ["DABDETRConfig"],
     "models.convbert": [
         "ConvBertConfig",
         "ConvBertTokenizer",
@@ -1619,6 +1620,14 @@ else:
             "ConditionalDetrForSegmentation",
             "ConditionalDetrModel",
             "ConditionalDetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dab_detr"].extend(
+        [
+            "DABDETRForObjectDetection",
+            "DABDETRForSegmentation",
+            "DABDETRModel",
+            "DABDETRPreTrainedModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -4782,6 +4791,9 @@ if TYPE_CHECKING:
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
+    from .models.dab_detr import (
+        DABDETRConfig,
+    )
     from .models.convbert import (
         ConvBertConfig,
         ConvBertTokenizer,
@@ -5646,6 +5658,10 @@ if TYPE_CHECKING:
             ConditionalDetrFeatureExtractor,
             ConditionalDetrImageProcessor,
         )
+        from .models.dab_detr import (
+           
+           
+        )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,
@@ -6111,6 +6127,12 @@ if TYPE_CHECKING:
             ConditionalDetrForSegmentation,
             ConditionalDetrModel,
             ConditionalDetrPreTrainedModel,
+        )
+        from .models.dab_detr import (
+            DABDETRForObjectDetection,
+            DABDETRForSegmentation,
+            DABDETRModel,
+            DABDETRPreTrainedModel,
         )
         from .models.convbert import (
             ConvBertForMaskedLM,

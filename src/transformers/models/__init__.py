@@ -51,6 +51,7 @@ from . import (
     codegen,
     cohere,
     conditional_detr,
+    dab_detr,
     convbert,
     convnext,
     convnextv2,

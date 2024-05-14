@@ -66,6 +66,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("codegen", "CodeGenModel"),
         ("cohere", "CohereModel"),
         ("conditional_detr", "ConditionalDetrModel"),
+        ("dab-detr", "DABDETRModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
@@ -513,6 +514,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("beit", "BeitModel"),
         ("bit", "BitModel"),
         ("conditional_detr", "ConditionalDetrModel"),
+        ("dab-detr", "DABDETRModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
         ("data2vec-vision", "Data2VecVisionModel"),
@@ -756,6 +758,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("dab-detr", "DABDETRForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),

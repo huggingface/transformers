@@ -48,6 +48,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
         ("conditional_detr", "ConditionalDetrImageProcessor"),
+        ("dab-detr", "DABDETRImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
         ("convnextv2", "ConvNextImageProcessor"),
         ("cvt", "ConvNextImageProcessor"),

@@ -46,6 +46,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("clipseg", "ViTFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),
+        ("dab-detr", "DABDETRFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("cvt", "ConvNextFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
