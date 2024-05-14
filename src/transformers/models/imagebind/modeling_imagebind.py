@@ -460,7 +460,7 @@ class ImageBindTextEmbeddings(nn.Module):
         embed_dim = config.hidden_size
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
@@ -481,7 +481,7 @@ class ImageBindTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        position_embeddings = self.position_embedding(position_ids)
+        position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
@@ -770,12 +770,12 @@ class ImageBindPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
         if isinstance(module, ImageBindTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, (ImageBindVisionEmbeddings, ImageBindAudioEmbeddings)):
             factor = self.config.initializer_factor
             nn.init.normal_(module.cls_token, std=module.config.hidden_size**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.projection.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embeddings, std=module.config.initializer_range * factor)
         elif isinstance(module, ImageBindAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor

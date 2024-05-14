@@ -143,7 +143,9 @@ def prepare_input():
     images = ds["image"]
     texts = ds["text"]
     audios = [
-        torchaudio.functional.resample(audio["array"], orig_freq=audio["sample_rate"], new_freq=16000)
+        torchaudio.functional.resample(
+            torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000
+        ).numpy()
         for audio in ds["audio"]
     ]
 
@@ -183,18 +185,27 @@ def convert_imagebind_checkpoint(args):
 
     if verify_inputs:
         texts, images, audios = prepare_input()
-        expected_input_ids = ...  # This won't matter for now
-        expected_pixel_values = ...
-        expected_input_features = ...
+        expected_pixel_values = torch.tensor(
+            [
+                [-0.1134, 0.7392, 1.3354][-0.6390, 0.1239, 0.2546],
+                [-0.8580, 0.1089, 0.9088],
+            ]
+        )
+        expected_input_features = torch.tensor(
+            [
+                [-1.2776, -0.9167, -1.2776],
+                [-1.2439, -0.8372, -0.8748],
+                [-1.1235, -0.7492, -1.0867],
+            ]
+        )
 
         tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
         image_processor = ImageBindImageProcessor()
         feature_extractor = ImageBindFeatureExtractor()
         processor = ImageBindProcessor(tokenizer, image_processor, feature_extractor)
 
-        inputs = processor(texts, images, audios, return_tensors="pt")
+        inputs = processor(texts=texts, images=images, audios=audios, return_tensors="pt")
 
-        assert torch.equal(inputs["input_ids"], expected_input_ids)
         assert torch.equal(inputs["pixel_values"], expected_pixel_values)
         assert torch.equal(inputs["input_features"], expected_input_features)
 
