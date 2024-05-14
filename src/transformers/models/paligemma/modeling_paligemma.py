@@ -290,12 +290,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         final_embedding = torch.zeros(
             batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
-        else:
-            final_labels = None
 
         text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.pad_token_id)
         image_mask = input_ids == self.config.image_token_index
@@ -323,7 +317,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
 
         if labels is not None:
+            final_labels = torch.full(
+                (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
+            )
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
+        else:
+            final_labels = None
         return final_embedding, final_attention_mask_4d, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
