@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, validate_preprocess_arguments
 from ...image_transforms import (
     center_to_corners_format,
     pad,
@@ -33,12 +33,8 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     TensorType,
@@ -248,6 +244,20 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    def _validate_preprocess_arguments(self, do_rescale, rescale_factor, do_normalize, image_mean, image_std, size):
+        # Here, pad and resize methods are different from the rest of image processors
+        # as they don't have any resampling in resize()
+        # or pad size in pad() (the maximum of (height, width) is taken instead).
+        # hence, these arguments don't need to be passed in validate_preprocess_arguments.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            size=size,
+        )
+
     def pad(
         self,
         image: np.array,
@@ -416,34 +426,8 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-        # Here, pad and resize methods are different from the rest of image processors
-        # as they don't have any resampling in resize()
-        # or pad size in pad() (the maximum of (height, width) is taken instead).
-        # hence, these arguments don't need to be passed in validate_preprocess_arguments.
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            size=size,
-        )
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

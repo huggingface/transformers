@@ -38,8 +38,6 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
-    validate_preprocess_arguments,
 )
 from ...utils import logging
 
@@ -156,6 +154,47 @@ class VivitImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    def _validate_image_inputs(self, images, segmentation_maps=None, do_rescale=False):
+        if not valid_images(images[0]):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if is_scaled_image(to_numpy_array(images[0][0])) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+    def _validate_preprocess_arguments(
+        self,
+        do_rescale,
+        rescale_factor,
+        do_normalize,
+        image_mean,
+        image_std,
+        do_center_crop,
+        crop_size,
+        do_resize,
+        size,
+        resample,
+        offset,
+    ):
+        super()._validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+        if offset and not do_rescale:
+            raise ValueError("For offset, do_rescale must also be set to True.")
+
     def resize(
         self,
         image: np.ndarray,
@@ -260,30 +299,8 @@ class VivitImageProcessor(BaseImageProcessor):
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        if offset and not do_rescale:
-            raise ValueError("For offset, do_rescale must also be set to True.")
-
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-
-        if is_scaled_image(image) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
@@ -385,14 +402,6 @@ class VivitImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if not valid_images(videos):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
 
         videos = make_batched(videos)
 

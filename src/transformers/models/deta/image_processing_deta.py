@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, get_size_dict, validate_preprocess_arguments
 from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
@@ -42,11 +42,9 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_batched,
-    is_scaled_image,
     to_numpy_array,
     valid_images,
     validate_annotations,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     is_flax_available,
@@ -543,6 +541,21 @@ class DetaImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
+    def _validate_preprocess_arguments(
+        self, do_rescale, rescale_factor, do_normalize, image_mean, image_std, do_resize, size, resample
+    ):
+        # pad() method pads to the maximum of (width, height). It does not need to be validated.
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DETA
     def prepare_annotation(
         self,
@@ -956,19 +969,6 @@ class DetaImageProcessor(BaseImageProcessor):
         do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
 
-        # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
         if not is_batched(images):
             images = [images]
             annotations = [annotations] if annotations is not None else None
@@ -999,12 +999,6 @@ class DetaImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

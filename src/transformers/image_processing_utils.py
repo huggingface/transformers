@@ -26,7 +26,7 @@ import requests
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension
+from .image_utils import ChannelDimension, is_scaled_image, to_numpy_array, valid_images
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
@@ -44,7 +44,58 @@ from .utils import (
 if is_vision_available():
     from PIL import Image
 
+    from .image_utils import PILImageResampling
+
 logger = logging.get_logger(__name__)
+
+
+def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str]):
+    unused_keys = set(captured_kwargs).difference(set(valid_processor_keys))
+    if unused_keys:
+        unused_key_str = ", ".join(unused_keys)
+        # TODO raise a warning here instead of simply logging?
+        logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
+
+
+def validate_preprocess_arguments(
+    do_rescale: Optional[bool] = None,
+    rescale_factor: Optional[float] = None,
+    do_normalize: Optional[bool] = None,
+    image_mean: Optional[Union[float, List[float]]] = None,
+    image_std: Optional[Union[float, List[float]]] = None,
+    do_pad: Optional[bool] = None,
+    size_divisibility: Optional[int] = None,
+    do_center_crop: Optional[bool] = None,
+    crop_size: Optional[Dict[str, int]] = None,
+    do_resize: Optional[bool] = None,
+    size: Optional[Dict[str, int]] = None,
+    resample: Optional["PILImageResampling"] = None,
+):
+    """
+    Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
+    Raises `ValueError` if arguments incompatibility is caught.
+    Many incompatibilities are model-specific. `do_pad` sometimes needs `size_divisor`,
+    sometimes `size_divisibility`, and sometimes `size`. New models and processors added should follow
+    existing arguments when possible.
+
+    """
+    if do_rescale and rescale_factor is None:
+        raise ValueError("rescale_factor must be specified if do_rescale is True.")
+
+    if do_pad and size_divisibility is None:
+        # Here, size_divisor might be passed as the value of size
+        raise ValueError(
+            "Depending on moel, size_divisibility, size_divisor, pad_size or size must be specified if do_pad is True."
+        )
+
+    if do_normalize and (image_mean is None or image_std is None):
+        raise ValueError("image_mean and image_std must both be specified if do_normalize is True.")
+
+    if do_center_crop and crop_size is None:
+        raise ValueError("crop_size must be specified if do_center_crop is True.")
+
+    if do_resize and (size is None or resample is None):
+        raise ValueError("size and resample must be specified if do_resize is True.")
 
 
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
@@ -543,12 +594,63 @@ class ImageProcessingMixin(PushToHubMixin):
 
 
 class BaseImageProcessor(ImageProcessingMixin):
+    _valid_processor_keys = None
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def __call__(self, images, **kwargs) -> BatchFeature:
         """Preprocess an image or a batch of images."""
+        self._validate_inputs(images, **kwargs)
         return self.preprocess(images, **kwargs)
+
+    def _validate_preprocess_arguments(self, **kwargs):
+        """Check if the arguments passed to the preprocess method have compatible settings e.g. if `size` is defined when `do_resize` is set to True."""
+        validate_preprocess_arguments(**kwargs)
+
+    def _validate_image_inputs(self, images, segmentation_maps=None, do_rescale=False):
+        """Check if the images and segmentation maps are valid."""
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if segmentation_maps is not None and not valid_images(segmentation_maps):
+            raise ValueError(
+                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if do_rescale and is_scaled_image(to_numpy_array(images[0])):
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+    def _validate_inputs(self, images, segmentation_maps=None, **kwargs):
+        """Check if the arguments passed to the preprocess method are valid."""
+        return_tensors = kwargs.pop("return_tensors", None)
+        input_data_format = kwargs.pop("input_data_format", None)
+        data_format = kwargs.pop("data_format", None)
+
+        if return_tensors not in (None, "np", "pt", "tf", "jax"):
+            raise ValueError("return_tensors should be one of 'np', 'pt', 'tf', 'jax'.")
+
+        if input_data_format not in (None, ChannelDimension.FIRST, ChannelDimension.LAST):
+            raise ValueError("input_data_format should be one of 'channels_first' or 'channels_last'.")
+
+        if data_format not in (None, ChannelDimension.FIRST, ChannelDimension.LAST):
+            raise ValueError("data_format should be one of 'channels_first' or 'channels_last'.")
+
+        if self._valid_processor_keys is None:
+            raise ValueError("Each image processor must define self._valid_processor_keys")
+
+        for key in kwargs:
+            if key not in self._valid_processor_keys:
+                raise ValueError(f"Invalid argument {key} passed to preprocess method.")
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        self._validate_preprocess_arguments(**kwargs)
+        self._validate_image_inputs(images, segmentation_maps, do_rescale=kwargs.get("do_rescale", False))
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")

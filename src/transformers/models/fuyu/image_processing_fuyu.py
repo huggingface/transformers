@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, validate_preprocess_arguments
 from ...image_transforms import (
     pad,
     resize,
@@ -35,7 +35,7 @@ from ...image_utils import (
     is_valid_image,
     make_list_of_images,
     to_numpy_array,
-    validate_preprocess_arguments,
+    valid_images,
 )
 from ...utils import (
     TensorType,
@@ -280,6 +280,38 @@ class FuyuImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
+    def _validate_image_inputs(self, images, segmentation_maps=None, do_rescale=False):
+        if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
+            raise ValueError("Multiple images for a single sample are not yet supported.")
+
+        if not valid_images(images[0]):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if is_scaled_image(to_numpy_array(images[0][0])) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+    def _validate_preprocess_arguments(
+        self, do_rescale, rescale_factor, do_normalize, image_mean, image_std, do_pad, size, do_resize, resample
+    ):
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            # There is no pad divisibility in this processor, but pad requires the size arg.
+            size_divisibility=size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
     def resize(
         self,
         image: np.ndarray,
@@ -460,31 +492,10 @@ class FuyuImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
-            raise ValueError("Multiple images for a single sample are not yet supported.")
-
         batch_images = make_list_of_list_of_images(images)
 
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size,  # There is no pad divisibility in this processor, but pad requires the size arg.
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
-
-        if is_scaled_image(batch_images[0][0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
