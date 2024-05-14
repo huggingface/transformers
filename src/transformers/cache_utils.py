@@ -196,6 +196,7 @@ class DynamicCache(Cache):
         if self.get_seq_length() <= maximum_length:
             return
 
+        self._seen_tokens = maximum_length
         for idx in range(len(self.key_cache)):
             self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
             self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
@@ -378,6 +379,7 @@ class EfficientDynamicCache(Cache):
                 last_tensor_size = maximum_length - cumulative_length
                 break
 
+        self._seen_tokens = maximum_length
         for idx in range(len(self.key_cache)):
             self.key_cache[idx] = self.key_cache[idx][:last] + [self.key_cache[idx][last][..., :last_tensor_size, :]]
             self.value_cache[idx] = self.value_cache[idx][:last] + [
