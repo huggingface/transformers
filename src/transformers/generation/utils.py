@@ -1619,7 +1619,12 @@ class GenerationMixin:
                 if not is_quanto_available():
                     raise ImportError(
                         "You need to install `quanto` in order to use KV cache quantization. "
-                        "Please install it via  with `pip install git+https://github.com/huggingface/quanto`"
+                        "Please install it via  with `pip install quanto`"
+                    )
+                if not self._supports_quantized_cache:
+                    raise ValueError(
+                        "This model does not support the quantized cache. If you want your model to support quantized "
+                        "cache, please open an issue."
                     )
 
                 cache_config = (

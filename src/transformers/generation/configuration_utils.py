@@ -18,7 +18,7 @@ import copy
 import json
 import os
 import warnings
-from dataclasses import is_dataclass
+from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
@@ -394,11 +394,12 @@ class GenerationConfig(PushToHubMixin):
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation == "quantized":
+        if self.cache_implementation is not None:
+            cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
             if self.cache_config is None:
-                self.cache_config = QuantizedCacheConfig()
+                self.cache_config = cache_config_class()
             elif isinstance(self.cache_config, dict):
-                self.cache_config = QuantizedCacheConfig.from_dict(self.cache_config)
+                self.cache_config = cache_config_class.from_dict(self.cache_config)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

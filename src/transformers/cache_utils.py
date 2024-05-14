@@ -379,7 +379,6 @@ class QuantoQuantizedCache(DynamicCache):
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
-        self.seen_token = 0
         self.residual_length = residual_length
         self.qtype = qint4 if nbits == 4 else qint2
         self.q_group_size = q_group_size
@@ -429,7 +428,10 @@ class QuantoQuantizedCache(DynamicCache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.key_cache) <= layer_idx:
             return 0
-        return self._seen_tokens
+        # since we cannot get the seq_length of each layer directly and rely on `_seen_tokens` which is
+        # updated every "layer_idx" == 0, this is a hack to get the actual seq_length for the given layer_idx
+        # this part of code otherwise fails when used to verify attn_weight shape in some models
+        return self._seen_tokens if layer_idx == 0 else self._seen_tokens - 1
 
     def _quantize(self, tensor):
         qtensor = QBitsTensor.quantize(tensor, axis=0, qtype=self.qtype, group_size=self.q_group_size)

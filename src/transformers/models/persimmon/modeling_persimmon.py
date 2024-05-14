@@ -458,6 +458,7 @@ class PersimmonPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PersimmonDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
+    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

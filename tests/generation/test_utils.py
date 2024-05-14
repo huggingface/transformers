@@ -1656,8 +1656,8 @@ class GenerationTesterMixin:
     @require_quanto
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
-                self.skipTest("This model does not support the new cache format")
+            if not model_class._supports_quantized_cache:
+                self.skipTest("This model does not support the quantized cache format")
 
             config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = True
@@ -1667,7 +1667,8 @@ class GenerationTesterMixin:
             generation_kwargs = {
                 "max_new_tokens": 5,
                 "cache_implementation": "quantized",
-                "cache_config": {"nbits": 2, "q_group_size": 32, "residual_length": 128},
+                # careful with group size, should be divisor of model's hidden size
+                "cache_config": {"nbits": 2, "q_group_size": 8, "residual_length": 128},
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
@@ -1681,7 +1682,7 @@ class GenerationTesterMixin:
                 )
 
             # setting incorrect cache_config args should raise an Error (i.e. int8 cache is not supported)
-            generation_kwargs["cache_config"] = {"nbits": 8, "q_group_size": 32, "residual_length": 128}
+            generation_kwargs["cache_config"] = {"nbits": 8, "q_group_size": 8, "residual_length": 128}
             with self.assertRaises(ValueError):
                 model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
