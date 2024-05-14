@@ -312,6 +312,9 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester = GemmaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GemmaConfig, hidden_size=37)
 
+    def _torch_compile_test_ckpt(self):
+        return "google/gemma-2b"
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

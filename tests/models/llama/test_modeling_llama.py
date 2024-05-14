@@ -316,6 +316,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester = LlamaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
 
+    def _torch_compile_test_ckpt(self):
+        return "meta-llama/Llama-2-7b-hf"
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
