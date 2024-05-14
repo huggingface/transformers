@@ -259,7 +259,7 @@ jobs:
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
-      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
+      image: huggingface/transformers-pytorch-deepspeed-latest-gpu-test
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
@@ -278,7 +278,7 @@ jobs:
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_DISABLE_NINJA=1 DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install "deepspeed<=0.14.0" --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
