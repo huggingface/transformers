@@ -22,7 +22,6 @@ from functools import partial
 from typing import Optional
 
 import albumentations as A
-import evaluate
 import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
@@ -30,6 +29,7 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from torch import nn
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -108,7 +108,7 @@ class DataTrainingArguments:
             )
         },
     )
-    reduce_labels: Optional[bool] = field(
+    do_reduce_labels: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
     )
@@ -303,14 +303,12 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
+        do_reduce_labels=data_args.do_reduce_labels,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
-    # `reduce_labels` is a property of dataset labels, in case we use image_processor
-    # pretrained on another dataset we should override the default setting
-    image_processor.do_reduce_labels = data_args.reduce_labels
 
     # Define transforms to be applied to each image and target.
     if "shortest_edge" in image_processor.size:
@@ -322,7 +320,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else None,
+                mask=reduce_labels_transform if data_args.do_reduce_labels else None,
                 p=1.0,
             ),
             # pad image with 255, because it is ignored by loss
@@ -337,7 +335,7 @@ def main():
         [
             A.Lambda(
                 name="reduce_labels",
-                mask=reduce_labels_transform if data_args.reduce_labels else None,
+                mask=reduce_labels_transform if data_args.do_reduce_labels else None,
                 p=1.0,
             ),
             A.Resize(height=height, width=width, p=1.0),

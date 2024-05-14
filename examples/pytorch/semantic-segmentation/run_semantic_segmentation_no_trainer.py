@@ -23,7 +23,6 @@ from pathlib import Path
 
 import albumentations as A
 import datasets
-import evaluate
 import numpy as np
 import torch
 from accelerate import Accelerator
@@ -35,6 +34,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -86,7 +86,7 @@ def parse_args():
         default="segments/sidewalk-semantic",
     )
     parser.add_argument(
-        "--reduce_labels",
+        "--do_reduce_labels",
         action="store_true",
         help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
@@ -315,11 +315,11 @@ def main():
         args.model_name_or_path, trust_remote_code=args.trust_remote_code
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
-        args.model_name_or_path, config=config, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path,
+        config=config,
+        trust_remote_code=args.trust_remote_code,
+        do_reduce_labels=args.do_reduce_labels,
     )
-    # `reduce_labels` is a property of dataset labels, in case we use image_processor
-    # pretrained on another dataset we should override the default setting
-    image_processor.do_reduce_labels = args.reduce_labels
 
     # Define transforms to be applied to each image and target.
     if "shortest_edge" in image_processor.size:
@@ -329,7 +329,7 @@ def main():
         height, width = image_processor.size["height"], image_processor.size["width"]
     train_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0),
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
             # pad image with 255, because it is ignored by loss
             A.PadIfNeeded(min_height=height, min_width=width, border_mode=0, value=255, p=1.0),
             A.RandomCrop(height=height, width=width, p=1.0),
@@ -340,7 +340,7 @@ def main():
     )
     val_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.reduce_labels else None, p=1.0),
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
             A.Resize(height=height, width=width, p=1.0),
             A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
             ToTensorV2(),
