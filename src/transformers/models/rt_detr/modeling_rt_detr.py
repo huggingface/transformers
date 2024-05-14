@@ -142,11 +142,6 @@ _CONFIG_FOR_DOC = "RTDetrConfig"
 # TODO: Replace all occurrences of the checkpoint with the final one
 _CHECKPOINT_FOR_DOC = "sbchoi/rtdetr_r50vd"
 
-RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sbchoi/rtdetr_r50vd",
-    # See all RTDETR models at https://huggingface.co/models?filter=rtdetr
-]
-
 
 @dataclass
 class RTDetrDecoderOutput(ModelOutput):
