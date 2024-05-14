@@ -967,6 +967,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        requires_backend(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)
