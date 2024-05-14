@@ -1284,6 +1284,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _supports_cache_class = False
     _supports_static_cache = False
 
+    # Has support for a `DynamicCache` instance as `past_key_values`. Some models support it but not other caches
+    # Using it is a big memory gain
+    _supports_dynamic_cache_class = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
