@@ -3872,6 +3872,15 @@ else:
             "TFHubertPreTrainedModel",
         ]
     )
+
+    _import_structure["models.idefics"].extend(
+        [
+            "TFIdeficsForVisionText2Text",
+            "TFIdeficsModel",
+            "TFIdeficsPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.layoutlm"].extend(
         [
             "TFLayoutLMForMaskedLM",
@@ -7922,6 +7931,11 @@ if TYPE_CHECKING:
             TFHubertForCTC,
             TFHubertModel,
             TFHubertPreTrainedModel,
+        )
+        from .models.idefics import (
+            TFIdeficsForVisionText2Text,
+            TFIdeficsModel,
+            TFIdeficsPreTrainedModel,
         )
         from .models.layoutlm import (
             TFLayoutLMForMaskedLM,
