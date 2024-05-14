@@ -18,6 +18,7 @@ import copy
 import json
 import os
 import warnings
+from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from .. import __version__
@@ -133,6 +134,10 @@ class GenerationConfig(PushToHubMixin):
         top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
+        min_p (`float`, *optional*):
+            Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
+            value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
+            the 0.99-0.8 range (use the opposite of normal `top_p` values).
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -217,6 +222,23 @@ class GenerationConfig(PushToHubMixin):
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
+        watermarking_config (Union[`WatermarkingConfig`, `dict`], *optional*):
+            Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green" tokens.
+            If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+            See [this paper](https://arxiv.org/abs/2306.04634) for more details. Accepts the following keys:
+            - greenlist_ratio (`float`):
+                Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+            - bias (`float`):
+                Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
+            - hashing_key (`int`):
+                Hahsing key used for watermarking. Defaults to 15485863 (the millionth prime).
+            - seeding_scheme (`str`):
+                Algorithm to use for watermarking. Accepts values:
+                    - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
+                    - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
+                        The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+            - context_width(`int`):
+                The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
 
         > Parameters that define the output variables of generate
 
@@ -306,6 +328,7 @@ class GenerationConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.min_p = kwargs.pop("min_p", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
@@ -328,6 +351,13 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.low_memory = kwargs.pop("low_memory", None)
+        watermarking_config = kwargs.pop("watermarking_config", None)
+        if watermarking_config is None:
+            self.watermarking_config = None
+        elif isinstance(watermarking_config, WatermarkingConfig):
+            self.watermarking_config = watermarking_config
+        else:
+            self.watermarking_config = WatermarkingConfig.from_dict(watermarking_config)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -491,6 +521,11 @@ class GenerationConfig(PushToHubMixin):
                     greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
                     UserWarning,
                 )
+            if self.min_p is not None:
+                warnings.warn(
+                    greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p),
+                    UserWarning,
+                )
             if self.typical_p is not None and self.typical_p != 1.0:
                 warnings.warn(
                     greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
@@ -602,6 +637,12 @@ class GenerationConfig(PushToHubMixin):
                     f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
                     f"({self.num_beams})."
                 )
+
+        # check watermarking arguments
+        if self.watermarking_config is not None:
+            if not isinstance(self.watermarking_config, WatermarkingConfig):
+                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+            self.watermarking_config.validate()
 
         # 5. check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
@@ -1011,7 +1052,16 @@ class GenerationConfig(PushToHubMixin):
             else:
                 return obj
 
+        def convert_dataclass_to_dict(obj):
+            if isinstance(obj, dict):
+                return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
+            elif is_dataclass(obj):
+                return obj.to_dict()
+            else:
+                return obj
+
         config_dict = convert_keys_to_string(config_dict)
+        config_dict = convert_dataclass_to_dict(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
@@ -1083,3 +1133,142 @@ class GenerationConfig(PushToHubMixin):
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+@dataclass
+class WatermarkingConfig:
+    """
+    Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
+    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+
+    Accepts the following keys:
+        - greenlist_ratio (`float`):
+            Used for watermarking. The ratio of "green" tokens used to the vocabulary size. Defaults to 0.25.
+        - bias (`float`):
+            Used with watermarking. The bias added to the selected "green" tokens' logits. Defaults to 2.0.
+        - hashing_key (`int`):
+            Hashing key used for watermarking. Defaults to 15485863 (the millionth prime).
+        - seeding_scheme (`str`):
+            Algorithm to use for watermarking. Accepts values:
+                - "lefthash" (default): "green" tokens selection depend on the last token (Algorithm 2 from the paper)
+                - "selfhash": "green" tokens selection depends on the current token itself (Algorithm 3 from the paper)
+                    The downside of this scheme is that it considers all possible next tokens and can be slower than "lefthash".
+        - context_width(`int`):
+            The context length of previous tokens to use in seeding. Higher context length makes watermarking more robust.
+    """
+
+    def __init__(
+        self,
+        greenlist_ratio: Optional[float] = 0.25,
+        bias: Optional[float] = 2.0,
+        hashing_key: Optional[int] = 15485863,
+        seeding_scheme: Optional[str] = "lefthash",
+        context_width: Optional[int] = 1,
+    ):
+        self.greenlist_ratio = greenlist_ratio
+        self.bias = bias
+        self.hashing_key = hashing_key
+        self.seeding_scheme = seeding_scheme
+        self.context_width = context_width
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        """
+        Constructs a WatermarkingConfig instance from a dictionary of parameters.
+
+        Args:
+            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            **kwargs: Additional keyword arguments to override dictionary values.
+
+        Returns:
+            WatermarkingConfig: Instance of WatermarkingConfig constructed from the dictionary.
+        """
+        config = cls(**config_dict)
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+        return config
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (Union[str, os.PathLike]): Path to the JSON file in which this configuration instance's parameters will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+            writer.write(json_string)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        return output
+
+    def __iter__(self):
+        for attr, value in copy.deepcopy(self.__dict__).items():
+            yield attr, value
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def to_json_string(self):
+        """
+        Serializes this instance to a JSON formatted string.
+
+        Returns:
+            str: JSON formatted string representing the configuration instance.
+        """
+        return json.dumps(self.__dict__, indent=2) + "\n"
+
+    def update(self, **kwargs):
+        """
+        Update the configuration attributes with new values.
+
+        Args:
+            **kwargs: Keyword arguments representing configuration attributes and their new values.
+        """
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def validate(self):
+        watermark_missing_arg_msg = (
+            "Some of the keys in `watermarking_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+        if self.seeding_scheme not in ["selfhash", "lefthash"]:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="seeding_scheme",
+                    correct_value="[`selfhash`, `lefthash`]",
+                    found_value=self.seeding_scheme,
+                ),
+            )
+        if not 0.0 <= self.greenlist_ratio <= 1.0:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="greenlist_ratio",
+                    correct_value="in range between 0.0 and 1.0",
+                    found_value=self.seeding_scheme,
+                ),
+            )
+        if not self.context_width >= 1:
+            raise ValueError(
+                watermark_missing_arg_msg.format(
+                    key="context_width",
+                    correct_value="a positive integer",
+                    found_value=self.context_width,
+                ),
+            )

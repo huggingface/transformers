@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig", "DetrOnnxConfig"]}
+_import_structure = {"configuration_detr": ["DetrConfig", "DetrOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_detr"] = [
-        "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetrForObjectDetection",
         "DetrForSegmentation",
         "DetrModel",
@@ -44,7 +43,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig, DetrOnnxConfig
+    from .configuration_detr import DetrConfig, DetrOnnxConfig
 
     try:
         if not is_vision_available():
@@ -62,7 +61,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_detr import (
-            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,
             DetrForSegmentation,
             DetrModel,

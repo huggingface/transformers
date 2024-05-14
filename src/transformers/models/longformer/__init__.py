@@ -25,7 +25,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_longformer": [
-        "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
         "LongformerOnnxConfig",
     ],
@@ -47,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_longformer"] = [
-        "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LongformerForMaskedLM",
         "LongformerForMultipleChoice",
         "LongformerForQuestionAnswering",
@@ -65,7 +63,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_longformer"] = [
-        "TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFLongformerForMaskedLM",
         "TFLongformerForMultipleChoice",
         "TFLongformerForQuestionAnswering",
@@ -79,7 +76,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_longformer import (
-        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
         LongformerOnnxConfig,
     )
@@ -100,7 +96,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_longformer import (
-            LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
             LongformerForMultipleChoice,
             LongformerForQuestionAnswering,
@@ -118,7 +113,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_longformer import (
-            TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLongformerForMaskedLM,
             TFLongformerForMultipleChoice,
             TFLongformerForQuestionAnswering,

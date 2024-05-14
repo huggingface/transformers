@@ -117,6 +117,7 @@ from . import (
     informer,
     instructblip,
     jamba,
+    jetmoe,
     jukebox,
     kosmos2,
     layoutlm,

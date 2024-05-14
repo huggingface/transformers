@@ -55,9 +55,6 @@ _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 
-from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class Mask2FormerPixelDecoderOutput(ModelOutput):
     """
