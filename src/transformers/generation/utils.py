@@ -74,6 +74,7 @@ from .logits_process import (
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
+    WatermarkLogitsProcessor,
 )
 from .stopping_criteria import (
     EosTokenCriteria,
@@ -763,6 +764,7 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        device: str = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
@@ -879,6 +881,18 @@ class GenerationMixin:
                 FutureWarning,
             )
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids, _has_warned=True))
+        if generation_config.watermarking_config is not None:
+            processors.append(
+                WatermarkLogitsProcessor(
+                    vocab_size=self.config.vocab_size,
+                    device=device,
+                    greenlist_ratio=generation_config.watermarking_config.greenlist_ratio,
+                    bias=generation_config.watermarking_config.bias,
+                    hashing_key=generation_config.watermarking_config.hashing_key,
+                    seeding_scheme=generation_config.watermarking_config.seeding_scheme,
+                    context_width=generation_config.watermarking_config.context_width,
+                )
+            )
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1632,6 +1646,7 @@ class GenerationMixin:
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            device=inputs_tensor.device,
             model_kwargs=model_kwargs,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,

@@ -117,7 +117,12 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": ["GenerationConfig", "TextIteratorStreamer", "TextStreamer"],
+    "generation": [
+        "GenerationConfig",
+        "TextIteratorStreamer",
+        "TextStreamer",
+        "WatermarkingConfig",
+    ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
     "image_transforms": [],
@@ -1232,6 +1237,8 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WatermarkDetector",
+            "WatermarkLogitsProcessor",
             "WhisperTimeStampLogitsProcessor",
         ]
     )
@@ -4617,7 +4624,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer
+    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -5797,6 +5804,8 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkDetector,
+            WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
         from .modeling_utils import PreTrainedModel
