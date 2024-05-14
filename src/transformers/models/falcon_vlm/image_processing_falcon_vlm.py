@@ -573,7 +573,7 @@ class FalconImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         new_images = []
-
+        image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
             # we intentially use the same data format as the input data format
@@ -606,6 +606,6 @@ class FalconImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             new_images.append(pixel_values)
 
-        data = {"pixel_values": new_images}
+        data = {"pixel_values": new_images, "image_sizes": image_sizes}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
