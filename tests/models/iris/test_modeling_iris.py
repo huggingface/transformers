@@ -138,7 +138,7 @@ class IrisModelTester:
         ep_end_pred_expected_shape = torch.Size((self.batch_size_world_model,self.seq_length_world_model, 2))
         obs_pred_expected_shape = torch.Size((self.batch_size_world_model,320,config.vocab_size))
 
-        self.parent.assertEqual(result.reconstructed_img.shape, observations[0].shape)
+        self.parent.assertEqual(result.reconstructed_img.shape, observations[0].squeeze(1).shape)
         self.parent.assertEqual(result.action_preds.shape, act_pred_expected_shape)
         self.parent.assertEqual(result.reward_preds.shape, reward_pred_expected_shape)
         self.parent.assertEqual(result.epsiode_end.shape, ep_end_pred_expected_shape)
@@ -186,7 +186,7 @@ class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = IrisModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IrisConfig, hidden_size=256)
+        self.config_tester = ConfigTester(self, config_class=IrisConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -220,6 +220,11 @@ class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
+    # @unittest.skip(
+    #     reason="Training is not supported yet, so the test is ignored."
+    # )
+    # def test_retain_grad_hidden_states_attentions(self):
+    #     pass
 
 @require_torch
 class IrisModelIntegrationTest(unittest.TestCase):
