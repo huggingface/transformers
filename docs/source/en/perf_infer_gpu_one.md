@@ -201,6 +201,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
