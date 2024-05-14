@@ -474,6 +474,12 @@ class WhisperGenerationMixin:
                 "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
                 FutureWarning,
             )
+
+        if "num_frames" in input_features.keys():
+            kwargs["num_frames"] = input_features.pop("num_frames")
+        if "input_features" in input_features.keys():
+            input_features = input_features.input_features
+
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 

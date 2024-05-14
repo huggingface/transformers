@@ -302,6 +302,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
         else:
             padded_inputs["input_features"] = input_features
 
@@ -311,5 +312,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+
+        return_num_frames = True
+
+        if return_num_frames:
+            padded_inputs["num_frames"] = [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
 
         return padded_inputs
