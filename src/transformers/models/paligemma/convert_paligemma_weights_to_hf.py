@@ -220,78 +220,6 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     return dict(items)
 
 
-def verify_logits(model, processor):
-    """
-    This verification is only valid for the variant "2b-test". There is currently no other verification available.
-    """
-
-    cow_on_beach_path = "/home/pablo/cow_beach_1.png"
-    list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-
-    # Test image captioning generation without padding
-    image_captioning_inputs_unpad = processor(
-        text="", images=list_images[0], max_length=16, padding="longest", return_tensors="pt"
-    ).to(device)
-    captioning_generation = model.generate(**image_captioning_inputs_unpad, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(rf"Image captioning without padding should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works without padding.")
-
-        # Test image captioning generation with padding
-    image_captioning_inputs = processor(
-        text="", images=list_images[0], max_length=16, padding="max_length", return_tensors="pt"
-    ).to(device)
-    captioning_generation = model.generate(**image_captioning_inputs, max_new_tokens=10)
-    captioning_output = processor.batch_decode(captioning_generation, skip_special_tokens=True)
-    if captioning_output[0] != "\ncow standing on the beach":
-        raise ValueError(rf"Image captioning with should match, got {captioning_output[0]}.")
-    else:
-        print("Image captioning works with padding.")
-
-    prompt = ["answer en Where is the cow standing?", ""]
-
-    model_inputs = processor(
-        text=prompt, images=list_images, max_length=16, padding="longest", return_tensors="pt"
-    ).to(device)
-    with torch.inference_mode():
-        raw_generation = model.generate(**model_inputs, max_new_tokens=10)
-        generated_output = processor.batch_decode(raw_generation, skip_special_tokens=True)
-
-        if generated_output[0] != "answer en Where is the cow standing?\nbeach":
-            raise ValueError("Generation does not match.")
-        elif generated_output[1] != "\ncow standing on the beach":
-            raise ValueError("Image captioning does not match.")
-        else:
-            print("Generation matches. You're almost done!")
-
-    print("Verifying that batched generation and single generation works.")
-    big_batch_inputs = [
-        "answer en What is that, isn't int a very strange happenstance? Most confusinglicious?",
-        "",
-        "answer en Where is the cow standing?",
-    ]
-
-    list_images = [Image.open(cow_on_beach_path), Image.open(cow_on_beach_path), Image.open(cow_on_beach_path)]
-    batch_model_inputs = processor(
-        text=big_batch_inputs, images=list_images, padding="longest", return_tensors="pt"
-    ).to(device)
-    single_inputs = [
-        processor(text=t, images=i, padding="do_not_pad", return_tensors="pt").to(device)
-        for t, i in zip(big_batch_inputs, list_images)
-    ]
-    with torch.inference_mode():
-        batched_generation = model.generate(**batch_model_inputs, max_new_tokens=25)
-        batched_output = processor.batch_decode(batched_generation, skip_special_tokens=True)
-        single_generations = [model.generate(**single_input, max_new_tokens=25) for single_input in single_inputs]
-        single_outputs = [processor.batch_decode(gen, skip_special_tokens=True) for gen in single_generations]
-        for single, batched in zip(single_outputs, batched_output):
-            if single[0] != batched:
-                raise ValueError(f"Single-batch generation does not match batched. {single} != {batched}")
-    print("All checks completed. Conversion is proper.")
-
-
 @torch.no_grad()
 def convert_paligemma_checkpoint(
     checkpoint_path,
@@ -299,7 +227,6 @@ def convert_paligemma_checkpoint(
     pytorch_dump_folder_path,
     variant: str,
     precision: str,
-    do_verify_logits=True,
     do_convert_weights=False,
 ):
     """
@@ -377,23 +304,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_path",
-        default="./hf_test_ckpt.bv.params.npz",
+        required=True,
         type=str,
         help="Path to the .npz checkpoint",
     )
 
     parser.add_argument(
         "--tokenizer_model_file",
-        default="./paligemma_tokenizer.model",
+        required=True,
         type=str,
-        help="Path to the sentencepiece model file",
+        help="Path to the sentencepiece tokenizer.model file",
     )
 
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="./converted_224_model",
+        required=True
         type=str,
-        help="Path to the output PyTorch model directory.",
+        help="Path to the output directory where model and processor will be saved.",
     )
 
     parser.add_argument(
@@ -411,11 +338,6 @@ if __name__ == "__main__":
         help="String identifier of the paligemma variant to convert.",
     )
 
-    parser.add_argument(
-        "--do_verify_logits",
-        action="store_true",
-        help="Whether or not to run checks against original implementation.",
-    )
     parser.add_argument(
         "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
     )
