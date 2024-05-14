@@ -1909,8 +1909,8 @@ class GenerationMixin:
         # Convert to legacy cache if needed
         if use_dynamic_cache_by_default and generation_config.return_legacy_cache:
             if isinstance(result, ModelOutput) and hasattr(result, "past_key_values"):
-                result.past_key_values = result.past_key_values.to_legacy_cache()
-
+                if isinstance(result.past_key_values, DynamicCache):
+                    result.past_key_values = result.past_key_values.to_legacy_cache()
         return result
 
     def _has_unfinished_sequences(self, this_peer_finished: bool, synced_gpus: bool, device: torch.device) -> bool:
