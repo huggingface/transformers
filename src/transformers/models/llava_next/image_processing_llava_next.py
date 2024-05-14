@@ -155,6 +155,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
+                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
     """
