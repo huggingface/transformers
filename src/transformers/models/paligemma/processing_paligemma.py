@@ -23,7 +23,7 @@ from typing import List, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import AddedToken, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 
 
@@ -94,6 +94,10 @@ class PaliGemmaProcessor(ProcessorMixin):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
         self.image_seq_length = image_processor.image_seq_length
+
+        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+        tokens_to_add = {"additional_special_tokens": [image_token]}
+        tokenizer.add_special_tokens(tokens_to_add)
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
         super().__init__(image_processor, tokenizer)
@@ -218,11 +222,10 @@ class PaliGemmaProcessor(ProcessorMixin):
                 max_length=max_length,
                 truncation=truncation,
             )
-            newline_token = self.tokenizer("\n", add_special_tokens=False, return_tensors=None)
-
-            concatenated_ids = [ids + newline_token["input_ids"] for ids in inputs["input_ids"]]
+            newline_token = self.tokenizer.convert_tokens_to_ids("\n")
+            concatenated_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
             concatenated_attention_masks = [
-                mask + newline_token["attention_mask"] for mask in inputs["attention_mask"]
+                mask + [1] for mask in inputs["attention_mask"]
             ]
 
             text_inputs = self.tokenizer.pad(
@@ -242,7 +245,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
-
+    
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->PaliGemma
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -250,6 +254,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->PaliGemma
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
@@ -257,6 +262,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
