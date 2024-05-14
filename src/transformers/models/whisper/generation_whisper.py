@@ -475,10 +475,12 @@ class WhisperGenerationMixin:
                 FutureWarning,
             )
 
-        if "num_frames" in input_features.keys():
-            kwargs["num_frames"] = input_features.pop("num_frames")
-        if "input_features" in input_features.keys():
-            input_features = input_features.input_features
+
+        if input_features is not None:  
+            if "num_frames" in input_features.keys():
+                kwargs["num_frames"] = input_features.pop("num_frames")
+            if "input_features" in input_features.keys():
+                input_features = input_features.input_features
 
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
