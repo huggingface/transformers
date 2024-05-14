@@ -299,6 +299,8 @@ class GenerationConfig(PushToHubMixin):
 
         cache_implementation (`str`, *optional*, default to `None`):
             Cache class that should be used when generating.
+        return_legacy_cache (`bool`, *optional*, default to `True`):
+            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Wild card
 
@@ -382,6 +384,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
+        self.return_legacy_cache = kwargs.pop("cache_implementation", True)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)

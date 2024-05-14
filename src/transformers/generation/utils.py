@@ -1617,6 +1617,7 @@ class GenerationMixin:
             input_ids_length=input_ids_length,
         )
 
+        use_dynamic_cache_by_default = False
         if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
             raise ValueError(
                 "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
@@ -1642,9 +1643,11 @@ class GenerationMixin:
             past = model_kwargs.get("past_key_values", None)
             if past is None:
                 model_kwargs["past_key_values"] = DynamicCache()
+                use_dynamic_cache_by_default = True
             elif isinstance(past, tuple):
                 model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(past)
-                
+                use_dynamic_cache_by_default = True
+
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
@@ -1902,6 +1905,11 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
+
+        # Convert to legacy cache if needed
+        if use_dynamic_cache_by_default and generation_config.return_legacy_cache:
+            if isinstance(result, ModelOutput) and hasattr(result, 'past_key_values'):
+                result.past_key_values = result.past_key_values.to_legacy_cache()
 
         return result
 
