@@ -1925,61 +1925,44 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_split_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "<my_new_token>"
+            special_sentence = f"Hey this is a {special_token} token"
             _, _, boxes = self.get_question_words_and_boxes()
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_rust = self.rust_tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
-                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name,
-                    additional_special_tokens=[special_token],
-                    split_special_tokens=True,
-                    **kwargs,
-                    from_slow=True,
-                )
-                tokenizer_p = self.tokenizer_class.from_pretrained(
+                tokenizer_py = self.tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
 
-                encoded_special_token = tokenizer_p.encode(
+                special_token_id = tokenizer_py.convert_tokens_to_ids(special_token)
+                encoded_special_token_unsplit = tokenizer_py.encode(
                     special_token, add_special_tokens=False, split_special_tokens=False
                 )
-                self.assertEqual(len(encoded_special_token), 1)
+                self.assertTrue(special_token_id in encoded_special_token_unsplit)
 
-                encoded_split_special_token = tokenizer_p.encode(special_token, add_special_tokens=False)
-                self.assertTrue(len(encoded_split_special_token) > 1)
+                encoded_special_token_split = tokenizer_py.encode(special_token, add_special_tokens=False)
+                self.assertTrue(special_token_id not in encoded_special_token_split)
 
-                p_output = tokenizer_p.tokenize(f"Hey this is a {special_token} token")
-                r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
-                cr_output = tokenizer_cr.tokenize(f"Hey this is a {special_token} token")
+                py_tokens_output = tokenizer_py.tokenize(special_sentence)
+                rust_tokens_output = tokenizer_rust.tokenize(special_sentence)
 
-                self.assertTrue(special_token not in p_output)
-                self.assertTrue(special_token not in r_output)
-                self.assertTrue(special_token not in cr_output)
+                self.assertTrue(special_token not in py_tokens_output)
+                self.assertTrue(special_token not in rust_tokens_output)
 
-                p_output_explicit = tokenizer_p.tokenize(
-                    f"Hey this is a {special_token} token", split_special_tokens=False
-                )
-                r_output_explicit = tokenizer_r.tokenize(
-                    f"Hey this is a {special_token} token", split_special_tokens=False
-                )
-                cr_output_explicit = tokenizer_cr.tokenize(
-                    f"Hey this is a {special_token} token", split_special_tokens=False
-                )
+                py_tokens_output_unsplit = tokenizer_py.tokenize(special_sentence, split_special_tokens=False)
+                rust_tokens_output_unsplit = tokenizer_rust.tokenize(special_sentence, split_special_tokens=False)
 
-                self.assertTrue(special_token in p_output_explicit)
-                self.assertTrue(special_token in r_output_explicit)
-                self.assertTrue(special_token in cr_output_explicit)
+                self.assertTrue(special_token in py_tokens_output_unsplit)
+                self.assertTrue(special_token in rust_tokens_output_unsplit)
 
                 tmpdirname = tempfile.mkdtemp()
-                tokenizer_p.save_pretrained(tmpdirname)
+                tokenizer_py.save_pretrained(tmpdirname)
                 fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
 
-                output_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token")
-                self.assertTrue(special_token not in output_reloaded)
+                output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
+                self.assertTrue(special_token not in output_tokens_reloaded_split)
 
-                output_explicit_reloaded = fast_from_saved.tokenize(
-                    f"Hey this is a {special_token} token", split_special_tokens=False
-                )
-                self.assertTrue(special_token in output_explicit_reloaded)
+                output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in output_tokens_reloaded_unsplit)

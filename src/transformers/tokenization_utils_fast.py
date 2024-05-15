@@ -163,6 +163,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
+        # Set the splitting mode for special tokens for the tokenizer to be used throughout the class.
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
         # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
@@ -519,7 +520,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
             is_pretokenized=is_split_into_words,
-            #     split_special_tokens=split_special_tokens
         )
 
         # Convert encoding to dict
