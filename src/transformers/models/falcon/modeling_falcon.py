@@ -773,9 +773,13 @@ class FalconDecoderLayer(nn.Module):
         if not config.parallel_attn:
             self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 <<<<<<< HEAD
+<<<<<<< HEAD
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 =======
 >>>>>>> 22672aca8 (remove unrelated changes)
+=======
+            self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+>>>>>>> 77b42bb66 (fix: backwards compatibility for falcon 1B architecture.)
         else:
             if config.num_ln_in_parallel_attn == 2:
                 # The layer norm before self-attention
