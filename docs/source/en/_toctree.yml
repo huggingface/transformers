@@ -137,6 +137,8 @@
     title: Troubleshoot
   - local: hf_quantizer
     title: Contribute new quantization method
+  - local: gguf
+    title: Interoperability with GGUF files
   title: Developer guides
 - sections:
   - local: performance
@@ -386,6 +388,8 @@
         title: I-BERT
       - local: model_doc/jamba
         title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led
@@ -782,6 +786,8 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paligemma
+        title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct
@@ -802,6 +808,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llava
+        title: VideoLlava
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

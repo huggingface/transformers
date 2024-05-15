@@ -45,6 +45,9 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
+# For GGUF tests
+RUN python3 -m pip install --no-cache-dir gguf
+
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
