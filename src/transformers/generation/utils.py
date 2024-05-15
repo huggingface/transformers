@@ -3574,6 +3574,13 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
+        # This is needed if return_dict_in_generate is True
+        if isinstance(model_kwargs.get("past_key_values", None), DynamicCache):
+            if len(model_kwargs["past_key_values"]) == 0:
+                start_from_empty_dynamic_cache = True
+        else:
+            start_from_empty_dynamic_cache = False
+
         this_peer_finished = False
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
@@ -3686,8 +3693,10 @@ class GenerationMixin:
                 if output_logits:
                     raw_logits += (next_token_logits,)
 
-                if "past_key_values" not in model_kwargs:
+                if "past_key_values" not in model_kwargs or start_from_empty_dynamic_cache:
                     added_len = new_cur_len
+                    # set it to false for other iterations
+                    start_from_empty_dynamic_cache = False
                 else:
                     added_len = n_matches + 1
 
