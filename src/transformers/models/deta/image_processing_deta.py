@@ -139,7 +139,6 @@ def get_resize_output_image_size(
     return get_size_with_aspect_ratio(image_size, size, max_size)
 
 
-
 # Copied from transformers.models.detr.image_processing_detr.get_image_size_for_max_height_width
 def get_image_size_for_max_height_width(
     input_image: np.ndarray,
@@ -541,7 +540,7 @@ class DetaImageProcessor(BaseImageProcessor):
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
         pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
             image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
     """
 
@@ -972,8 +971,8 @@ class DetaImageProcessor(BaseImageProcessor):
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
-                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
                 dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
@@ -991,7 +990,7 @@ class DetaImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
                 image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:

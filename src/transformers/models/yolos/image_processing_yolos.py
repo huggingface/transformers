@@ -739,7 +739,7 @@ class YolosImageProcessor(BaseImageProcessor):
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
         pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
             image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
     """
 
@@ -1121,7 +1121,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
             pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
                 image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
         pad_size = pad_size if pad_size is not None else self.pad_size
@@ -1230,8 +1230,8 @@ class YolosImageProcessor(BaseImageProcessor):
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
-                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
                 dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
@@ -1246,7 +1246,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
                 image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:

@@ -1322,8 +1322,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
-                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
                 dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.

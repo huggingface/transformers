@@ -839,7 +839,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
         pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any
             image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
     """
 
@@ -1332,8 +1332,8 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
-                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
                 dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
