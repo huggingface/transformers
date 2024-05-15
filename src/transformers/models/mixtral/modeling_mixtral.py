@@ -848,10 +848,11 @@ class MixtralSparseMoeBlock(nn.Module):
             current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
+            # the `top_x` tensor here. this will give `skipping cudagraphs due to index put with accumulate`
+            # in compile
             # final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
 
-            # still suffers from `skipping cudagrahs due to ['incompatible ops']`
+            # still suffers from `skipping cudagraphs due to ['incompatible ops']`
             final_hidden_states[top_x] += current_hidden_states.to(hidden_states.dtype)
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
