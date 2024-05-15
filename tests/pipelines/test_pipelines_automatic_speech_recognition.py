@@ -1178,13 +1178,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         transcription_ass = pipe(sample)["text"]
         total_time_non_assist = time.time() - start_time
 
-        assert transcription_ass == transcription_non_ass
-        assert (
-            transcription_ass
-            == " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
+        self.assertEqual(transcription_ass, transcription_non_ass)
+        self.assertEqual(
+            transcription_ass,
+            " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."
         )
-
-        assert total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster"
+        self.assertTrue(total_time_non_assist > total_time_assist, "Make sure that assistant decoding is faster") 
 
     @slow
     def test_speculative_decoding_whisper_distil(self):
