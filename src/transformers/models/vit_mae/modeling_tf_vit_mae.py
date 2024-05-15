@@ -1054,36 +1054,37 @@ class TFViTMAEDecoder(keras.layers.Layer):
                 with tf.name_scope(layer.name):
                     layer.build(None)
 
-    def interpolate_pos_encoding(self, embeddings, height, width) -> tf.Tensor:
+    def interpolate_pos_encoding(self, embeddings) -> tf.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        This method is a modified version of the interpolation function for ViT-mae model at the deocder, that
+        allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
         resolution images.
 
         Source:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        batch_size, seq_len, dim = shape_list(embeddings)
-        num_patches = seq_len - 1
+        # [batch_size, num_patches + 1, hidden_size]
+        _, num_positions, dim = shape_list(self.decoder_pos_embed)
 
-        _, num_positions, _ = shape_list(self.decoder_pos_embed)
-        num_positions -= 1
+        # -1 removes the class dimension since we later append it without interpolation
+        seq_len = shape_list(embeddings)[1] - 1
+        num_positions = num_positions - 1
 
-        if num_patches == num_positions and height == width:
-            return self.decoder_pos_embed
-        class_pos_embed = self.decoder_pos_embed[:, :1]
-        patch_pos_embed = self.decoder_pos_embed[:, 1:]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
+        # Separation of class token and patch tokens
+        class_pos_embed = self.decoder_pos_embed[:, :1, :]
+        patch_pos_embed = self.decoder_pos_embed[:, 1:, :]
+
+        # interpolate the position embeddings
         patch_pos_embed = tf.image.resize(
-            images=tf.reshape(
-                patch_pos_embed, shape=(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-            ),
-            size=(h0, w0),
+            images=tf.reshape(patch_pos_embed, shape=(1, 1, -1, dim)),
+            size=(1, seq_len),
             method="bicubic",
         )
 
+        # [1, seq_len, hidden_size]
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, dim))
+        # Adding the class token back
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 
     def call(
@@ -1093,7 +1094,6 @@ class TFViTMAEDecoder(keras.layers.Layer):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        pixel_values=None,
         interpolate_pos_encoding=False,
     ):
         # embed tokens
@@ -1107,8 +1107,7 @@ class TFViTMAEDecoder(keras.layers.Layer):
         x_ = tf.gather(x_, axis=1, batch_dims=1, indices=ids_restore)  # unshuffle
         x = tf.concat([x[:, :1, :], x_], axis=1)  # append cls token
         if interpolate_pos_encoding:
-            _, _, height, width = shape_list(pixel_values)
-            decoder_pos_embed = self.interpolate_pos_encoding(x, height, width)
+            decoder_pos_embed = self.interpolate_pos_encoding(x)
         else:
             decoder_pos_embed = self.decoder_pos_embed
         # add pos embed
@@ -1338,9 +1337,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         mask = outputs.mask
 
         # [batch_size, num_patches, patch_size**2*3]
-        decoder_outputs = self.decoder(
-            latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding, pixel_values=pixel_values
-        )
+        decoder_outputs = self.decoder(latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding)
         logits = decoder_outputs.logits
 
         loss = self.forward_loss(pixel_values, logits, mask, interpolate_pos_encoding=interpolate_pos_encoding)

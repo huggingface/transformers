@@ -254,9 +254,8 @@ class ViTMAEEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
+        if int(h0) != patch_pos_embed.shape[-2] and int(w0) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
-
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
@@ -295,7 +294,6 @@ class ViTMAEEmbeddings(nn.Module):
     def forward(self, pixel_values, noise=None, interpolate_pos_encoding=False):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
         if interpolate_pos_encoding:
             position_embeddings = self.interpolate_pos_encoding(embeddings, height, width)
         else:
@@ -788,38 +786,45 @@ class ViTMAEDecoder(nn.Module):
         self.config = config
         self.initialize_weights(num_patches)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        This method is a modified version of the interpolation function for ViT-mae model at the deocder, that
+        allows to interpolate the pre-trained decoder position encodings, to be able to use the model on higher
         resolution images.
 
         Source:
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
-        num_patches = embeddings.shape[1] - 1
+
+        # -1 removes the class dimension since we later append it without interpolation
+        embeddings_positions = embeddings.shape[1] - 1
         num_positions = self.decoder_pos_embed.shape[1] - 1
-        if num_patches == num_positions and height == width:
-            return self.decoder_pos_embed
+
+        # Separation of class token and patch tokens
         class_pos_embed = self.decoder_pos_embed[:, 0, :]
         patch_pos_embed = self.decoder_pos_embed[:, 1:, :]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        # To retain the final 3d tensor with the required dimensions
+        dim = self.decoder_pos_embed.shape[-1]
+
+        # Increasing a dimension to enable bicubic interpolation
+        patch_pos_embed = patch_pos_embed.reshape(1, 1, -1, dim)
+
+        # permute to bring the dimension to be interpolated, to the last
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # Interpolating the decoder position embeddings shape wrt embeddings shape i.e (x).
+        # 1 keeps the other dimension constant
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            scale_factor=(1, embeddings_positions / num_positions),
             mode="bicubic",
             align_corners=False,
         )
-        if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
 
+        # Converting back to the original shape
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        # Adding the class token back
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def initialize_weights(self, num_patches):
@@ -852,10 +857,9 @@ class ViTMAEDecoder(nn.Module):
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
         # add pos embed
         if interpolate_pos_encoding:
-            decoder_pos_embed = self.interpolate_pos_encoding(x, pixel_values.shape[-2], pixel_values.shape[-1])
+            decoder_pos_embed = self.interpolate_pos_encoding(x)
         else:
             decoder_pos_embed = self.decoder_pos_embed
-
         hidden_states = x + decoder_pos_embed
 
         # apply Transformer layers (blocks)
