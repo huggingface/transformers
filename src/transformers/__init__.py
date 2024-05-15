@@ -582,6 +582,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.paligemma": ["PaliGemmaConfig"],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -732,6 +733,7 @@ _import_structure = {
         "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
+    "models.video_llava": ["VideoLlavaConfig"],
     "models.videomae": ["VideoMAEConfig"],
     "models.vilt": [
         "ViltConfig",
@@ -2651,6 +2653,13 @@ else:
             "OwlViTVisionModel",
         ]
     )
+    _import_structure["models.paligemma"].extend(
+        [
+            "PaliGemmaForConditionalGeneration",
+            "PaliGemmaPreTrainedModel",
+            "PaliGemmaProcessor",
+        ]
+    )
     _import_structure["models.patchtsmixer"].extend(
         [
             "PatchTSMixerForPrediction",
@@ -3229,6 +3238,14 @@ else:
         [
             "UperNetForSemanticSegmentation",
             "UperNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.video_llava"].extend(
+        [
+            "VideoLlavaForConditionalGeneration",
+            "VideoLlavaImageProcessor",
+            "VideoLlavaPreTrainedModel",
+            "VideoLlavaProcessor",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -5126,6 +5143,9 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.paligemma import (
+        PaliGemmaConfig,
+    )
     from .models.patchtsmixer import (
         PatchTSMixerConfig,
     )
@@ -5298,6 +5318,7 @@ if TYPE_CHECKING:
         UnivNetFeatureExtractor,
     )
     from .models.upernet import UperNetConfig
+    from .models.video_llava import VideoLlavaConfig
     from .models.videomae import VideoMAEConfig
     from .models.vilt import (
         ViltConfig,
@@ -6956,6 +6977,11 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
+        from .models.paligemma import (
+            PaliGemmaForConditionalGeneration,
+            PaliGemmaPreTrainedModel,
+            PaliGemmaProcessor,
+        )
         from .models.patchtsmixer import (
             PatchTSMixerForPrediction,
             PatchTSMixerForPretraining,
@@ -7408,6 +7434,12 @@ if TYPE_CHECKING:
         from .models.upernet import (
             UperNetForSemanticSegmentation,
             UperNetPreTrainedModel,
+        )
+        from .models.video_llava import (
+            VideoLlavaForConditionalGeneration,
+            VideoLlavaImageProcessor,
+            VideoLlavaPreTrainedModel,
+            VideoLlavaProcessor,
         )
         from .models.videomae import (
             VideoMAEForPreTraining,
