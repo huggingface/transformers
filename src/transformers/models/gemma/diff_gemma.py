@@ -40,6 +40,7 @@ from transformers.models.llama.modeling_llama import repeat_kv, apply_rotary_pos
 
 logger = logging.get_logger(__name__)
 
+GemmaConverter = ModelConverter(__file__)
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -218,7 +219,6 @@ class GemmaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-GemmaConverter = ModelConverter(__file__)
 GemmaFlashAttention2 = GemmaConverter.register("GemmaFlashAttention2", LlamaFlashAttention2)
 GemmaSdpaAttention = GemmaConverter.register("GemmaSdpaAttention", LlamaSdpaAttention)
 
@@ -229,8 +229,6 @@ GemmaConverter.register("GemmaPreTrainedModel", LlamaPreTrainedModel)
 
 class GemmaModel(LlamaModel):
     
-    @add_start_docstrings_to_model_forward("")
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="""_CONFIG_FOR_DOC""")
     def forward(
         self,
         input_ids: torch.LongTensor = None,

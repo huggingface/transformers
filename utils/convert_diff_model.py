@@ -42,6 +42,8 @@ def replace_super_calls_in_method(method_body, parent_method_body, method_name):
 
     return method_body
 # 2. Write all the classes. Use the `CohereConverter` class for this.
+
+
 def create_single_model_file(converter):
     if hasattr(converter, "diff_file"):
         model_identifier = converter.diff_file.split("diff_")
