@@ -385,7 +385,7 @@ def dequantize_and_replace(
     has_been_replaced=False,
 ):
     """
-    Converts a quantized model into its unquantized original version. The newly converted model will have
+    Converts a quantized model into its dequantized original version. The newly converted model will have
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
