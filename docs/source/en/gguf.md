@@ -66,7 +66,7 @@ For now the supported model architectures are the architectures that have been v
 
 ## Example usage
 
-In order to load `gguf` files in `transformers`, you should specify the `from_gguf` argument to the `from_pretrained`
+In order to load `gguf` files in `transformers`, you should specify the `gguf_file` argument to the `from_pretrained`
 methods of both tokenizers and models. Here is how one would load a tokenizer and a model, which can be loaded
 from the exact same file:
 
@@ -76,8 +76,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
 filename = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id, from_gguf=filename)
-model = AutoModelForCausalLM.from_pretrained(model_id, from_gguf=filename)
+tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
+model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 ```
 
 Now you have access to the full, unquantized version of the model in the PyTorch ecosystem, where you can combine it
