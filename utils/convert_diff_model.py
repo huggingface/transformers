@@ -12,7 +12,18 @@ import inspect
 # only updating the attention classes. 
 # Need to keep the order correct
 # TODO the imports here are not correctly done. We should dynamically import what we need
-
+APACHE_LICENCE = """# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
 # 1. all the imports from the original file should be copied until end of header? __HEADER__
 # with open(CohereConverter.original_file, 'r') as file, open("result.py", "w+") as modeling:
 #         pass
@@ -35,13 +46,14 @@ def create_single_model_file(converter):
     model_identifier = converter.diff_file.split("diff_")
     # temporarily add the source to the path in order to load everything?
     # 1. Import all modules from the registered classes
-    modules = set([ _class.__module__ for _class in converter.registered_classes.values()])
+    modules = set([ _class.__module__ for _class in converter.registered_classes.values()]) or set()
     for module in modules | {re.sub(r'.*src/(.*)\.py', r'\1', converter.diff_file).replace('/', '.')}:
         modeling_ = importlib.import_module(module)
         globals().update({k: getattr(modeling_, k) for k in modeling_.__dict__.keys()})
 
 
     with open(converter.diff_file, 'r') as file, open(f"{model_identifier[0]}modeling_{model_identifier[1]}", "w+") as modeling:
+        modeling.write(APACHE_LICENCE)
         function_set = {}
         for line in file:
                 if "Converter.register" in line: # TODO use map() to map lines to this
