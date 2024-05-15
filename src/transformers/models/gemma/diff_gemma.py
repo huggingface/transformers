@@ -27,8 +27,8 @@ GemmaConverter.register("GemmaRotaryEmbedding", LlamaRotaryEmbedding)
 GemmaConverter.register("GemmaMLP", LlamaMLP) 
 
 GemmaAttention = GemmaConverter.register("GemmaAttention", LlamaAttention) 
-GemmaSdpaAttention = GemmaConverter.register("GemmaSdpaAttention", LlamaAttention) 
-GemmaFlashAttention2 = GemmaConverter.register("GemmaFlashAttention2", LlamaAttention) 
+GemmaSdpaAttention = GemmaConverter.register("GemmaSdpaAttention", LlamaSdpaAttention)
+GemmaFlashAttention2 = GemmaConverter.register("GemmaFlashAttention2", LlamaFlashAttention2)
 
 COHERE_ATTENTION_CLASSES = {"eager": GemmaAttention, "flash_attention_2": GemmaFlashAttention2, "sdpa": GemmaSdpaAttention}
 

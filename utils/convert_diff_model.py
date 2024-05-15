@@ -89,6 +89,7 @@ def create_single_model_file(converter):
 
                         parent_identifier_camel = re.findall(r'[A-Z][a-z0-9]*', parent_class)[0]
                         child_identifier_camel = re.findall(r'[A-Z][a-z0-9]*', class_name)[0]
+                        print(f"`{class_name}` -> `{parent_class}`")
 
                         child_function_set = parent_function_set.copy()
                         class_def = inspect.getsource(eval(class_name))
@@ -98,8 +99,8 @@ def create_single_model_file(converter):
                             full_function = match.group()
                             if "def" in full_function:
                                 function_name = full_function.split("def")[1].split("(")[0]
+
                                 if (f"super()." in full_function or f"return super()." in full_function) and parent_identifier_camel != child_identifier_camel:
-                                    print(f"`{parent_identifier_camel}` `{child_identifier_camel}`")
                                     replaced_function = replace_super_calls_in_method(full_function,
                                                                                       parent_function_set.get(function_name,
                                                                                                               ""),
