@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AddedToken, AutoModelForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_gguf, require_torch_gpu, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -179,7 +179,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
         dataset = load_dataset("xnli", "all_languages")
 
-        for i, item in enumerate(tqdm.tqdm(dataset["train"])):
+        for i, item in enumerate(tqdm.tqdm(dataset["train"].select(range(100)))):
             for string in item["premise"].values():
                 encoded1 = gguf_tokenizer.encode(string)
                 encoded2 = original_tokenizer.encode(string)
@@ -191,6 +191,25 @@ class GgufIntegrationTests(unittest.TestCase):
 
                 self.assertEqual(decoded1, decoded2)
 
-            # Otherwise the test takes too long
-            if i > 100:
-                break
+        # With special tokens
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id)
+        original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
+
+        gguf_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<token>", rstrip=False, lstrip=False)]}
+        )
+        original_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<token>", rstrip=False, lstrip=False)]}
+        )
+
+        text = "Hello <token>. <token> Hello"
+
+        encoded1 = gguf_tokenizer.encode(text)
+        encoded2 = original_tokenizer.encode(text)
+
+        self.assertEqual(encoded1, encoded2)
+
+        decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+        decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+        self.assertEqual(decoded1, decoded2)

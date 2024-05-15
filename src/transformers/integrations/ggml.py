@@ -513,6 +513,9 @@ class GGUFTokenizerSkeleton:
         else:
             self.merges = [tuple(merge.split(" ")) for merge in self.merges]
 
+        if not hasattr(self, "added_tokens"):
+            self.added_tokens = []
+
 
 class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
@@ -539,6 +542,12 @@ class GGUFLlamaConverter(LlamaConverter):
                 AddedToken("</s>", normalized=False, special=True),
             ]
         )
+
+        if len(self.proto.added_tokens) != 0:
+            tokenizer.add_special_tokens(
+                [AddedToken(added_token, normalized=False, special=False) for added_token in self.added_tokens]
+            )
+
         return tokenizer
 
     def decoder(self, replacement, add_prefix_space):
