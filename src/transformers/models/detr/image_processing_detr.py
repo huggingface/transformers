@@ -821,9 +821,11 @@ class DetrImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
             method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `max_height` and `max_width` are provided in the `size` parameter, the image will be padded to the
-            `max_height` and `max_width` dimensions. Otherwise, the image will be padded to the maximum height and width
-            of the batch.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+            image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -841,6 +843,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -874,6 +877,7 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self.pad_size = pad_size
         self._valid_processor_keys = [
             "images",
             "annotations",
@@ -889,6 +893,7 @@ class DetrImageProcessor(BaseImageProcessor):
             "image_mean",
             "image_std",
             "do_pad",
+            "pad_size",
             "format",
             "return_tensors",
             "data_format",
@@ -1158,7 +1163,7 @@ class DetrImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
-        padded_size: Optional[Tuple[int, int]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1188,11 +1193,14 @@ class DetrImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
-            padded_size (`List[int, int]`, *optional*):
-                The size to pad the images to. If not provided, the images will be padded to the largest height and
-                width in the batch.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
-        if padded_size is None:
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
             padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         annotation_list = annotations if annotations is not None else [None] * len(images)
@@ -1249,6 +1257,7 @@ class DetrImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1294,8 +1303,9 @@ class DetrImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
-                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
@@ -1311,6 +1321,9 @@ class DetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -1340,6 +1353,7 @@ class DetrImageProcessor(BaseImageProcessor):
             self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
         )
         do_pad = self.do_pad if do_pad is None else do_pad
+        pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
 
         images = make_list_of_images(images)
@@ -1456,10 +1470,6 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-            if "max_height" in size and "max_width" in size:
-                padded_size = (size["max_height"], size["max_width"])
-            else:
-                padded_size = None
             encoded_inputs = self.pad(
                 images,
                 annotations=annotations,
@@ -1468,7 +1478,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,
                 return_tensors=return_tensors,
-                padded_size=padded_size,
+                pad_size=pad_size,
             )
         else:
             images = [

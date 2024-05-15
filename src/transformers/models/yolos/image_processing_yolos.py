@@ -133,6 +133,42 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     return (height, width)
 
 
+# Copied from transformers.models.detr.image_processing_detr.get_image_size_for_max_height_width
+def get_image_size_for_max_height_width(
+    input_image: np.ndarray,
+    max_height: int,
+    max_width: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        input_image (`np.ndarray`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+    """
+    image_size = get_image_size(input_image, input_data_format)
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
+
+
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -699,8 +735,12 @@ class YolosImageProcessor(BaseImageProcessor):
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True` will pad the images in the batch to the largest height and width in the batch.
-            Padding will be applied to the bottom and right of the image with zeros.
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+            image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -718,6 +758,7 @@ class YolosImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -751,6 +792,7 @@ class YolosImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self.pad_size = pad_size
         self._valid_processor_keys = [
             "images",
             "annotations",
@@ -766,6 +808,7 @@ class YolosImageProcessor(BaseImageProcessor):
             "image_std",
             "do_convert_annotations",
             "do_pad",
+            "pad_size",
             "format",
             "return_tensors",
             "data_format",
@@ -883,18 +926,27 @@ class YolosImageProcessor(BaseImageProcessor):
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(
+            new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
             )
+        elif "max_height" in size and "max_width" in size:
+            new_size = get_image_size_for_max_height_width(
+                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+            )
         elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+            new_size = (size["height"], size["width"])
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
         image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            size=new_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
         return image
 
@@ -1037,6 +1089,7 @@ class YolosImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1067,8 +1120,15 @@ class YolosImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         annotation_list = annotations if annotations is not None else [None] * len(images)
         padded_images = []
@@ -1076,7 +1136,7 @@ class YolosImageProcessor(BaseImageProcessor):
         for image, annotation in zip(images, annotation_list):
             padded_image, padded_annotation = self._pad_image(
                 image,
-                pad_size,
+                padded_size,
                 annotation,
                 constant_values=constant_values,
                 data_format=data_format,
@@ -1090,7 +1150,7 @@ class YolosImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -1124,6 +1184,7 @@ class YolosImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1169,8 +1230,9 @@ class YolosImageProcessor(BaseImageProcessor):
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
-                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of 
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified 
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
@@ -1183,6 +1245,9 @@ class YolosImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any 
+                image in `images`. If not provided, the images will be padded to the largest height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -1212,6 +1277,7 @@ class YolosImageProcessor(BaseImageProcessor):
             self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
         )
         do_pad = self.do_pad if do_pad is None else do_pad
+        pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
@@ -1335,6 +1401,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
                 update_bboxes=do_convert_annotations,
                 return_tensors=return_tensors,
+                pad_size=pad_size,
             )
         else:
             images = [
