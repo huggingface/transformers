@@ -3518,9 +3518,6 @@ class FalconPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class FalconVlmForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 

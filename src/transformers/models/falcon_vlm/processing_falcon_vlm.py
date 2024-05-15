@@ -26,8 +26,9 @@ from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextI
 from ...utils import TensorType
 
 
-# Ignore copy
+# Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor with LlavaNext->FalconVL,llava_next->falcon_vlm
 class FalconVLProcessor(ProcessorMixin):
+    # Ignore copy
     r"""
     Constructs a FalconVlm processor which wraps a Falcon image processor and a Falcon tokenizer into a single processor.
 
@@ -48,8 +49,7 @@ class FalconVLProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
+    # Ignore copy
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
@@ -123,6 +123,7 @@ class FalconVLProcessor(ProcessorMixin):
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Falcon
     def batch_decode(self, *args, **kwargs):
+        # Ignore copy
         """
         This method forwards all its arguments to FalconTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
@@ -131,6 +132,7 @@ class FalconVLProcessor(ProcessorMixin):
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Falcon
     def decode(self, *args, **kwargs):
+        # Ignore copy
         """
         This method forwards all its arguments to FalconTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
