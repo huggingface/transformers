@@ -4186,7 +4186,6 @@ class TokenizerTesterMixin:
                 )
 
                 p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
-
                 encoded_special_token = tokenizer_p.encode(
                     special_token, add_special_tokens=False, split_special_tokens=False
                 )
