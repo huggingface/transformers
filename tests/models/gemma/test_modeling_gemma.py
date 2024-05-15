@@ -41,7 +41,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaTokenizer, GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel
+    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel, GemmaTokenizer
 
 
 class GemmaModelTester:
@@ -831,9 +831,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         prompts = ["Hello I am doing", "Hi today"]
         tokenizer = GemmaTokenizer.from_pretrained("google/gemma-2b", pad_token="</s>", padding_side="right")
-        model = GemmaForCausalLM.from_pretrained(
-            "google/gemma-2b", device_map="sequential", torch_dtype=torch.float16
-        )
+        model = GemmaForCausalLM.from_pretrained("google/gemma-2b", device_map="sequential", torch_dtype=torch.float16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
