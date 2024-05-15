@@ -303,6 +303,9 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.6]
 
+    # used in `test_torch_compile`
+    _torch_compile_test_ckpt = "google/gemma-2b"
+
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
@@ -312,9 +315,6 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = GemmaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GemmaConfig, hidden_size=37)
-
-    def _torch_compile_test_ckpt(self):
-        return "google/gemma-2b"
 
     def test_config(self):
         self.config_tester.run_common_tests()
