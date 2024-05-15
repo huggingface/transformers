@@ -24,9 +24,10 @@ def create_single_model_file(converter):
     # temporarily add the source to the path in order to load everything?
     # 1. Import all modules from the registered classes
     modules = set([ _class.__module__ for _class in converter.registered_classes.values()])
-    for module in modules:
-        if module not in sys.path:
-            sys.path.append(module)
+    for module in modules | {re.sub(r'.*src/(.*)\.py', r'\1', converter.diff_file).replace('/', '.')}:
+        modeling_ = importlib.import_module(module)
+        globals().update({k: getattr(modeling_, k) for k in modeling_.__dict__.keys()})
+
 
     with open(converter.diff_file, 'r') as file, open(f"{model_identifier[0]}modeling_{model_identifier[1]}", "w+") as modeling:
         function_set = {}
@@ -46,14 +47,7 @@ def create_single_model_file(converter):
                 elif match:=re.match(r"class (\w+)\((\w+)\):", line):
                     class_name, parent_class = match.groups()
                     pattern = re.compile( r"(\ {4}(?:[\S\s\ \n]*?)(?=\n\ ^[\) ]|\n\n    (?:def|@)|\Z))", re.MULTILINE)
-
-                    module = eval(parent_class).__module__
-                    if module not in sys.path:
-                        sys.path.append(module)
-
                     parent_class_def = inspect.getsource(eval(parent_class))
-
-
                     modeling.write(parent_class_def.split('\n')[0].replace(parent_class,class_name)+"\n")
 
                     function_name_pattern = r"(?=    def ([\S]*)\()"
@@ -76,9 +70,10 @@ def create_single_model_file(converter):
                     for match in matches:
                         # TODO handle call to super!
                         full_function = match.group()
-                        function_name = full_function.split("def")[1].split("(")[0]
-                        full_function = re.sub(r"return super\(\).forward\(", parent_function_set.get(function_name,""), full_function)
-                        child_function_set[function_name] = full_function
+                        if "def" in full_function:
+                            child_function_set[full_function.split("def")[1].split("(")[0]] = re.sub(r"    return super\(\).forward\(", parent_function_set.get(function_name,""), full_function)
+                        else:
+                            child_function_set[full_function] = full_function
 
                     modeling.write("\n".join(child_function_set.values())) # TODO we wrote the code, next lines shall be ignored
                     modeling.write("\n")
