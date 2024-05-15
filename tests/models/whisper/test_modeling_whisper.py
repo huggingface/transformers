@@ -1921,7 +1921,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = np.concatenate(self._load_datasamples(4))
         input_features = processor(
-            input_speech, return_tensors="pt", sampling_rate=16_000, return_timestamps=True
+            input_speech, return_tensors="pt", sampling_rate=16_000, return_token_timestamps=True
         ).input_features
         input_features = input_features.to(torch_device)
 
@@ -2120,7 +2120,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
-        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000, return_timestamps=True)
+        input_features = processor(
+            input_speech, return_tensors="pt", sampling_rate=16_000, return_token_timestamps=True
+        )
         input_features.input_features = input_features.input_features.to(torch_device)
 
         generate_outputs = model.generate(

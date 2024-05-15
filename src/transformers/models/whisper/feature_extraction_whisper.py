@@ -238,6 +238,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
+            return_token_timestamps (`bool`, *optional*, defaults to None):
+                Whether or not to return the number of frames of the input raw_speech.
+                These num_frames can be used by the model to compute word level timestamps.
         """
 
         if sampling_rate is not None:
@@ -314,7 +317,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
-        if return_timestamps is not None:
-            padded_inputs["num_frames"] = [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
+        if return_token_timestamps is not None:
+            padded_inputs["num_frames"] = torch.tensor(
+                [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
+            )
 
         return padded_inputs

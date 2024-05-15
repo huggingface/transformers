@@ -208,7 +208,7 @@ class WhisperGenerationMixin:
             # two cases:
             # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
             # 2. num_frames is different, compute the DTW matrix for each sample sequentially
-
+            num_frames = num_frames.tolist()
             # we're using np.unique because num_frames can be int/list/tuple
             if len(np.unique(num_frames)) == 1:
                 # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
@@ -232,7 +232,7 @@ class WhisperGenerationMixin:
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray, torch.Tensor)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
