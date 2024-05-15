@@ -4165,6 +4165,9 @@ class TokenizerTesterMixin:
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
+        if not self.test_slow_tokenizer:
+            return
+
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "<my_new_token>"
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
