@@ -17,7 +17,19 @@ import inspect
 # with open(CohereConverter.original_file, 'r') as file, open("result.py", "w+") as modeling:
 #         pass
 # TODO also copy and import from all modules in CohereConverter.modules_to_import to be able to use inspect
-import sys
+def replace_super_calls_in_method(method_body, parent_method_body, method_name):
+    # Indent parent method body to match the child's method indentation
+    indent = re.match(r'(\s*)def ', method_body).group(1)
+    indented_parent_method_body = "\n".join([indent + line if line.strip() else line for line in parent_method_body.split('\n')])
+    method_name = method_name.strip()
+    # Handle super().method_name(args) and return super().method_name(args)
+    super_call_pattern = re.compile(r'(\s*)return super\(\)\.' + method_name + r'\((.*?)\)')
+    method_body = super_call_pattern.sub(r'\1return (\2\n' + indented_parent_method_body + r'\1)', method_body)
+
+    super_call_pattern_no_return = re.compile(r'(\s*)super\(\)\.' + method_name + r'\((.*?)\)')
+    method_body = super_call_pattern_no_return.sub(r'\1\2\n' + indented_parent_method_body, method_body)
+
+    return method_body
 # 2. Write all the classes. Use the `CohereConverter` class for this.
 def create_single_model_file(converter):
     model_identifier = converter.diff_file.split("diff_")
@@ -71,7 +83,15 @@ def create_single_model_file(converter):
                         # TODO handle call to super!
                         full_function = match.group()
                         if "def" in full_function:
-                            child_function_set[full_function.split("def")[1].split("(")[0]] = re.sub(r"    return super\(\).forward\(", parent_function_set.get(function_name,""), full_function)
+                            function_name = full_function.split("def")[1].split("(")[0]
+                            if f"super()." in full_function or f"return super()." in full_function:
+                                replaced_function = replace_super_calls_in_method(full_function,
+                                                                                  parent_function_set.get(function_name,
+                                                                                                          ""),
+                                                                                  function_name)
+                                child_function_set[function_name] = replaced_function
+                            else:
+                                child_function_set[function_name] = full_function
                         else:
                             child_function_set[full_function] = full_function
 
