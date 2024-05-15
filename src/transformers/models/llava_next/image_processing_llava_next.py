@@ -177,6 +177,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: Optional[bool] = True,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
