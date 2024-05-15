@@ -1104,8 +1104,7 @@ class GenerationMixin:
         if not assistant_model.config.is_encoder_decoder:
             attributes_to_check = [attr for attr in dir(self.config) if attr.startswith("encoder_")]
             are_equal = all(
-                getattr(self.config, attr) == getattr(assistant_model.config, attr)
-                for attr in attributes_to_check
+                getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
             )
             if not are_equal:
                 raise ValueError(
