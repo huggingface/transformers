@@ -199,10 +199,6 @@ class HfQuantizer(ABC):
         Potentially dequantize the model to retrive the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
-        if self.requires_calibration:
-            raise ValueError(
-                f"{self.quantization_config.quant_method} requires data calibration, it cannot be dequantized."
-            )
         model = self._dequantize(model)
 
         # Delete quantizer and quantization config
