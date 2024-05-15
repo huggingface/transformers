@@ -556,9 +556,7 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
@@ -569,12 +567,8 @@ class DetrAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -798,7 +792,6 @@ class ConditionalDetrEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         object_queries: torch.Tensor = None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         """
         Args:
@@ -812,9 +805,6 @@ class ConditionalDetrEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -903,7 +893,6 @@ class ConditionalDetrDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         is_first: Optional[bool] = False,
-        **kwargs,
     ):
         """
         Args:
@@ -926,9 +915,6 @@ class ConditionalDetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
         residual = hidden_states
 
         # ========== Begin of Self-Attention =============
@@ -1170,7 +1156,6 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1197,9 +1182,6 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1298,7 +1280,6 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1335,9 +1316,6 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
