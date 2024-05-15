@@ -443,12 +443,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     return_tensors="pt",
                 )
             else:
-                if stride is None: 
+                if self.type == "seq2seq_whisper" and stride is None:
                     processed = self.feature_extractor(
-                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt", return_num_frames=True, 
+                        inputs,
+                        sampling_rate=self.feature_extractor.sampling_rate,
+                        return_tensors="pt",
+                        return_timestamps=True,
                     )
-                    extra["num_frames"] = processed.pop('num_frames')
-                else: 
+                    extra["num_frames"] = processed.pop("num_frames")
+                else:
                     processed = self.feature_extractor(
                         inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
                     )
@@ -499,11 +502,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
 
                     else:
-                        # if isinstance(segment_size, int):
-                        #     generate_kwargs["num_frames"] = segment_size // self.feature_extractor.hop_length
-                        # else:
-                        #     generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
-                        generate_kwargs['num_frames'] = num_frames
+                        generate_kwargs["num_frames"] = num_frames
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs

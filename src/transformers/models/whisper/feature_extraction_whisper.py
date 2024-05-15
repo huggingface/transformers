@@ -188,7 +188,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
         device: Optional[str] = "cpu",
-        return_num_frames: Optional[int]=None, 
+        return_timestamps: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -314,7 +314,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
-        if return_num_frames is not None: 
+        if return_timestamps is not None:
             padded_inputs["num_frames"] = [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
 
         return padded_inputs
