@@ -40,11 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FalconVlmConfig"
 
-FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tiiuae/falcon-11B-vlm",
-    # See all FalconVlm models at https://huggingface.co/models?filter=falcon_vlm
-]
-
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
     """

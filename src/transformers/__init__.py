@@ -382,7 +382,6 @@ _import_structure = {
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
     "models.falcon_vlm": [
-        "FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FalconVlmConfig",
         "FalconVLProcessor",
     ],
@@ -1968,7 +1967,6 @@ else:
 
     _import_structure["models.falcon_vlm"].extend(
         [
-            "FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FalconVlmForConditionalGeneration",
             "FalconVlmPreTrainedModel",
         ]
@@ -4942,7 +4940,6 @@ if TYPE_CHECKING:
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
     from .models.falcon_vlm import (
-        FALCON_VLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FalconVlmConfig,
         FalconVLProcessor,
     )
@@ -6444,7 +6441,6 @@ if TYPE_CHECKING:
             FalconPreTrainedModel,
         )
         from .models.falcon_vlm import (
-            FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             FalconVlmForConditionalGeneration,
             FalconVlmPreTrainedModel,
         )
