@@ -39,6 +39,7 @@ from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
+    AutoTokenizer,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -165,39 +166,6 @@ def _mock_all_init_weights(self):
         # Tie weights should be skipped when not initializing all weights
         # since from_pretrained(...) calls tie weights anyways
         self.tie_weights()
-
-
-@require_read_token
-def _test_torch_compile(ckpt, directory):
-    error = None
-    try:
-        from transformers import AutoTokenizer
-
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        batch_size = 1
-        n_iter = 3
-
-        tokenizer = AutoTokenizer.from_pretrained(ckpt)
-        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
-
-        model.generation_config.max_new_tokens = 4
-        model.generation_config.max_new_tokens = 4
-
-        model.generation_config.cache_implementation = "static"
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-
-        input_text = "Why dogs are cute?"
-        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
-
-        for i in range(n_iter):
-            _ = model.generate(**input_ids, do_sample=False)
-
-    except Exception:
-        error = f"{traceback.format_exc()}"
-
-    with open(os.path.join(directory, "results.json"), "w") as fp:
-        json.dump({"error": error}, fp, indent=4)
 
 
 @require_torch
@@ -4398,26 +4366,32 @@ class ModelTesterMixin:
     @require_torch_gpu
     @require_read_token
     def test_torch_compile(self):
-        if version.parse(torch.__version__) < version.parse("2.2.1"):
-            self.skipTest("This test requires torch >= 2.2.1 to run.")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
 
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
         ckpt = self._torch_compile_test_ckpt()
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            ctx = multiprocessing.get_context("spawn")
-            p = ctx.Process(
-                target=_test_torch_compile,
-                args=(ckpt, tmpdirname),
-            )
-            p.start()
-            p.join()
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-            with open(os.path.join(tmpdirname, "results.json")) as fp:
-                results = json.load(fp)
-                if results["error"] is not None:
-                    self.fail(f'{results["error"]}')
+        batch_size = 1
+        n_iter = 3
+
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+
+        model.generation_config.max_new_tokens = 4
+        model.generation_config.max_new_tokens = 4
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        input_text = "Why dogs are cute?"
+        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
+
+        for i in range(n_iter):
+            _ = model.generate(**input_ids, do_sample=False)
 
 
 global_rng = random.Random()
