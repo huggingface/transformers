@@ -73,10 +73,10 @@ class IrisOutput(ModelOutput):
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        losses (`tuple[torch.FloatTensor]` of shape `(1,)`):
-            Agent's components' total loss (tokenizer, world model and actor critic).
         reconstructed_img (`torch.FloatTensor` of shape `(batch_size, time_steps, num_channels, height, width)`):
             Reconstructed image from input frame 
+        losses (`tuple[torch.FloatTensor]` of shape `(1,)`):
+            Agent's components' total loss (tokenizer, world model and actor critic).
         action_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, action_dim)`):
             Policy action predictions
         reward_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, 1)`):
@@ -93,8 +93,9 @@ class IrisOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    losses: Tuple[torch.FloatTensor] = None
+    
     reconstructed_img: torch.FloatTensor = None
+    losses: Tuple[torch.FloatTensor] = None
     action_preds: torch.FloatTensor = None
     reward_preds: torch.FloatTensor = None
     epsiode_end: torch.FloatTensor = None
@@ -1594,12 +1595,13 @@ class IrisModel(IrisPreTrainedModel):
             for attention in all_self_attentions: attention.requires_grad_(True)
         
         if not return_dict:
-            return tuple(v for v in [losses, tokenizer_outputs[2], actor_critic_outputs.logits_actions, world_model_outputs.logits_rewards, 
+            return tuple(v for v in [tokenizer_outputs[2],losses, actor_critic_outputs.logits_actions, world_model_outputs.logits_rewards, 
                                      world_model_outputs.logits_ends, world_model_outputs.logits_observations, all_hidden_states, all_self_attentions] if v is not None)
 
         return IrisOutput(
-            losses = losses,
+            
             reconstructed_img = tokenizer_outputs[2],
+            losses = losses, 
             action_preds = actor_critic_outputs.logits_actions,
             reward_preds = world_model_outputs.logits_rewards,
             epsiode_end = world_model_outputs.logits_ends,
