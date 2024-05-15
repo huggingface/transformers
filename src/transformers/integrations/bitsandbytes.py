@@ -377,7 +377,7 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def dequantize_and_replace(
+def _dequantize_and_replace(
     model,
     modules_to_not_convert=None,
     current_key_name=None,
@@ -434,7 +434,7 @@ def dequantize_and_replace(
                 new_module.to(device)
                 model._modules[name] = new_module
         if len(list(module.children())) > 0:
-            _, has_been_replaced = dequantize_and_replace(
+            _, has_been_replaced = _dequantize_and_replace(
                 module,
                 modules_to_not_convert,
                 current_key_name,
@@ -444,3 +444,22 @@ def dequantize_and_replace(
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
+
+
+def dequantize_and_replace(
+    model,
+    modules_to_not_convert=None,
+    quantization_config=None,
+):
+    model, has_been_replaced = _dequantize_and_replace(
+        model,
+        modules_to_not_convert=modules_to_not_convert,
+        quantization_config=quantization_config,
+    )
+
+    if not has_been_replaced:
+        logger.warning(
+            "For some reason the model has not been properly dequantized. You might see unexpected behavior."
+        )
+
+    return model
