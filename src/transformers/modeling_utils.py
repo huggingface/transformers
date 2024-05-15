@@ -1328,6 +1328,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self._backward_compatibility_gradient_checkpointing()
 
     def dequantize(self):
+        """
+        Potentially dequantize the model in case it has been quantized by a quantization method that support
+        dequantization.
+        """
         hf_quantizer = getattr(self, "hf_quantizer", None)
 
         if hf_quantizer is None:

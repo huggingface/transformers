@@ -195,6 +195,10 @@ class HfQuantizer(ABC):
         return self._process_model_after_weight_loading(model, **kwargs)
 
     def dequantize(self, model):
+        """
+        Potentially dequantize the model to retrive the original model, with some loss in accuracy / performance.
+        Note not all quantization schemes support this.
+        """
         if self.requires_calibration:
             raise ValueError(
                 f"{self.quantization_config.quant_method} requires data calibration, it cannot be dequantized."

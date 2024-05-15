@@ -389,8 +389,6 @@ def dequantize_and_replace(
 
     Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
     """
-    import bitsandbytes as bnb
-
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
