@@ -25,12 +25,12 @@ _import_structure = {
         "replace_with_awq_linear",
     ],
     "bitsandbytes": [
+        "dequantize_and_replace",
         "get_keys_to_not_convert",
         "replace_8bit_linear",
         "replace_with_bnb_linear",
         "set_module_8bit_tensor_to_device",
         "set_module_quantized_tensor_to_device",
-        "dequantize_and_replace",
     ],
     "deepspeed": [
         "HfDeepSpeedConfig",
@@ -98,12 +98,12 @@ if TYPE_CHECKING:
         replace_with_awq_linear,
     )
     from .bitsandbytes import (
+        dequantize_and_replace,
         get_keys_to_not_convert,
         replace_8bit_linear,
         replace_with_bnb_linear,
         set_module_8bit_tensor_to_device,
         set_module_quantized_tensor_to_device,
-        dequantize_and_replace,
     )
     from .deepspeed import (
         HfDeepSpeedConfig,
