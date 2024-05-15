@@ -773,7 +773,7 @@ class AutoTokenizer:
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        from_gguf = kwargs.get("from_gguf", None)
+        gguf_file = kwargs.get("gguf_file", None)
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -820,8 +820,8 @@ class AutoTokenizer:
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PretrainedConfig):
-                if from_gguf:
-                    gguf_path = cached_file(pretrained_model_name_or_path, from_gguf, **kwargs)
+                if gguf_file:
+                    gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
                     config = AutoConfig.for_model(**config_dict)
                 else:

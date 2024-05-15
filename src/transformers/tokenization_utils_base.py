@@ -1968,7 +1968,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
-        from_gguf = kwargs.get("from_gguf", None)
+        gguf_file = kwargs.get("gguf_file", None)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -1996,7 +1996,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1 and not from_gguf:
+            if len(cls.vocab_files_names) > 1 and not gguf_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
@@ -2011,8 +2011,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
         else:
-            if from_gguf:
-                vocab_files["vocab_file"] = from_gguf
+            if gguf_file:
+                vocab_files["vocab_file"] = gguf_file
             else:
                 # At this point pretrained_model_name_or_path is either a directory or a model identifier name
                 additional_files_names = {
@@ -2088,9 +2088,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "files are necessary for the tokenizer to operate."
             )
 
-        # If one passes a GGUF file path to `from_gguf` there is no need for this check as the tokenizer will be
+        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
-        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not from_gguf:
+        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not gguf_file:
             raise EnvironmentError(
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                 "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -2139,12 +2139,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
-        from_gguf = kwargs.get("from_gguf", None)
+        gguf_file = kwargs.get("gguf_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
 
-        # If one passes a GGUF file path to `from_gguf` there is no need for this check as the tokenizer will be
+        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
         # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not from_gguf:
+        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,

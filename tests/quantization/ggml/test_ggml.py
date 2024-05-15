@@ -45,8 +45,8 @@ class GgufIntegrationTests(unittest.TestCase):
     example_text = "Hello"
 
     def test_q2_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -55,8 +55,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q2_k_serialization(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q2_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q2_k_gguf_model_id).to(torch_device)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -72,8 +72,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q3_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q3_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q3_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q3_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q3_k_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -82,8 +82,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q5_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q5_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q5_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q5_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q5_k_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -92,8 +92,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q4_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q4_0_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q4_0_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q4_0_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q4_0_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -102,8 +102,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q4_k_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q4_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q4_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q4_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q4_k_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -112,8 +112,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q6_k_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q6_k_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -122,9 +122,9 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k_fp16(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q6_k_gguf_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q6_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, from_gguf=self.q6_k_gguf_model_id, torch_dtype=torch.float16
+            self.model_id, gguf_file=self.q6_k_gguf_model_id, torch_dtype=torch.float16
         ).to(torch_device)
 
         self.assertTrue(model.lm_head.weight.dtype == torch.float16)
@@ -136,8 +136,8 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q8_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id).to(torch_device)
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
@@ -146,9 +146,9 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_mistral_q4_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, from_gguf=self.q4_0_mistral_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.mistral_model_id, from_gguf=self.q4_0_mistral_model_id, device_map="auto", torch_dtype=torch.float16
+            self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id, device_map="auto", torch_dtype=torch.float16
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
@@ -161,7 +161,7 @@ class GgufIntegrationTests(unittest.TestCase):
         import tqdm
         from datasets import load_dataset
 
-        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id)
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
         dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
@@ -192,7 +192,7 @@ class GgufIntegrationTests(unittest.TestCase):
                 self.assertEqual(decoded1, decoded2)
 
         # With special tokens
-        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id)
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
         original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
 
         gguf_tokenizer.add_special_tokens(

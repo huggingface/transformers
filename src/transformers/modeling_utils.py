@@ -2993,7 +2993,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
-        from_gguf = kwargs.pop("from_gguf", None)
+        gguf_file = kwargs.pop("gguf_file", None)
         # Cache path to the GGUF file
         gguf_path = None
 
@@ -3202,12 +3202,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules = None
         use_keep_in_fp32_modules = False
 
-        if from_gguf is not None and hf_quantizer is not None:
+        if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
                 "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
             )
 
-        if pretrained_model_name_or_path is not None and from_gguf is None:
+        if pretrained_model_name_or_path is not None and gguf_file is None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
             if is_local:
@@ -3449,12 +3449,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 resolved_archive_file = archive_file
             else:
                 logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
-        elif from_gguf:
+        elif gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
             # Case 1: the GGUF file is present locally
-            if os.path.isfile(from_gguf):
-                gguf_path = from_gguf
+            if os.path.isfile(gguf_file):
+                gguf_path = gguf_file
             # Case 2: The GGUF path is a location on the Hub
             # Load from URL or cache if already cached
             else:
@@ -3473,7 +3473,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "_commit_hash": commit_hash,
                 }
 
-                gguf_path = cached_file(pretrained_model_name_or_path, from_gguf, **cached_file_kwargs)
+                gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
 
             state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
 

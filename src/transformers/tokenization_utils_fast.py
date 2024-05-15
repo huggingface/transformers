@@ -96,7 +96,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
-        from_gguf = kwargs.pop("from_gguf", None)
+        gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
@@ -115,7 +115,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif from_gguf is not None:
+        elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
             fast_tokenizer = convert_gguf_tokenizer(tokenizer_dict)
