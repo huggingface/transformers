@@ -820,18 +820,12 @@ class GemmaIntegrationTest(unittest.TestCase):
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
         EXPECTED_TEXT_COMPLETION = {
             8: [
-                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-                "theory of relativ",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],
             7: [
-                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
-                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
-                "be.\nThe theory of relativity",
-                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
-                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+                "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
             ],
         }
 
