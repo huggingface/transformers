@@ -25,6 +25,7 @@ _import_structure = {
         "replace_with_awq_linear",
     ],
     "bitsandbytes": [
+        "dequantize_and_replace",
         "get_keys_to_not_convert",
         "replace_8bit_linear",
         "replace_with_bnb_linear",
@@ -105,6 +106,7 @@ if TYPE_CHECKING:
         replace_with_awq_linear,
     )
     from .bitsandbytes import (
+        dequantize_and_replace,
         get_keys_to_not_convert,
         replace_8bit_linear,
         replace_with_bnb_linear,

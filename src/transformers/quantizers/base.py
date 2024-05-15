@@ -194,6 +194,23 @@ class HfQuantizer(ABC):
         """
         return self._process_model_after_weight_loading(model, **kwargs)
 
+    def dequantize(self, model):
+        """
+        Potentially dequantize the model to retrive the original model, with some loss in accuracy / performance.
+        Note not all quantization schemes support this.
+        """
+        model = self._dequantize(model)
+
+        # Delete quantizer and quantization config
+        del model.hf_quantizer
+
+        return model
+
+    def _dequantize(self, model):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
+        )
+
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs):
         ...
