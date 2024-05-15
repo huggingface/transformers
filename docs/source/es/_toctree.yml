@@ -17,6 +17,8 @@
     title: Fine-tuning a un modelo pre-entrenado
   - local: accelerate
     title: Entrenamiento distribuido con 🤗 Accelerate
+    local: peft
+    title: Carga los adaptadores con 🤗 PEFT
   - local: model_sharing
     title: Compartir un modelo
   title: Tutoriales
@@ -96,8 +98,6 @@
     title: Mecanismos de atención
   - local: pad_truncation
     title: Relleno y truncamiento
-    local: peft
-    title: Carga los adaptadores con 🤗 PEFT
   - local: bertology
     title: BERTología
   - local: perplexity

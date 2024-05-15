@@ -13,16 +13,16 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) métodos congelan los parámetros del modelo preentrenado durante el afinamiento y agregan un pequeño número de parámetros entrenables (los adaptadores) encima de eso.  Varios parámetros entrenables (los adaptadores) están entrenados para aprender la tarea específica.  Está manera a sido comprobada en ser eficiente con la memoria y con menos uso de computar mientras produciendo resultados comparable a un modelo completamente afinado. 
+[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) métodos congelan los parámetros del modelo preentrenado durante el punto fino y agregan un pequeño número de parámetros entrenables (los adaptadores) encima de eso.  Los parámetros (los adaptadores) están entrenados para aprender la información tarea específica.  Este enfoque a sido comprobado en ser muy eficiente en memoria con proceso inferior mientras produciendo resultados comparable a un modelo completamente afinado. 
 
  Adaptadores entrenados con PEFT también son usualmente un orden de magnitud más pequeños que los modelos enteros, haciéndolos más convenientes para compartir, archivar, y cargar. 
 
 <div class="flex flex-col justify-center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/peft/PEFT-hub-screenshot.png"/>
-  <figcaption class="text-center">The adapter weights for a OPTForCausalLM model stored on the Hub are only ~6MB compared to the full size of the model weights, which can be ~700MB.</figcaption>
+  <figcaption class="text-center">Los pesos del adaptero para un modelo de OPTForCausalLM guardado en el Hub son solo ~6MB en comparaciôn al tamaño completo de los  pesos de modelo, cuales sean ~700MB.</figcaption>
 </div>
 
-Si estás interesado en aprender más sobre la librería de PEFT, lee la [documentación](https://huggingface.co/docs/peft/index).
+Si estás interesado en aprender más sobre la librería de PEFT, mira la [documentación](https://huggingface.co/docs/peft/index).
 
 ## Configuración
 
@@ -40,18 +40,18 @@ pip install git+https://github.com/huggingface/peft.git
 
 ##  Los modelos de PEFT apoyados
 
-Los 🤗 Transformers nativamente apoyan algunos métodos de PEFT.  De esta manera puedes cargar los pesos del adaptador archivados localmente o archivados en el Hub y fácilmente ejecutar o entrenar los pesos con unas cuantas líneas de código.  Los siguientes métodos están apoyados:
+Los 🤗 Transformers nativamente apoyan algunos métodos de PEFT, que significa puedes cargar los pesos del adaptador archivados localmente o archivados en el Hub y fácilmente ejecutar o entrenar los pesos con unas cuantas líneas de código.  Los siguientes métodos están apoyados:
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
 - [AdaLoRA](https://arxiv.org/abs/2303.10512)
 
-Si quieres usar otros métodos de PEFT como el aprendizaje de avisos o afinamientos de los avisos o de la librería de 🤗 PEFT en general por favor refiere a la [documentación](https://huggingface.co/docs/peft/index).
+Si quieres usar otros métodos de PEFT como el aprendizaje de los prompts o afinamientos de los prompts o de la librería de 🤗 PEFT en general, por favor refiere a la [documentación](https://huggingface.co/docs/peft/index).
 
 
 ## Cargar un adaptador de PEFT
 
-Para cargar y usar un modelo adaptador de PEFT desde 🤗 Transformers, asegura que el Hub repositorio o el directorio local contiene un `adapter_config.json` archivo y pesas de adaptadores como presentado en el imagen de arriba. Después puedes cargar el modelo adaptador de PEFT usando la clase de `AutoModelFor`. Por ejemplo, para cargar el modelo adaptador de PEFT para  modelar usando idioma casual:
+Para cargar y usar un modelo adaptador de PEFT desde 🤗 Transformers, asegura que el Hub repositorio o el directorio local contiene un `adapter_config.json` archivo y pesas de adaptadores como presentado en el ejemplo de imagen de arriba. Después puedes cargar el modelo adaptador de PEFT usando la clase de `AutoModelFor`. Por ejemplo, para cargar el modelo adaptador de PEFT para el lenguaje casual en modelar:
 
 1. específica el ID del modelo de PEFT
 2. pásalo a la clase de [`AutoModelForCausalLM`]
@@ -65,7 +65,7 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
 <Tip>
 
-Puedes cargar al PEFT adaptador con una clase de `AutoModelFor` o la clase del modelo base como `OPTForCausalLM` o `LlamaForCausalLM`.
+Puedes cargar al PEFT adaptador con tampoco una clase de `AutoModelFor` o la clase del modelo base como `OPTForCausalLM` o `LlamaForCausalLM`.
 
 </Tip>
 
@@ -83,8 +83,8 @@ model.load_adapter(peft_model_id)
 
 ## Cargar en 8bit o 4bit
 
-La integración de `bitsandbytes` apoya los tipos de datos precisos que son utilizados para cargar modelos grandes porque
- guarda memoria (mira la [guia](./quantization#bitsandbytes-integration) de `bitsandbytes` para aprender mas). Agrega el parametro `load_in_8bit` o el parametro `load_in_4bit` al [`~PreTrainedModel.from_pretrained`] y coloca `device_map="auto"` para effectivamente distribuir el modelo tu hardware:
+La integración de `bitsandbytes` apoya los tipos de datos precisos que son útiles para cargar modelos grandes porque
+ guarda memoria (mira la [guia](https://huggingface.co/docs/transformers/quantization#bitsandbyes) de `bitsandbytes` para aprender mas). Agrega el parametro `load_in_8bit` o el parametro `load_in_4bit` al [`~PreTrainedModel.from_pretrained`] y coloca `device_map="auto"` para effectivamente distribuir el modelo en tu hardware:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -95,8 +95,8 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", l
 
 ## Agrega un nuevo adaptador
 
-Puedes usar [`~peft.PeftModel.add_adapter`] para agregar un nuevo adaptador a un modelo con un existente adaptador mientras
- el nuevo sea el mismo tipo que el adaptador actual. Por ejemplo si tienes un existente LoRA adaptador ajunto a un modelo:
+Puedes usar [`~peft.PeftModel.add_adapter`] para agregar un nuevo adaptador a un modelo con un existente adaptador con tal que
+ el nuevo sea el mismo tipo que el adaptador actual. Por ejemplo si tienes un existente LoRA adaptador connectado a un modelo:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
@@ -135,7 +135,7 @@ print(tokenizer.decode(output_enabled[0], skip_special_tokens=True))
 
 ## Para activar y desactivar los adaptadores
 
-Cuando has agregado un adaptador a un modelo, activa or desactiva el módulo de adaptador. Para activar el módulo de adaptador:
+Cuando has agregado un adaptador a un modelo, puedes activar or desactivar el módulo de adaptador. Para activar el módulo de adaptador:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
@@ -165,17 +165,17 @@ model.disable_adapters()
 output = model.generate(**inputs)
 ```
 
-## Como entrenar un adaptor de PEFT
+## Entrenar un adaptor de PEFT
 
-Los adaptadores de PEFT están apoyados por la clase de PEFT [`Trainer`] para que puedas entrenar el adaptador para tu caso de uso específico. Sólo  requiere agregar unas cuantas líneas más de código.  Por ejemplo, para entrenar un adaptador de LoRA:  
+Los adaptadores de PEFT están apoyados por la clase de [`Trainer`] para que puedas entrenar el adaptador para tu caso de uso específico. Sólo requiere agregar unas líneas más de código.  Por ejemplo, para entrenar un adaptador de LoRA:  
 
 <Tip>
 
-Si no estás familiarizado con el proceso de afinar un modelo con [`Trainer`], mira el tutorial [Fine-tune a pretrained model](training).
+Si no estás familiarizado con el afinamiento de un modelo con la clase[`Trainer`], mira el tutorial [Fine-tune a pretrained model](training).
 
 </Tip>
 
-1. Define tu configuraciôn de adaptador con el tipo de tarea y hiperparámetros (lee [`~peft.LoraConfig`] sobre más detalles de lo que
+1. Define tu configuraciôn de adaptador con el tipo de tarea y hiperparámetros (ves [`~peft.LoraConfig`] para más detalles de lo que
  hacen los hiperparámetros).
 
 ```py
@@ -212,7 +212,7 @@ model = AutoModelForCausalLM.from_pretrained(save_dir)
 
 ## Agrega capas entrenables adicionales a un PEFT adaptador
 
-Tambien puedes afinar adaptadores entrenables adicionales en encima de un modelo que tiene adaptadores ajustados por pasar a `modules_to_save` en tu config PEFT. Por ejemplo, si tu quieres también afinar el lm_head encima de un modelo con un adaptador de LoRA:
+Tambien puedes afinar adaptadores entrenables adicionales en encima de un modelo que tiene adaptadores connectados por pasar a `modules_to_save` en tu config de PEFT. Por ejemplo, si tu quieres también afinar el lm_head encima de un modelo con un adaptador de LoRA:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
