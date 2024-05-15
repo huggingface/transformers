@@ -70,6 +70,7 @@ class MoTModelTester:
         hidden_size=32,
         group_size=1,
         expert_size=None,
+        n_experts=32,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=32,
@@ -95,6 +96,7 @@ class MoTModelTester:
         self.hidden_size = hidden_size
         self.group_size = group_size
         self.expert_size = expert_size
+        self.n_experts = n_experts
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -174,6 +176,7 @@ class MoTModelTester:
             n_head=self.num_attention_heads,
             n_inner=self.intermediate_size,
             group_size=self.group_size,
+            n_experts=self.n_experts,
             expert_size=self.expert_size,
             activation_function=self.hidden_act,
             resid_pdrop=self.hidden_dropout_prob,

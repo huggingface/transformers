@@ -373,7 +373,7 @@ class MoTMLP(nn.Module):
 
         self.d_model: int = config.n_embd
         self.d_ff: int = config.n_inner if inner_dim is None else inner_dim
-        self.n_experts: int = config.n_expert
+        self.n_experts: int = config.n_experts
         self.group_size: int = config.group_size
         self.sparsity_dim: int = sparsity_dim
         self.expert_size: int = config.expert_size
@@ -391,11 +391,18 @@ class MoTMLP(nn.Module):
         ), f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
         self.d_ff *= self.group_size
 
-        if self.expert_size is None:
+        if self.expert_size is None and self.n_experts is not None:
             assert (
                 self.d_ff % self.n_experts == 0
             ), f"dff = {self.d_ff} is not divisible by n_experts = {self.n_experts}"
             self.expert_size = self.d_ff // self.n_experts
+        elif self.expert_size is not None and self.n_experts is None:
+            assert (
+                self.d_ff % self.expert_size == 0
+            ), f"dff = {self.d_ff} is not divisible by expert_size = {self.expert_size}"
+            self.n_experts = self.d_ff // self.expert_size
+        else:
+            raise ValueError("Either expert_size or n_experts should be provided")
 
         self.lin1 = nn.Parameter(
             self.get_init_weight(
