@@ -51,7 +51,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\n[10:0"
+        EXPECTED_TEXT = "Hello, World!\n\n[10:0"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q2_k_serialization(self):
@@ -68,7 +68,7 @@ class GgufIntegrationTests(unittest.TestCase):
             text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
             out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\n[10:0"
+        EXPECTED_TEXT = "Hello, World!\n\n[10:0"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q3_k(self):
@@ -78,7 +78,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\n```\n<|user"
+        EXPECTED_TEXT = "Hello, World!\n\n```\n<|user"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q5_k(self):
@@ -88,7 +88,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\nStep 3: Add"
+        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q4_0(self):
@@ -98,7 +98,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\nStep 3: Add"
+        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q4_k_m(self):
@@ -108,7 +108,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\n5. Python:\n"
+        EXPECTED_TEXT = "Hello, World!\n\n5. Python:\n"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k(self):
@@ -118,7 +118,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\nStep 3: Add"
+        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k_fp16(self):
@@ -132,7 +132,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\nStep 3: Add"
+        EXPECTED_TEXT = "Hello, World!\n\nStep 3: Add"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q8_0(self):
@@ -142,7 +142,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = " Hello, World!\n\n5. Use a library"
+        EXPECTED_TEXT = "Hello, World!\n\n5. Use a library"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_mistral_q4_0(self):
@@ -154,5 +154,43 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "<s> Hello,\n\nI'm trying to create a"
+        EXPECTED_TEXT = "Hello,\n\nI'm trying to create a"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_tokenization_xnli(self):
+        import tqdm
+        from datasets import load_dataset
+
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_gguf=self.q8_0_gguf_model_id)
+        original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
+
+        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        for item in tqdm.tqdm(dataset["validation"]):
+            string = item["code"]
+            encoded1 = gguf_tokenizer.encode(string)
+            encoded2 = original_tokenizer.encode(string)
+
+            self.assertEqual(encoded1, encoded2)
+
+            decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+            decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+            self.assertEqual(decoded1, decoded2)
+
+        dataset = load_dataset("xnli", "all_languages")
+
+        for i, item in enumerate(tqdm.tqdm(dataset["train"])):
+            for string in item["premise"].values():
+                encoded1 = gguf_tokenizer.encode(string)
+                encoded2 = original_tokenizer.encode(string)
+
+                self.assertEqual(encoded1, encoded2)
+
+                decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+                decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+                self.assertEqual(decoded1, decoded2)
+
+            # Otherwise the test takes too long
+            if i > 100:
+                break

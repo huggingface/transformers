@@ -547,7 +547,6 @@ class GGUFLlamaConverter(LlamaConverter):
             decoders.Fuse(),
             decoders.Replace("▁", " "),
         ]
-        add_prefix_space = False
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
