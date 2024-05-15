@@ -4185,13 +4185,15 @@ class TokenizerTesterMixin:
                     pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
                 )
 
+                p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
+
                 encoded_special_token = tokenizer_p.encode(
                     special_token, add_special_tokens=False, split_special_tokens=False
                 )
-                self.assertEqual(len(encoded_special_token), 1)
+                self.assertTrue(p_special_token_id in encoded_special_token)
 
                 encoded_split_special_token = tokenizer_p.encode(special_token, add_special_tokens=False)
-                self.assertTrue(len(encoded_split_special_token) > 1)
+                self.assertTrue(p_special_token_id not in encoded_split_special_token)
 
                 p_output = tokenizer_p.tokenize(f"Hey this is a {special_token} token")
                 r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
@@ -4215,7 +4217,6 @@ class TokenizerTesterMixin:
                 self.assertTrue(special_token in r_output_explicit)
                 self.assertTrue(special_token in cr_output_explicit)
 
-                p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
                 p_output = tokenizer_p(f"Hey this is a {special_token} token")
                 r_output = tokenizer_r(f"Hey this is a {special_token} token")
                 cr_output = tokenizer_cr(f"Hey this is a {special_token} token")
