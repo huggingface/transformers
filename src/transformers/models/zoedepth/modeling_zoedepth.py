@@ -361,7 +361,7 @@ class ZoeDepthRelativeDepthEstimationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.config = config
+        self.head_in_index = config.head_in_index
 
         self.projection = None
         if config.add_projection:
@@ -375,7 +375,7 @@ class ZoeDepthRelativeDepthEstimationHead(nn.Module):
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
-        hidden_states = hidden_states[self.config.head_in_index]
+        hidden_states = hidden_states[self.head_in_index]
 
         if self.projection is not None:
             hidden_states = self.projection(hidden_states)
@@ -797,29 +797,22 @@ class ZoeDepthProjector(nn.Module):
 
 
 class ZoeDepthPatchTransformerEncoder(nn.Module):
-    def __init__(self, in_channels, patch_size=10, embedding_dim=128, num_heads=4, use_class_token=False):
+    def __init__(self, config):
         """ViT-like transformer block
 
         Args:
-            in_channels (`int`):
-                Input channels.
-            patch_size (`int`, *optional*, defaults to 10):
-                Patch size.
-            embedding_dim (`int`, *optional*, defaults to 128):
-                Embedding dimension in transformer model.
-            num_heads (`int`, *optional*, defaults to 4):
-                Number of attention heads.
-            use_class_token (`bool`, *optional*, defaults to `False`):
-                Whether to use extra token at the start for global accumulation (called as "class token").
+            config (`ZoeDepthConfig`):
+                Model configuration class defining the model architecture.
         """
         super().__init__()
-        encoder_layers = nn.TransformerEncoderLayer(embedding_dim, num_heads, dim_feedforward=1024, batch_first=True)
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)
-        self.use_class_token = use_class_token
 
-        self.embedding_convPxP = nn.Conv2d(
-            in_channels, embedding_dim, kernel_size=patch_size, stride=patch_size, padding=0
-        )
+        in_channels = config.bottleneck_features
+        embedding_dim = 128
+
+        encoder_layers = nn.TransformerEncoderLayer(embedding_dim, nhead=4, dim_feedforward=1024, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=4)
+
+        self.embedding_convPxP = nn.Conv2d(in_channels, embedding_dim, kernel_size=1, stride=1, padding=0)
 
     def positional_encoding_1d(self, batch_size, sequence_length, embedding_dim, device="cpu", dtype=torch.float32):
         """Generate positional encodings
@@ -849,9 +842,8 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
             torch.Tensor - Transformer output embeddings of shape (batch_size, sequence_length, embedding_dim)
         """
         embeddings = self.embedding_convPxP(x).flatten(2)  # shape (batch_size, num_channels, sequence_length)
-        if self.use_class_token:
-            # extra special token at the start
-            embeddings = nn.functional.pad(embeddings, (1, 0))
+        # add an extra special CLS token at the start for global accumulation
+        embeddings = nn.functional.pad(embeddings, (1, 0))
 
         embeddings = embeddings.permute(0, 2, 1)
         batch_size, sequence_length, embedding_dim = embeddings.shape
@@ -897,7 +889,7 @@ class ZoeDepthMultipleMetricDepthEstimationHeads(nn.Module):
         self.conv2 = nn.Conv2d(bottleneck_features, bottleneck_features, kernel_size=1, stride=1, padding=0)
 
         # Transformer classifier on the bottleneck
-        self.patch_transformer = ZoeDepthPatchTransformerEncoder(bottleneck_features, 1, 128, use_class_token=True)
+        self.patch_transformer = ZoeDepthPatchTransformerEncoder(config)
         # MLP classifier
         self.mlp_classifier = ZoeDepthMLPClassifier(in_features=128, out_features=2)
 

@@ -282,9 +282,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
         height, width = get_image_size(image, input_data_format)
 
         pad_height = int(np.sqrt(height / 2) * 3)
