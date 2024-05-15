@@ -604,10 +604,10 @@ class FalconLanguageGenerationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_lm_generate_falcon_10b(self):
-        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-10B", padding_side="left")
+    def test_lm_generate_falcon_11b(self):
+        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
         model = FalconForCausalLM.from_pretrained(
-            "tiiuae/falcon-10B", device_map={"": torch_device}, load_in_8bit=True
+            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
         )
         model.eval()
         inputs = tokenizer("Two roads diverged in a yellow wood", return_tensors="pt", return_token_type_ids=False).to(

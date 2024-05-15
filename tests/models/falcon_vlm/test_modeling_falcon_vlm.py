@@ -226,7 +226,7 @@ class FalconVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 @require_torch
 class FalconVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("tiiuae/falcon-10B-vlm")
+        self.processor = AutoProcessor.from_pretrained("tiiuae/falcon-11B-vlm")
         url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
@@ -239,7 +239,7 @@ class FalconVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
-        model = FalconVlmForConditionalGeneration.from_pretrained("tiiuae/falcon-10B-vlm", load_in_8bit=True)
+        model = FalconVlmForConditionalGeneration.from_pretrained("tiiuae/falcon-11B-vlm", load_in_8bit=True)
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         cats_image = Image.open(requests.get(url, stream=True).raw)
 
