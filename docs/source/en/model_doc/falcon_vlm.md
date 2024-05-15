@@ -16,28 +16,14 @@ rendered properly in your Markdown viewer.
 
 # FalconVlm
 
-# FalconVlm
-
-# FalconVlm
-
-# FalconVlm
-
 ## Overview
 
-The FalconVlm model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The FalconVlm model was proposed from [Technology Innovation Institute](https://www.tii.ae/).
+
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+The Falcon2-11B VLM is a vision-language model (VLM) for additionally handling image inputs and answering the queries corresponding to the images. To achieve this, we integrate the pretrained CLIP ViT-L/14 vision encoder with our Falcon2-11B chat-finetuned model and train with image-text data. For enhancing the VLM's perception of fine-grained details w.r.t small objects in images, we employ a dynamic encoding mechanism at high-resolution for image inputs, similar to LLaVA-Next.
 
 ## FalconVlmConfig
 
