@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FalconVlmConfig"
 
 FALCON_VLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tiiuae/falcon-10B-vlm",
+    "tiiuae/falcon-11B-vlm",
     # See all FalconVlm models at https://huggingface.co/models?filter=falcon_vlm
 ]
 

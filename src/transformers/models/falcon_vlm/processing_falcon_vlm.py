@@ -19,8 +19,6 @@ Processor class for FalconVlm.
 
 from typing import List, Optional, Union
 
-import torch
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -50,8 +48,6 @@ class FalconVLProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
-        self.image_padded_token = torch.tensor(tokenizer("<image>").input_ids).view(1, -1)
-        self.image_padded_mask = torch.tensor(1).view(1, -1)
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     def __call__(
@@ -113,31 +109,15 @@ class FalconVLProcessor(ProcessorMixin):
         else:
             image_inputs = {}
 
-        if isinstance(text, list):
-            text = ["\n" + t for t in text]
-        else:
-            text = "\n" + text
+        formatted_text = self.process_user_input(text)
 
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            formatted_text,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
-
-        if "<image>" not in text:
-            batch, _ = text_inputs["input_ids"].shape
-            text_inputs["input_ids"] = torch.cat(
-                [
-                    self.image_padded_token.repeat(batch, 1),
-                    text_inputs["input_ids"],
-                ],
-                dim=-1,
-            )
-            text_inputs["attention_mask"] = torch.cat(
-                [
-                    self.image_padded_mask.repeat(batch, 1),
-                    text_inputs["attention_mask"],
-                ],
-                dim=-1,
-            )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
@@ -156,6 +136,22 @@ class FalconVLProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    # Ignore copy
+    def process_user_input(self, user_input):
+        """
+        Process user input by formatting it and processing through FalconVLProcessor.
+
+        Args:
+            user_input (str): Text input from the user.
+
+        Returns:
+            formatted_text (str): The modified input prompt as per the processor's specification.
+        """
+        # Always format the text to include "User: <image>\n" before the actual user input
+        formatted_text = f"User: <image>\n{user_input}"
+
+        return formatted_text
 
     @property
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
