@@ -454,8 +454,6 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
         condition_dim,
         n_classes=256,
         bottleneck_factor=2,
-        p_eps=1e-4,
-        act=torch.softmax,
     ):
         """Per-pixel MLP followed by a Conditional Log Binomial softmax.
 
@@ -468,10 +466,6 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
                 Number of classes.
             bottleneck_factor (`int`, *optional*, defaults to 2):
                 Hidden dim factor.
-            p_eps (`float`, *optional*, defaults to 1e-4):
-                Small eps value.
-            act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
-                Activation function to apply to the output.
 
         """
         super().__init__()
@@ -485,10 +479,10 @@ class ZoeDepthConditionalLogBinomialSoftmax(nn.Module):
             nn.Softplus(),
         )
 
-        self.p_eps = p_eps
+        self.p_eps = 1e-4
         self.max_temp = config.max_temp
         self.min_temp = config.min_temp
-        self.log_binomial_transform = LogBinomialSoftmax(n_classes, act=act)
+        self.log_binomial_transform = LogBinomialSoftmax(n_classes, act=torch.softmax)
 
     def forward(self, main_feature, condition_feature):
         """
@@ -855,10 +849,10 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
 
 
 class ZoeDepthMLPClassifier(nn.Module):
-    def __init__(self, in_features, out_features, hidden_features=None) -> None:
+    def __init__(self, in_features, out_features) -> None:
         super().__init__()
 
-        hidden_features = hidden_features or in_features
+        hidden_features = in_features
         self.linear1 = nn.Linear(in_features, hidden_features)
         self.activation = nn.ReLU()
         self.linear2 = nn.Linear(hidden_features, out_features)
