@@ -1972,8 +1972,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token in r_output_explicit)
                 self.assertTrue(special_token in cr_output_explicit)
 
-                p_special_token_id = tokenizer_p.convert_tokens_to_ids(special_token)
-
                 tmpdirname = tempfile.mkdtemp()
                 tokenizer_p.save_pretrained(tmpdirname)
                 fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
