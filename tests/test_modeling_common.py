@@ -4371,7 +4371,7 @@ class ModelTesterMixin:
 
         if not hasattr(self, "_torch_compile_test_ckpt"):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
-        ckpt = self._torch_compile_test_ckpt()
+        ckpt = self._torch_compile_test_ckpt
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
