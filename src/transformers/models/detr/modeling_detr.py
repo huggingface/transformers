@@ -875,7 +875,6 @@ class DetrDecoderLayer(nn.Module):
         return outputs
 
 
-
 class DetrPreTrainedModel(PreTrainedModel):
     config_class = DetrConfig
     base_model_prefix = "model"
