@@ -113,7 +113,7 @@ class VideoLlavaVisionText2TextModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
 
-        self.batch_size = 3
+        self.batch_size = 5
         self.num_channels = 3
         self.image_size = 224
         self.encoder_seq_length = 2044

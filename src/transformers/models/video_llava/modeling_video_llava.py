@@ -311,9 +311,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         final_embedding = torch.zeros(
             batch_size, max_seq_len, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
-        final_attention_mask = torch.zeros(
-            batch_size, max_seq_len, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
         final_input_ids = torch.full(
             (batch_size, max_seq_len), self.pad_token_id, dtype=input_ids.dtype, device=inputs_embeds.device
         )
@@ -325,12 +322,10 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             non_image_indices.to(target_device),
             text_to_overwrite.to(target_device),
         )
-        attention_mask = attention_mask.to(target_device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
         final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_image_indices]
         if labels is not None:
             final_labels = torch.full(
@@ -354,8 +349,18 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
             )
 
         final_embedding[image_to_overwrite] = visual_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+
+        if attention_mask is not None:
+            final_attention_mask = torch.zeros(
+                batch_size, max_seq_len, dtype=attention_mask.dtype, device=inputs_embeds.device
+            )
+            attention_mask = attention_mask.to(target_device)
+            final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+            final_attention_mask |= image_to_overwrite
+            position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
+        else:
+            final_attention_mask = None
+            position_ids = None
 
         return final_embedding, final_attention_mask, final_labels, position_ids, final_input_ids
 
@@ -544,8 +549,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                         labels,
                         num_frames=8,
                     )
-                if labels is None:
-                    labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
             else:
                 # In case input_ids.shape[1] == 1 & past_key_values != None, we are in the case of
                 # generation with cache
