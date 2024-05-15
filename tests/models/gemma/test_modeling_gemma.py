@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import pytest
+from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.testing_utils import (
@@ -40,7 +41,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel
+    from transformers import GemmaTokenizer, GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel
 
 
 class GemmaModelTester:
@@ -804,3 +805,59 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+
+    @slow
+    @require_torch_gpu
+    @require_read_token
+    def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
+        NUM_TOKENS_TO_GENERATE = 40
+        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
+        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        EXPECTED_TEXT_COMPLETION = {
+            8: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
+                "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
+                "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
+            7: [
+                "Simply put, the theory of relativity states that 1. surely nothing is faster than light.\nThe theory "
+                "goes that nothing travels faster than light, but the faster you go, the slower everything else will "
+                "be.\nThe theory of relativity",
+                "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
+                "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
+            ],
+        }
+
+        prompts = ["Hello I am doing", "Hi today"]
+        tokenizer = GemmaTokenizer.from_pretrained("google/gemma-2b", pad_token="</s>", padding_side="right")
+        model = GemmaForCausalLM.from_pretrained(
+            "google/gemma-2b", device_map="sequential", torch_dtype=torch.float16
+        )
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        # Dynamic Cache
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
+
+        # Static Cache
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
+
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
