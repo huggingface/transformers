@@ -1408,8 +1408,12 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         output_router_logits=False,
         **kwargs,
     ):
+        # We may have an initialized but empty DynamicCache during first iteration
+        past_exist = past_key_values is not None and not (
+            isinstance(past_key_values, DynamicCache) and len(past_key_values) == 0
+        )
         # Omit tokens covered by past_key_values
-        if past_key_values is not None:
+        if past_exist:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
                 past_length = past_key_values.seen_tokens
@@ -1447,7 +1451,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and not past_exist:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}

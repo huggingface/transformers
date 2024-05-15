@@ -1220,7 +1220,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         **kwargs,
     ):
         past_length = 0
-        if past_key_values is not None:
+        # We may have an initialized but empty DynamicCache during first iteration
+        past_exist = past_key_values is not None and not (
+            isinstance(past_key_values, DynamicCache) and len(past_key_values) == 0
+        )
+        if past_exist:
             if isinstance(past_key_values, Cache):
                 past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
                 max_cache_length = (
@@ -1262,7 +1266,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and not past_exist:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
