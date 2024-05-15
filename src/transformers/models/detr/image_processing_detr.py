@@ -116,35 +116,6 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     return (oh, ow)
 
 
-def _get_image_size_for_max_height_width(
-    image_size: Tuple[int, int], max_height: int, max_width: int
-) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
-    Important, even if image_height < max_height and image_width < max_width, the image will be resized
-    to at least one of the edges be equal to max_height or max_width.
-
-    For example:
-        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
-        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        max_height (`int`):
-            The maximum allowed height.
-        max_width (`int`):
-            The maximum allowed width.
-    """
-    height, width = image_size
-    height_ratio = max_height / height
-    width_ratio = max_width / width
-    ratio = min(height_ratio, width_ratio)
-    new_height = int(height * ratio)
-    new_width = int(width * ratio)
-    return new_height, new_width
-
-
 def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,
@@ -171,7 +142,13 @@ def get_image_size_for_max_height_width(
             The channel dimension format of the input image. If not provided, it will be inferred from the input image.
     """
     image_size = get_image_size(input_image, input_data_format)
-    return _get_image_size_for_max_height_width(image_size, max_height, max_width)
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
 
 
 def get_resize_output_image_size(
