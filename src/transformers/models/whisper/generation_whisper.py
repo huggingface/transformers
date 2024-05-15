@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...feature_extraction_utils import BatchFeature
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import (
     LogitsProcessorList,
@@ -475,7 +476,7 @@ class WhisperGenerationMixin:
                 FutureWarning,
             )
 
-        if input_features is not None and input_features.keys():
+        if input_features is not None and isinstance(input_features, BatchFeature):
             if "num_frames" in input_features.keys():
                 kwargs["num_frames"] = input_features.pop("num_frames")
             if "input_features" in input_features.keys():
