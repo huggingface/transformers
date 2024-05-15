@@ -1098,22 +1098,23 @@ class GenerationMixin:
             raise TypeError(exception_message)
 
     def _validate_assistant(self, assistant_model):
-        if assistant_model is not None:
-            if self.config.is_encoder_decoder:
-                if not assistant_model.config.is_encoder_decoder:
-                    attributes_to_check = [attr for attr in dir(self.config) if attr.startswith("encoder_")]
-                    are_equal = all(
-                        getattr(self.config, attr) == getattr(assistant_model.config, attr)
-                        for attr in attributes_to_check
-                    )
-                    if not are_equal:
-                        raise ValueError(
-                            "The main model and the assistant don't have encoders of the same size. "
-                            "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
-                        )
+        if assistant_model is None or not self.config.is_encoder_decoder:
+            return
 
-                if not self.config.vocab_size == assistant_model.config.vocab_size:
-                    raise ValueError("Make sure the main and assistant model use the same tokenizer")
+        if not assistant_model.config.is_encoder_decoder:
+            attributes_to_check = [attr for attr in dir(self.config) if attr.startswith("encoder_")]
+            are_equal = all(
+                getattr(self.config, attr) == getattr(assistant_model.config, attr)
+                for attr in attributes_to_check
+            )
+            if not are_equal:
+                raise ValueError(
+                    "The main model and the assistant don't have encoders of the same size. "
+                    "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
+                )
+
+        if not self.config.vocab_size == assistant_model.config.vocab_size:
+            raise ValueError("Make sure the main and assistant model use the same tokenizer")
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
