@@ -628,32 +628,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(EXPECTED_SLICE, out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
 
-
-    @slow
-    @require_read_token
-    def test_model_7b_logits_bf16(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        
-        model = LlamaForCausalLM.from_pretrained(
-            "NousResearch/Llama-2-7b-hf", 
-            device_map="auto",
-            torch_dtype=torch.bfloat16
-        )
-        
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]))
-        # Expected mean on dim = -1
- 
-        import pdb; pdb.set_trace()
-
-        EXPECTED_MEAN = torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041,  0.8261, -3.0052,  1.2957, -3.3648]])
-        self.assertTrue(torch.allclose(EXPECTED_MEAN, out.logits.mean(-1), atol=1e-2, rtol=1e-2))
-
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor([-12.8125,  -7.3359,  -0.4846,  -8.0234,  -7.2383,  -7.9922,  -6.4805, -7.7344,  -7.8125,  -7.0078,  -6.1797,  -7.1094,  -1.8633,   1.9736, -8.6016])
-
-        self.assertTrue(torch.allclose(EXPECTED_SLICE, out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
-
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
     def test_model_13b_logits(self):
