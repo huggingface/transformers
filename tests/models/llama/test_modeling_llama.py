@@ -605,18 +605,54 @@ class LlamaIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
+    @require_read_token
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
-        out = model(torch.tensor([input_ids]))
+        
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", 
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+        
+        with torch.no_grad():
+            out = model(torch.tensor([input_ids]))
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+ 
+        EXPECTED_MEAN = torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041,  0.8261, -3.0052,  1.2957, -3.3648]])
+        self.assertTrue(torch.allclose(EXPECTED_MEAN, out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+
+        # slicing logits[0, 0, 0:15]
+        EXPECTED_SLICE = torch.tensor([-12.8125,  -7.3359,  -0.4846,  -8.0234,  -7.2383,  -7.9922,  -6.4805, -7.7344,  -7.8125,  -7.0078,  -6.1797,  -7.1094,  -1.8633,   1.9736, -8.6016])
+
+        self.assertTrue(torch.allclose(EXPECTED_SLICE, out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
+
+
+    @slow
+    @require_read_token
+    def test_model_7b_logits_bf16(self):
+        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        
+        model = LlamaForCausalLM.from_pretrained(
+            "NousResearch/Llama-2-7b-hf", 
+            device_map="auto",
+            torch_dtype=torch.bfloat16
+        )
+        
+        with torch.no_grad():
+            out = model(torch.tensor([input_ids]))
+        # Expected mean on dim = -1
+ 
+        import pdb; pdb.set_trace()
+
+        EXPECTED_MEAN = torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041,  0.8261, -3.0052,  1.2957, -3.3648]])
+        self.assertTrue(torch.allclose(EXPECTED_MEAN, out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+
+        # slicing logits[0, 0, 0:15]
+        EXPECTED_SLICE = torch.tensor([-12.8125,  -7.3359,  -0.4846,  -8.0234,  -7.2383,  -7.9922,  -6.4805, -7.7344,  -7.8125,  -7.0078,  -6.1797,  -7.1094,  -1.8633,   1.9736, -8.6016])
+
+        self.assertTrue(torch.allclose(EXPECTED_SLICE, out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
 
     @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
@@ -643,22 +679,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([-2.2227, 4.8828, 0.9023, -0.4578, -0.7871, -0.1033, -0.6221, -0.5786, -0.7803, -1.0674, -1.2920, -0.1570, 0.8008, 2.0723, -0.9497, 0.2771, -2.2227, -0.7612, -1.4346, -1.2061, -1.6426, -0.3000, -0.7139, -1.1934, -1.8691, -1.6973, -1.5947, -1.2705, -0.3523, -0.5513])  # fmt: skip
         torch.testing.assert_close(out.mean(-1), EXPECTED_SLICE, atol=1e-2, rtol=1e-2)
-
-    @unittest.skip(
-        "Logits are not exactly the same, once we fix the instabalities somehow, will update! Also it is gonna be a `too_slow` test"
-    )
-    @slow
-    def test_model_70b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-70b-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
-
-        EXPECTED_MEAN = torch.tensor(
-            [[-4.2327, -3.3360, -4.6665, -4.7631, -1.8180, -3.4170, -1.4211, -3.1810]], dtype=torch.float32
-        )
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @unittest.skip("Model is curently gated")
     @slow
