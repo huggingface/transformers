@@ -29,6 +29,8 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
+from .integrations.ggml import convert_gguf_tokenizer
+from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -94,6 +96,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
+        gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
@@ -112,6 +115,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif gguf_file is not None:
+            # We need to convert a slow tokenizer to build the backend
+            tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
+            fast_tokenizer = convert_gguf_tokenizer(tokenizer_dict)
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
