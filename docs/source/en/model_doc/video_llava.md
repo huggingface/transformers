@@ -84,7 +84,6 @@ model = VideoLlavaForConditionalGeneration.from_pretrained("RaushanTurganbay/vid
 processor = VideoLlavaProcessor.from_pretrained("RaushanTurganbay/video-llava-7b-hf")
 
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
-clip = load_video_tensor(video_path, n_frms=8)
 
 container = av.open(video_path)
 total_frames = container.streams.video[0].frames

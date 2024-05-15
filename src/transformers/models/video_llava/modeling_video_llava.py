@@ -38,11 +38,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "VideoLlavaConfig"
 
-VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "LanguageBind/Video-LLaVA-7B",
-    # See all video_llava models at https://huggingface.co/models?filter=video_llava
-]
-
 
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VideoLlava

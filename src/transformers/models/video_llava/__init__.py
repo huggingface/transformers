@@ -17,10 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_video_llava": [
-        "VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VideoLlavaConfig",
-    ],
+    "configuration_video_llava": ["VideoLlavaConfig"],
     "processing_video_llava": ["VideoLlavaProcessor"],
 }
 
@@ -39,14 +36,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_video_llava"] = [
-        "VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "VideoLlavaPreTrainedModel",
         "VideoLlavaForConditionalGeneration",
     ]
 
 if TYPE_CHECKING:
     from .configuration_video_llava import (
-        VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VideoLlavaConfig,
     )
     from .image_processing_video_llava import VideoLlavaProcessor
@@ -66,7 +61,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_video_llava import (
-            VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoLlavaForConditionalGeneration,
             VideoLlavaPreTrainedModel,
         )

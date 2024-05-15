@@ -20,10 +20,6 @@ from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
-VIDEO_LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "LanguageBind/Video-LLaVA-7B-hf": "https://huggingface.co/LanguageBind/Video-LLaVA-7B-hf/resolve/main/config.json",
-}
-
 
 class VideoLlavaConfig(PretrainedConfig):
     r"""

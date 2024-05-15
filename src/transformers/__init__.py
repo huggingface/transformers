@@ -3218,7 +3218,6 @@ else:
     )
     _import_structure["models.video_llava"].extend(
         [
-            "VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VideoLlavaForConditionalGeneration",
             "VideoLlavaImageProcessor",
             "VideoLlavaPreTrainedModel",
@@ -7396,7 +7395,6 @@ if TYPE_CHECKING:
             UperNetPreTrainedModel,
         )
         from .models.video_llava import (
-            VIDEO_LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoLlavaForConditionalGeneration,
             VideoLlavaImageProcessor,
             VideoLlavaPreTrainedModel,
