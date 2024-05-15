@@ -283,9 +283,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
 
     def _dequantize(self, model):
-        from ..integrations import unquantize_and_replace
+        from ..integrations import dequantize_and_replace
 
-        model, has_been_replaced = unquantize_and_replace(
+        model, has_been_replaced = dequantize_and_replace(
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model

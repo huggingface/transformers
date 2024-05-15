@@ -287,7 +287,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
     def test_generate_quality_dequantize(self):
         r"""
-        Test that loading the model and unquantize it produce correct results
+        Test that loading the model and dequantizing it produce correct results
         """
         bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 

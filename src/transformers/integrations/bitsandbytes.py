@@ -375,7 +375,7 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def unquantize_and_replace(
+def dequantize_and_replace(
     model,
     modules_to_not_convert=None,
     current_key_name=None,
@@ -434,7 +434,7 @@ def unquantize_and_replace(
                 new_module.to(device)
                 model._modules[name] = new_module
         if len(list(module.children())) > 0:
-            _, has_been_replaced = unquantize_and_replace(
+            _, has_been_replaced = dequantize_and_replace(
                 module,
                 modules_to_not_convert,
                 current_key_name,

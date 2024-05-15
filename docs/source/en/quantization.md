@@ -642,10 +642,10 @@ double_quant_config = BitsAndBytesConfig(
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
 
-### Unquantizing `bitsandbytes` models
+### Dequantizing `bitsandbytes` models
 
-Once quantized, you can unquantize the model to the original precision. Note this might result in a small quality loss of the model. Make also sure to have enough GPU RAM to fit the unquantized model. 
-Below is how to perform unquantization on a 4-bit model using `bitsandbytes`.
+Once quantized, you can dequantize the model to the original precision. Note this might result in a small quality loss of the model. Make also sure to have enough GPU RAM to fit the dequantized model. 
+Below is how to perform dequantization on a 4-bit model using `bitsandbytes`.
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
