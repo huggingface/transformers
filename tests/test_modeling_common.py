@@ -3759,13 +3759,8 @@ class ModelTesterMixin:
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
                         for output_attentions in [True, False]:
-                            if (
-                                not (
-                                    self.has_attentions
-                                    and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                                )
-                                and output_attentions
-                            ):
+                            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+                            if (not (self.has_attentions and can_output_attn) and output_attentions):
                                 continue
                             for batch_size in [1, 5]:
                                 dummy_input = inputs_dict[model.main_input_name]
