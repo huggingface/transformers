@@ -68,7 +68,7 @@ translated_question = translator(question=question, src_lang="French", tgt_lang=
 print(f"The translated question is {translated_question}.")
 answer = image_qa(image=image, question=translated_question)
 print(f"The answer is {answer}")
-```<end_code>
+```<end_action>
 
 ---
 Task: "Identify the oldest person in the `document` and create an image showcasing the result."
@@ -79,7 +79,7 @@ Code:
 answer = document_qa(document, question="What is the oldest person?")
 print(f"The answer is {answer}.")
 image = image_generator(answer)
-```<end_code>
+```<end_action>
 
 ---
 Task: "Generate an image using the text given in the variable `caption`."
@@ -88,7 +88,7 @@ I will use the following tool: `image_generator` to generate an image.
 Code:
 ```py
 image = image_generator(prompt=caption)
-```<end_code>
+```<end_action>
 
 ---
 Task: "Summarize the text given in the variable `text` and read it out loud."
@@ -99,7 +99,7 @@ Code:
 summarized_text = summarizer(text)
 print(f"Summary: {summarized_text}")
 audio_summary = text_reader(summarized_text)
-```<end_code>
+```<end_action>
 
 ---
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
@@ -110,7 +110,7 @@ Code:
 answer = text_qa(text=text, question=question)
 print(f"The answer is {answer}.")
 image = image_generator(answer)
-```<end_code>
+```<end_action>
 
 ---
 Task: "Caption the following `image`."
@@ -119,14 +119,14 @@ I will use the following tool: `image_captioner` to generate a caption for the i
 Code:
 ```py
 caption = image_captioner(image)
-```<end_code>
+```<end_action>
 
 ---
 Above example were using tools that might not exist for you. You only have acces to those Tools:
 <<tool_names>>
 
 Remember to make sure that variables you use are all defined.
-Be sure to provide a 'Code:\n```' sequence before the code and '```<end_code>' after, else you will get an error.
+Be sure to provide a 'Code:\n```' sequence before the code and '```<end_action>' after, else you will get an error.
 DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
 Now Begin!
@@ -136,15 +136,14 @@ Now Begin!
 DEFAULT_REACT_JSON_SYSTEM_PROMPT = """You will be given a task to solve as best you can. You have access to the following tools:
 <<tool_descriptions>>
 
-The way you use the tools is by specifying a json blob.
-Specifically, this json should have a `action` key (name of the tool to use) and a `action_input` key (input to the tool).
+The way you use the tools is by specifying a json, ending with '<end_action>'.
+Specifically, this json should have an `action` key (name of the tool to use) and an `action_input` key (input to the tool).
 
 The $ACTION_JSON_BLOB should only contain a SINGLE action, do NOT return a list of multiple actions. It should be formatted in json. Do not try to escape special characters. Here is the template of a valid $ACTION_JSON_BLOB:
-Action:
 {
   "action": $TOOL_NAME,
   "action_input": $INPUT
-}
+}<end_action>
 
 Make sure to have the $INPUT as a dictionnary in the right format for the tool you are using, and do not put variable names as input if you can find the right values.
 
@@ -171,14 +170,14 @@ Action:
 {
   "action": "image_transformer",
   "action_input": {"image": "image_1.jpg"}
-}
+}<end_action>
 
 To provide the final answer to the task, use an action blob with "action": "final_answer" tool. It is the only way to complete the task, else you will be stuck on a loop. So your final output should look like this:
 Action:
 {
   "action": "final_answer",
   "action_input": {"answer": "insert your final answer here"}
-}
+}<end_action>
 
 
 Here are a few examples using notional tools:
@@ -190,7 +189,7 @@ Action:
 {
   "action": "document_qa",
   "action_input": {"document": "document.pdf", "question": "Who is the oldest person mentioned?"}
-}
+}<end_action>
 Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
 
 
@@ -199,7 +198,7 @@ Action:
 {
   "action": "image_generator",
   "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
-}
+}<end_action>
 Observation: "image.png"
 
 Thought: I will now return the generated image.
@@ -207,7 +206,7 @@ Action:
 {
   "action": "final_answer",
   "action_input": "image.png"
-}
+}<end_action>
 
 ---
 Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
@@ -217,7 +216,7 @@ Action:
 {
     "action": "python_interpreter",
     "action_input": {"code": "5 + 3 + 1294.678"}
-}
+}<end_action>
 Observation: 1302.678
 
 Thought: Now that I know the result, I will now return it.
@@ -225,7 +224,7 @@ Action:
 {
   "action": "final_answer",
   "action_input": "1302.678"
-}
+}<end_action>
 
 ---
 Task: "Which city has the highest population , Guangzhou or Shanghai?"
@@ -235,7 +234,7 @@ Action:
 {
     "action": "search",
     "action_input": "Population Guangzhou"
-}
+}<end_action>
 Observation: ['Guangzhou has a population of 15 million inhabitants as of 2021.']
 
 
@@ -252,7 +251,7 @@ Action:
 {
   "action": "final_answer",
   "action_input": "Shanghai"
-}
+}<end_action>
 
 
 Above example were using notional tools that might not exist for you. You only have acces to those tools:
@@ -285,7 +284,7 @@ Code:
 ```py
 answer = document_qa(document=document, question="Who is the oldest person mentioned?")
 print(answer)
-```<end_code>
+```<end_action>
 Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
 
 Thought: I will now generate an image showcasing the oldest person.
@@ -294,7 +293,7 @@ Code:
 ```py
 image = image_generator("A portrait of John Doe, a 55-year-old man living in Canada.")
 final_answer(image)
-```<end_code>
+```<end_action>
 
 ---
 Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
@@ -305,7 +304,7 @@ Code:
 ```py
 result = 5 + 3 + 1294.678
 final_answer(result)
-```<end_code>
+```<end_action>
 
 ---
 Task: "Which city has the highest population , Guangzhou or Shanghai?"
@@ -317,7 +316,7 @@ population_guangzhou = search("Guangzhou population")
 print("Population Guangzhou:", population_guangzhou)
 population_shanghai = search("Shanghai population")
 print("Population Shanghai:", population_shanghai)
-```<end_code>
+```<end_action>
 Observation:
 Population Guangzhou: ['Guangzhou has a population of 15 million inhabitants as of 2021.']
 Population Shanghai: '26 million (2019)'
@@ -326,7 +325,7 @@ Thought: Now I know that Shanghai has the highest population.
 Code:
 ```py
 final_answer("Shanghai")
-```<end_code>
+```<end_action>
 
 ---
 Task: "What is the current age of the pope, raised to the power 0.36?"
@@ -336,7 +335,7 @@ Code:
 ```py
 pope_age = search(query="current pope age")
 print("Pope age:", pope_age)
-```<end_code>
+```<end_action>
 Observation:
 Pope age: "The pope Francis is currently 85 years old."
 
@@ -345,14 +344,14 @@ Code:
 ```py
 pope_current_age = 85 ** 0.36
 final_answer(pope_current_age)
-```<end_code>
+```<end_action>
 
 
 Above example were using notional tools that might not exist for you. You only have acces to those tools:
 <<tool_names>>
 You also can perform computations in the python code you generate.
 
-Always provide a 'Thought:' and a 'Code:\n```py' sequence ending with '```<end_code>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
+Always provide a 'Thought:' and a 'Code:\n```py' sequence ending with '```<end_action>' sequence. You MUST provide at least the 'Code:' sequence to move forward.
 
 Remember to not perform too many operations in a single code block! You should split the task into intermediate code blocks.
 Print results at the end of each step to save the intermediate results. Then use final_answer() to return the final result.

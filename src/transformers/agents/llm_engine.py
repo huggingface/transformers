@@ -75,8 +75,6 @@ class HfEngine:
         if "Meta-Llama-3" in self.model:
             if "<|eot_id|>" not in stop_sequences:
                 stop_sequences.append("<|eot_id|>")
-            if "!!!!!" not in stop_sequences:
-                stop_sequences.append("!!!!!")
 
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
