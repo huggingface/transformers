@@ -1705,10 +1705,10 @@ class GenerationMixin:
             assistant_kwargs = copy.copy(model_kwargs)
             if assistant_model is not None:
                 if use_dynamic_cache_by_default and not assistant_model._supports_dynamic_cache_class:
-                    if len(assistant_kwargs['past_key_values']) == 0:
-                        del assistant_kwargs['past_key_values']
+                    if len(assistant_kwargs["past_key_values"]) == 0:
+                        del assistant_kwargs["past_key_values"]
                     else:
-                        assistant_kwargs['past_key_values'] = assistant_kwargs['past_key_values'].to_legacy_cache()
+                        assistant_kwargs["past_key_values"] = assistant_kwargs["past_key_values"].to_legacy_cache()
 
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
