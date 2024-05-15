@@ -1103,7 +1103,9 @@ class JetMoeModel(JetMoePreTrainedModel):
                     " this may lead to unexpected behaviour for Flash Attention version of JetMoe. Make sure to "
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        )
 
         hidden_states = inputs_embeds
 
