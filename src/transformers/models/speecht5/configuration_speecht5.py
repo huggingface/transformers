@@ -24,14 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
-SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
-    "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
-}
-
-
 class SpeechT5Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate a

@@ -40,13 +40,6 @@ _CONFIG_FOR_DOC = "DPRConfig"
 _CHECKPOINT_FOR_DOC = "facebook/dpr-ctx_encoder-single-nq-base"
 
 
-from ..deprecated._archive_maps import (  # noqa: F401, E402
-    DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-    DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-    DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-)
-
-
 ##########
 # Outputs
 ##########
@@ -142,6 +135,8 @@ class DPRReaderOutput(ModelOutput):
 
 
 class DPRPreTrainedModel(PreTrainedModel):
+    _supports_sdpa = True
+
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):

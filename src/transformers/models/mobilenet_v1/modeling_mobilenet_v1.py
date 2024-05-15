@@ -43,9 +43,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v1_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
     """
     A map of modules from TF to PyTorch.
@@ -254,6 +251,7 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""

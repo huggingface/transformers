@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Qwen2MoE model."""
+"""PyTorch Qwen2MoE model."""
+
 import inspect
 import math
 import warnings
@@ -60,11 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen1.5-MoE-A2.7B"
 _CONFIG_FOR_DOC = "Qwen2MoeConfig"
-
-QWEN2MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Qwen/Qwen1.5-MoE-A2.7B",
-    # See all Qwen2 models at https://huggingface.co/models?filter=qwen2
-]
 
 
 # Copied from transformers.models.mixtral.modeling_mixtral.load_balancing_loss_func
@@ -871,7 +867,9 @@ class Qwen2MoeDecoderLayer(nn.Module):
 
         self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        if config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
             self.mlp = Qwen2MoeSparseMoeBlock(config)
         else:
             self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
@@ -982,7 +980,6 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1514,7 +1511,7 @@ class Qwen2MoeForSequenceClassification(Qwen2MoePreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

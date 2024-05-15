@@ -65,6 +65,9 @@ ImageInput = Union[
 ]  # noqa
 
 
+VideoInput = Union[np.ndarray, "torch.Tensor", List[np.ndarray], List["torch.Tensor"]]  # noqa
+
+
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
@@ -320,7 +323,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
 
             # Try to load as base64
             try:
-                b64 = base64.b64decode(image, validate=True)
+                b64 = base64.decodebytes(image.encode())
                 image = PIL.Image.open(BytesIO(b64))
             except Exception as e:
                 raise ValueError(

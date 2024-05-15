@@ -52,9 +52,6 @@ _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 
 
-from .._archive_maps import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFPositionalEmbedding(keras.layers.Layer):
     def __init__(self, demb, **kwargs):
         super().__init__(**kwargs)

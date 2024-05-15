@@ -59,8 +59,6 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-from ..deprecated._archive_maps import FALCON_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
@@ -769,15 +767,20 @@ class FalconDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
         self.config = config
 
-        if config.new_decoder_architecture:
-            # The layer norm before self-attention
-            self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            # The layer norm before the MLP
-            self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        else:
+        if config.num_ln_in_parallel_attn is None and config.new_decoder_architecture:
+            config.num_ln_in_parallel_attn = 2
+
+        if not config.parallel_attn:
+            self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            if not config.parallel_attn:
-                self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        else:
+            if config.num_ln_in_parallel_attn == 2:
+                # The layer norm before self-attention
+                self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+                # The layer norm before the MLP
+                self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            else:
+                self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
@@ -798,7 +801,7 @@ class FalconDecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        if self.config.new_decoder_architecture:
+        if self.config.new_decoder_architecture and self.config.num_ln_in_parallel_attn == 2:
             attention_layernorm_out = self.ln_attn(hidden_states)
             mlp_layernorm_out = self.ln_mlp(hidden_states)
         else:
@@ -827,6 +830,13 @@ class FalconDecoderLayer(nn.Module):
                     attention_output, residual, self.config.attention_dropout, training=self.training
                 )
                 mlp_layernorm_out = self.post_attention_layernorm(residual)
+
+        if (
+            self.config.new_decoder_architecture
+            and self.config.parallel_attn
+            and self.config.num_ln_in_parallel_attn == 1
+        ):
+            mlp_layernorm_out = attention_layernorm_out
 
         outputs = attn_outputs[1:]
 
@@ -1212,6 +1222,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
         if past_key_values is not None:
@@ -1234,13 +1245,20 @@ class FalconForCausalLM(FalconPreTrainedModel):
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
-        return {
-            "input_ids": input_ids,
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-        }
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
 
     @add_start_docstrings_to_model_forward(FALCON_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

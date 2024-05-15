@@ -86,7 +86,7 @@ jobs:
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
-          pytest -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rs -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
@@ -97,7 +97,7 @@ jobs:
       
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
@@ -108,7 +108,7 @@ jobs:
         id: run_integration_tests
         if: always()
         run:
-          pytest -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rs -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
@@ -119,7 +119,7 @@ jobs:
 
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main 
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
@@ -127,7 +127,7 @@ jobs:
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        if: ${{ failure() || runner.debug == '1'}}
+        if: ${{ runner.debug == '1'}}
         uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}

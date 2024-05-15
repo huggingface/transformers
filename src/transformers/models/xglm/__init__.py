@@ -24,7 +24,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"]}
+_import_structure = {"configuration_xglm": ["XGLMConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -49,7 +49,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_xglm"] = [
-        "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XGLMForCausalLM",
         "XGLMModel",
         "XGLMPreTrainedModel",
@@ -76,7 +75,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_xglm"] = [
-        "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFXGLMForCausalLM",
         "TFXGLMModel",
         "TFXGLMPreTrainedModel",
@@ -84,7 +82,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
+    from .configuration_xglm import XGLMConfig
 
     try:
         if not is_sentencepiece_available():
@@ -108,7 +106,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
+        from .modeling_xglm import XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
 
     try:
         if not is_flax_available():
@@ -125,7 +123,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_xglm import (
-            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXGLMForCausalLM,
             TFXGLMModel,
             TFXGLMPreTrainedModel,

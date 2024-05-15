@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_multi_accelerator,
     require_torch_or_tf,
     slow,
     torch_device,
@@ -519,6 +520,52 @@ class PipelineUtilsTest(unittest.TestCase):
         actual_output = classifier("Test input.")
         self.assertEqual(expected_output, actual_output)
 
+    @require_torch_accelerator
+    def test_pipeline_no_device(self):
+        # Test when no device is passed to pipeline
+        import torch
+
+        from transformers import AutoModelForCausalLM
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        # Case 1: Model is manually moved to device
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
+        ).to(torch_device)
+        model_device = model.device
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+        self.assertEqual(pipe.model.device, model_device)
+        # Case 2: Model is loaded by accelerate
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", device_map=torch_device, torch_dtype=torch.float16
+        )
+        model_device = model.device
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+        self.assertEqual(pipe.model.device, model_device)
+        # Case 3: device_map is passed to model and device is passed to pipeline
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", device_map=torch_device, torch_dtype=torch.float16
+        )
+        with self.assertRaises(ValueError):
+            pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
+
+    @require_torch_multi_accelerator
+    def test_pipeline_device_not_equal_model_device(self):
+        # Test when device ids are different, pipeline should move the model to the passed device id
+        import torch
+
+        from transformers import AutoModelForCausalLM
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model_device = f"{torch_device}:1"
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", torch_dtype=torch.float16
+        ).to(model_device)
+        target_device = f"{torch_device}:0"
+        self.assertNotEqual(model_device, target_device)
+        pipe = pipeline("text-generation", model=model, device=target_device, tokenizer=tokenizer)
+        self.assertEqual(pipe.model.device, torch.device(target_device))
+
     @slow
     @require_torch
     def test_load_default_pipelines_pt(self):
@@ -541,11 +588,10 @@ class PipelineUtilsTest(unittest.TestCase):
     @slow
     @require_tf
     def test_load_default_pipelines_tf(self):
-        import tensorflow as tf
-
+        from transformers.modeling_tf_utils import keras
         from transformers.pipelines import SUPPORTED_TASKS
 
-        set_seed_fn = lambda: tf.random.set_seed(0)  # noqa: E731
+        set_seed_fn = lambda: keras.utils.set_random_seed(0)  # noqa: E731
         for task in SUPPORTED_TASKS.keys():
             if task == "table-question-answering":
                 # test table in seperate test due to more dependencies
@@ -553,7 +599,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
 
-            # clean-up as much as possible GPU memory occupied by PyTorch
+            # clean-up as much as possible GPU memory occupied by TF
             gc.collect()
 
     @slow

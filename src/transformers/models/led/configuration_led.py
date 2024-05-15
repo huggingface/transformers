@@ -23,9 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import LED_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class LEDConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LEDModel`]. It is used to instantiate an LED

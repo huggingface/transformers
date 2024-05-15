@@ -53,9 +53,6 @@ _CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
 _CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
 
-from ..deprecated._archive_maps import GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Fused kernels
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling, dropout and head mask.
@@ -1208,6 +1205,24 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
             }
         )
         return model_inputs
+
+    def _get_initial_cache_position(self, input_ids, model_kwargs):
+        """
+        Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length.
+        Since gpt bigcode is special, the method is overridden here, other models use it from `generation.utils.py`.
+        """
+        past_length = 0
+        if "past_key_values" in model_kwargs:
+            if self.config.multi_query:
+                past_length = model_kwargs["past_key_values"][0].shape[1]
+            else:
+                past_length = model_kwargs["past_key_values"][0].shape[2]
+        if "inputs_embeds" in model_kwargs:
+            cur_len = model_kwargs["inputs_embeds"].shape[1]
+        else:
+            cur_len = input_ids.shape[-1]
+        model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
+        return model_kwargs
 
     @add_start_docstrings_to_model_forward(GPT_BIGCODE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

@@ -44,9 +44,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "nvidia/groupvit-gcc-yfcc"
 
 
-from ..deprecated._archive_maps import GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
@@ -1118,6 +1115,7 @@ class GroupViTTextTransformer(nn.Module):
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
+                # Note: we assume each sequence (along batch dim.) contains an  `eos_token_id` (e.g. prepared by the tokenizer)
                 (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
                 .int()
                 .argmax(dim=-1),

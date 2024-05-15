@@ -45,9 +45,6 @@ _TOKENIZER_FOR_DOC = "MgpstrTokenizer"
 _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
 
 
-from ..deprecated._archive_maps import MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
@@ -317,6 +314,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
 
     config_class = MgpstrConfig
     base_model_prefix = "mgp_str"
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
