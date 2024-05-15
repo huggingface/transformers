@@ -149,18 +149,72 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
 
-    def test_split_special_tokens(self):
-        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
-        _, _, boxes = self.get_question_words_and_boxes()
-        special_token = "[SPECIAL_TOKEN]"
-        tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
-        encoded_special_token = tokenizer.tokenize(special_token, boxes=boxes, add_special_tokens=False)
-        self.assertEqual(len(encoded_special_token), 1)
+    # def test_split_special_tokens(self):
+    #     tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
+    #     _, _, boxes = self.get_question_words_and_boxes()
+    #     special_token = "[SPECIAL_TOKEN]"
+    #     tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+    #     encoded_special_token = tokenizer.tokenize(special_token, boxes=boxes, add_special_tokens=False)
+    #     self.assertEqual(len(encoded_special_token), 1)
+    #
+    #     encoded_split_special_token = tokenizer.tokenize(
+    #         special_token, add_special_tokens=False, split_special_tokens=True, boxes=boxes
+    #     )
+    #     self.assertTrue(len(encoded_split_special_token) > 1)
 
-        encoded_split_special_token = tokenizer.tokenize(
-            special_token, add_special_tokens=False, split_special_tokens=True, boxes=boxes
-        )
-        self.assertTrue(len(encoded_split_special_token) > 1)
+    def test_split_special_tokens(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            special_token = "<my_new_token>"
+            _, _, boxes = self.get_question_words_and_boxes()
+
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+                tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name,
+                    additional_special_tokens=[special_token],
+                    split_special_tokens=True,
+                    **kwargs,
+                    from_slow=True,
+                )
+                tokenizer_p = self.tokenizer_class.from_pretrained(
+                    pretrained_name, additional_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+
+                p_output = tokenizer_p.tokenize(f"Hey this is a {special_token} token")
+                r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
+                cr_output = tokenizer_cr.tokenize(f"Hey this is a {special_token} token")
+
+                self.assertTrue(special_token not in p_output)
+                self.assertTrue(special_token not in r_output)
+                self.assertTrue(special_token not in cr_output)
+
+                p_output_explicit = tokenizer_p.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+                r_output_explicit = tokenizer_r.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+                cr_output_explicit = tokenizer_cr.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+
+                self.assertTrue(special_token in p_output_explicit)
+                self.assertTrue(special_token in r_output_explicit)
+                self.assertTrue(special_token in cr_output_explicit)
+
+                tmpdirname = tempfile.mkdtemp()
+                tokenizer_p.save_pretrained(tmpdirname)
+                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
+
+                output_reloaded = fast_from_saved.tokenize(f"Hey this is a {special_token} token")
+                self.assertTrue(special_token not in output_reloaded)
+
+                output_explicit_reloaded = fast_from_saved.tokenize(
+                    f"Hey this is a {special_token} token", split_special_tokens=False
+                )
+                self.assertTrue(special_token in output_explicit_reloaded)
 
     @slow
     def test_sequence_builders(self):

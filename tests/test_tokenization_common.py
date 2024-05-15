@@ -4165,9 +4165,6 @@ class TokenizerTesterMixin:
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
-        if not self.test_slow_tokenizer:
-            return
-
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "<my_new_token>"
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -4192,6 +4189,7 @@ class TokenizerTesterMixin:
 
                 encoded_split_special_token = tokenizer_p.encode(special_token, add_special_tokens=False)
                 self.assertTrue(len(encoded_split_special_token) > 1)
+
                 p_output = tokenizer_p.tokenize(f"Hey this is a {special_token} token")
                 r_output = tokenizer_r.tokenize(f"Hey this is a {special_token} token")
                 cr_output = tokenizer_cr.tokenize(f"Hey this is a {special_token} token")
