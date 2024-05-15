@@ -747,7 +747,7 @@ class YolosImageProcessor(BaseImageProcessor):
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
         pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size 
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
     """
@@ -1137,7 +1137,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
             pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size 
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
         """
@@ -1271,7 +1271,7 @@ class YolosImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size 
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
         """
