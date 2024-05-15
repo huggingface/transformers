@@ -40,7 +40,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "InformerConfig"
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Informer
 class InformerFeatureEmbedder(nn.Module):
     """
     Embed a sequence of categorical features.
@@ -75,7 +74,6 @@ class InformerFeatureEmbedder(nn.Module):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->Informer,TimeSeries->Informer
 class InformerStdScaler(nn.Module):
     """
     Standardize features by calculating the mean and scaling along the first dimension, and then normalizes it by
@@ -111,7 +109,6 @@ class InformerStdScaler(nn.Module):
         return (data - loc) / scale, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeriesTransformer->Informer,TimeSeries->Informer
 class InformerMeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along the first dimension, and scales the data
@@ -166,7 +163,6 @@ class InformerMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeriesTransformer->Informer,TimeSeries->Informer
 class InformerNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along the first dimension, and therefore applies no scaling to the input data.
@@ -194,7 +190,6 @@ class InformerNOPScaler(nn.Module):
         return data, loc, scale
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
@@ -219,7 +214,6 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return input_tensor.mean(dim=dim)
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
 def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
     """
     Computes the negative log likelihood loss from input distribution with respect to target.
@@ -262,7 +256,6 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesValueEmbedding with TimeSeries->Info
 class InformerValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super().__init__()
@@ -903,7 +896,7 @@ INFORMER_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`TimeSeriesTransformerConfig`]):
+        config ([`InformerTransformerConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1215,7 +1208,6 @@ class InformerEncoder(InformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
     Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
@@ -1437,7 +1429,6 @@ class InformerDecoder(InformerPreTrainedModel):
     "The bare Informer Model outputting raw hidden-states without any specific head on top.",
     INFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer,TimeSeries->Informer
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -1699,7 +1690,6 @@ class InformerModel(InformerPreTrainedModel):
     "The Informer Model with a distribution head on top for time-series forecasting.",
     INFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
 class InformerForPrediction(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)

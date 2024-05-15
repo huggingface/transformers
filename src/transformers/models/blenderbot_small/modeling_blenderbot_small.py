@@ -313,7 +313,7 @@ class BlenderbotSmallEncoderLayer(nn.Module):
         return outputs
 
 
-# TODO: Implement attention with SDPA for TimeSeriesTransformer.
+# TODO: Implement attention with SDPA for TTransformer.
 BLENDERBOT_SMALL_ATTENTION_CLASSES = {
     "eager": BlenderbotSmallAttention,
 }

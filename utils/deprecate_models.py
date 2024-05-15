@@ -164,7 +164,8 @@ def update_main_init_file(models):
 
     # 1. For each model, find all the instances of model.model_name and replace with model.deprecated.model_name
     for model in models:
-        init_file = init_file.replace(f"models.{model}", f"models.deprecated.{model}")
+        init_file = init_file.replace(f'models.{model}"', f'models.deprecated.{model}"')
+        init_file = init_file.replace(f"models.{model} import", f"models.deprecated.{model} import")
 
     with open(filename, "w") as f:
         f.write(init_file)
@@ -265,14 +266,14 @@ def add_models_to_deprecated_models_in_config_auto(models):
         elif in_deprecated_models and line.strip() == "]":
             in_deprecated_models = False
             # Add the new models to deprecated models list
-            deprecated_models_list.extend([f'"{model},"' for model in models])
+            deprecated_models_list.extend([f'    "{model}", ' for model in models])
             # Sort so they're in alphabetical order in the file
             deprecated_models_list = sorted(deprecated_models_list)
             new_file_lines.extend(deprecated_models_list)
             # Make sure we still have the closing bracket
             new_file_lines.append(line)
         elif in_deprecated_models:
-            deprecated_models_list.append(line.strip())
+            deprecated_models_list.append(line)
         else:
             new_file_lines.append(line)
 

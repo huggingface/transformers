@@ -341,8 +341,6 @@ _import_structure = {
         "MCTCTProcessor",
     ],
     "models.deprecated.mega": ["MegaConfig"],
-    "models.deprecated.megatron_bert": ["MegatronBertConfig"],
-    "models.deprecated.megatron_gpt2": [],
     "models.deprecated.mmbt": ["MMBTConfig"],
     "models.deprecated.nat": ["NatConfig"],
     "models.deprecated.nezha": ["NezhaConfig"],
@@ -548,6 +546,8 @@ _import_structure = {
     ],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
+    "models.megatron_bert": ["MegatronBertConfig"],
+    "models.megatron_gpt2": [],
     "models.mgp_str": [
         "MgpstrConfig",
         "MgpstrProcessor",
@@ -1834,20 +1834,6 @@ else:
             "MegaPreTrainedModel",
         ]
     )
-    _import_structure["models.deprecated.megatron_bert"].extend(
-        [
-            "MegatronBertForCausalLM",
-            "MegatronBertForMaskedLM",
-            "MegatronBertForMultipleChoice",
-            "MegatronBertForNextSentencePrediction",
-            "MegatronBertForPreTraining",
-            "MegatronBertForQuestionAnswering",
-            "MegatronBertForSequenceClassification",
-            "MegatronBertForTokenClassification",
-            "MegatronBertModel",
-            "MegatronBertPreTrainedModel",
-        ]
-    )
     _import_structure["models.deprecated.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
     _import_structure["models.deprecated.nat"].extend(
         [
@@ -1911,7 +1897,9 @@ else:
             "RetriBertPreTrainedModel",
         ]
     )
-    _import_structure["models.deprecated.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
+    _import_structure["models.deprecated.speech_to_text_2"].extend(
+        ["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"]
+    )
     _import_structure["models.deprecated.time_series_transformer"].extend(
         [
             "TimeSeriesTransformerForPrediction",
@@ -2523,6 +2511,20 @@ else:
             "MBartForSequenceClassification",
             "MBartModel",
             "MBartPreTrainedModel",
+        ]
+    )
+    _import_structure["models.megatron_bert"].extend(
+        [
+            "MegatronBertForCausalLM",
+            "MegatronBertForMaskedLM",
+            "MegatronBertForMultipleChoice",
+            "MegatronBertForNextSentencePrediction",
+            "MegatronBertForPreTraining",
+            "MegatronBertForQuestionAnswering",
+            "MegatronBertForSequenceClassification",
+            "MegatronBertForTokenClassification",
+            "MegatronBertModel",
+            "MegatronBertPreTrainedModel",
         ]
     )
     _import_structure["models.mgp_str"].extend(
@@ -4888,20 +4890,52 @@ if TYPE_CHECKING:
         DeformableDetrConfig,
     )
     from .models.deit import DeiTConfig
+    from .models.deprecated.deta import DetaConfig
+    from .models.deprecated.efficientformer import (
+        EfficientFormerConfig,
+    )
+    from .models.deprecated.ernie_m import ErnieMConfig
+    from .models.deprecated.gptsan_japanese import (
+        GPTSanJapaneseConfig,
+        GPTSanJapaneseTokenizer,
+    )
+    from .models.deprecated.graphormer import GraphormerConfig
+    from .models.deprecated.jukebox import (
+        JukeboxConfig,
+        JukeboxPriorConfig,
+        JukeboxTokenizer,
+        JukeboxVQVAEConfig,
+    )
     from .models.deprecated.mctct import (
         MCTCTConfig,
         MCTCTFeatureExtractor,
         MCTCTProcessor,
     )
+    from .models.deprecated.mega import MegaConfig
     from .models.deprecated.mmbt import MMBTConfig
+    from .models.deprecated.nat import NatConfig
+    from .models.deprecated.nezha import NezhaConfig
     from .models.deprecated.open_llama import (
         OpenLlamaConfig,
+    )
+    from .models.deprecated.qdqbert import QDQBertConfig
+    from .models.deprecated.realm import (
+        RealmConfig,
+        RealmTokenizer,
     )
     from .models.deprecated.retribert import (
         RetriBertConfig,
         RetriBertTokenizer,
     )
+    from .models.deprecated.speech_to_text_2 import (
+        Speech2Text2Config,
+        Speech2Text2Processor,
+        Speech2Text2Tokenizer,
+    )
     from .models.deprecated.tapex import TapexTokenizer
+    from .models.deprecated.time_series_transformer import (
+        TimeSeriesTransformerConfig,
+    )
     from .models.deprecated.trajectory_transformer import (
         TrajectoryTransformerConfig,
     )
@@ -4910,9 +4944,25 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.deprecated.tvlt import (
+        TvltConfig,
+        TvltFeatureExtractor,
+        TvltProcessor,
+    )
     from .models.deprecated.van import VanConfig
+    from .models.deprecated.vit_hybrid import (
+        ViTHybridConfig,
+    )
+    from .models.deprecated.x_clip import (
+        XCLIPConfig,
+        XCLIPProcessor,
+        XCLIPTextConfig,
+        XCLIPVisionConfig,
+    )
+    from .models.deprecated.xlm_prophetnet import (
+        XLMProphetNetConfig,
+    )
     from .models.depth_anything import DepthAnythingConfig
-    from .models.deprecated.deta import DetaConfig
     from .models.detr import DetrConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
@@ -4932,9 +4982,6 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPTConfig
-    from .models.deprecated.efficientformer import (
-        EfficientFormerConfig,
-    )
     from .models.efficientnet import (
         EfficientNetConfig,
     )
@@ -4948,7 +4995,6 @@ if TYPE_CHECKING:
     )
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
-    from .models.deprecated.ernie_m import ErnieMConfig
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
     from .models.fastspeech2_conformer import (
@@ -4996,11 +5042,6 @@ if TYPE_CHECKING:
         GPTNeoXJapaneseConfig,
     )
     from .models.gptj import GPTJConfig
-    from .models.deprecated.gptsan_japanese import (
-        GPTSanJapaneseConfig,
-        GPTSanJapaneseTokenizer,
-    )
-    from .models.deprecated.graphormer import GraphormerConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -5027,12 +5068,6 @@ if TYPE_CHECKING:
     )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
-    from .models.deprecated.jukebox import (
-        JukeboxConfig,
-        JukeboxPriorConfig,
-        JukeboxTokenizer,
-        JukeboxVQVAEConfig,
-    )
     from .models.kosmos2 import (
         Kosmos2Config,
         Kosmos2Processor,
@@ -5098,8 +5133,7 @@ if TYPE_CHECKING:
         MaskFormerSwinConfig,
     )
     from .models.mbart import MBartConfig
-    from .models.deprecated.mega import MegaConfig
-    from .models.deprecated.megatron_bert import (
+    from .models.megatron_bert import (
         MegatronBertConfig,
     )
     from .models.mgp_str import (
@@ -5141,8 +5175,6 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
-    from .models.deprecated.nat import NatConfig
-    from .models.deprecated.nezha import NezhaConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
     from .models.nystromformer import (
@@ -5213,14 +5245,9 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
-    from .models.deprecated.qdqbert import QDQBertConfig
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
     from .models.qwen2_moe import Qwen2MoeConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
-    from .models.deprecated.realm import (
-        RealmConfig,
-        RealmTokenizer,
-    )
     from .models.recurrent_gemma import RecurrentGemmaConfig
     from .models.reformer import ReformerConfig
     from .models.regnet import RegNetConfig
@@ -5273,11 +5300,6 @@ if TYPE_CHECKING:
         Speech2TextFeatureExtractor,
         Speech2TextProcessor,
     )
-    from .models.deprecated.speech_to_text_2 import (
-        Speech2Text2Config,
-        Speech2Text2Processor,
-        Speech2Text2Tokenizer,
-    )
     from .models.speecht5 import (
         SpeechT5Config,
         SpeechT5FeatureExtractor,
@@ -5312,9 +5334,6 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
-    from .models.deprecated.time_series_transformer import (
-        TimeSeriesTransformerConfig,
-    )
     from .models.timesformer import (
         TimesformerConfig,
     )
@@ -5322,11 +5341,6 @@ if TYPE_CHECKING:
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
-    )
-    from .models.deprecated.tvlt import (
-        TvltConfig,
-        TvltFeatureExtractor,
-        TvltProcessor,
     )
     from .models.tvp import (
         TvpConfig,
@@ -5365,9 +5379,6 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
-    from .models.deprecated.vit_hybrid import (
-        ViTHybridConfig,
-    )
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -5400,17 +5411,8 @@ if TYPE_CHECKING:
         WhisperProcessor,
         WhisperTokenizer,
     )
-    from .models.deprecated.x_clip import (
-        XCLIPConfig,
-        XCLIPProcessor,
-        XCLIPTextConfig,
-        XCLIPVisionConfig,
-    )
     from .models.xglm import XGLMConfig
     from .models.xlm import XLMConfig, XLMTokenizer
-    from .models.deprecated.xlm_prophetnet import (
-        XLMProphetNetConfig,
-    )
     from .models.xlm_roberta import (
         XLMRobertaConfig,
     )
@@ -5571,6 +5573,7 @@ if TYPE_CHECKING:
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.deprecated.ernie_m import ErnieMTokenizer
+        from .models.deprecated.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gemma import GemmaTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
@@ -5593,7 +5596,6 @@ if TYPE_CHECKING:
         from .models.t5 import T5Tokenizer
         from .models.udop import UdopTokenizer
         from .models.xglm import XGLMTokenizer
-        from .models.deprecated.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
         from .models.xlnet import XLNetTokenizer
 
@@ -5621,6 +5623,7 @@ if TYPE_CHECKING:
         from .models.cpm import CpmTokenizerFast
         from .models.deberta import DebertaTokenizerFast
         from .models.deberta_v2 import DebertaV2TokenizerFast
+        from .models.deprecated.realm import RealmTokenizerFast
         from .models.deprecated.retribert import RetriBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import (
@@ -5656,7 +5659,6 @@ if TYPE_CHECKING:
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.qwen2 import Qwen2TokenizerFast
-        from .models.deprecated.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
@@ -5727,10 +5729,12 @@ if TYPE_CHECKING:
         )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
+        from .models.deprecated.efficientformer import EfficientFormerImageProcessor
+        from .models.deprecated.tvlt import TvltImageProcessor
+        from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
-        from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
@@ -5784,13 +5788,11 @@ if TYPE_CHECKING:
         from .models.siglip import SiglipImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
-        from .models.deprecated.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
-        from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
@@ -6300,15 +6302,78 @@ if TYPE_CHECKING:
             DeiTModel,
             DeiTPreTrainedModel,
         )
+        from .models.deprecated.deta import (
+            DetaForObjectDetection,
+            DetaModel,
+            DetaPreTrainedModel,
+        )
+        from .models.deprecated.efficientformer import (
+            EfficientFormerForImageClassification,
+            EfficientFormerForImageClassificationWithTeacher,
+            EfficientFormerModel,
+            EfficientFormerPreTrainedModel,
+        )
+        from .models.deprecated.ernie_m import (
+            ErnieMForInformationExtraction,
+            ErnieMForMultipleChoice,
+            ErnieMForQuestionAnswering,
+            ErnieMForSequenceClassification,
+            ErnieMForTokenClassification,
+            ErnieMModel,
+            ErnieMPreTrainedModel,
+        )
+        from .models.deprecated.gptsan_japanese import (
+            GPTSanJapaneseForConditionalGeneration,
+            GPTSanJapaneseModel,
+            GPTSanJapanesePreTrainedModel,
+        )
+        from .models.deprecated.graphormer import (
+            GraphormerForGraphClassification,
+            GraphormerModel,
+            GraphormerPreTrainedModel,
+        )
+        from .models.deprecated.jukebox import (
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            JukeboxPrior,
+            JukeboxVQVAE,
+        )
         from .models.deprecated.mctct import (
             MCTCTForCTC,
             MCTCTModel,
             MCTCTPreTrainedModel,
         )
+        from .models.deprecated.mega import (
+            MegaForCausalLM,
+            MegaForMaskedLM,
+            MegaForMultipleChoice,
+            MegaForQuestionAnswering,
+            MegaForSequenceClassification,
+            MegaForTokenClassification,
+            MegaModel,
+            MegaPreTrainedModel,
+        )
         from .models.deprecated.mmbt import (
             MMBTForClassification,
             MMBTModel,
             ModalEmbeddings,
+        )
+        from .models.deprecated.nat import (
+            NatBackbone,
+            NatForImageClassification,
+            NatModel,
+            NatPreTrainedModel,
+        )
+        from .models.deprecated.nezha import (
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
         )
         from .models.deprecated.open_llama import (
             OpenLlamaForCausalLM,
@@ -6316,9 +6381,41 @@ if TYPE_CHECKING:
             OpenLlamaModel,
             OpenLlamaPreTrainedModel,
         )
+        from .models.deprecated.qdqbert import (
+            QDQBertForMaskedLM,
+            QDQBertForMultipleChoice,
+            QDQBertForNextSentencePrediction,
+            QDQBertForQuestionAnswering,
+            QDQBertForSequenceClassification,
+            QDQBertForTokenClassification,
+            QDQBertLayer,
+            QDQBertLMHeadModel,
+            QDQBertModel,
+            QDQBertPreTrainedModel,
+            load_tf_weights_in_qdqbert,
+        )
+        from .models.deprecated.realm import (
+            RealmEmbedder,
+            RealmForOpenQA,
+            RealmKnowledgeAugEncoder,
+            RealmPreTrainedModel,
+            RealmReader,
+            RealmRetriever,
+            RealmScorer,
+            load_tf_weights_in_realm,
+        )
         from .models.deprecated.retribert import (
             RetriBertModel,
             RetriBertPreTrainedModel,
+        )
+        from .models.deprecated.speech_to_text_2 import (
+            Speech2Text2ForCausalLM,
+            Speech2Text2PreTrainedModel,
+        )
+        from .models.deprecated.time_series_transformer import (
+            TimeSeriesTransformerForPrediction,
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerPreTrainedModel,
         )
         from .models.deprecated.trajectory_transformer import (
             TrajectoryTransformerModel,
@@ -6332,19 +6429,39 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
+        from .models.deprecated.tvlt import (
+            TvltForAudioVisualClassification,
+            TvltForPreTraining,
+            TvltModel,
+            TvltPreTrainedModel,
+        )
         from .models.deprecated.van import (
             VanForImageClassification,
             VanModel,
             VanPreTrainedModel,
         )
+        from .models.deprecated.vit_hybrid import (
+            ViTHybridForImageClassification,
+            ViTHybridModel,
+            ViTHybridPreTrainedModel,
+        )
+        from .models.deprecated.x_clip import (
+            XCLIPModel,
+            XCLIPPreTrainedModel,
+            XCLIPTextModel,
+            XCLIPVisionModel,
+        )
+        from .models.deprecated.xlm_prophetnet import (
+            XLMProphetNetDecoder,
+            XLMProphetNetEncoder,
+            XLMProphetNetForCausalLM,
+            XLMProphetNetForConditionalGeneration,
+            XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
+        )
         from .models.depth_anything import (
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
-        )
-        from .models.deprecated.deta import (
-            DetaForObjectDetection,
-            DetaModel,
-            DetaPreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,
@@ -6392,12 +6509,6 @@ if TYPE_CHECKING:
             DPTModel,
             DPTPreTrainedModel,
         )
-        from .models.deprecated.efficientformer import (
-            EfficientFormerForImageClassification,
-            EfficientFormerForImageClassificationWithTeacher,
-            EfficientFormerModel,
-            EfficientFormerPreTrainedModel,
-        )
         from .models.efficientnet import (
             EfficientNetForImageClassification,
             EfficientNetModel,
@@ -6431,15 +6542,6 @@ if TYPE_CHECKING:
             ErnieForTokenClassification,
             ErnieModel,
             ErniePreTrainedModel,
-        )
-        from .models.deprecated.ernie_m import (
-            ErnieMForInformationExtraction,
-            ErnieMForMultipleChoice,
-            ErnieMForQuestionAnswering,
-            ErnieMForSequenceClassification,
-            ErnieMForTokenClassification,
-            ErnieMModel,
-            ErnieMPreTrainedModel,
         )
         from .models.esm import (
             EsmFoldPreTrainedModel,
@@ -6589,16 +6691,6 @@ if TYPE_CHECKING:
             GPTJModel,
             GPTJPreTrainedModel,
         )
-        from .models.deprecated.gptsan_japanese import (
-            GPTSanJapaneseForConditionalGeneration,
-            GPTSanJapaneseModel,
-            GPTSanJapanesePreTrainedModel,
-        )
-        from .models.deprecated.graphormer import (
-            GraphormerForGraphClassification,
-            GraphormerModel,
-            GraphormerPreTrainedModel,
-        )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
@@ -6666,12 +6758,6 @@ if TYPE_CHECKING:
             JetMoeForSequenceClassification,
             JetMoeModel,
             JetMoePreTrainedModel,
-        )
-        from .models.deprecated.jukebox import (
-            JukeboxModel,
-            JukeboxPreTrainedModel,
-            JukeboxPrior,
-            JukeboxVQVAE,
         )
         from .models.kosmos2 import (
             Kosmos2ForConditionalGeneration,
@@ -6810,17 +6896,7 @@ if TYPE_CHECKING:
             MBartModel,
             MBartPreTrainedModel,
         )
-        from .models.deprecated.mega import (
-            MegaForCausalLM,
-            MegaForMaskedLM,
-            MegaForMultipleChoice,
-            MegaForQuestionAnswering,
-            MegaForSequenceClassification,
-            MegaForTokenClassification,
-            MegaModel,
-            MegaPreTrainedModel,
-        )
-        from .models.deprecated.megatron_bert import (
+        from .models.megatron_bert import (
             MegatronBertForCausalLM,
             MegatronBertForMaskedLM,
             MegatronBertForMultipleChoice,
@@ -6945,23 +7021,6 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
-        )
-        from .models.deprecated.nat import (
-            NatBackbone,
-            NatForImageClassification,
-            NatModel,
-            NatPreTrainedModel,
-        )
-        from .models.deprecated.nezha import (
-            NezhaForMaskedLM,
-            NezhaForMultipleChoice,
-            NezhaForNextSentencePrediction,
-            NezhaForPreTraining,
-            NezhaForQuestionAnswering,
-            NezhaForSequenceClassification,
-            NezhaForTokenClassification,
-            NezhaModel,
-            NezhaPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,
@@ -7125,19 +7184,6 @@ if TYPE_CHECKING:
             PvtV2Model,
             PvtV2PreTrainedModel,
         )
-        from .models.deprecated.qdqbert import (
-            QDQBertForMaskedLM,
-            QDQBertForMultipleChoice,
-            QDQBertForNextSentencePrediction,
-            QDQBertForQuestionAnswering,
-            QDQBertForSequenceClassification,
-            QDQBertForTokenClassification,
-            QDQBertLayer,
-            QDQBertLMHeadModel,
-            QDQBertModel,
-            QDQBertPreTrainedModel,
-            load_tf_weights_in_qdqbert,
-        )
         from .models.qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
@@ -7157,16 +7203,6 @@ if TYPE_CHECKING:
             RagPreTrainedModel,
             RagSequenceForGeneration,
             RagTokenForGeneration,
-        )
-        from .models.deprecated.realm import (
-            RealmEmbedder,
-            RealmForOpenQA,
-            RealmKnowledgeAugEncoder,
-            RealmPreTrainedModel,
-            RealmReader,
-            RealmRetriever,
-            RealmScorer,
-            load_tf_weights_in_realm,
         )
         from .models.recurrent_gemma import (
             RecurrentGemmaForCausalLM,
@@ -7318,10 +7354,6 @@ if TYPE_CHECKING:
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
-        from .models.deprecated.speech_to_text_2 import (
-            Speech2Text2ForCausalLM,
-            Speech2Text2PreTrainedModel,
-        )
         from .models.speecht5 import (
             SpeechT5ForSpeechToSpeech,
             SpeechT5ForSpeechToText,
@@ -7420,11 +7452,6 @@ if TYPE_CHECKING:
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
         )
-        from .models.deprecated.time_series_transformer import (
-            TimeSeriesTransformerForPrediction,
-            TimeSeriesTransformerModel,
-            TimeSeriesTransformerPreTrainedModel,
-        )
         from .models.timesformer import (
             TimesformerForVideoClassification,
             TimesformerModel,
@@ -7434,12 +7461,6 @@ if TYPE_CHECKING:
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,
-        )
-        from .models.deprecated.tvlt import (
-            TvltForAudioVisualClassification,
-            TvltForPreTraining,
-            TvltModel,
-            TvltPreTrainedModel,
         )
         from .models.tvp import (
             TvpForVideoGrounding,
@@ -7525,11 +7546,6 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
-        from .models.deprecated.vit_hybrid import (
-            ViTHybridForImageClassification,
-            ViTHybridModel,
-            ViTHybridPreTrainedModel,
-        )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
             ViTMAELayer,
@@ -7601,12 +7617,6 @@ if TYPE_CHECKING:
             WhisperModel,
             WhisperPreTrainedModel,
         )
-        from .models.deprecated.x_clip import (
-            XCLIPModel,
-            XCLIPPreTrainedModel,
-            XCLIPTextModel,
-            XCLIPVisionModel,
-        )
         from .models.xglm import (
             XGLMForCausalLM,
             XGLMModel,
@@ -7621,14 +7631,6 @@ if TYPE_CHECKING:
             XLMModel,
             XLMPreTrainedModel,
             XLMWithLMHeadModel,
-        )
-        from .models.deprecated.xlm_prophetnet import (
-            XLMProphetNetDecoder,
-            XLMProphetNetEncoder,
-            XLMProphetNetForCausalLM,
-            XLMProphetNetForConditionalGeneration,
-            XLMProphetNetModel,
-            XLMProphetNetPreTrainedModel,
         )
         from .models.xlm_roberta import (
             XLMRobertaForCausalLM,
@@ -7921,6 +7923,12 @@ if TYPE_CHECKING:
             TFDeiTModel,
             TFDeiTPreTrainedModel,
         )
+        from .models.deprecated.efficientformer import (
+            TFEfficientFormerForImageClassification,
+            TFEfficientFormerForImageClassificationWithTeacher,
+            TFEfficientFormerModel,
+            TFEfficientFormerPreTrainedModel,
+        )
         from .models.deprecated.transfo_xl import (
             TFAdaptiveEmbedding,
             TFTransfoXLForSequenceClassification,
@@ -7946,12 +7954,6 @@ if TYPE_CHECKING:
             TFDPRPretrainedReader,
             TFDPRQuestionEncoder,
             TFDPRReader,
-        )
-        from .models.deprecated.efficientformer import (
-            TFEfficientFormerForImageClassification,
-            TFEfficientFormerForImageClassificationWithTeacher,
-            TFEfficientFormerModel,
-            TFEfficientFormerPreTrainedModel,
         )
         from .models.electra import (
             TFElectraForMaskedLM,
