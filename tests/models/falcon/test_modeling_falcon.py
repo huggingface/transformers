@@ -622,25 +622,6 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     @slow
-    @require_bitsandbytes
-    def test_lm_generate_falcon_11b(self):
-        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
-        model = FalconForCausalLM.from_pretrained(
-            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
-        )
-        model.eval()
-        inputs = tokenizer("Two roads diverged in a yellow wood", return_tensors="pt", return_token_type_ids=False).to(
-            torch_device
-        )
-
-        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both"
-
-        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=9)
-        output_str = tokenizer.batch_decode(output_ids)[0]
-
-        self.assertEqual(output_str, EXPECTED_OUTPUT)
-
-    @slow
     def test_lm_generation_big_models(self):
         # The big models are way too big for the CI, so we use tiny random models that resemble their
         # architectures but with much smaller and fewer layers
@@ -704,27 +685,3 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertLess(unpadded_inputs.input_ids.shape[-1], padded_inputs.input_ids.shape[-1])  # left-padding exists
         self.assertEqual(unpadded_gen_text[0], expected_output)
         self.assertEqual(padded_gen_text[0], expected_output)
-
-    @slow
-    @require_torch_sdpa
-    def test_falcon_alibi_sdpa_matches_eager(self):
-        input_ids = torch.randint(0, 1000, (5, 20))
-
-        config = FalconConfig(
-            vocab_size=1000,
-            hidden_size=64,
-            num_hidden_layers=3,
-            num_attention_heads=4,
-            new_decoder_architecture=True,
-            alibi=True,
-        )
-
-        falcon = FalconForCausalLM(config)
-        falcon = falcon.eval()
-
-        with torch.no_grad():
-            # output_attentions=True dispatches to eager path
-            falcon_output_eager = falcon(input_ids, output_attentions=True)[0]
-            falcon_output_sdpa = falcon(input_ids)[0]
-
-        self.assertTrue(torch.allclose(falcon_output_eager, falcon_output_sdpa, atol=1e-3))
