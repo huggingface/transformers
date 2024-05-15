@@ -1057,7 +1057,11 @@ class MistralModel(MistralPreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
         using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
 
-        if self.config._attn_implementation == "sdpa" and not (using_static_cache or using_sliding_window_cache):
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not (using_static_cache or using_sliding_window_cache)
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
