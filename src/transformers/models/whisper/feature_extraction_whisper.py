@@ -188,7 +188,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
         device: Optional[str] = "cpu",
-        return_timestamps: Optional[int] = None,
+        return_token_timestamps: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
         """
