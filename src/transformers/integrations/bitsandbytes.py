@@ -341,10 +341,12 @@ def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
     if cls_name not in ("Params4bit", "Int8Params"):
         return weight
 
-    import bitsandbytes as bnb
-
     if cls_name == "Params4bit":
-        return bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
+        output_tensor = bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
+        logger.warning_once(
+            f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
+        )
+        return output_tensor
 
     if state.SCB is None:
         state.SCB = weight.SCB
