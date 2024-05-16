@@ -323,7 +323,7 @@ class AutoImageProcessor:
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            use_fast (`bool`, *optional*, defaults to `True`):
+            use_fast (`bool`, *optional*, defaults to `False`):
                 Use a fast torchvision-base image processor if it is supported for a given model.
                 If a fast tokenizer is not available for a given model, a normal numpy-based image processor
                 is returned instead.
@@ -371,7 +371,7 @@ class AutoImageProcessor:
             kwargs["token"] = use_auth_token
 
         config = kwargs.pop("config", None)
-        use_fast = kwargs.pop("use_fast", True)
+        use_fast = kwargs.pop("use_fast", False)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
