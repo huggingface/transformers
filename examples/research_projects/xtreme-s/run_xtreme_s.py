@@ -844,7 +844,7 @@ def main():
             compute_metrics=compute_asr_metric if training_args.predict_with_generate else None,
             train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
             eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-            tokenizer=feature_extractor,
+            processor=processor,
         )
     else:
         trainer = Trainer(
@@ -855,7 +855,7 @@ def main():
             compute_metrics=compute_asr_metric if is_text_target else compute_classification_metric,
             train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
             eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-            tokenizer=feature_extractor,
+            processor=processor,
         )
 
     # 8. Finally, we can start training
