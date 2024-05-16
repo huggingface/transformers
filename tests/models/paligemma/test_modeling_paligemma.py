@@ -262,7 +262,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 @require_torch
 class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = PaliGemmaProcessor.from_pretrained("gv-hf/PaliGemma-test-224px-hf")
+        self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
         gc.collect()
@@ -272,7 +272,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = PaliGemmaForConditionalGeneration.from_pretrained("gv-hf/PaliGemma-test-224px-hf")
+        model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-pt-224")
         prompt = ""
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
@@ -280,40 +280,40 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(text=prompt, images=raw_image, return_tensors="pt")
         # fmt: off
-        EXPECTED_INPUT_IDS = torch.tensor([[256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000, 256000,
-         256000, 256000, 256000, 256000,      2,    108]])
+        EXPECTED_INPUT_IDS = torch.tensor([[257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152, 257152,
+         257152, 257152, 257152, 257152,      2,    108]])
         # fmt: on
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\ncow standing on the beach"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -322,11 +322,11 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_small_model_integration_test_paligemma(self):
+    def test_small_model_integration_test_paligemma_VQA(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "gv-hf/PaliGemma-test-224px-hf"
+        model_id = "google/paligemma-3b-pt-224"
 
-        model = PaliGemmaForConditionalGeneration.from_pretrained("gv-hf/PaliGemma-test-224px-hf")
+        model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-pt-224")
         processor = PaliGemmaProcessor.from_pretrained(model_id)
 
         prompt = "answer en Where is the cow standing?"
@@ -346,9 +346,33 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_small_model_integration_test_paligemma_empty_prompt(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "google/paligemma-3b-pt-224"
+
+        model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PaliGemmaProcessor.from_pretrained(model_id)
+
+        prompt = ""
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        )
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(text=prompt, images=raw_image, return_tensors="pt").to(torch.float16)
+
+        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
+        EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
+
+        self.assertEqual(
+            processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
     def test_small_model_integration_test_paligemma_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "gv-hf/PaliGemma-test-224px-hf"
+        model_id = "google/paligemma-3b-pt-224"
 
         model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
         processor = PaliGemmaProcessor.from_pretrained(model_id)
@@ -369,15 +393,18 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow standing on the beach"]  # fmt: skip
+        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
+    @require_torch
     @require_bitsandbytes
-    def test_small_model_integration_test_batch(self):
+    def test_small_model_integration_test_paligemma_batched_bf16(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = PaliGemmaForConditionalGeneration.from_pretrained("gv-hf/PaliGemma-test-224px-hf")
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
+            "google/paligemma-3b-pt-224", revision="bfloat16", torch_dtype=torch.bfloat16
+        ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
             "answer en Where is the cow standing?",
@@ -391,11 +418,46 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         image2 = image1
 
-        inputs = self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+        inputs = (
+            self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+            .to(torch.bfloat16)
+            .to(torch_device)
+        )
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_torch
+    @require_bitsandbytes
+    def test_small_model_integration_test_paligemma_batched_f16(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model = PaliGemmaForConditionalGeneration.from_pretrained(
+            "google/paligemma-3b-pt-224", revision="float16", torch_dtype=torch.float16
+        ).to(torch_device)
+        # The first batch is longer in terms of text, the second will be padded.
+        prompts = [
+            "answer en Where is the cow standing?",
+            "",
+        ]
+        image1 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                stream=True,
+            ).raw
+        )
+        image2 = image1
+
+        inputs = (
+            self.processor(text=prompts, images=[image1, image2], return_tensors="pt", padding=True)
+            .to(torch.float16)
+            .to(torch_device)
+        )
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow standing on the beach"]  # fmt: skip
+        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
@@ -404,7 +466,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
-        model_id = "gv-hf/PaliGemma-test-224px-hf"
+        model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
 
         processor = PaliGemmaProcessor.from_pretrained(model_id)
