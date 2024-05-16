@@ -312,6 +312,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
+    # used in `test_torch_compile`
+    _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
+
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)

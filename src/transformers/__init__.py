@@ -1161,6 +1161,7 @@ else:
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
+    _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -3250,7 +3251,6 @@ else:
     _import_structure["models.video_llava"].extend(
         [
             "VideoLlavaForConditionalGeneration",
-            "VideoLlavaImageProcessor",
             "VideoLlavaPreTrainedModel",
             "VideoLlavaProcessor",
         ]
@@ -5769,6 +5769,7 @@ if TYPE_CHECKING:
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
+        from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -7451,7 +7452,6 @@ if TYPE_CHECKING:
         )
         from .models.video_llava import (
             VideoLlavaForConditionalGeneration,
-            VideoLlavaImageProcessor,
             VideoLlavaPreTrainedModel,
             VideoLlavaProcessor,
         )

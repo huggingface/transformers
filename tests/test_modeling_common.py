@@ -27,6 +27,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
+from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -35,6 +36,7 @@ from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
+    AutoTokenizer,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -71,6 +73,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_safetensors,
     require_torch,
     require_torch_gpu,
@@ -2788,7 +2791,9 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = model_class.from_pretrained(
+                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
+                    )
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
@@ -3724,6 +3729,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
+            # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
+            # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
+            # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
+            deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
 
             is_encoder_decoder = model.config.is_encoder_decoder
 
@@ -3861,6 +3871,27 @@ class ModelTesterMixin:
                                             and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
                                         ):
                                             processed_inputs["output_attentions"] = output_attentions
+                                    if not deactivate_mask and (
+                                        "bool_masked_pos" in inspect.signature(model_eager.forward).parameters
+                                    ):
+                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
+
+                                        # In case of additional token (like class) we define a custom `mask_length`
+                                        if hasattr(self.model_tester, "mask_length"):
+                                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
+                                        else:
+                                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
+                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
+                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+
+                                    if "noise" in inspect.signature(model_eager.forward).parameters:
+                                        np.random.seed(2)
+                                        num_patches = int(
+                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+                                        )
+                                        noise = np.random.uniform(size=(batch_size, num_patches))
+                                        processed_inputs["noise"] = torch.from_numpy(noise)
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
@@ -4337,7 +4368,7 @@ class ModelTesterMixin:
             self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
+            if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
@@ -4370,6 +4401,38 @@ class ModelTesterMixin:
             normalized_0 = F.softmax(out_last_tokens)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+    # For now, Let's focus only on GPU for `torch.compile`
+    @slow
+    @require_torch_gpu
+    @require_read_token
+    def test_torch_compile(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
+        if not hasattr(self, "_torch_compile_test_ckpt"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
+        ckpt = self._torch_compile_test_ckpt
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        batch_size = 1
+        n_iter = 3
+
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+
+        model.generation_config.max_new_tokens = 4
+        model.generation_config.max_new_tokens = 4
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        input_text = "Why dogs are cute?"
+        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
+
+        for i in range(n_iter):
+            _ = model.generate(**input_ids, do_sample=False)
 
 
 global_rng = random.Random()
