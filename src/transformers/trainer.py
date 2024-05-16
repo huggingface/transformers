@@ -75,6 +75,7 @@ from .pytorch_utils import (
     is_torch_greater_or_equal_than_2_3,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
+from .processing_utils import ProcessorMixin
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -318,6 +319,10 @@ class Trainer:
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
+        processor ([`ProcessorMixin`], *optional*):
+            The processor used to pre- and post-process the data for multimodal models. If provided, will be used to
+            automatically pad the inputs to the maximum length when batching inputs, and it will be saved along the
+            model to make it easier to rerun an interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -375,6 +380,7 @@ class Trainer:
         train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset], "datasets.Dataset"]] = None,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        processor: Optional[ProcessorMixin] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
@@ -510,6 +516,10 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
+        self.tokenizer = tokenizer
+        if processor is not None and hasattr(processor, "feature_extractor"):
+            tokenizer = processor.feature_extractor
+
         default_collator = (
             DataCollatorWithPadding(tokenizer)
             if tokenizer is not None and isinstance(tokenizer, (PreTrainedTokenizerBase, SequenceFeatureExtractor))
@@ -518,7 +528,6 @@ class Trainer:
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
-        self.tokenizer = tokenizer
 
         # Bnb Quantized models doesn't support `.to` operation.
         if (

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
     from .training_args import TrainingArguments
+    from .processing_utils import ProcessorMixin
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +49,7 @@ class Seq2SeqTrainer(Trainer):
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        processor: Optional["ProcessorMixin"] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
         callbacks: Optional[List["TrainerCallback"]] = None,
@@ -61,6 +63,7 @@ class Seq2SeqTrainer(Trainer):
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             tokenizer=tokenizer,
+            processor=processor,
             model_init=model_init,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
