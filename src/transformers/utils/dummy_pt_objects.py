@@ -8417,13 +8417,6 @@ class VideoLlavaForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class VideoLlavaImageProcessor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class VideoLlavaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
