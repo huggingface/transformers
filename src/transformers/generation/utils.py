@@ -2156,6 +2156,7 @@ class GenerationMixin:
         """
         # torch.compile does not support data-dependent control flow. This is a workaround to allow torch.compile,
         # although we lose the ability to stop when all sequences return an EOS token (and other stopping criteria)
+        # TODO (joao): remove this when torch's support for control flow is not experimental (https://pytorch.org/docs/stable/generated/torch.cond.html)
         if is_torchdynamo_compiling():
             return cur_len < max_length
         else:
