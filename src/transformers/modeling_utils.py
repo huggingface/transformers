@@ -1479,6 +1479,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config,
                 hard_check_only=False if requested_attn_implementation is None else True,
             )
+
+            if (
+                torch.version.hip is not None
+                and config._attn_implementation == "sdpa"
+                and torch.cuda.device_count() > 1
+            ):
+                logger.warning_once(
+                    "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
+                )
+                torch.backends.cuda.enable_flash_sdp(False)
         else:
             config._attn_implementation = "eager"
 
