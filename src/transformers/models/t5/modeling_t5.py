@@ -25,8 +25,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
+from ...activations import ACT2FN
+from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
@@ -35,10 +35,10 @@ from transformers.modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import PreTrainedModel
-from transformers.cache_utils import Cache, T5StaticCache
-from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
-from transformers.utils import (
+from ...modeling_utils import PreTrainedModel
+from ...cache_utils import Cache, T5StaticCache
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
@@ -47,8 +47,8 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
-from transformers.models.t5.configuration_t5 import T5Config
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from .configuration_t5 import T5Config
 
 
 logger = logging.get_logger(__name__)
