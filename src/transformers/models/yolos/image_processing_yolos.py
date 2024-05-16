@@ -204,7 +204,7 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
     """Convert annotation boxes from absolute xyxy (pascal voc) to relative xcycwh (yolo) format."""
     if "boxes" in annotation:
-        annotation = dict(**annotation)  # shallow copy
+        annotation = annotation.copy()  # shallow copy
         annotation["boxes"] = convert_boxes(
             annotation["boxes"],
             input_format="absolute_xyxy",
