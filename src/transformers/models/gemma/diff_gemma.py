@@ -223,7 +223,7 @@ class GemmaAttention(nn.Module):
 GemmaFlashAttention2 = LlamaFlashAttention2
 GemmaSdpaAttention = LlamaSdpaAttention
 
-COHERE_ATTENTION_CLASSES = {
+GEMMA_ATTENTION_CLASSES = {
     "eager": GemmaAttention,
     "flash_attention_2": GemmaFlashAttention2,
     "sdpa": GemmaSdpaAttention,
