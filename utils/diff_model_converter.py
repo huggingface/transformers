@@ -56,19 +56,12 @@ class ReplaceNameTransformer(CSTTransformer):
         updated_value = self.preserve_case_replace(updated_node.value)
         return updated_node.with_changes(value=updated_value)
 
-    def leave_SimpleStatementLine(self, orignal_node, updated_node):
+    def leave_SimpleString(self, orignal_node, updated_node):
         """Replace imports that match our criteria."""
-        
-        if m.matches(updated_node.body[0], m.Expr()):
-            expr=updated_node.body[0]
-            if m.matches(expr.value, m.SimpleString()):
-                simplestring=expr.value.value
-                updated_value = self.preserve_case_replace(simplestring)
-                print(f'GOTT={updated_value}')
-                return updated_node.with_changes(body=[
-                    cst.Expr(value=cst.SimpleString(value=updated_value))
-                ])
-        return updated_node
+
+        updated_value = self.preserve_case_replace(updated_node.value)
+        print(f'GOTT={updated_value}')
+        return updated_node.with_changes(value=updated_value)
 
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     transformer = ReplaceNameTransformer(old_id, new_id)
