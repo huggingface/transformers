@@ -80,6 +80,8 @@ class DeiTModelTester:
         num_labels=3,
         scope=None,
         encoder_stride=2,
+        mask_ratio=0.5,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -99,10 +101,14 @@ class DeiTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
+        self.attn_implementation = attn_implementation
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 2
+        self.mask_ratio = mask_ratio
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -130,6 +136,7 @@ class DeiTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
