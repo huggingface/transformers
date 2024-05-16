@@ -145,12 +145,10 @@ class GPTSanJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     is_encoder_decoder = False
     test_pruning = False
     test_headmasking = False
-    test_cpu_offload = False
-    test_disk_offload = False
     test_save_load_fast_init_to_base = False
     test_training = False
     # The small GPTSAN_JAPANESE model needs higher percentages for CPU/MP tests
-    model_split_percents = [0.8, 0.9]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
