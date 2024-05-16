@@ -83,11 +83,15 @@ def get_json_schema(func):
     if not doc:
         raise ValueError(f"Cannot generate JSON schema for {func.__name__} because it has no docstring!")
     doc = doc.strip()
-    main_doc, param_descriptions = _get_argument_descriptions_from_docstring(doc)
+    main_doc, param_descriptions, return_doc = _get_argument_descriptions_from_docstring(doc)
 
     json_schema = _convert_type_hints_to_json_schema(func)
     for arg in json_schema["properties"]:
-        if arg not in param_descriptions:
+        if arg == "return":
+            if return_doc is not None:  # We allow a missing return docstring since most templates ignore it
+                json_schema["properties"][arg]["description"] = return_doc
+            continue
+        elif arg not in param_descriptions:
             raise ValueError(
                 f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
             )
@@ -137,8 +141,10 @@ def add_json_schema(func):
 def _get_argument_descriptions_from_docstring(doc):
     param_pattern = r":param (\w+): (.+)"
     params = re.findall(param_pattern, doc)
+    return_pattern = r":returns?: (.+)"
+    return_doc = re.search(return_pattern, doc)
     main_doc = doc.split(":param")[0].strip()
-    return main_doc, dict(params)
+    return main_doc, dict(params), return_doc.group(1) if return_doc else None
 
 
 def _convert_type_hints_to_json_schema(func):
@@ -154,8 +160,6 @@ def _convert_type_hints_to_json_schema(func):
             required.append(param_name)
 
     for param_name, param_type in type_hints.items():
-        if param_name == "return":
-            continue
         properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
