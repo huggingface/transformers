@@ -5759,8 +5759,8 @@ if TYPE_CHECKING:
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
-        from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.video_llava import VideoLlavaImageProcessor
+        from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
