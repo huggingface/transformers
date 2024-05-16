@@ -3254,7 +3254,7 @@ class Trainer:
 
         return ctx_manager
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], **kwargs) -> torch.Tensor:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -3268,8 +3268,6 @@ class Trainer:
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument `labels`. Check your model's documentation for all accepted arguments.
-            kwargs:
-                Additional key-word arguments to pass along for custom optimizers
 
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
