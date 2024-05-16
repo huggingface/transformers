@@ -2788,7 +2788,9 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = model_class.from_pretrained(
+                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
+                    )
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
@@ -3724,6 +3726,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
+            # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
+            # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
+            # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
+            deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
 
             is_encoder_decoder = model.config.is_encoder_decoder
 
@@ -3861,6 +3868,27 @@ class ModelTesterMixin:
                                             and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
                                         ):
                                             processed_inputs["output_attentions"] = output_attentions
+                                    if not deactivate_mask and (
+                                        "bool_masked_pos" in inspect.signature(model_eager.forward).parameters
+                                    ):
+                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
+
+                                        # In case of additional token (like class) we define a custom `mask_length`
+                                        if hasattr(self.model_tester, "mask_length"):
+                                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
+                                        else:
+                                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
+                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
+                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+
+                                    if "noise" in inspect.signature(model_eager.forward).parameters:
+                                        np.random.seed(2)
+                                        num_patches = int(
+                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+                                        )
+                                        noise = np.random.uniform(size=(batch_size, num_patches))
+                                        processed_inputs["noise"] = torch.from_numpy(noise)
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():

@@ -84,7 +84,7 @@ def check_sdpa_support_list():
                 archs_supporting_sdpa.append(model_name)
 
     for arch in archs_supporting_sdpa:
-        if arch not in doctext:
+        if arch not in doctext and arch not in doctext.replace("-", "_"):
             raise ValueError(
                 f"{arch} should be in listed in the SDPA documentation but is not. Please update the documentation."
             )
