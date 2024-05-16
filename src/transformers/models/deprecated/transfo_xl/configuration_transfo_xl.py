@@ -22,9 +22,6 @@ from ....utils import logging
 logger = logging.get_logger(__name__)
 
 
-from .._archive_maps import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class TransfoXLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`TransfoXLModel`] or a [`TFTransfoXLModel`]. It is

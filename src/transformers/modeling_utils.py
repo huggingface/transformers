@@ -1327,6 +1327,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+    def dequantize(self):
+        """
+        Potentially dequantize the model in case it has been quantized by a quantization method that support
+        dequantization.
+        """
+        hf_quantizer = getattr(self, "hf_quantizer", None)
+
+        if hf_quantizer is None:
+            raise ValueError("You need to first quantize your model in order to dequantize it")
+
+        return hf_quantizer.dequantize(self)
+
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
@@ -2993,6 +3005,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
+        gguf_file = kwargs.pop("gguf_file", None)
+        # Cache path to the GGUF file
+        gguf_path = None
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3156,6 +3172,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwarg_attn_imp = kwargs.pop("attn_implementation", None)
             if kwarg_attn_imp is not None:
                 config._attn_implementation = kwarg_attn_imp
+
             model_kwargs = kwargs
 
         pre_quantized = getattr(config, "quantization_config", None) is not None
@@ -3197,7 +3214,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules = None
         use_keep_in_fp32_modules = False
 
-        if pretrained_model_name_or_path is not None:
+        if gguf_file is not None and hf_quantizer is not None:
+            raise ValueError(
+                "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+            )
+
+        if pretrained_model_name_or_path is not None and gguf_file is None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
             if is_local:
@@ -3439,6 +3461,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 resolved_archive_file = archive_file
             else:
                 logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
+        elif gguf_file:
+            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+            # Case 1: the GGUF file is present locally
+            if os.path.isfile(gguf_file):
+                gguf_path = gguf_file
+            # Case 2: The GGUF path is a location on the Hub
+            # Load from URL or cache if already cached
+            else:
+                cached_file_kwargs = {
+                    "cache_dir": cache_dir,
+                    "force_download": force_download,
+                    "proxies": proxies,
+                    "resume_download": resume_download,
+                    "local_files_only": local_files_only,
+                    "token": token,
+                    "user_agent": user_agent,
+                    "revision": revision,
+                    "subfolder": subfolder,
+                    "_raise_exceptions_for_gated_repo": False,
+                    "_raise_exceptions_for_missing_entries": False,
+                    "_commit_hash": commit_hash,
+                }
+
+                gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
+
+            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
+
+            resolved_archive_file = None
+            is_sharded = False
         else:
             resolved_archive_file = None
 
@@ -3533,7 +3585,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
-            if low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()):
+
+            if gguf_path is None and (low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available())):
                 # In case some weights need to be kept in float32 and accelerate is not installed,
                 # we later on want to take the path where state_dict is not None, that is the one
                 # that do not require accelerate.
@@ -3679,6 +3732,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
+
             (
                 model,
                 missing_keys,
@@ -3702,6 +3756,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
+                gguf_path=gguf_path,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -3795,9 +3850,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         hf_quantizer=None,
         keep_in_fp32_modules=None,
+        gguf_path=None,
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
+        state_dict_folder = None
+        state_dict_index = None
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -4055,6 +4113,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for p, f in weight_map.items()
                 if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
             }
+        else:
+            offload_index = None
 
         if state_dict is not None:
             # Whole checkpoint
@@ -4066,11 +4126,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
             )
-            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
-            offload_index = None
-        else:
-            # Sharded checkpoint or whole but low_cpu_mem_usage==True
 
+            # For GGUF models `state_dict` is never set to None as the state dict is always small
+            if gguf_path:
+                error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                    model_to_load,
+                    state_dict,
+                    loaded_keys,
+                    start_prefix,
+                    expected_keys,
+                    device_map=device_map,
+                    offload_folder=offload_folder,
+                    offload_index=offload_index,
+                    state_dict_folder=state_dict_folder,
+                    state_dict_index=state_dict_index,
+                    dtype=dtype,
+                    hf_quantizer=hf_quantizer,
+                    is_safetensors=is_safetensors,
+                    keep_in_fp32_modules=keep_in_fp32_modules,
+                    unexpected_keys=unexpected_keys,
+                )
+            else:
+                # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+
+        else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]

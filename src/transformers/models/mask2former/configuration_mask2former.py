@@ -18,7 +18,6 @@ from typing import Dict, List, Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from ..deprecated._archive_maps import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 logger = logging.get_logger(__name__)

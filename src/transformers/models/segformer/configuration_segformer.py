@@ -28,9 +28,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class SegformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an

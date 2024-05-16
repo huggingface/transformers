@@ -27,8 +27,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-from ..deprecated._archive_maps import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
 
 class BlenderbotSmallConfig(PretrainedConfig):
     r"""
