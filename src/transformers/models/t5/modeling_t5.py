@@ -25,8 +25,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
-from ...modeling_outputs import (
+from transformers.activations import ACT2FN
+from transformers.modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
@@ -35,10 +35,10 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...cache_utils import Cache, T5StaticCache
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
+from transformers.modeling_utils import PreTrainedModel
+from transformers.cache_utils import Cache, T5StaticCache
+from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from transformers.utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
@@ -47,8 +47,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_t5 import T5Config
+from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+from transformers.models.t5.configuration_t5 import T5Config
 
 
 logger = logging.get_logger(__name__)
@@ -466,16 +466,15 @@ class T5Attention(nn.Module):
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
+        real_seq_length = seq_length
+
         if past_key_value is not None:
             if self.layer_idx is not None:
-                real_seq_length = mask.shape[3]
+                real_seq_length += cache_position
             else:
-                real_seq_length = seq_length + past_key_value[0].shape[2]
-        else:
-            real_seq_length = seq_length
+                real_seq_length += past_key_value[0].shape[2]
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-        print('real_seq_length', real_seq_length, key_length, hidden_states.shape)
 
         def shape(states):
             """projection"""
@@ -522,20 +521,19 @@ class T5Attention(nn.Module):
         value_states = project(
             hidden_states, self.v, key_value_states, None
         )
-        print('self.layer_idx', self.layer_idx)
 
         if past_key_value is not None and isinstance(past_key_value, Cache):
-
-            cache_kwargs = {"cache_position": cache_position}
-            print(cache_kwargs)
+            
+            cache_kwargs = {"cache_position": torch.tensor([cache_position], device=key_states.device)}
             key_states, value_states = past_key_value.update(
                 key_states,
                 value_states,
                 self.layer_idx,
                 cache_kwargs,
             )
-
-        print('qk', query_states.shape, key_states.shape)
+            aranged = torch.arange(cache_position + 1, device = key_states.device)
+            key_states = key_states[:,:,aranged]
+            value_states = value_states[:,:,aranged]
 
         # compute scores
         scores = torch.matmul(
@@ -558,7 +556,6 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
 
             if mask is not None:
-                print(mask.shape, position_bias.shape)
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         if self.pruned_heads:
@@ -568,7 +565,6 @@ class T5Attention(nn.Module):
         else:
             position_bias_masked = position_bias
 
-        print('scores', scores.shape, position_bias_masked.shape)
         scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
@@ -710,7 +706,6 @@ class T5Block(nn.Module):
                 self_attn_past_key_value = past_key_value
                 cross_attn_past_key_value = past_key_value[self.layer_idx][-2:]
             else:
-                print('past_key_value', past_key_value[0].shape)
                 self_attn_past_key_value = past_key_value[:2]
                 cross_attn_past_key_value = past_key_value[2:]
         else:
@@ -1050,10 +1045,10 @@ class T5Stack(T5PreTrainedModel):
 
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                mask_seq_length = cache_position[0]
+                mask_seq_length = cache_position
             else:
-                mask_seq_length = past_key_values[0][0].shape[2] + seq_length
-
+                mask_seq_length = past_key_values[0][0].shape[2]
+            mask_seq_length = mask_seq_length + seq_length
         else:
             mask_seq_length = seq_length
 
@@ -1072,14 +1067,13 @@ class T5Stack(T5PreTrainedModel):
                 cache_position,
                 past_key_values
             )
-            print('extended_attention_mask', extended_attention_mask)
-        
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
             # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
             # ourselves in which case we just need to make it broadcastable to all heads.
+            # extended_attention_mask = attention_mask[:,None,None]
             extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
@@ -1229,7 +1223,7 @@ class T5Stack(T5PreTrainedModel):
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
-    
+
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1250,7 +1244,7 @@ class T5Stack(T5PreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = cache_position[0]
+        past_seen_tokens = cache_position
         using_static_cache = isinstance(past_key_values, T5StaticCache)
         if self.config._attn_implementation == "sdpa" and not using_static_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
@@ -1265,7 +1259,7 @@ class T5Stack(T5PreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = cache_position
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1275,15 +1269,13 @@ class T5Stack(T5PreTrainedModel):
 
         causal_mask = torch.full(
             (sequence_length,
-             target_length),
-            fill_value=1.0,
+             target_length + 1),
+            fill_value=min_dtype,
             dtype=dtype,
             device=device)
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-        
-        causal_mask *= torch.arange(target_length, device=device) <= cache_position.reshape(-1, 1)
-        print(target_length, causal_mask, torch.arange(target_length, device=device) > cache_position.reshape(-1, 1))
+        causal_mask *= torch.arange(target_length + 1, device=device) > torch.tensor([cache_position], device=device).reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1297,11 +1289,11 @@ class T5Stack(T5PreTrainedModel):
             elif attention_mask.dim() == 4:
                 # backwards compatibility: we allow passing a 4D attention mask shorter than the input length with
                 # cache. In that case, the 4D attention mask attends to the newest tokens only.
-                if attention_mask.shape[-2] < cache_position[0] + sequence_length:
+                if attention_mask.shape[-2] < cache_position + sequence_length:
                     logger.warning_once(
                         "Passing a 4d mask shorter than the input length is deprecated and will be removed in "
                         "transformers v4.42.0")
-                    offset = cache_position[0]
+                    offset = cache_position
                 else:
                     offset = 0
                 mask_shape = attention_mask.shape
@@ -1807,6 +1799,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+        
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -1838,6 +1831,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
