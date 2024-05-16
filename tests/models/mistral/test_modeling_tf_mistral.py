@@ -331,6 +331,7 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
     def test_save_load_after_resize_token_embeddings(self):
         pass
 
+
 @require_tf
 class TFMistralIntegrationTest(unittest.TestCase):
     @slow
