@@ -30,9 +30,6 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class BloomConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom

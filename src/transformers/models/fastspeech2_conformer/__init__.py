@@ -22,9 +22,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_fastspeech2_conformer": [
-        "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
         "FastSpeech2ConformerWithHifiGanConfig",
@@ -39,7 +36,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_fastspeech2_conformer"] = [
-        "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FastSpeech2ConformerWithHifiGan",
         "FastSpeech2ConformerHifiGan",
         "FastSpeech2ConformerModel",
@@ -48,9 +44,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_fastspeech2_conformer import (
-        FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
         FastSpeech2ConformerWithHifiGanConfig,
@@ -64,7 +57,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_fastspeech2_conformer import (
-            FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,

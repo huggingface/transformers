@@ -59,12 +59,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/Phi-3-mini-4k-instruct"
 _CONFIG_FOR_DOC = "Phi3Config"
 
-PHI3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/Phi-3-mini-4k-instruct",
-    "microsoft/Phi-3-mini-128k-instruct",
-    # See all Phi-3 models at https://huggingface.co/models?filter=Phi-3
-]
-
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Phi3
 class Phi3RMSNorm(nn.Module):
@@ -927,7 +921,6 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = False
-    _supports_cache_class = True
 
     _version = "0.0.5"
 

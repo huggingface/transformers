@@ -414,9 +414,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
         input_ids = (
             torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
-            + model._get_decoder_start_token_id()
+            + generation_config.decoder_start_token_id
         )
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask

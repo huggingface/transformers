@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_markuplm": ["MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarkupLMConfig"],
+    "configuration_markuplm": ["MarkupLMConfig"],
     "feature_extraction_markuplm": ["MarkupLMFeatureExtractor"],
     "processing_markuplm": ["MarkupLMProcessor"],
     "tokenization_markuplm": ["MarkupLMTokenizer"],
@@ -38,7 +38,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_markuplm"] = [
-        "MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MarkupLMForQuestionAnswering",
         "MarkupLMForSequenceClassification",
         "MarkupLMForTokenClassification",
@@ -48,7 +47,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_markuplm import MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP, MarkupLMConfig
+    from .configuration_markuplm import MarkupLMConfig
     from .feature_extraction_markuplm import MarkupLMFeatureExtractor
     from .processing_markuplm import MarkupLMProcessor
     from .tokenization_markuplm import MarkupLMTokenizer
@@ -68,7 +67,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_markuplm import (
-            MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             MarkupLMForQuestionAnswering,
             MarkupLMForSequenceClassification,
             MarkupLMForTokenClassification,

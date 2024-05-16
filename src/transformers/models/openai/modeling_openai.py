@@ -47,9 +47,6 @@ _CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
 
-from ..deprecated._archive_maps import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     """Load tf pre-trained weights in a pytorch model (from NumPy arrays here)"""
     import re

@@ -57,9 +57,6 @@ _IMAGE_CLASS_CHECKPOINT = "google/bit-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-from ..deprecated._archive_maps import BIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
     r"""
     Utility function to get the tuple padding value given the kernel_size and padding.

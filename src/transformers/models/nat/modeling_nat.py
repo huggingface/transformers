@@ -68,9 +68,6 @@ _IMAGE_CLASS_CHECKPOINT = "shi-labs/nat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-from ..deprecated._archive_maps import NAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # drop_path and NatDropPath are from the timm library.
 
 

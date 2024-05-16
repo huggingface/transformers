@@ -59,9 +59,6 @@ _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"
 
 
-from ..deprecated._archive_maps import TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):
     """
     This class performs downsampling between two stages. For the input tensor with the shape [batch_size, num_channels,
