@@ -30,11 +30,11 @@ from .utils import logging
 if TYPE_CHECKING:
     from .data.data_collator import DataCollator
     from .modeling_utils import PreTrainedModel
+    from .processing_utils import ProcessorMixin
     from .tokenization_utils_base import PreTrainedTokenizerBase
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
     from .training_args import TrainingArguments
-    from .processing_utils import ProcessorMixin
 
 
 logger = logging.get_logger(__name__)
