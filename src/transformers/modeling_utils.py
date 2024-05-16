@@ -1649,6 +1649,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if not hard_check_only:
             config._attn_implementation = "sdpa"
+
+        if torch.version.hip is not None and config._attn_implementation == "sdpa":
+            logger.warning_once(
+                'Using the "sdpa" attention implementation on a ROCM device may lead to performance issues due to the FA backend. Disabling it to use other backends.'
+            )
+            torch.backends.cuda.enable_flash_sdp(False)
+
         return config
 
     def enable_input_require_grads(self):
