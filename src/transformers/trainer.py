@@ -410,6 +410,7 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
+        self._is_lomo_optimizer = False
 
         self.create_accelerator_and_postprocess()
 
