@@ -3276,17 +3276,6 @@ class Trainer:
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
-        _is_lomo = False
-
-        if is_lomo_available():
-            from lomo_optim import AdaLomo, Lomo
-
-            _is_lomo = isinstance(_unwrap_optimizer(self.optimizer), (Lomo, AdaLomo))
-
-        # For LOMO optimizers you need to explicitly use the learnign rate
-        if _is_lomo:
-            kwargs["learning_rate"] = self._get_learning_rate()
-
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
@@ -3296,6 +3285,11 @@ class Trainer:
 
         del inputs
         torch.cuda.empty_cache()
+
+
+        # For LOMO optimizers you need to explicitly use the learnign rate
+        if self._is_lomo_optimizer:
+            kwargs["learning_rate"] = self._get_learning_rate()
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
