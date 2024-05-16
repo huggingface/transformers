@@ -3284,6 +3284,7 @@ class Trainer:
         del inputs
         torch.cuda.empty_cache()
 
+        kwargs = {}
 
         # For LOMO optimizers you need to explicitly use the learnign rate
         if self._is_lomo_optimizer:
