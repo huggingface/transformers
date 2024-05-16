@@ -554,11 +554,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    def test_model_from_pretrained(self):
-        for model_name in RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = RTDetrModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
 
 TOLERANCE = 1e-4
 
