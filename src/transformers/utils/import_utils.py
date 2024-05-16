@@ -295,6 +295,9 @@ def is_torch_available():
 
 
 def is_torch_deterministic():
+    """
+    Check whether `torch.use_deterministic_algorithms()` is set to True or torch.set_deterministic_debug_mode() is set to 1 or 2
+    """
     import torch
 
     if torch.get_deterministic_debug_mode() == 0:
