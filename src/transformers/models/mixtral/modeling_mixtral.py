@@ -786,6 +786,80 @@ class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
         super().__init__(*args, **kwargs)
 
 
+class MixtralBlockTop2MLP(nn.Module):
+    def __init__(self, config: MixtralConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Parameter(torch.empty(self.num_experts, self.ffn_dim, self.hidden_dim))
+        self.w2 = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.ffn_dim))
+        self.w3 = nn.Parameter(torch.empty(self.num_experts, self.ffn_dim, self.hidden_dim))
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            hidden_states (torch.Tensor): (batch_size * token_num, hidden_dim)
+            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
+            routing_weights (torch.Tensor): (batch_size * token_num, top_k)
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        ts, tk = hidden_states.size(0), selected_experts.size(-1)
+
+        w1 = self.w1[selected_experts]  # (batch_size * token_num, top_k, ffn_dim, hidden_dim)
+        w2 = self.w2[selected_experts]  # (batch_size * token_num, top_k, hidden_dim, ffn_dim)
+        w3 = self.w3[selected_experts]  # (batch_size * token_num, ffn_dim, hidden_dim)
+
+        x1 = torch.matmul(w1, hidden_states[:, None, :, None])
+        x3 = torch.matmul(w3, hidden_states[:, None, :, None])
+        x1 = self.act_fn(x1)
+        final_hidden_states = torch.matmul(w2, x1 * x3).reshape(ts, tk, self.hidden_dim)
+        final_hidden_states = final_hidden_states * routing_weights[:, :, None]
+        final_hidden_states = final_hidden_states.sum(dim=1)
+        return final_hidden_states
+
+
+class MixtralMoeBlock(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.hidden_dim = config.hidden_size
+        self.ffn_dim = config.intermediate_size
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+
+        # gating
+        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.experts = MixtralBlockTop2MLP(config)
+        # Jitter parameters
+        self.jitter_noise = config.router_jitter_noise
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
+
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        # we cast back to the input dtype
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return final_hidden_states, router_logits
+
+
 class MixtralSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -840,20 +914,12 @@ class MixtralSparseMoeBlock(nn.Module):
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
-
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here. this will give `skipping cudagraphs due to index put with accumulate`
-            # in compile
-            # final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-
-            # still suffers from `skipping cudagraphs due to ['incompatible ops']`
-            final_hidden_states[top_x] += current_hidden_states.to(hidden_states.dtype)
+            final_hidden_states[top_x].index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
@@ -866,6 +932,7 @@ class MixtralDecoderLayer(nn.Module):
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        # self.block_sparse_moe = MixtralMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -954,7 +1021,7 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Mixtral
+# copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Mixtral
 class MixtralPreTrainedModel(PreTrainedModel):
     config_class = MixtralConfig
     base_model_prefix = "model"
@@ -963,6 +1030,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
