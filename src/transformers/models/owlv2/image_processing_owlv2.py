@@ -525,11 +525,13 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         # Post process boxes
         boxes = convert_boxes(
-            boxes, input_format="relative_xcycwh", output_format="relative_xyxy",
+            boxes,
+            input_format="relative_xcycwh",
+            output_format="relative_xyxy",
         )
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
-        # We do not convert it directly, because it includes some coordinates 
+        # We do not convert it directly, because it includes some coordinates
         # rescaling because of padding area
         # TODO: (Pavel) figure out how to simplify this postprocessing
         if target_sizes is not None:
