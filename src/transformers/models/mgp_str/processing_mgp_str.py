@@ -16,9 +16,9 @@
 
 import warnings
 
-from transformers import AutoTokenizer
-from transformers.utils import is_torch_available
-from transformers.utils.generic import ExplicitEnum
+from ...models.auto.tokenization_auto import AutoTokenizer
+from ...utils import is_torch_available
+from ...utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
 from ...utils.import_utils import register

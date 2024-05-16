@@ -42,7 +42,7 @@ from ..utils import (
     logging,
 )
 from .agent_types import handle_agent_inputs, handle_agent_outputs
-
+from ..utils.import_utils import register
 
 logger = logging.get_logger(__name__)
 
@@ -88,6 +88,7 @@ launch_gradio_demo({class_name})
 """
 
 
+@register()
 class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -456,6 +457,7 @@ def compile_jinja_template(template):
     return jinja_env.from_string(template)
 
 
+@register()
 class PipelineTool(Tool):
     """
     A [`Tool`] tailored towards Transformer models. On top of the class attributes of the base class [`Tool`], you will
@@ -604,6 +606,7 @@ class PipelineTool(Tool):
         return handle_agent_outputs(decoded_outputs, self.output_type)
 
 
+@register()
 def launch_gradio_demo(tool_class: Tool):
     """
     Launches a gradio demo for a tool. The corresponding tool class needs to properly implement the class attributes
@@ -658,6 +661,7 @@ TASK_MAPPING = {
 }
 
 
+@register()
 def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
     """
     Main function to quickly load a tool, be it on the Hub or in the Transformers library.
@@ -782,6 +786,7 @@ def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
     return inputs
 
 
+@register()
 class ToolCollection:
     """
     Tool collections enable loading all Spaces from a collection in order to be added to the agent's toolbox.

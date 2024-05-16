@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ mT5 tokenization file"""
-from transformers import T5Tokenizer
-from transformers.utils.import_utils import register
+from ..t5 import T5Tokenizer
+from ...utils.import_utils import register
 
 
 @register(backends=("sentencepiece",))

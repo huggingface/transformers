@@ -20,7 +20,7 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ... import is_torch_available
+from ...utils.import_utils import is_torch_available
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature

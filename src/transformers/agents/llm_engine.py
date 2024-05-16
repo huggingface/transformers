@@ -20,6 +20,8 @@ from typing import Dict, List
 
 from huggingface_hub import InferenceClient
 
+from transformers.utils.import_utils import register
+
 
 class MessageRole(str, Enum):
     USER = "user"
@@ -66,6 +68,7 @@ llama_role_conversions = {
 }
 
 
+@register()
 class HfEngine:
     def __init__(self, model: str = "meta-llama/Meta-Llama-3-8B-Instruct"):
         self.model = model

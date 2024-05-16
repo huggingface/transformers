@@ -1,4 +1,4 @@
-from ... import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...utils.import_utils import register
 
 

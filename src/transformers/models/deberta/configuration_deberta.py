@@ -24,7 +24,8 @@ from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
+    from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...tokenization_utils import PreTrainedTokenizerBase, TensorType
 
 
 logger = logging.get_logger(__name__)

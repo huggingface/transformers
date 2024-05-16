@@ -23,7 +23,7 @@ from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer, TensorType
+    from ...tokenization_utils import PreTrainedTokenizer, TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec

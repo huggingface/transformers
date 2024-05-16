@@ -26,7 +26,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase, TensorType
+    from ...tokenization_utils import PreTrainedTokenizerBase, TensorType
 
 logger = logging.get_logger(__name__)
 

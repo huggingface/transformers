@@ -17,7 +17,8 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from ... import PretrainedConfig, PreTrainedTokenizer
+from ...configuration_utils import PretrainedConfig
+from ...tokenization_utils import PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import register

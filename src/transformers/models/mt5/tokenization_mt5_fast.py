@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ mT5 fast tokenization file"""
-from transformers import T5TokenizerFast
-from transformers.utils.import_utils import register
+from ..t5 import T5TokenizerFast
+from ...utils.import_utils import register
 
 
 @register(backends=("tokenizers",))

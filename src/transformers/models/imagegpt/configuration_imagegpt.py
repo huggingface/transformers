@@ -24,7 +24,7 @@ from ...utils.import_utils import register
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, TensorType
+    from ...feature_extraction_utils import FeatureExtractionMixin, TensorType
 
 logger = logging.get_logger(__name__)
 

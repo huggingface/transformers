@@ -1503,19 +1503,70 @@ class _LazyModule(ModuleType):
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
     def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
-        self._modules = set(import_structure.keys())
-        self._class_to_module = {}
-        for key, values in import_structure.items():
-            for value in values:
-                self._class_to_module[value] = key
-        # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
-        self.__file__ = module_file
-        self.__spec__ = module_spec
-        self.__path__ = [os.path.dirname(module_file)]
-        self._objects = {} if extra_objects is None else extra_objects
-        self._name = name
-        self._import_structure = import_structure
+
+        if any([isinstance(key, tuple) for key in import_structure.keys()]):
+            PER_BACKEND_SPLIT = True
+        else:
+            PER_BACKEND_SPLIT = False
+
+        self._object_missing_backend = {}
+
+        if PER_BACKEND_SPLIT:
+            self._modules = set()
+            self._class_to_module = {}
+            self.__all__ = []
+
+            _import_structure = {}
+
+            for backends, item in import_structure.items():
+                lacking_backends = []
+                for backend in backends:
+                    if backend not in BACKENDS_MAPPING:
+                        raise ValueError(f"Error: the following backend: '{backend}' was specified around object {item} but isn't specified in the backends mapping.")
+                    callable, error = BACKENDS_MAPPING[backend]
+                    if not callable():
+                        lacking_backends.append(backend)
+
+                self._modules.union(set(item.keys()))
+                for key, values in item.items():
+                    for value in values:
+                        self._class_to_module[value] = key
+
+                    if key not in _import_structure:
+                        _import_structure[key] = values
+                    else:
+                        _import_structure[key].extend(values)
+
+                # Needed for autocompletion in an IDE
+                self.__all__.extend(list(item.keys()) + list(chain(*item.values())))
+
+                if len(lacking_backends):
+                    for module, objects in item.items():
+                        for obj in objects:
+                            self._object_missing_backend[obj] = lacking_backends
+                        self._object_missing_backend[module] = lacking_backends
+
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = _import_structure
+
+        if not PER_BACKEND_SPLIT:
+            self._modules = set(import_structure.keys())
+            self._class_to_module = {}
+            for key, values in import_structure.items():
+                for value in values:
+                    self._class_to_module[value] = key
+            # Needed for autocompletion in an IDE
+            self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
@@ -1532,6 +1583,20 @@ class _LazyModule(ModuleType):
             return self._objects[name]
         if name in self._modules:
             value = self._get_module(name)
+        elif name in self._object_missing_backend.keys():
+            missing_backends = self._object_missing_backend[name]
+
+            class Placeholder(metaclass=DummyObject):
+                _backends = missing_backends
+
+                def __init__(self, *args, **kwargs):
+                    requires_backends(self, missing_backends)
+
+            # Placeholder.__class__.__name__ = name
+            Placeholder.__name__ = name
+            Placeholder.__module__ = self.__spec__
+
+            value = Placeholder
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
@@ -1595,8 +1660,17 @@ def register(*, backends=()):
     return inner_fn
 
 
+@lru_cache()
 def define_import_structure(module_path):
-    directory = os.path.dirname(module_path)
+    import_structure = {}
+    if os.path.isdir(module_path):
+        for f in os.listdir(module_path):
+            if f != '__pycache__' and os.path.isdir(os.path.join(module_path, f)):
+                import_structure[f] = define_import_structure(os.path.join(module_path, f))
+        directory = module_path
+    else:
+        directory = os.path.dirname(module_path)
+
     adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
 
     if "__init__.py" in adjacent_modules:
@@ -1635,22 +1709,53 @@ def define_import_structure(module_path):
                 module_requirements[backends][module_name].append(object_name)
             previous_line = line
 
-    _import_structure = module_requirements.pop((), {})
+    import_structure = {**module_requirements, **import_structure}
+    return import_structure
 
-    for backends, modules in module_requirements.items():
-        try:
-            for backend in backends:
-                is_backend_available, _ = BACKENDS_MAPPING[backend]
 
-                if not is_backend_available():
-                    raise OptionalDependencyNotAvailable()
-        except OptionalDependencyNotAvailable:
-            pass
+def spread_import_structure(nested_import_structure):
+
+    def propagate_tuple(unordered_import_structure):
+        tuple_first_import_structure = {}
+        for _key, _value in unordered_import_structure.items():
+            if not isinstance(_value, dict):
+                tuple_first_import_structure[_key] = _value
+
+            elif any(isinstance(v, tuple) for v in _value.keys()):
+                # Here we want to switch around key and v
+                for k, v in _value.items():
+                    if isinstance(k, tuple):
+                        if k not in tuple_first_import_structure:
+                            tuple_first_import_structure[k] = {}
+                        tuple_first_import_structure[k][_key] = v
+
+            else:
+                tuple_first_import_structure[_key] = propagate_tuple(_value)
+
+        return tuple_first_import_structure
+
+    def flatten_dict(_dict, previous_key=None):
+        items = []
+        for _key, _value in _dict.items():
+            _key = f"{previous_key}.{_key}" if previous_key is not None else _key
+            if isinstance(_value, dict):
+                items.extend(flatten_dict(_value, _key).items())
+            else:
+                items.append((_key, _value))
+        return dict(items)
+
+    # The tuples contain the necessary backends. We want these first, so we propagate them up the
+    # import structure.
+    ordered_import_structure = nested_import_structure
+    for i in range(6):
+        ordered_import_structure = propagate_tuple(ordered_import_structure)
+
+    # We then flatten the dict so that it references a module path.
+    flattened_import_structure = {}
+    for key, value in ordered_import_structure.copy().items():
+        if isinstance(key, str):
+            del ordered_import_structure[key]
         else:
-            for module, objects in modules.items():
-                if module not in _import_structure:
-                    _import_structure[module] = objects
-                else:
-                    _import_structure[module].extend(objects)
+            flattened_import_structure[key] = flatten_dict(value)
 
-    return _import_structure
+    return flattened_import_structure

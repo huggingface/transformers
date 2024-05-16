@@ -19,7 +19,7 @@ import logging
 import re
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from .. import is_torch_available
+from ..utils.import_utils import is_torch_available, register
 from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
 from .agent_types import AgentAudio, AgentImage, AgentText
@@ -147,6 +147,7 @@ HUGGINGFACE_DEFAULT_TOOLS = {}
 _tools_are_initialized = False
 
 
+@register()
 class Toolbox:
     """
     The toolbox contains all tools that the agent can perform operations with, as well as a few methods to
@@ -291,6 +292,7 @@ class AgentGenerationError(AgentError):
     pass
 
 
+@register()
 class Agent:
     def __init__(
         self,
@@ -475,6 +477,7 @@ class Agent:
         raise NotImplementedError
 
 
+@register()
 class CodeAgent(Agent):
     """
     A class for an agent that solves the given task using a single block of code. It plans all its actions, then executes all in one shot.
@@ -572,6 +575,7 @@ class CodeAgent(Agent):
             return error_msg
 
 
+@register()
 class ReactAgent(Agent):
     """
     This agent that solves the given task step by step, using the ReAct framework:
@@ -653,6 +657,7 @@ class ReactAgent(Agent):
         return final_answer
 
 
+@register()
 class ReactJsonAgent(ReactAgent):
     """
     This agent that solves the given task step by step, using the ReAct framework:
@@ -744,6 +749,7 @@ class ReactJsonAgent(ReactAgent):
             return None
 
 
+@register()
 class ReactCodeAgent(ReactAgent):
     """
     This agent that solves the given task step by step, using the ReAct framework:

@@ -17,7 +17,7 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ... import is_vision_available
+from ...utils.import_utils import is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
