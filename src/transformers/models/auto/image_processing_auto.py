@@ -429,12 +429,12 @@ class AutoImageProcessor:
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]
 
-            image_processor_class_py, image_processor_fast_class = image_processor_tuple
+            image_processor_class_py, image_processor_class_fast = image_processor_tuple
 
-            if image_processor_fast_class and (use_fast or image_processor_class_py is None):
-                return image_processor_fast_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            if image_processor_class_fast and (use_fast or image_processor_class_py is None):
+                return image_processor_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                if image_processor_class_py is None:
+                if image_processor_class_py is not None:
                     return image_processor_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
                     raise ValueError(
