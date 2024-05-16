@@ -105,7 +105,6 @@ class DiffConverterTransformer(CSTTransformer):
                     ),
                 ],
             ):
-                print("Happy")
                 assign = self.python_module.code_for_node(original_node.body[0])
                 node = original_node.body[0]
                 if m.matches(node.value, m.Name()) and assign in self.mapping:
@@ -131,10 +130,3 @@ if __name__ == "__main__":
     with open("result.py", "w") as f:
         f.write(new_mod.code)
     exit(0)
-# Process the found imports
-# for imported_name, import_node in visitor.transformers_imports:
-#     print(f"Imported from transformers: {imported_name}")
-#     # Extract the source code of the imported entity
-#     entity_source_code = get_imported_entity_source(module, imported_name)
-#     print(f"Source code of {imported_name}:")
-#     print(entity_source_code)
