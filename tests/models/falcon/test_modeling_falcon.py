@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Falcon model. """
-
+"""Testing suite for the PyTorch Falcon model."""
 
 import tempfile
 import unittest
@@ -610,9 +609,9 @@ class FalconLanguageGenerationTest(unittest.TestCase):
             "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
         )
         model.eval()
-        inputs = tokenizer("Two roads diverged in a yellow wood,", return_tensors="pt", return_token_type_ids=False).to(
-            torch_device
-        )
+        inputs = tokenizer(
+            "Two roads diverged in a yellow wood,", return_tensors="pt", return_token_type_ids=False
+        ).to(torch_device)
 
         EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\n"
 
