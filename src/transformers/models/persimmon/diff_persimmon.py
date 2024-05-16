@@ -1,19 +1,23 @@
-from transformers.models.llama.modeling_llama import *
 import torch.nn as nn
-from .configuration_persimmon import PersimmonConfig
+
+from transformers.models.llama.modeling_llama import *
 from transformers.utils import ModelConverter
+
+from .configuration_persimmon import PersimmonConfig
+
 
 PersimmonConverter = ModelConverter(__file__)
 
 PersimmonConverter.register("PersimmonRotaryEmbedding", LlamaRotaryEmbedding)
-PersimmonConverter.register("PersimmonMLP", LlamaMLP) 
+PersimmonConverter.register("PersimmonMLP", LlamaMLP)
+
 
 class PersimmonAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: PersimmonConfig, layer_idx: Optional[int] = None):
         super().__init__()
-        ... # copy before? add the line? how to best support this
+        ...  # copy before? add the line? how to best support this
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
         self.qk_layernorm = config.qk_layernorm
@@ -71,16 +75,19 @@ class PersimmonAttention(LlamaAttention):
         # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
-        ... # TODO copy the rest of the function? if we do this it's unusable
+        ...  # TODO copy the rest of the function? if we do this it's unusable
 
 
+PersimmonSdpaAttention = PersimmonConverter.register("PersimmonSdpaAttention", LlamaAttention)
+PersimmonFlashAttention2 = PersimmonConverter.register("PersimmonFlashAttention2", LlamaAttention)
 
-PersimmonSdpaAttention = PersimmonConverter.register("PersimmonSdpaAttention", LlamaAttention) 
-PersimmonFlashAttention2 = PersimmonConverter.register("PersimmonFlashAttention2", LlamaAttention) 
+COHERE_ATTENTION_CLASSES = {
+    "eager": PersimmonAttention,
+    "flash_attention_2": PersimmonFlashAttention2,
+    "sdpa": PersimmonSdpaAttention,
+}
 
-COHERE_ATTENTION_CLASSES = {"eager": PersimmonAttention, "flash_attention_2": PersimmonFlashAttention2, "sdpa": PersimmonSdpaAttention}
-
-PersimmonConverter.register("PersimmonDecoderLayer", LlamaDecoderLayer) 
+PersimmonConverter.register("PersimmonDecoderLayer", LlamaDecoderLayer)
 PersimmonConverter.register("PersimmonPreTrainedModel", LlamaPreTrainedModel)
 
 PersimmonConverter.register("PersimmonModel", LlamaModel)

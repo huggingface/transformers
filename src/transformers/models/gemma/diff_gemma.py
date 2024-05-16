@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Gemma model."""
-from transformers.models.llama.modeling_llama import *
-import torch.nn as nn
-from transformers.utils import ModelConverter
-
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -25,22 +21,29 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
+
+from transformers.models.llama.modeling_llama import (
+    LlamaDecoderLayer,
+    LlamaFlashAttention2,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaSdpaAttention,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS 
-from ...utils import (
-    logging,
-)
+from ...modeling_outputs import CausalLMOutputWithPast
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import logging
 from .configuration_gemma import GemmaConfig
-
-from transformers.models.llama.modeling_llama import repeat_kv, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
 
-GemmaConverter = ModelConverter(__file__)
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -92,7 +95,6 @@ class GemmaRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-
 class GemmaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -115,7 +117,6 @@ class GemmaMLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
 
 
 class GemmaAttention(nn.Module):
@@ -219,16 +220,20 @@ class GemmaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-GemmaFlashAttention2 = GemmaConverter.register("GemmaFlashAttention2", LlamaFlashAttention2)
-GemmaSdpaAttention = GemmaConverter.register("GemmaSdpaAttention", LlamaSdpaAttention)
+GemmaFlashAttention2 = LlamaFlashAttention2
+GemmaSdpaAttention = LlamaSdpaAttention
 
-COHERE_ATTENTION_CLASSES = {"eager": GemmaAttention, "flash_attention_2": GemmaFlashAttention2, "sdpa": GemmaSdpaAttention}
+COHERE_ATTENTION_CLASSES = {
+    "eager": GemmaAttention,
+    "flash_attention_2": GemmaFlashAttention2,
+    "sdpa": GemmaSdpaAttention,
+}
 
-GemmaConverter.register("GemmaDecoderLayer", LlamaDecoderLayer) 
-GemmaConverter.register("GemmaPreTrainedModel", LlamaPreTrainedModel)
+GemmaDecoderLayer = LlamaDecoderLayer
+GemmaPreTrainedModel = LlamaPreTrainedModel
+
 
 class GemmaModel(LlamaModel):
-    
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -244,7 +249,7 @@ class GemmaModel(LlamaModel):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         output_attentions = output_attentions | self.config.output_attentions
-        output_hidden_states = output_hidden_states| self.config.output_hidden_states
+        output_hidden_states = output_hidden_states | self.config.output_hidden_states
         return_dict = return_dict | self.config.use_return_dict
 
         outputs = self.model(
@@ -288,4 +293,5 @@ class GemmaModel(LlamaModel):
             attentions=outputs.attentions,
         )
 
-GemmaConverter.register("GemmaForCausalLM", LlamaForCausalLM)
+
+GemmaForCausalLM = LlamaForCausalLM

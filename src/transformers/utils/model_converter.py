@@ -1,57 +1,70 @@
-"""
-running this script on `src/transformers/models/**_diff.py` should produce the equivalent single model single files
-1. Iterate though `**_diff.py` files
-2. How to handle the imports?
-    a. `model_type` should always be present?
-    b. `ConfigClass` should be defined as well?
-3. Copy each class and function one by one.
-    a. if there is a class registered for this file like `@__file__.register(MyNewClass, OldClass)`
-    then copy the content of `OldClass`, replacing all names of `Old` with `MyNew`.
-    Also copy the decorators that are on top of this class.
-    b. if there is inheritance, copy non-overloaded functions from base, and overloaded from non base.
-4. Register things?
-new = type("new_class", (torch.nn.Linear,),{})
-new__main__.new_class
-new(10,10)
-new_class(in_features=10, out_features=10, bias=True)
-CohereConverter = ModelConverter(__file__)
-CohereMLP = CohereConverter.register("CohereMLP", LlamaMLP)
-CohereMLP
-<class 'transformers.models.cohere.modeling_cohere.CohereMLP'>
-CohereMLP(LlamaConfig())
-CohereMLP(
-  (gate_proj): Linear(in_features=4096, out_features=11008, bias=False)
-  (up_proj): Linear(in_features=4096, out_features=11008, bias=False)
-  (down_proj): Linear(in_features=11008, out_features=4096, bias=False)
-  (act_fn): SiLU()
-)
->>> CohereMLP(LlamaConfig())(torch.ones(1,1,4096))
-How to deal with submodules?
-CohereSdpaAttention(
-  (q_proj): Linear(in_features=4096, out_features=4096, bias=False)
-  (k_proj): Linear(in_features=4096, out_features=4096, bias=False)
-  (v_proj): Linear(in_features=4096, out_features=4096, bias=False)
-  (o_proj): Linear(in_features=4096, out_features=4096, bias=False)
-  (rotary_emb): LlamaRotaryEmbedding()
-)
-"""
-import regex as re
-class ModelConverter:
+import libcst as cst
+from libcst import matchers as m
 
-    def __init__(self, file):
-        self.diff_file = file
-        self.model_name = re.search(r'models/(.*?)/diff', self.diff_file).group(1)
-        self.modeling_file = file.replace("diff", "modeling")
-        self.registered_classes = {}
-        self.modules_to_import = []
-    def register(self, new_class, old_class):
-        # registering. Returns the old class to be usable with a new name
-        self.registered_classes[new_class] = old_class
-        self.modules_to_import.append([old_class, old_class.__module__])
-        new_class = type(new_class, (old_class,), {})
-        base_model_name = re.search(r'models\.(.*?)\.modeling', old_class.__module__).group(1)
-        new_class.__module__ = re.sub(base_model_name, self.model_name, old_class.__module__)
-        return new_class
 
-    def __repr__(self) -> str:
-        return f"ModelConverter({self.diff_file}, {self.model_name}, {self.registered_classes})"
+
+module = cst.parse_module("import math")
+module.code
+
+# Should we use the scope to figure out if classes are imported and inherited from 
+# then go from here, instead of visiting the classes?
+
+# Define a visitor to traverse the tree and find import statements
+class ImportVisitor(cst.CSTVisitor):
+    def __init__(self, python_module):
+        self.transformers_imports = []
+        self.python_module = python_module
+
+    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+        if m.matches(node.module, m.Attribute()):
+            print("full import statement:", self.python_module.code_for_node(node))
+            for imported_ in node.names:
+                print("Modules", self.python_module.code_for_node(imported_.name))
+                self.transformers_imports.append((node.module.value, imported_))
+                
+    def visit_Assign(self,  node: cst.Assign) -> None:
+        if m.matches(node.value, m.Name()):
+            name =node.value.value 
+            if "Llama" in name:
+                print(f"Found assignment that should be replaced:{self.python_module.code_for_node(node)}")
+            # TODO This is what has to be replaced if it's in 
+            # transformers_modeling_imports! Replaced by original source
+    
+    def visit_ClassDef(self,  node: cst.ClassDef) -> None:
+        print(node.name)
+
+    def visit_Import(self, node: cst.Import) -> None:
+        for alias in node.names:
+            if isinstance(alias.name, cst.Attribute) and alias.name.value == "transformers":
+                self.transformers_imports.append((alias.name.attr.value, node))
+            elif isinstance(alias.name.value, str) and alias.name.value.startswith("transformers."):
+                self.transformers_imports.append((alias.name.value, node))
+
+# Function to get the source code of the imported entity
+def get_imported_entity_source(module, entity_name):
+    source_code = []
+    for stmt in module.body:
+        if isinstance(stmt, cst.SimpleStatementLine) and isinstance(stmt.body, cst.FunctionDef):
+            if stmt.body.name.value == entity_name:
+                source_code.append(cst.MetadataWrapper(module.get_metadata(cst.metadata.PositionProvider)).code_for_node(stmt))
+        elif isinstance(stmt, cst.SimpleStatementLine) and isinstance(stmt.body, cst.ClassDef):
+            if stmt.body.name.value == entity_name:
+                source_code.append(cst.MetadataWrapper(module.get_metadata(cst.metadata.PositionProvider)).code_for_node(stmt))
+    return '\n'.join(source_code)
+
+# Parse the Python file
+with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/diff_gemma.py", "r") as file:
+    code = file.read()
+module = cst.parse_module(code)
+
+# Use the visitor to find imports
+visitor = ImportVisitor(module)
+module.visit(visitor)
+exit(0)
+# Process the found imports
+for imported_name, import_node in visitor.transformers_imports:
+    print(f"Imported from transformers: {imported_name}")
+    # Extract the source code of the imported entity
+    entity_source_code = get_imported_entity_source(module, imported_name)
+    print(f"Source code of {imported_name}:")
+    print(entity_source_code)

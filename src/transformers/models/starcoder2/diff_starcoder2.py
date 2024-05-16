@@ -14,18 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import List, Tuple
+
+import torch.nn as nn
 from torch import FloatTensor, LongTensor, Tensor
+
+from transformers import Starcoder2Config
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import *
-import torch.nn as nn
-from transformers import Starcoder2Config
 from transformers.utils import ModelConverter
+
 
 Starcoder2Converter = ModelConverter(__file__)
 
 Starcoder2RMSNorm = Starcoder2Converter.register("Starcoder2RMSNorm", LlamaRMSNorm)
 StarcoderRotaryEmbedding = Starcoder2Converter.register("StarcoderRotaryEmbedding", LlamaRotaryEmbedding)
+
 
 class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):
@@ -43,6 +47,7 @@ class Starcoder2MLP(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
         return hidden_states
 
+
 # TODO either we support this, or we don't allow call to super?
 # if part of the super is used, then we are fucked. Let's restrict this to init?
 
@@ -50,13 +55,14 @@ class Starcoder2MLP(nn.Module):
 # Copied form where? No.
 # But then how do we check the architecture etc.
 
-# TODO do we support multiple inheritance? 
+# TODO do we support multiple inheritance?
 # This will depend on whether we usually copy from more than one module
-# Mixtral for example? 
+# Mixtral for example?
+
 
 class Starcoder2Attention(LlamaAttention):
     def __init__(self, config: LlamaConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx) # here call to super means
+        super().__init__(config, layer_idx)  # here call to super means
         self.attention_dropout = config.attention_dropout
 
     def forward(
@@ -141,26 +147,58 @@ class Starcoder2Attention(LlamaAttention):
 
         return attn_output, attn_weights, past_key_value
 
-Starcoder2SdpaAttention = Starcoder2Converter.register("Starcoder2SdpaAttention", LlamaAttention) 
-Starcoder2FlashAttention2 = Starcoder2Converter.register("Starcoder2FlashAttention2", LlamaAttention) 
 
-STARCODER2_ATTENTION_CLASSES = {"eager": Starcoder2Attention, "flash_attention_2": Starcoder2FlashAttention2, "sdpa": Starcoder2SdpaAttention}
+Starcoder2SdpaAttention = Starcoder2Converter.register("Starcoder2SdpaAttention", LlamaAttention)
+Starcoder2FlashAttention2 = Starcoder2Converter.register("Starcoder2FlashAttention2", LlamaAttention)
+
+STARCODER2_ATTENTION_CLASSES = {
+    "eager": Starcoder2Attention,
+    "flash_attention_2": Starcoder2FlashAttention2,
+    "sdpa": Starcoder2SdpaAttention,
+}
 
 
-Starcoder2DecoderLayer = Starcoder2Converter.register("Starcoder2DecoderLayer", LlamaDecoderLayer) 
+Starcoder2DecoderLayer = Starcoder2Converter.register("Starcoder2DecoderLayer", LlamaDecoderLayer)
 Starcoder2PreTrainedModel = Starcoder2Converter.register("Starcoder2PreTrainedModel", LlamaPreTrainedModel)
+
 
 class Starcoder2Model(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
         self.embedding_dropout = config.embedding_dropout
 
-    def forward(self, input_ids: LongTensor = None, attention_mask: Tensor | None = None, position_ids: LongTensor | None = None, past_key_values: List[FloatTensor] | None = None, inputs_embeds: FloatTensor | None = None, use_cache: bool | None = None, output_attentions: bool | None = None, output_hidden_states: bool | None = None, return_dict: bool | None = None, cache_position: LongTensor | None = None) -> Tuple | BaseModelOutputWithPast:
-        if inputs_embeds is None: 
+    def forward(
+        self,
+        input_ids: LongTensor = None,
+        attention_mask: Tensor | None = None,
+        position_ids: LongTensor | None = None,
+        past_key_values: List[FloatTensor] | None = None,
+        inputs_embeds: FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: LongTensor | None = None,
+    ) -> Tuple | BaseModelOutputWithPast:
+        if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.embedding_dropout, training=self.training)
-        return super().forward(None, attention_mask, position_ids, past_key_values, inputs_embeds, use_cache, output_attentions, output_hidden_states, return_dict, cache_position)
+        return super().forward(
+            None,
+            attention_mask,
+            position_ids,
+            past_key_values,
+            inputs_embeds,
+            use_cache,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            cache_position,
+        )
+
 
 Starcoder2ForCausalLM = Starcoder2Converter.register("Starcoder2ForCausalLM", LlamaForCausalLM)
-Starcoder2ForSequenceClassification = Starcoder2Converter.register("Starcoder2ForSequenceClassification", LlamaForSequenceClassification)
+Starcoder2ForSequenceClassification = Starcoder2Converter.register(
+    "Starcoder2ForSequenceClassification", LlamaForSequenceClassification
+)

@@ -1,9 +1,12 @@
 from typing import Tuple
+
+import torch.nn as nn
+
+from transformers import StableLmConfig
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import *
-import torch.nn as nn
-from transformers import StableLmConfig
 from transformers.utils import ModelConverter
+
 
 StableLmConverter = ModelConverter(__file__)
 
@@ -26,17 +29,15 @@ class StableLmLayerNormPerHead(nn.Module):
         # Normalize and merge the heads back together
         return torch.cat([norm(hidden_states) for norm, hidden_states in zip(self.norms, states_per_heads)], dim=1)
 
+
 class StableLmAttention(LlamaAttention):
     def __init__(self, config: LlamaConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx) # here call to super means
-                                            # we should copy super
+        super().__init__(config, layer_idx)  # here call to super means
+        # we should copy super
         self.qk_layernorm = config.qk_layernorm
         self.q_layernorm = StableLmLayerNormPerHead(self.head_dim, self.num_heads, eps=config.layer_norm_eps)
-        self.k_layernorm = StableLmLayerNormPerHead(
-            self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps
-        )
+        self.k_layernorm = StableLmLayerNormPerHead(self.head_dim, self.num_key_value_heads, eps=config.layer_norm_eps)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
-
 
     def forward(
         self,
@@ -133,6 +134,7 @@ class StableLmAttention(LlamaAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 class StableLmSdpaAttention(StableLmAttention):
     def forward(
@@ -233,6 +235,7 @@ class StableLmSdpaAttention(StableLmAttention):
 
         return attn_output, None, past_key_value
 
+
 class StableLmFlashAttention2(LlamaFlashAttention2):
     """
     StableLM flash attention module. This module inherits from `StableLmAttention` as the weights of the module stays
@@ -325,7 +328,12 @@ class StableLmFlashAttention2(LlamaFlashAttention2):
         return attn_output, attn_weights, past_key_value
 
 
-StableLm_ATTENTION_CLASSES = {"eager": StableLmAttention, "flash_attention_2": StableLmFlashAttention2, "sdpa": StableLmSdpaAttention}
+StableLm_ATTENTION_CLASSES = {
+    "eager": StableLmAttention,
+    "flash_attention_2": StableLmFlashAttention2,
+    "sdpa": StableLmSdpaAttention,
+}
+
 
 class StableLmDecoderLayer(nn.Module):
     def __init__(self, config: StableLmConfig, layer_idx: int):
@@ -389,7 +397,10 @@ class StableLmDecoderLayer(nn.Module):
 
         return outputs
 
+
 StableLmPreTrainedModel = StableLmConverter.register("StableLmPreTrainedModel", LlamaPreTrainedModel)
 StableLmdModel = StableLmConverter.register("StableLmdModel", LlamaModel)
 StableLmForCausalLM = StableLmConverter.register("StableLmForCausalLM", LlamaForCausalLM)
-StableLmForSequenceClassification = StableLmConverter.register("StableLmForSequenceClassification", LlamaForSequenceClassification)
+StableLmForSequenceClassification = StableLmConverter.register(
+    "StableLmForSequenceClassification", LlamaForSequenceClassification
+)

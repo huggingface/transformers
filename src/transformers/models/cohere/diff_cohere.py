@@ -1,10 +1,13 @@
-from transformers.models.llama.modeling_llama import *
 import torch.nn as nn
+
 from transformers import CohereConfig
+from transformers.models.llama.modeling_llama import *
 from transformers.utils import ModelConverter
 
+
 CohereConverter = ModelConverter(__file__)
-# now should the cohere converted be added to all model converters? 
+# now should the cohere converted be added to all model converters?
+
 
 class CohereLayerNorm(nn.Module):
     def __init__(self, hidden_size=None, eps=1e-5, bias=False):
@@ -22,8 +25,8 @@ class CohereLayerNorm(nn.Module):
         hidden_states = self.weight.to(torch.float32) * hidden_states
         return hidden_states.to(input_dtype)
 
-class CohereRotaryEmbedding(LlamaRotaryEmbedding):
 
+class CohereRotaryEmbedding(LlamaRotaryEmbedding):
     def rotate_half(self, x):
         # Split and rotate
         x1 = x[..., ::2]
@@ -33,7 +36,7 @@ class CohereRotaryEmbedding(LlamaRotaryEmbedding):
 
     def forward(self, q, k, position_ids=None, unsqueeze_dim=1):
         dtype = q.dtype
-        q,k  = q.float(), k.float()
+        q, k = q.float(), k.float()
         cos, sin = self.comput_cos_sin(q, position_ids)
         cos = cos.unsqueeze(unsqueeze_dim)
         sin = sin.unsqueeze(unsqueeze_dim)
@@ -41,12 +44,18 @@ class CohereRotaryEmbedding(LlamaRotaryEmbedding):
         k_embed = (k * cos) + (self.rotate_half(k) * sin)
         return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
-CohereMLP = CohereConverter.register("CohereMLP", LlamaMLP) 
-CohereAttention = CohereConverter.register("CohereAttention", LlamaAttention) 
-CohereSdpaAttention = CohereConverter.register("CohereSdpaAttention", LlamaAttention) 
-CohereFlashAttention2 = CohereConverter.register("CohereFlashAttention2", LlamaAttention) 
 
-COHERE_ATTENTION_CLASSES = {"eager": CohereAttention, "flash_attention_2": CohereFlashAttention2, "sdpa": CohereSdpaAttention}
+CohereMLP = CohereConverter.register("CohereMLP", LlamaMLP)
+CohereAttention = CohereConverter.register("CohereAttention", LlamaAttention)
+CohereSdpaAttention = CohereConverter.register("CohereSdpaAttention", LlamaAttention)
+CohereFlashAttention2 = CohereConverter.register("CohereFlashAttention2", LlamaAttention)
+
+COHERE_ATTENTION_CLASSES = {
+    "eager": CohereAttention,
+    "flash_attention_2": CohereFlashAttention2,
+    "sdpa": CohereSdpaAttention,
+}
+
 
 class CohereDecoderLayer(nn.Module):
     def __init__(self, config: CohereConfig, layer_idx: int):
@@ -98,6 +107,7 @@ class CohereDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
 
 CoherePreTrainedModel = CohereConverter.register("CoherePreTrainedModel", LlamaPreTrainedModel)
 CohereModel = CohereConverter.register("CohereModel", LlamaModel)

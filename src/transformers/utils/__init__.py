@@ -208,6 +208,7 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
+from .model_converter import ModelConverter
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -215,7 +216,7 @@ from .peft_utils import (
     check_peft_version,
     find_adapter_config_file,
 )
-from .model_converter import ModelConverter
+
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
