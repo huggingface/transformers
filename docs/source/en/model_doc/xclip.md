@@ -16,13 +16,13 @@ rendered properly in your Markdown viewer.
 
 # X-CLIP
 
-    <Tip warning={true}>
+<Tip warning={true}>
 
-    This model is in maintenance mode only, we don't accept any new PRs changing its code.
-    If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-    You can do so by running the following command: `pip install -U transformers==4.40.2`.
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
 
-    </Tip>
+</Tip>
 
 ## Overview
 
@@ -38,7 +38,7 @@ Tips:
 - Usage of X-CLIP is identical to [CLIP](clip).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xclip_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> X-CLIP architecture. Taken from the <a href="https://arxiv.org/abs/2208.02816">original paper.</a> </small>
 

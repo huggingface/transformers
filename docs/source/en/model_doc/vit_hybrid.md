@@ -16,13 +16,13 @@ rendered properly in your Markdown viewer.
 
 # Hybrid Vision Transformer (ViT Hybrid)
 
-    <Tip warning={true}>
+<Tip warning={true}>
 
-    This model is in maintenance mode only, we don't accept any new PRs changing its code.
-    If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-    You can do so by running the following command: `pip install -U transformers==4.40.2`.
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
 
-    </Tip>
+</Tip>
 
 ## Overview
 
