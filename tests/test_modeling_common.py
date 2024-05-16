@@ -78,6 +78,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    require_torch_multi_accelerator,
 )
 from transformers.utils import (
     CONFIG_NAME,
@@ -3010,7 +3011,7 @@ class ModelTesterMixin:
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
             else:
-                self.assertEqual(param.device, torch.device(param_device))
+                self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3129,7 +3130,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3155,7 +3156,6 @@ class ModelTesterMixin:
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
                     # Making sure part of the model will actually end up offloaded
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
-
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
                     torch.manual_seed(0)
