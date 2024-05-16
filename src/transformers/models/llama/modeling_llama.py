@@ -115,7 +115,7 @@ class LlamaRotaryEmbedding(nn.Module):
     @property
     def sin_cached(self):
         logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "The sin_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
             "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._sin_cached
@@ -123,7 +123,7 @@ class LlamaRotaryEmbedding(nn.Module):
     @property
     def cos_cached(self):
         logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
+            "The cos_cached attribute will be removed in 4.42. Bear in mind that its contents changed in v4.40. Use "
             "the forward method of RoPE from now on instead. It is not used in the `LlamaAttention` class"
         )
         return self._cos_cached
@@ -769,7 +769,6 @@ class LlamaDecoderLayer(nn.Module):
         return outputs
 
 
-
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -785,7 +784,6 @@ LLAMA_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-
 
 
 @add_start_docstrings(
