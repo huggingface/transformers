@@ -1476,6 +1476,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
                 config,
+                device_map=device_map,
                 hard_check_only=False if requested_attn_implementation is None else True,
             )
         else:
@@ -1622,7 +1623,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return config
 
     @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+    def _check_and_enable_sdpa(
+        cls, config, device_map: Optional[Union[str, Dict[str, int]]] = None, hard_check_only: bool = False
+    ) -> PretrainedConfig:
         """
         Checks the availability of SDPA for a given model.
 
@@ -1650,9 +1653,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not hard_check_only:
             config._attn_implementation = "sdpa"
 
-        if torch.version.hip is not None and config._attn_implementation == "sdpa":
+        if torch.version.hip is not None and config._attn_implementation == "sdpa" and device_map == "auto":
             logger.warning_once(
-                "Using the `SDPA` attention implementation on a ROCM device may lead to performance issues due to the FA backend. Disabling it to use other backends."
+                "Using the `SDPA` attention implementation with `device_map='auto'` on a ROCM device may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
             )
             torch.backends.cuda.enable_flash_sdp(False)
 
