@@ -894,6 +894,7 @@ _import_structure = {
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
+        "is_torch_deterministic",
         "is_torch_mlu_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
