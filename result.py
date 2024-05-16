@@ -505,7 +505,7 @@ class GemmaSdpaAttention(GemmaAttention):
 
         return attn_output, None, past_key_value
 
-COHERE_ATTENTION_CLASSES = {
+GEMMA_ATTENTION_CLASSES = {
     "eager": GemmaAttention,
     "flash_attention_2": GemmaFlashAttention2,
     "sdpa": GemmaSdpaAttention,

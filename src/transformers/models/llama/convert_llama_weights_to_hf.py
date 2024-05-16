@@ -15,7 +15,6 @@ import argparse
 import gc
 import json
 import os
-import shutil
 import warnings
 
 import torch
@@ -304,7 +303,9 @@ def write_model(
     gc.collect()
 
     print("Loading the checkpoint in a Llama model.")
-    model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True) # Avoid saving this as part of the config.  del model.config._name_or_path model.config.torch_dtype = torch.float16 print("Saving in the Transformers format.") model.save_pretrained(model_path, safe_serialization=safe_serialization) shutil.rmtree(tmp_model_path)
+    model = LlamaForCausalLM.from_pretrained(
+        tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+    )  # Avoid saving this as part of the config.  del model.config._name_or_path model.config.torch_dtype = torch.float16 print("Saving in the Transformers format.") model.save_pretrained(model_path, safe_serialization=safe_serialization) shutil.rmtree(tmp_model_path)
 
 
 class Llama3Converter(TikTokenConverter):
