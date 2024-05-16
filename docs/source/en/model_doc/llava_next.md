@@ -98,7 +98,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 ### Multi image inference
 
-LLaVa-Next can perform inference with miltiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Gere is how you can do it:
+LLaVa-Next can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
 
 ```python
 import requests
