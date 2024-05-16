@@ -60,7 +60,6 @@ class ReplaceNameTransformer(CSTTransformer):
         """Replace imports that match our criteria."""
 
         updated_value = self.preserve_case_replace(updated_node.value)
-        print(f'GOTT={updated_value}')
         return updated_node.with_changes(value=updated_value)
 
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
@@ -132,6 +131,6 @@ if __name__ == "__main__":
 
     transformers = DiffConverterTransformer(module)
     new_mod = module.visit(transformers)
-    with open("result.py", "w") as f:
+    with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/modeling_gemma.py", "w") as f:
         f.write(new_mod.code)
     exit(0)
