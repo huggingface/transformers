@@ -19,7 +19,7 @@ import os
 import pathlib
 import tempfile
 
-from transformers import BatchFeature
+from transformers import BatchFeature, AutoImageProcessor
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -172,6 +172,18 @@ class ImageProcessingTestMixin:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
                 image_processor_second = image_processing_class.from_pretrained(tmpdirname)
+
+            self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+
+    def test_image_processor_save_load_with_autoimageprocessor(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor_first = image_processing_class(**self.image_processor_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
+                check_json_file_has_correct_format(saved_file)
+
+                image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
 
