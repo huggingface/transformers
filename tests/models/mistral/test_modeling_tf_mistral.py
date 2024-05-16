@@ -327,6 +327,9 @@ class TFMistralModelTest(TFModelTesterMixin, TFGenerationIntegrationTests, Pipel
     def test_past_key_values_format(self):
         pass
 
+    @unittest.skip("Vocab resizing is not supported")
+    def test_save_load_after_resize_token_embeddings(self):
+        pass
 
 @require_tf
 class TFMistralIntegrationTest(unittest.TestCase):
