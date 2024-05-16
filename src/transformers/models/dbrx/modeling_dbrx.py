@@ -1442,7 +1442,9 @@ class DbrxForCausalLM(DbrxPreTrainedModel):
         use_cache=True,
         **kwargs,
     ):
-        # with torch.compile, we only support the basic case where we assume `input_ids` has all tokens (prompt + generated tokens)
+        # with torch.compile, we only support the basic case where we assume `input_ids` has all tokens (prompt +
+        # generated tokens)
+        # TODO (joao): remove this when torch's support for control flow is not experimental (https://pytorch.org/docs/stable/generated/torch.cond.html)
         if is_torchdynamo_compiling():
             input_ids = input_ids[:, cache_position]
 
