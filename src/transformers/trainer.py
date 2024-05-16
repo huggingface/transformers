@@ -516,7 +516,7 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        self.tokenizer = tokenizer
+        self.tokenizer = processor if processor is not None else tokenizer
         if processor is not None and hasattr(processor, "feature_extractor"):
             tokenizer = processor.feature_extractor
 
