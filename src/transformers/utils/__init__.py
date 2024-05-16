@@ -129,6 +129,7 @@ from .import_utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_hqq_available,
     is_in_notebook,
     is_ipex_available,

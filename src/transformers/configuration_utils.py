@@ -27,6 +27,7 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
+from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
@@ -658,6 +659,8 @@ class PretrainedConfig(PushToHubMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
 
+        gguf_file = kwargs.get("gguf_file", None)
+
         if trust_remote_code is True:
             logger.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
@@ -676,10 +679,10 @@ class PretrainedConfig(PushToHubMixin):
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
-            configuration_file = pretrained_model_name_or_path
+            configuration_file = pretrained_model_name_or_path if gguf_file is None else gguf_file
             resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
-            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
 
             try:
                 # Load from local folder or from cache or download from model Hub and cache
@@ -712,8 +715,12 @@ class PretrainedConfig(PushToHubMixin):
                 )
 
         try:
-            # Load config dict
-            config_dict = cls._dict_from_json_file(resolved_config_file)
+            if gguf_file:
+                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+            else:
+                # Load config dict
+                config_dict = cls._dict_from_json_file(resolved_config_file)
+
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise EnvironmentError(

@@ -16,7 +16,6 @@
 Processor class for LLaVa-NeXT.
 """
 
-
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -53,7 +52,8 @@ class LlavaNextProcessor(ProcessorMixin):
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
+        max_length: Optional[int] = None,
+        do_pad: Optional[bool] = True,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
@@ -82,6 +82,9 @@ class LlavaNextProcessor(ProcessorMixin):
                   lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
+            do_pad (`bool`, *optional*, defaults to self.do_pad):
+                Whether to pad the image. If `True` will pad the images in the batch to the largest image in the batch
+                and create a pixel mask. Padding will be applied to the bottom and right of the image with zeros.
             truncation (`bool`, *optional*):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
@@ -102,7 +105,7 @@ class LlavaNextProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
-            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            image_inputs = self.image_processor(images, do_pad=do_pad, return_tensors=return_tensors)
         else:
             image_inputs = {}
         text_inputs = self.tokenizer(
