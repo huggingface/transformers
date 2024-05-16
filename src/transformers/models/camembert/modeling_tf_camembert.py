@@ -66,9 +66,6 @@ _CHECKPOINT_FOR_DOC = "almanach/camembert-base"
 _CONFIG_FOR_DOC = "CamembertConfig"
 
 
-from ..deprecated._archive_maps import TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 CAMEMBERT_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the

@@ -55,9 +55,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LayoutLMConfig"
 
 
-from ..deprecated._archive_maps import TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 class TFLayoutLMEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 

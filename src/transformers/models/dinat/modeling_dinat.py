@@ -68,9 +68,6 @@ _IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-from ..deprecated._archive_maps import DINAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # drop_path and DinatDropPath are from the timm library.
 
 

@@ -36,7 +36,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -57,7 +57,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -155,7 +155,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -230,7 +230,7 @@ jobs:
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports ${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports ${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }} -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}

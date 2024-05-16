@@ -60,12 +60,10 @@ jobs:
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
-        # Only the model testing job is concerned for this step
-        if: ${{ inputs.job == 'run_models_gpu' }}
         uses: actions/upload-artifact@v4
         with:
-          name: prev_ci_results
-          path: prev_ci_results
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}
       
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -77,6 +75,7 @@ jobs:
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
+          CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
@@ -85,3 +84,11 @@ jobs:
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}" 
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: ci_results_${{ inputs.job }}

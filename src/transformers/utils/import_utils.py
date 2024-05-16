@@ -143,6 +143,7 @@ _phonemizer_available = _is_package_available("phonemizer")
 _psutil_available = _is_package_available("psutil")
 _py3nvml_available = _is_package_available("py3nvml")
 _pyctcdecode_available = _is_package_available("pyctcdecode")
+_pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
@@ -152,6 +153,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
+_is_gguf_available = _is_package_available("gguf")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -296,6 +298,10 @@ def is_torch_available():
 
 def is_hqq_available():
     return _hqq_available
+
+
+def is_pygments_available():
+    return _pygments_available
 
 
 def get_torch_version():
@@ -810,6 +816,10 @@ def is_seqio_available():
     return _is_seqio_available
 
 
+def is_gguf_available():
+    return _is_gguf_available
+
+
 def is_protobuf_available():
     if importlib.util.find_spec("google") is None:
         return False
@@ -1297,6 +1307,11 @@ NATTEN_IMPORT_ERROR = """
 {0} requires the natten library but it was not found in your environment. You can install it by referring to:
 shi-labs.com/natten . You can also install it with pip (may take longer to build):
 `pip install natten`. Please note that you may need to restart your runtime after installation.
+"""
+
+NUMEXPR_IMPORT_ERROR = """
+{0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
+https://numexpr.readthedocs.io/en/latest/index.html.
 """
 
 

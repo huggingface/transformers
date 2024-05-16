@@ -28,9 +28,6 @@ from ...utils import CONFIG_NAME, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import CONFIG_ARCHIVE_MAP_MAPPING_NAMES  # noqa: F401, E402
-
-
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
@@ -131,6 +128,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
         ("jamba", "JambaConfig"),
+        ("jetmoe", "JetMoeConfig"),
         ("jukebox", "JukeboxConfig"),
         ("kosmos-2", "Kosmos2Config"),
         ("layoutlm", "LayoutLMConfig"),
@@ -184,6 +182,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("opt", "OPTConfig"),
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
+        ("paligemma", "PaliGemmaConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -256,6 +255,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
+        ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
         ("vipllava", "VipLlavaConfig"),
@@ -402,6 +402,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
         ("jamba", "Jamba"),
+        ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
         ("kosmos-2", "KOSMOS-2"),
         ("layoutlm", "LayoutLM"),
@@ -465,6 +466,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("opt", "OPT"),
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
+        ("paligemma", "PaliGemma"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -541,6 +543,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("van", "VAN"),
+        ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
         ("vipllava", "VipLlava"),
@@ -982,6 +985,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
-
-
-ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)

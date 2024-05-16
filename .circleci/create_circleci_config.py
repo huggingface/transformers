@@ -132,7 +132,7 @@ class CircleCIJob:
             if tests is None:
                 folder = os.environ["test_preparation_dir"]
                 test_file = os.path.join(folder, "filtered_test_list.txt")
-                if os.path.exists(test_file):
+                if os.path.exists(test_file): # We take this job's tests from the filtered test_list.txt
                     with open(test_file) as f:
                         tests = f.read().split(" ")
 
@@ -144,9 +144,20 @@ class CircleCIJob:
                 if test.endswith(".py"):
                     expanded_tests.append(test)
                 elif test == "tests/models":
-                    expanded_tests.extend(glob.glob("tests/models/**/test*.py", recursive=True))
+                    if "tokenization" in self.name:
+                        expanded_tests.extend(glob.glob("tests/models/**/test_tokenization*.py", recursive=True))
+                    elif self.name in ["flax","torch","tf"]:
+                        name = self.name if self.name != "torch" else ""
+                        if self.name == "torch":
+                            all_tests = glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True) 
+                            filtered = [k for k in all_tests if ("_tf_") not in k and "_flax_" not in k]
+                            expanded_tests.extend(filtered)
+                        else:
+                            expanded_tests.extend(glob.glob(f"tests/models/**/test_modeling_{name}*.py", recursive=True))
+                    else:
+                        expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True))
                 elif test == "tests/pipelines":
-                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                    expanded_tests.extend(glob.glob("tests/models/**/test_modeling*.py", recursive=True)) 
                 else:
                     expanded_tests.append(test)
             tests = " ".join(expanded_tests)
@@ -234,6 +245,14 @@ torch_job = CircleCIJob(
     pytest_num_workers=16
 )
 
+tokenization_job = CircleCIJob(
+    "tokenization",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv venv && uv pip install ."],
+    parallelism=6,
+    pytest_num_workers=16
+)
+
 
 tf_job = CircleCIJob(
     "tf",
@@ -291,7 +310,8 @@ examples_torch_job = CircleCIJob(
     additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
-    install_steps=["uv venv && uv pip install ."],
+    # TODO @ArthurZucker remove this once docker is easier to build
+    install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
     pytest_num_workers=1,
 )
 
@@ -404,6 +424,7 @@ REGULAR_TESTS = [
     hub_job,
     onnx_job,
     exotic_models_job,
+    tokenization_job
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,

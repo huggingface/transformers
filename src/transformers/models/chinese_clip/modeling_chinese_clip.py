@@ -49,9 +49,6 @@ _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
 
 
-from ..deprecated._archive_maps import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:

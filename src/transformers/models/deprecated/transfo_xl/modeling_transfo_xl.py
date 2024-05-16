@@ -43,9 +43,6 @@ _CHECKPOINT_FOR_DOC = "transfo-xl/transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 
 
-from .._archive_maps import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 def build_tf_to_pytorch_map(model, config):
     """
     A map of modules from TF to PyTorch. This time I use a map to keep the PyTorch model as identical to the original

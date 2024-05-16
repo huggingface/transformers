@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_qwen2_moe": ["QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2MoeConfig"],
+    "configuration_qwen2_moe": ["Qwen2MoeConfig"],
 }
 
 
@@ -40,7 +40,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2_moe import QWEN2MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2MoeConfig
+    from .configuration_qwen2_moe import Qwen2MoeConfig
 
     try:
         if not is_torch_available():

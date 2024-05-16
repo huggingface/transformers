@@ -22,11 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PHI3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/Phi-3-mini-4k-instruct": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/resolve/main/config.json",
-    "microsoft/Phi-3-mini-128k-instruct": "https://huggingface.co/microsoft/Phi-3-mini-128k-instruct/resolve/main/config.json",
-}
-
 
 class Phi3Config(PretrainedConfig):
     r"""

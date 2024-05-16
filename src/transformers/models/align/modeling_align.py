@@ -47,9 +47,6 @@ _CHECKPOINT_FOR_DOC = "kakaobrain/align-base"
 _CONFIG_FOR_DOC = "AlignConfig"
 
 
-from ..deprecated._archive_maps import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 ALIGN_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
