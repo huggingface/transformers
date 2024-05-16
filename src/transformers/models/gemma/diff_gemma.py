@@ -30,6 +30,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaSdpaAttention,
+    LlamaForSequenceClassification,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -295,3 +296,4 @@ class GemmaModel(LlamaModel):
 
 
 GemmaForCausalLM = LlamaForCausalLM
+GemmaForSequenceClassification = LlamaForSequenceClassification
