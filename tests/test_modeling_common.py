@@ -74,11 +74,11 @@ from transformers.testing_utils import (
     require_safetensors,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
-    require_torch_multi_accelerator,
 )
 from transformers.utils import (
     CONFIG_NAME,
