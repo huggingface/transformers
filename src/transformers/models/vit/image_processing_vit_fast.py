@@ -47,16 +47,15 @@ if is_vision_available():
 if is_torchvision_available():
     from torchvision.transforms import Compose, InterpolationMode, Lambda, Normalize, Resize, ToTensor
 
-
-pil_torch_interpolation_mapping = {
-    PILImageResampling.NEAREST: InterpolationMode.NEAREST,
-    PILImageResampling.BOX: InterpolationMode.BOX,
-    PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
-    PILImageResampling.HAMMING: InterpolationMode.HAMMING,
-    PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
-    PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-    PILImageResampling.NEAREST: InterpolationMode.NEAREST,
-}
+    pil_torch_interpolation_mapping = {
+        PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+        PILImageResampling.BOX: InterpolationMode.BOX,
+        PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+        PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+        PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+        PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+        PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+    }
 
 
 @dataclass(frozen=True)
@@ -168,7 +167,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
         image_type: ImageType,
-    ) -> Compose:
+    ) -> "Compose":
         """
         Given the input settings build the image transforms using `torchvision.transforms.Compose`.
         """

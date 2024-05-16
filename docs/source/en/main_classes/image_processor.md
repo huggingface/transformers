@@ -36,4 +36,4 @@ An image processor is in charge of preparing input features for vision models an
 
 ## BaseImageProcessorFast
 
-[[autodoc]] image_processing_utils.BaseImageProcessorFast
+[[autodoc]] image_processing_utils_fast.BaseImageProcessorFast

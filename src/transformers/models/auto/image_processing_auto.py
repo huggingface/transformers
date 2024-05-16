@@ -438,7 +438,7 @@ class AutoImageProcessor:
                     return image_processor_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
                     raise ValueError(
-                        "This image processor cannot be instantiated. Please make sure you have `torchvision` installed."
+                        "This image processor cannot be instantiated. Please make sure you have `Pillow` installed."
                     )
 
         raise ValueError(
