@@ -1388,7 +1388,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 inputs_embeds, past_key_values_length=past_key_values_length, position_ids=position_ids
             )
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if self.gradient_checkpointing and self.training:
