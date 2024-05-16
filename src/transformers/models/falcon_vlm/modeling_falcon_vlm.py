@@ -317,6 +317,16 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
+    @property
+    def padding_side(self):
+        return self._padding_side
+
+    @padding_side.setter
+    def padding_side(self, padding_side: str):
+        if padding_side not in ["left", "right"]:
+            raise ValueError(f"{padding_side} is not `left` or `right`.")
+        self._padding_side = padding_side
+
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_input_embeddings
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -353,28 +363,170 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._merge_input_ids_with_image_features
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features.shape
-        batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
+    def _merge_input_ids_with_image_features(
+        self,
+        image_features,
+        feature_lens,
+        inputs_embeds,
+        input_ids,
+        attention_mask,
+        position_ids=None,
+        labels=None,
+        image_token_index=None,
+        ignore_index=-100,
+    ):
+        """
+        Merge input_ids with with image features into final embeddings
 
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
+        Args:
+            image_features (`torch.Tensor` of shape `(all_feature_lens, embed_dim)`):
+                All vision vectors of all images in the batch
+            feature_lens (`torch.LongTensor` of shape `(num_images)`):
+                The length of visual embeddings of each image as stacked in `image_features`
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
+                Token embeddings before merging with visual embeddings
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input_ids of tokens, possibly filled with image token
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Mask to avoid performing attention on padding token indices.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                config.n_positions - 1]`.
+            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
+                :abels need to be recalculated to support training (if provided)
+            image_token_index (`int`, *optional*)
+                Token id used to indicate the special "image" token. Defaults to `config.image_token_index`
+            ignore_index (`int`, *optional*)
+                Value that is used to pad `labels` and will be ignored when calculated loss. Default: -100.
+        Returns:
+            final_embedding, final_attention_mask, position_ids, final_labels
+
+        Explanation:
+            each image has variable length embeddings, with length specified by feature_lens
+            image_features is concatenation of all visual embed vectors
+            task: fill each <image> with the correct number of visual embeddings
+            Example:
+                X (5 patches), Y (3 patches), Z (8)
+                X, Y are in the same sequence (in-context learning)
+            if right padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    o p q r Z s t u v _ _ _ _ _ _
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
+                ]
+            elif left padding
+                input_ids: [
+                    a b c d e f X g h i j k Y l m
+                    _ _ _ _ _ _ o p q r Z s t u v
+                ]
+                input_ids should be: [
+                    a b c d e f X X X X X g h i j k Y Y Y l m
+                    _ _ _ _ _ o p q r Z Z Z Z Z Z Z Z s t u v
+                ]
+                labels should be: [
+                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
+                    _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
+                ]
+            Edge cases:
+                * If tokens are same but image token sizes are different, then cannot infer left or right padding
+                ```python
+                cat_img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+                chart_img = Image.open(requests.get("https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true", stream=True).raw)
+                prompts = [
+                    "[INST] <image>\nWhat is shown in this image? [/INST]",
+                    "[INST] <image>\nWhat is shown in this image? [/INST]",
+                ]
+                inputs = processor(prompts, [chart_img, cat_img], return_tensors='pt', padding=True).to("cuda")
+                    chart_img has 2634 tokens, while cat_img has 2340 tokens
+                ```
+
+                input_ids: [
+                    a b c d X g h
+                    i j Y k l m n
+                ]
+                where X is 3 tokens while Y is 5, this mean after merge
+                if left-padding (batched generation)
+                    input_ids should be: [
+                        _ _ a b c d X X X g h
+                        i j Y Y Y Y Y k l m n
+                    ]
+                elif (right padding) (training)
+                    input_ids should be: [
+                        a b c d X X X g h _ _
+                        i j Y Y Y Y Y k l m n
+                    ]
+        """
+        image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
+        ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
+
+        with torch.no_grad():
+            # ! in llava 1.6, number of patches is variable
+            num_images = feature_lens.size(0)
+            num_image_features, embed_dim = image_features.shape
+            if feature_lens.sum() != num_image_features:
+                raise ValueError(f"{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}")
+            batch_size = input_ids.shape[0]
+            _left_padding = torch.any(attention_mask[:, 0] == 0)
+            _right_padding = torch.any(attention_mask[:, -1] == 0)
+
+            left_padding = True
+            if batch_size > 1:
+                if _left_padding and not _right_padding:
+                    left_padding = True
+                elif not _left_padding and _right_padding:
+                    left_padding = False
+                elif not _left_padding and not _right_padding:
+                    # both side is 1, so cannot tell
+                    left_padding = self.padding_side == "left"
+                else:
+                    # invalid attention_mask
+                    raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
+
+            # Whether to turn off right padding
+            # 1. Create a mask to know where special image tokens are
+            special_image_token_mask = input_ids == image_token_index
+            # special_image_token_mask: [bsz, seqlen]
+            num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
+            # num_special_image_tokens: [bsz]
+            # Reserve for padding of num_images
+            total_num_special_image_tokens = torch.sum(special_image_token_mask)
+            if total_num_special_image_tokens != num_images:
+                raise ValueError(
+                    f"Number of image tokens in input_ids ({total_num_special_image_tokens}) different from num_images ({num_images})."
+                )
+            # Compute the maximum embed dimension
+            # max_image_feature_lens is max_feature_lens per batch
+            feature_lens_batch = feature_lens.split(num_special_image_tokens.tolist(), dim=0)
+            feature_lens_batch_sum = torch.tensor([x.sum() for x in feature_lens_batch], device=feature_lens.device)
+            embed_sequence_lengths = (
+                (attention_mask == 1).long().sum(-1) - num_special_image_tokens + feature_lens_batch_sum
+            )
+            max_embed_dim = embed_sequence_lengths.max()
+
+            batch_indices, non_image_indices = torch.where((input_ids != image_token_index) & (attention_mask == 1))
+            # 2. Compute the positions where text should be written
+            # Calculate new positions for text tokens in merged image-text sequence.
+            # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images` text tokens.
+            # `torch.cumsum` computes how each image token shifts subsequent text token positions.
+            # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
+            # ! instead of special_image_token_mask * (num_image_patches - 1)
+            #   special_image_token_mask * (num_feature_len - 1)
+            special_image_token_mask = special_image_token_mask.long()
+            special_image_token_mask[special_image_token_mask == 1] = feature_lens - 1
+            new_token_positions = torch.cumsum((special_image_token_mask + 1), -1) - 1
+            if left_padding:
+                # shift right token positions so that they are ending at the same number
+                # the below here was incorrect? new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
+                new_token_positions += max_embed_dim - 1 - new_token_positions[:, -1:]
+
+            text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
         # 3. Create the full embedding, already padded to the maximum position
         final_embedding = torch.zeros(
@@ -383,10 +535,9 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
         final_attention_mask = torch.zeros(
             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
+        final_labels = None
         if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
+            final_labels = torch.full_like(final_attention_mask, ignore_index).to(torch.long)
         # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
         # set the corresponding tensors into their correct target device.
         target_device = inputs_embeds.device
@@ -405,32 +556,89 @@ class FalconVlmForConditionalGeneration(FalconVlmPreTrainedModel):
             final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
         # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        image_to_overwrite = torch.full(
-            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
-        )
-        image_to_overwrite[batch_indices, text_to_overwrite] = False
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
+        with torch.no_grad():
+            image_to_overwrite = torch.full(
+                (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
             )
+            image_to_overwrite[batch_indices, text_to_overwrite] = False
+            embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
+            embed_indices = embed_indices.expand(batch_size, max_embed_dim)
+            embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
 
+            if left_padding:
+                # exclude padding on the left
+                val = (max_embed_dim - embed_indices) <= embed_seq_lens
+            else:
+                # exclude padding on the right
+                val = embed_indices < embed_seq_lens
+            image_to_overwrite &= val
+
+            if image_to_overwrite.sum() != num_image_features:
+                raise ValueError(
+                    f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
+                    f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
+                    f" the number of image given to the model is {num_images}. "
+                    f"This prevents correct indexing and breaks batch generation."
+                )
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
 
-        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
-        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
-        indices_to_mask = new_token_positions[batch_indices, pad_indices]
+        return final_embedding, final_attention_mask, position_ids, final_labels
 
-        final_embedding[batch_indices, indices_to_mask] = 0
+    def pack_image_features(self, image_features, image_sizes, image_newline=None):
+        """
+        Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
-        if labels is None:
-            final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
+        Args:
+            image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
+                List of image feature tensor, each contains all the visual feature of all patches.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+            image_newline (`torch.Tensor` of shape `(embed_dim)`)
+                New line embedding vector.
+        Returns:
+            image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
+            feature_lens (`List[int]`)
+                token length of each image in image_features
+        """
+        new_image_features = []
+        feature_lens = []
+        for image_idx, image_feature in enumerate(image_features):
+            if image_feature.shape[0] > 1:
+                base_image_feature = image_feature[0]
+                image_feature = image_feature[1:]
+                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+                if height * width != base_image_feature.shape[0]:
+                    raise ValueError("The number of patches is not consistent with the image size.")
+                num_patch_width, num_patch_height = get_anyres_image_grid_shape(
+                    image_sizes[image_idx],
+                    self.config.image_grid_pinpoints,
+                    self.config.vision_config.image_size,
+                )
+                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
+                image_feature = image_feature.flatten(1, 2).flatten(2, 3)
+                image_feature = unpad_image(image_feature, image_sizes[image_idx])
+                if image_newline is not None:
+                    image_feature = torch.cat(
+                        (
+                            image_feature,
+                            image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).to(image_feature.dtype),
+                        ),
+                        dim=-1,
+                    )
+                image_feature = image_feature.flatten(1, 2).transpose(0, 1)
+                image_feature = torch.cat((base_image_feature, image_feature), dim=0)
+            else:
+                image_feature = image_feature[0]
+                if image_newline is not None:
+                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
+            new_image_features.append(image_feature)
+            feature_lens.append(image_feature.size(0))
+        image_features = torch.cat(new_image_features, dim=0)
+        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
+        return image_features, feature_lens
 
     @add_start_docstrings_to_model_forward(FALCON_VLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FalconVlmCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

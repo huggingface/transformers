@@ -3352,9 +3352,6 @@ class FalconVlmPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class FastSpeech2ConformerHifiGan(metaclass=DummyObject):
     _backends = ["torch"]
 
