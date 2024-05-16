@@ -208,13 +208,16 @@ class WhisperGenerationMixin:
             # two cases:
             # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
             # 2. num_frames is different, compute the DTW matrix for each sample sequentially
-            num_frames = num_frames.tolist() if isinstance(num_frames, torch.Tensor) else num_frames
+            if isinstance(num_frames, torch.Tensor):
+                num_frames = num_frames.to("cpu")
+
             # we're using np.unique because num_frames can be int/list/tuple
             if len(np.unique(num_frames)) == 1:
                 # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
-                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
-
-                weights = weights[..., : num_frames // 2]
+                if isinstance(num_frames, int):
+                    weights = weights[..., : num_frames // 2]
+                else:
+                    weights = weights[..., : num_frames[0] // 2]
             else:
                 # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)

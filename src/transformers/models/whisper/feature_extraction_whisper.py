@@ -314,12 +314,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             # rescale from sample (48000) to feature (3000)
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
+        if return_token_timestamps is not None:
+            padded_inputs["num_frames"] = [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
-        if return_token_timestamps is not None:
-            padded_inputs["num_frames"] = torch.tensor(
-                [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
-            )
 
         return padded_inputs
