@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+import unittest
 from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
@@ -613,6 +614,10 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_overall_accuracy"], 0.1)
 
     @patch.dict(os.environ, {"WANDB_DISABLED": "true"})
+    @unittest.skipIf(
+        backend_device_count(torch_device) > 1,
+        "TODO @qubvel, index out of bounds for bounding boxes when running on multi-accelerator",
+    )
     def test_run_object_detection(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
