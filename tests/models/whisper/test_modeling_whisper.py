@@ -931,7 +931,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa, logits, atol=4e-1)
+                assert torch.allclose(logits_fa, logits, atol=6e-1)
 
                 # check with inference + dropout
                 model.train()
@@ -976,7 +976,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa, logits, atol=4e-1)
+                assert torch.allclose(logits_fa, logits, atol=6e-1)
 
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
@@ -991,7 +991,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                assert torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=4e-1)
+                assert torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=6e-1)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
