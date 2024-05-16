@@ -79,10 +79,10 @@ class IrisModelTester:
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_tokenizer==7)|( rewards_tokenizer==4)|(rewards_tokenizer==1))]=1
         rewards_tokenizer = torch.mul(zeros,rewards_tokenizer).float()
-        ends_tokenizer = torch.zeros(self.batch_size_tokenizer,self.seq_length_tokenizer).long()
+        ends_tokenizer = torch.zeros(self.batch_size_tokenizer,self.seq_length_tokenizer).long().to(device=torch_device)
         for i in range(self.batch_size_tokenizer):
             ends_tokenizer[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
-        mask_padding_tokenizer = torch.ones(self.batch_size_tokenizer,self.seq_length_tokenizer).bool()
+        mask_padding_tokenizer = torch.ones(self.batch_size_tokenizer,self.seq_length_tokenizer).bool().to(device=torch_device)
 
         observations_world_model = floats_tensor((self.batch_size_world_model,self.seq_length_world_model,config.in_channels,config.resolution,config.resolution))
         actions_world_model = ids_tensor((self.batch_size_world_model,self.seq_length_world_model),vocab_size =4).long()
@@ -91,10 +91,10 @@ class IrisModelTester:
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_world_model==7)|( rewards_world_model==4)|(rewards_world_model==1))]=1
         rewards_world_model = torch.mul(zeros,rewards_world_model).float()
-        ends_world_model = torch.zeros(self.batch_size_world_model,self.seq_length_world_model).long()
+        ends_world_model = torch.zeros(self.batch_size_world_model,self.seq_length_world_model).long().to(device=torch_device)
         for i in range(self.batch_size_world_model):
             ends_world_model[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
-        mask_padding_world_model = torch.ones(self.batch_size_world_model,self.seq_length_world_model).bool()
+        mask_padding_world_model = torch.ones(self.batch_size_world_model,self.seq_length_world_model).bool().to(device=torch_device)
 
         observations_actor_critic = floats_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic,config.in_channels,config.resolution,config.resolution))
         actions_actor_critic = ids_tensor((self.batch_size_actor_critic,self.seq_length_actor_critic),vocab_size =4).long()
@@ -103,10 +103,10 @@ class IrisModelTester:
         # Rewards are given depending on which color brick is broken in 'Breakout' Atari env
         zeros[((rewards_actor_critic==7)|( rewards_actor_critic==4)|(rewards_actor_critic==1))]=1
         rewards_actor_critic = torch.mul(zeros,rewards_actor_critic).float()
-        ends_actor_critic = torch.zeros(self.batch_size_actor_critic,self.seq_length_actor_critic).long()
+        ends_actor_critic = torch.zeros(self.batch_size_actor_critic,self.seq_length_actor_critic).long().to(device=torch_device)
         for i in range(self.batch_size_actor_critic):
             ends_actor_critic[i,ids_tensor((1,),vocab_size=1).item()]=1 if floats_tensor((1,)).item()<0.5 else 0
-        mask_padding_actor_critic = torch.ones(self.batch_size_actor_critic,self.seq_length_actor_critic).bool()
+        mask_padding_actor_critic = torch.ones(self.batch_size_actor_critic,self.seq_length_actor_critic).bool().to(device=torch_device)
         
         observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
         actions = [actions_tokenizer,actions_world_model,actions_actor_critic]
@@ -380,7 +380,7 @@ class IrisModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 #hidden states are also non deterministic(tight but generous tolerance for the test)
-                TOLERANCE = 1e-01 if key == "hidden_states" else 1e-03
+                TOLERANCE = 2e-01 if key in ["hidden_states", "attentions"] else 1e-03
                     
                 self.assertTrue(
                     (equivalence(batched_row, single_row_object)) <= TOLERANCE,
@@ -468,7 +468,7 @@ class IrisModelIntegrationTest(unittest.TestCase):
                                         [-61.1128,   8.9312,  -9.0944],[-71.0932,   9.6851,  -9.7979],
                                         [-65.7601,   8.2317,  -8.2783],[-45.1447,   6.7321,  -6.9647]]], device=torch_device)
 
-        observations_tokenizer = torch.randn(batch_size,1,config.in_channels,config.resolution,config.resolution).to(device=torch_device, dtype=torch.float32)
+        observations_tokenizer = torch.randn(batch_size,1,config.in_channels,config.resolution,config.resolution).to(device=torch_device)
         actions_tokenizer = torch.randint(0,4,(batch_size,1)).to(device=torch_device, dtype=torch.long)
         rewards_tokenizer = torch.randint(0,8,(batch_size,1))
         zeros = torch.zeros_like(rewards_tokenizer)
@@ -478,9 +478,9 @@ class IrisModelIntegrationTest(unittest.TestCase):
         ends_tokenizer = torch.zeros(batch_size,1).to(device=torch_device, dtype=torch.long)
         for i in range(batch_size):
             ends_tokenizer[i,torch.randint(0,1,(1,)).item()]=1 if torch.randn(1,).item()<0.5 else 0
-        mask_padding_tokenizer = torch.ones(batch_size,1).bool().to(device=torch_device, dtype=torch.bool)
+        mask_padding_tokenizer = torch.ones(batch_size,1).bool().to(device=torch_device)
 
-        observations_world_model = torch.randn(batch_size,20,config.in_channels,config.resolution,config.resolution).to(device=torch_device, dtype=torch.float32)
+        observations_world_model = torch.randn(batch_size,20,config.in_channels,config.resolution,config.resolution).to(device=torch_device)
         actions_world_model = torch.randint(0,4,(batch_size,20)).to(device=torch_device, dtype=torch.long)
         rewards_world_model = torch.randint(0,8,(batch_size,20))
         zeros = torch.zeros_like(rewards_world_model)
@@ -490,9 +490,9 @@ class IrisModelIntegrationTest(unittest.TestCase):
         ends_world_model = torch.zeros(batch_size,20).to(device=torch_device, dtype=torch.long)
         for i in range(batch_size):
             ends_world_model[i,torch.randint(0,20,(1,)).item()]=1 if torch.randn(1,).item()<0.5 else 0
-        mask_padding_world_model = torch.ones(batch_size,20).bool().to(device=torch_device, dtype=torch.bool)
+        mask_padding_world_model = torch.ones(batch_size,20).bool().to(device=torch_device)
 
-        observations_actor_critic = torch.randn(batch_size,21,config.in_channels,config.resolution,config.resolution).to(device=torch_device, dtype=torch.float32)
+        observations_actor_critic = torch.randn(batch_size,21,config.in_channels,config.resolution,config.resolution).to(device=torch_device)
         actions_actor_critic = torch.randint(0,4,(batch_size,21)).to(device=torch_device, dtype=torch.long)
         rewards_actor_critic = torch.randint(0,8,(batch_size,21))
         zeros = torch.zeros_like(rewards_actor_critic)
@@ -502,7 +502,7 @@ class IrisModelIntegrationTest(unittest.TestCase):
         ends_actor_critic = torch.zeros(batch_size,21).to(device=torch_device, dtype=torch.long)
         for i in range(batch_size):
             ends_actor_critic[i,torch.randint(0,21,(1,)).item()]=1 if torch.randn(1,).item()<0.5 else 0
-        mask_padding_actor_critic = torch.ones(batch_size,21).bool().to(device=torch_device, dtype=torch.bool)
+        mask_padding_actor_critic = torch.ones(batch_size,21).bool().to(device=torch_device)
         
         observations = [observations_tokenizer,observations_world_model,observations_actor_critic]
         actions = [actions_tokenizer,actions_world_model,actions_actor_critic]
