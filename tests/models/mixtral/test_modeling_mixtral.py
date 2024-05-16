@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import pytest
+from packaging import version
 
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
@@ -604,3 +605,95 @@ class MixtralIntegrationTest(unittest.TestCase):
             atol=1e-3,
             rtol=1e-3,
         )
+
+    @slow
+    @require_torch_gpu
+    def test_compile_sliding_window_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+        NUM_TOKENS_TO_GENERATE = 20
+        EXPECTED_TOKEN_COMPLETION = {
+            8: [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                18261,
+                21705,
+                9341,
+                20302,
+                31111,
+                5535,
+                10439,
+                3799,
+                12334,
+                28929,
+                15688,
+                8388,
+                15592,
+                4507,
+                12986,
+                13895,
+                14997,
+                30984,
+                23273,
+                17094,
+            ],
+            7: [],
+        }
+
+        model_id = "hf-internal-testing/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+
+        # ugly hack
+        with torch.no_grad():
+            from transformers.models.mixtral.modeling_mixtral import MixtralMoeBlock, MixtralSparseMoeBlock
+
+            for decode_layer in model.model.layers:
+                original_block: MixtralSparseMoeBlock = getattr(decode_layer, "block_sparse_moe")
+                new_block: MixtralMoeBlock = MixtralMoeBlock(model.config).to(torch_device)
+                new_block.gate = original_block.gate
+                for i in range(model.config.num_local_experts):
+                    new_block.experts.w1[i].copy_(original_block.experts[i].w1.weight)
+                    new_block.experts.w2[i].copy_(original_block.experts[i].w2.weight)
+                    new_block.experts.w3[i].copy_(original_block.experts[i].w3.weight)
+                new_block.experts.w1.data = new_block.experts.w1.data.to(original_block.experts[i].w1.weight.dtype)
+                new_block.experts.w2.data = new_block.experts.w2.data.to(original_block.experts[i].w2.weight.dtype)
+                new_block.experts.w3.data = new_block.experts.w3.data.to(original_block.experts[i].w3.weight.dtype)
+                setattr(decode_layer, "block_sparse_moe", new_block)
+                del original_block
+
+        inputs = {"input_ids": dummy_input, "attention_mask": attention_mask}
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+
+            self.assertEqual(
+                EXPECTED_TOKEN_COMPLETION[self.cuda_compute_capability_major_version], generated_ids.tolist()[0]
+            )
+
+            generated_ids = model.generate(
+                **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
+            )
+            self.assertEqual(
+                EXPECTED_TOKEN_COMPLETION[self.cuda_compute_capability_major_version], generated_ids.tolist()[0]
+            )
+
+            model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
+            generated_ids = model.generate(
+                **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
+            )
+            self.assertEqual(
+                EXPECTED_TOKEN_COMPLETION[self.cuda_compute_capability_major_version], generated_ids.tolist()[0]
+            )
