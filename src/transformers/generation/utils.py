@@ -1622,10 +1622,14 @@ class GenerationMixin:
                     "This model does not support the `cache_implementation` argument. Please check the following "
                     "issue: https://github.com/huggingface/transformers/issues/28981."
                 )
+            if generation_config.cache_implementation == "static" and not self._supports_static_cache:
+                raise ValueError(
+                    "This model does not support `cache_implementation='static'`. Please check the following "
+                    "issue: https://github.com/huggingface/transformers/issues/28981"
+                )
             model_kwargs["past_key_values"] = self._get_cache(
                 generation_config.cache_implementation, batch_size, generation_config.max_length
             )
-
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
