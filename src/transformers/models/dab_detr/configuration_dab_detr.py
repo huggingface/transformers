@@ -185,6 +185,9 @@ class DABDETRConfig(PretrainedConfig):
         query_scale_type='cond_elewise',
         decoder_modulate_hw_attn=False,
         decoder_bbox_embed_diff_each_layer=False,
+        decoder_num_patterns=0,
+        decoder_normalize_before=False,
+        decoder_nhead=8,
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
@@ -262,6 +265,9 @@ class DABDETRConfig(PretrainedConfig):
         self.decoder_keep_query_pos = decoder_keep_query_pos,
         self.decoder_modulate_hw_attn = decoder_modulate_hw_attn,
         self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer,
+        self.decoder_num_patterns = decoder_num_patterns,
+        self.decoderr_normalize_before = decoder_normalize_before,
+        self.decoder_nhead = decoder_nhead,
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
