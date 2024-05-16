@@ -18,14 +18,22 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Idefics2 model was created by the [Hugging Face M4](https://huggingface.co/HuggingFaceM4) team and authored by Léo Tronchon, Hugo Laurencon, Victor Sanh.
-The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
+The Idefics2 model was proposed in [What matters when building vision-language models?](https://arxiv.org/abs/2405.02246) by Léo Tronchon, Hugo Laurencon, Victor Sanh. The accompanying blog post can be found [here](https://huggingface.co/blog/idefics2).
 
 Idefics2 is an open multimodal model that accepts arbitrary sequences of image and text inputs and produces text
 outputs. The model can answer questions about images, describe visual content, create stories grounded on multiple
 images, or simply behave as a pure language model without visual inputs. It improves upon IDEFICS-1, notably on
 document understanding, OCR, or visual reasoning. Idefics2 is lightweight (8 billion parameters) and treats
 images in their native aspect ratio and resolution, which allows for varying inference efficiency.
+
+The abstract from the paper is the following:
+
+*The growing interest in vision-language models (VLMs) has been driven by improvements in large language models and vision transformers. Despite the abundance of literature on this subject, we observe that critical decisions regarding the design of VLMs are often not justified. We argue that these unsupported decisions impede progress in the field by making it difficult to identify which choices improve model performance. To address this issue, we conduct extensive experiments around pre-trained models, architecture choice, data, and training methods. Our consolidation of findings includes the development of Idefics2, an efficient foundational VLM of 8 billion parameters. Idefics2 achieves state-of-the-art performance within its size category across various multimodal benchmarks, and is often on par with models four times its size. We release the model (base, instructed, and chat) along with the datasets created for its training.*
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/idefics2_architecture.png"
+alt="drawing" width="600"/>
+
+<small> Idefics2 architecture. Taken from the <a href="https://arxiv.org/abs/2405.02246">original paper.</a> </small>
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
