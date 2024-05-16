@@ -39,9 +39,7 @@ from torch.nn import functional as F
 
 from torch.cuda.amp import autocast
 
-# from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -64,32 +62,32 @@ IRIS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Iris models at https://huggingface.co/models?filter=iris
 ]
 
-
-
-
 @dataclass
 class IrisOutput(ModelOutput):
     """
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        reconstructed_img (`torch.FloatTensor` of shape `(batch_size, time_steps, num_channels, height, width)`):
-            Reconstructed image from input frame 
-        losses (`tuple[torch.FloatTensor]` of shape `(1,)`):
-            Agent's components' total loss (tokenizer, world model and actor critic).
-        action_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, action_dim)`):
-            Policy action predictions
-        reward_preds (`torch.FloatTensor` of shape `(batch_size, time_steps, 1)`):
-            Predicted returns for each state
-        epsiode_end (`torch.FloatTensor` of shape `(batch_size, time_steps, 1)`):
-            Predicted potential episode termination
-        obs_preds (`torch.FloatTensor` of shape `(batch_size, time_Steps, 1)`):
-            Predicted tokens for next frame
+        reconstructed_img (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Reconstructed image from input frame(only one real image per batch is given as rest are in imagination of the world model) with tokenizer 
+        losses (`[torch.FloatTensor]` of shape `(3,)`):
+            Agent's components' total loss [tokenizer, world model and actor critic].
+        action_preds (logits) (`torch.FloatTensor` of shape `(batch_size, 1, num_actions)`):
+            Policy action predictions with actor critic
+        reward_preds (logits) (`torch.FloatTensor` of shape `(batch_size, sequence_length_world_model, 3)`):
+            Predicted rewards for each state with world model
+        epsiode_end (logits) (`torch.FloatTensor` of shape `(batch_size, sequence_length_world_model, 2)`):
+            Predicted potential episode termination with world model
+        obs_preds (logits) (`torch.FloatTensor` of shape `(batch_size, 320, vocab_size)`):
+            Predicted tokens for next frame with world model
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) ofshape `(batch_size, sequence_length, hidden_size)`. 
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of various shapes as there are three components in agent and the shapes are:
+            `(batch_size, resolution, resolution,resolution), (batch_size, resolution, resolution//2,resolution//2),(batch_size, resolution, resolution//4,resolution//4),
+            (batch_size, resolution, resolution//8,resolution//8)(batch_size, resolution, resolution//16,resolution//16)`. 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`. 
+            Tuple of `torch.FloatTensor` (one for each layer)(len of tuple:22) of various shapes as there are three components in agent and the shapes are: 
+            `(batch_size, embed_dim, embed_dim),(batch_size,resolution,resolution),(batch_size,attn_resolution,attn_resolution),(batch_size,num_heads,340,340)`. 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
@@ -145,15 +143,15 @@ IRIS_START_DOCSTRING = r"""
 
 IRIS_INPUTS_DOCSTRING = r"""
     Args:
-        observations (`torch.FloatTensor` of shape `(batch_size, timesteps, num_channels, height, width)`):
-            The image observations from real environment in L timesteps (only one frame is used from the environment and 
+        observations (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels, height, width)`):
+            The image observations from real environment in L sequence length(timesteps) (only one frame is used from the environment and 
             rest are imagined in the world model for training)
-        actions (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
-            The actions from real environment in L timesteps
-        rewards (`torch.FloatTensor` of shape `(batch_size, timesteps)`):
-            The rewards from real environment in L timesteps
-        ends (`torch.IntTensor` of shape `(batch_size, timesteps)`):
-            The episode termination booleans from real environment in L timesteps
+        actions (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            The actions from real environment in L sequence length(timesteps)
+        rewards (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            The rewards from real environment in L sequence length(timesteps)
+        ends (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            The episode termination booleans from real environment in L sequence length(timesteps)
         mask_padding (`torch.BoolTensor` of shape `(batch_size, 1)`):
             The padding mask for input observations before putting them in encode and decoder
         should_preprocess (`bool`, *optional*):
@@ -187,8 +185,6 @@ class TokenizerEncoderOutput:
     z: torch.FloatTensor
     z_quantized: torch.FloatTensor
     tokens: torch.LongTensor
-
-
 
 class Slicer(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
@@ -355,6 +351,7 @@ class Encoder(nn.Module):
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
+        
         return h, hidden_states, attentions
 
 
@@ -370,7 +367,6 @@ class Decoder(nn.Module):
         in_ch_mult = (1,) + tuple(config.ch_mult)
         block_in = config.ch * config.ch_mult[self.num_resolutions - 1]
         curr_res = config.resolution // 2 ** (self.num_resolutions - 1)
-        print(f"Tokenizer : shape of latent is {config.z_channels, curr_res, curr_res}.")
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(config.z_channels,
@@ -466,6 +462,7 @@ class Decoder(nn.Module):
         h = self.norm_out(h)
         h = nonlinearity(h)
         h = self.conv_out(h)
+
         return h, hidden_states,attentions
 
 def nonlinearity(x: torch.Tensor) -> torch.Tensor:
@@ -1012,6 +1009,7 @@ class Transformer(nn.Module):
 
         x = self.ln_f(x)
         hidden_states = hidden_states + (x,) if output_hidden_states else None
+    
         return x,hidden_states, attentions
 
 
@@ -1483,8 +1481,9 @@ class Agent(nn.Module):
 class IrisModel(IrisPreTrainedModel):
     """
 
-    The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
-    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
+    The model,IRIS (Imagination with auto-Regression over an Inner Speech), a data-efficient agent that learns in a world model composed of a 
+    discrete autoencoder and an autoregressive Transformer.It learns behaviors by accurately simulating millions of trajectories
+    Refer to the paper for more details: https://arxiv.org/abs/2209.00588
 
     """
 
@@ -1524,8 +1523,8 @@ class IrisModel(IrisPreTrainedModel):
         mask_padding: torch.BoolTensor = None,
         should_preprocess: Optional[bool] = None,
         should_postprocess: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = True,
+        output_attentions: Optional[bool] = True,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.FloatTensor], IrisOutput]:
         r"""
@@ -1536,34 +1535,108 @@ class IrisModel(IrisPreTrainedModel):
         ```python
         >>> from transformers import IrisModel
         >>> import torch
+        >>> import gym
 
         >>> model = IrisModel.from_pretrained("ruffy369/iris-breakout")
         >>> # evaluation
         >>> model = model.to(device)
         >>> model.eval()
+        
+        >>> batch_size = 1 #here, single batch size is for the sake of example asin original code all the three components have separate batch size
+        >>> sequence_length_tokenizer = 1
+        >>> sequence_length_world_model = 20
+        >>> sequence_length_actor_critic = 21
+        >>> env = gym.make("BreakoutNoFrameskip-v4")
+        >>> observations_tok, actions_tok, rewards_tok, dones_tok = [], [], [], []
+        >>> observations_wm, actions_wm, rewards_wm, dones_wm = [], [], [], []
+        >>> observations_ac, actions_ac, rewards_ac, dones_ac = [], [], [], []
+        >>> observation_tok_batch, actions_tok_batch, rewards_tok_batch, dones_tok_batch = [], [], [], []
+        >>> observation_wm_batch, actions_wm_batch, rewards_wm_batch, dones_wm_batch = [], [], [], []
+        >>> observation_ac_batch, actions_ac_batch, rewards_ac_batch, dones_ac_batch = [], [], [], []
+        
 
-        >>> env = create_env(self.cfg.env.train, self.cfg.collection.train.num_envs)
-        >>> state_dim = env.observation_space.shape[0]
-        >>> act_dim = env.action_space.shape[0]
+        >>> for b in batch_size:
+        ...     for t in sequence_length_tokenizer:
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...         obs, reward, done, _ = env.step(act)
+        ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
+        ...         actions_tok.append(act.tolist())
+        ...         rewards_tok.append(reward)
+        ...         dones_tok.append(done)
+        ...         observations_tok.append(obs.tolist())
+        ...     observation_tok_batch.append(observations_tok)
+        ...     actions_tok_batch.apped(actions_tok)
+        ...     rewards_tok_batch.append(rewards_tok)
+        ...     dones_tok_batch.append(dones_tok)
 
-        >>> state = env.reset()
-        >>> states = torch.from_numpy(state).reshape(1, 1, state_dim).to(device=device, dtype=torch.float32)
-        >>> actions = torch.zeros((1, 1, act_dim), device=device, dtype=torch.float32)
-        >>> rewards = torch.zeros(1, 1, device=device, dtype=torch.float32)
-        >>> target_return = torch.tensor(TARGET_RETURN, dtype=torch.float32).reshape(1, 1)
-        >>> timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
-        >>> attention_mask = torch.zeros(1, 1, device=device, dtype=torch.float32)
+        ...     for t in sequence_length_world_model:
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...         obs, reward, done, _ = env.step(act)
+        ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
+        ...         actions_wm.append(act.tolist())
+        ...         rewards_wm.append(reward)
+        ...         dones_wm.append(done)
+        ...         observations_wm.append(obs.tolist())
+        ...     observation_wm_batch.append(observations_wm)
+        ...     actions_wm_batch.append(actions_wm)
+        ...     rewards_wm_batch.append(rewards_wm)
+        ...     dones_wm_batch.append(dones_wm)
+
+        ...     for t in sequence_length_actor_critic:
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...         obs, reward, done, _ = env.step(act)
+        ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
+        ...         actions_ac.append(act.tolist())
+        ...         rewards_ac.append(reward)
+        ...         dones_ac.append(done)
+        ...         observations_ac.append(obs.tolist())
+        ...     observation_ac_batch.append(observations_ac)
+        ...     actions_ac_batch.append(dones_ac)
+        ...     rewards_ac_batch.append(rewards_ac)
+        ...     dones_ac_batch.append(actions_ac)
+        
+        >>> observation_tok_batch = torch.tensor(observation_tok_batch).float().to(device)
+        >>> actions_tok_batch = torch.tensor(actions_tok_batch).long().to(device)
+        >>> rewards_tok_batch = torch.tensor(rewards_tok_batch).float().to(device)
+        >>> dones_tok_batch = torch.tensor(dones_tok_batch).long().to(device)
+
+        >>> observation_wm_batch = torch.tensor(observation_wm_batch).float().to(device)
+        >>> actions_wm_batch = torch.tensor(actions_wm_batch).long().to(device)
+        >>> rewards_wm_batch = torch.tensor(rewards_wm_batch).float().to(device)
+        >>> dones_wm_batch = torch.tensor(dones_wm_batch).long().to(device)
+
+        >>> observation_ac_batch = torch.tensor(observation_ac_batch).float().to(device)
+        >>> actions_ac_batch = torch.tensor(actions_ac_batch).long().to(device)
+        >>> rewards_ac_batch = torch.tensor(rewards_ac_batch).float().to(device)
+        >>> dones_ac_batch = torch.tensor(dones_ac_batch).long().to(device)
+
+        >>> mask_padding_tok = torch.ones(batch_size,sequence_length_tokenizer).bool().to(device)
+        >>> mask_padding_wm = torch.ones(batch_size,sequence_length_world_model).bool().to(device)
+        >>> mask_padding_ac = torch.ones(batch_size,sequence_length_actor_critic).bool().to(device)
+
+        >>> observations = [observation_tok_batch,observation_wm_batch,observation_ac_batch]
+        >>> actions = [actions_tok_batch,actions_wm_batch,actions_ac_batch]
+        >>> rewards = [rewards_tok_batch,rewards_wm_batch,rewards_ac_batch]
+        >>> ends = [dones_tok_batch,dones_wm_batch,dones_ac_batch]
+        >>> mask_padding = [mask_padding_tok,mask_padding_wm,mask_padding_ac]
+
 
         >>> # forward pass
         >>> with torch.no_grad():
-        ...     state_preds, action_preds, return_preds = model(
+        ...     model_pred = model(
         ...         observations = observations,
+                    actions = actions,
+                    rewards = rewards,
+                    ends = ends,
+                    mask_padding = mask_padding,
                     should_preprocess = True,
                     should_postprocess = True,
                     output_hidden_states = False,
                     output_attentions = False,
-                    return_dict = True,
         ...     )
+        
+        >>> # model_pred is the output instance of IrisOutput() class. These are the attributes if output is returned as dict and in same order if returned as tuple:
+        >>> # reconstructed_img, losses, action_preds, reward_preds, epsiode_end, obs_preds, hidden_states, attentions
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

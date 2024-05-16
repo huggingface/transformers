@@ -17,10 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_iris": [
-        "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "IrisConfig",
-    ],
+    "configuration_iris": ["IrisConfig"],
 }
 
 try:
@@ -30,9 +27,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_iris"] = [
-        "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "IrisGPT2Model",
-        "IrisGPT2PreTrainedModel",
         "IrisModel",
         "IrisPreTrainedModel",
     ]
@@ -40,7 +34,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_iris import (
-        DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IrisConfig,
     )
 
@@ -51,9 +44,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_iris import (
-            DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            IrisGPT2Model,
-            IrisGPT2PreTrainedModel,
             IrisModel,
             IrisPreTrainedModel,
         )

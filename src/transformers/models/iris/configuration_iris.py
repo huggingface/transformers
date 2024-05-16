@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-
-# from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class IrisConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`IrisModel`]. It is used to
@@ -34,51 +30,72 @@ class IrisConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        state_dim (`int`, *optional*, defaults to 17):
-            The state size for the RL environment
-        act_dim (`int`, *optional*, defaults to 4):
-            The size of the output action space
-        hidden_size (`int`, *optional*, defaults to 128):
-            The size of the hidden layers
-        max_ep_len (`int`, *optional*, defaults to 4096):
-            The maximum length of an episode in the environment
-        action_tanh (`bool`, *optional*, defaults to True):
-            Whether to use a tanh activation on action prediction
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`IrisModel`].
-        n_positions (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        n_layer (`int`, *optional*, defaults to 3):
-            Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*):
-            Dimensionality of the inner feed-forward layers. If unset, will default to 4 times `n_embd`.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
+        num_actions (`int`, *optional*, defaults to 4):
+            The number of actions or size of the output action space for the Atari environment
+        vocab_size (`int`, *optional*, defaults to 512):
+            Vocabulary size of Tokenizer and World Model
+        embed_dim_tokenizer (`int`, *optional*, defaults to 512):
+            The embedding dim of Tokenizer
+        resolution (`int`, *optional*, defaults to 64):
+            The resolution of image frame observation passed to encoder
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of channels of the input image 
+        z_channels (`int`, *optional*, defaults to 512):
+            Number of channels for tokens encoded by Encoder which in turn will be the input for Decoder
+        ch (`int`, *optional*, defaults to 64):
+            For calculation of number of in channels and out channels in ResnetBlock for Tokenizer
+        ch_mult (`list`, *optional*, defaults to [1, 1, 1, 1, 1]):
+            len of it is equal to number of resolutions in Encoder and Decoder of Tokenizer and is used for calculation of number of in channels and out channels in ResnetBlock for Tokenizer.
+        num_res_blocks (`int`, *optional*,defaults to 2):
+            Number of Resnet Blocks in Encoder and Decoder of Tokenizer.
+        attn_resolutions (`list`, *optional*, defaults to `[8, 16]`):
+            Resolution for Attention Block for Encoder and Decoder of Tokenizer.
+        out_ch (`int`, *optional*, defaults to 3):
+            Number of out channels for Decoder.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for ResnetBlocks in Encoder and Decoder.
+        use_original_obs_actor_critic (`bool`, *optional*, defaults to 'False'):
+            Tells wheter the actor critic should use original observation or reconstructed image from Decoder for predicting action 
+        tokens_per_block (`int`, *optional*, defaults to 17):
+            Number of tokens per block in World Model's transformer
+        max_blocks (`int`, *optional*, defaults to 20):
+            Max number of blocks in World Model's transformer
+        attention (`string`, *optional*, defaults to `"causal"`):
+            Type of attention in World Model's transformer self attention
+        num_layers (`int`, *optional*, defaults to 10):
+            Number of layers in World Model's transformer
+        num_heads (`int`, *optional*, defaults to 4):
+            Number of attention heads in World Model's transformer
+        embed_dim_world_model (`int`, *optional*, defaults to 256):
+            The embedding dim of World Model
+        embed_pdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for sequences fed to Transformer
         resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
+            The dropout probability for attention layers applied to last state in World Model's Transformer
         attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
-            The epsilon to use in the layer normalization layers.
+            The dropout probability for attention weights softmax layers in World Model's Transformer
+        epochs (`int`, *optional*, defaults to 600):
+            Number of epochs for training
+        grad_acc_steps_tokenizer (`int`, *optional*, defaults to 1):
+            Number of Gradient steps for Tokenizer
+        grad_acc_steps_world_model (`int`, *optional*, defaults to 20):
+            Number of Gradient steps for World Model 
+        weight_decay (`float`, *optional*, defaults to 0.01):
+            Weight decay rate for optimizer of World Model
+        grad_acc_steps_actor_critic (`int`, *optional*, defaults to 1):
+            Number of Gradient steps for Actor Critic
+        gamma (`float`, *optional*, defaults to 0.995):
+            Discount Factor for Actor Critic
+        lambda_ (`float`, *optional*, defaults to 0.95):
+            Lambda for lambda returns in Actor Critic
+        entropy_weight (`float`, *optional*, defaults to 0.001):
+            Entropy weight for entropy loss in Actor Critic
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
-            Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
-            dot-product/softmax to float() when training with mixed precision.
+        
 
     Example:
 
@@ -129,7 +146,6 @@ class IrisConfig(PretrainedConfig):
         resid_pdrop=0.1,
         attn_pdrop=0.1,
         epochs=600,
-        should_sample_collect_test=True,
         grad_acc_steps_tokenizer=1,
         grad_acc_steps_world_model=1,
         weight_decay=0.01,
@@ -169,7 +185,6 @@ class IrisConfig(PretrainedConfig):
         self.attn_pdrop=attn_pdrop
         self.epochs=epochs
         self.sequence_length = self.max_blocks
-        self.should_sample_collect_test=should_sample_collect_test
         self.grad_acc_steps_tokenizer=grad_acc_steps_tokenizer
         self.grad_acc_steps_world_model=grad_acc_steps_world_model
         self.weight_decay=weight_decay

@@ -18,30 +18,21 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The IRIS model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The IRIS model was proposed in [TRANSFORMERS ARE SAMPLE-EFFICIENT WORLD MODELS](https://arxiv.org/abs/2209.00588) by Vincent Micheli, Eloi Alonso, François Fleuret.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Deep reinforcement learning agents are notoriously sample inefficient, which considerably limits their application to real-world problems. Recently, many model-based methods have been designed to address this issue, with learning in the imagination of a world model being one of the most prominent approaches. However, while virtually unlimited interaction with a simulated environment sounds appealing, the world model has to be accurate over extended periods of time. Motivated by the success of Transformers in sequence modeling tasks, we introduce IRIS, a data-efficient agent that learns in a world model composed of a discrete autoencoder and an autoregressive Transformer. With the equivalent of only two hours of gameplay in the Atari 100k benchmark, IRIS achieves a mean human normalized score of 1.046, and outperforms humans on 10 out of 26 games, setting a new state of the art for methods without lookahead search.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+The hugging face version of the model provides the architecture of the original model for training and inference with an exact same output with precision of more 1e-3. The batch provided for training and inference is same as given in the original model, i.e., [observations,actions,rewards,ends, mask_padding]. It depends on you if you want to use the same method of data collection from env as provided in the original code or use or your own as the this version supports both. The env are Atari environments to train in as in the original code. If you want to use it, provide the batch consisting of [observations(image frames),actions,rewards,ends](from the env) & mask padding.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
+This model was contributed by [ruffy369](https://huggingface.co/ruffy369). The original code can be found [here](https://github.com/eloialonso/iris).
 
 ## IrisConfig
 
 [[autodoc]] IrisConfig
-
-
-## IrisGPT2Model
-
-[[autodoc]] IrisGPT2Model
-    - forward
 
 ## IrisModel
 
