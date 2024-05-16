@@ -315,7 +315,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
         if return_token_timestamps is not None:
-            padded_inputs["num_frames"] = [len(raw_speech[i]) // self.hop_length for i in range(len(raw_speech))]
+            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
