@@ -516,9 +516,18 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-        self.tokenizer = processor if processor is not None else tokenizer
-        if processor is not None and hasattr(processor, "feature_extractor"):
-            tokenizer = processor.feature_extractor
+        if processor is not None and tokenizer is not None:
+            raise ValueError(
+                "You cannot pass both `processor` and `tokenizer` to the Trainer. Only pass the `processor` if defined."
+            )
+        elif processor is not None:
+            self.tokenizer = processor
+            if hasattr(processor, "feature_extractor"):
+                tokenizer = processor.feature_extractor
+            elif hasattr(processor, "tokenizer"):
+                tokenizer = processor.tokenizer
+        else:
+            self.tokenizer = tokenizer
 
         default_collator = (
             DataCollatorWithPadding(tokenizer)
