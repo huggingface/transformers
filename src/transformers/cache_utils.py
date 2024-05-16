@@ -469,7 +469,7 @@ class T5StaticCache(Cache):
         )
         self.dtype = dtype
         self.device = device
-        self.max_cache_len = config.max_target_positions - 2
+        self.max_cache_len = maxlen
         for k in range(config.num_hidden_layers):
             new_layer_key_cache = torch.zeros(
                 decoder_cache_shape, dtype=self.dtype, device=self.device)
