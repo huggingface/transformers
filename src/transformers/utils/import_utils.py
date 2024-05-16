@@ -294,6 +294,15 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torch_deterministic():
+    import torch
+
+    if torch.get_deterministic_debug_mode() == 0:
+        return False
+    else:
+        return True
+
+
 def is_hqq_available():
     return _hqq_available
 
