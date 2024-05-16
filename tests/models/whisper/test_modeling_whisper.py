@@ -2038,7 +2038,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 50257,
             ]
         )
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+        self.assertTrue((generated_ids == EXPECTED_OUTPUT).all())
 
         EXPECTED_TRANSCRIPT = [
             {
