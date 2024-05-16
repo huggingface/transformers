@@ -208,7 +208,6 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
-from .model_converter import ModelConverter
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
