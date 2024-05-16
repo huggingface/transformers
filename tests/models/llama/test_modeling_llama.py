@@ -616,33 +616,20 @@ class LlamaIntegrationTest(unittest.TestCase):
             out = model(torch.tensor([input_ids]).to(torch_device))
         # Expected mean on dim = -1
 
-        EXPECTED_MEAN = torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]])
+        EXPECTED_MEAN = {
+            7: torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]), # fmt: skip
+            8: torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]) # fmt: skip
+        }
+
         self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor(
-            [
-                [
-                    -12.5000,
-                    -7.0625,
-                    -0.6289,
-                    -7.8750,
-                    -6.9688,
-                    -7.8125,
-                    -6.4688,
-                    -7.4375,
-                    -7.6875,
-                    -6.9375,
-                    -6.0312,
-                    -7.0000,
-                    -1.8594,
-                    1.8438,
-                    -8.5000,
-                ]
-            ]
-        )
+        EXPECTED_SLICE = {
+            7: torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]), # fmt: skip
+            8: torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]) # fmt: skip
+        }
 
-        self.assertTrue(torch.allclose(EXPECTED_SLICE.to(torch_device), out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device), out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
 
     @slow
     @require_read_token
@@ -656,32 +643,20 @@ class LlamaIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
         # Expected mean on dim = -1
+        EXPECTED_MEAN = {
+            7: torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]), # fmt: skip
+            8: torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]]) # fmt: skip
+        }
 
-        EXPECTED_MEAN = torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]])
-        self.assertTrue(torch.allclose(EXPECTED_MEAN, out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
 
         # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICE = torch.tensor(
-            [
-                -12.8125,
-                -7.3359,
-                -0.4846,
-                -8.0234,
-                -7.2383,
-                -7.9922,
-                -6.4805,
-                -7.7344,
-                -7.8125,
-                -7.0078,
-                -6.1797,
-                -7.1094,
-                -1.8633,
-                1.9736,
-                -8.6016,
-            ]
-        )
+        EXPECTED_SLICE = {
+            7: torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]), # fmt: skip
+            8: torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328]) # fmt: skip
+        }
 
-        self.assertTrue(torch.allclose(EXPECTED_SLICE, out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device), out.logits[0, 0, :15], atol=1e-3, rtol=1e-3))
 
     @slow
     @require_torch_gpu
