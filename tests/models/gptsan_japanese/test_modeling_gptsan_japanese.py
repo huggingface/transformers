@@ -196,10 +196,8 @@ class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
     is_encoder_decoder = False
     test_pruning = False
     test_headmasking = False
-    test_cpu_offload = False
-    test_disk_offload = False
     # The small GPTSAN_JAPANESE model needs higher percentages for CPU/MP tests
-    model_split_percents = [0.8, 0.9]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = GPTSanJapaneseTester(self)
