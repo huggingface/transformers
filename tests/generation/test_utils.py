@@ -1805,14 +1805,14 @@ class GenerationTesterMixin:
 
     @require_torch_gpu
     @slow
-    @is_flaky()  # compilation may result in equivalent (!= same) FP ops, causing the argmax in generate to be flaky
+    @is_flaky()  # compilation may result in equivalent (!= same) FP ops, causing the argmax in `generate` to be flaky
     def test_generate_compile_fullgraph(self):
         """
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
-        Runs two sequential generations to ensure the cache doesn't get stuck when compiled!
+        ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
         """
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
+            if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

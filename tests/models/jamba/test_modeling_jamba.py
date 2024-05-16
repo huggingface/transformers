@@ -645,10 +645,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
-    @unittest.skip("Jamba has its own special cache type")
-    def test_generate_compile_fullgraph(self):
-        pass
-
 
 @require_torch
 class JambaModelIntegrationTest(unittest.TestCase):
