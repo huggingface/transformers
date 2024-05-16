@@ -210,8 +210,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             get_json_schema(fn)
 
-    def test_return_value_has_no_effect(self):
-        # We ignore return values, so we want to make sure they don't affect the schema
+    def test_return_value(self):
         def fn(x: int) -> int:
             """
             Test function
@@ -226,7 +225,32 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {
                 "type": "object",
-                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "properties": {"x": {"type": "integer", "description": "The input"}, "return": {"type": "integer"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema, expected_schema)
+
+    def test_return_value_docstring(self):
+        def fn(x: int) -> int:
+            """
+            Test function
+
+            :param x: The input
+            :returns: The output
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The input"},
+                    "return": {"type": "integer", "description": "The output"},
+                },
                 "required": ["x"],
             },
         }
