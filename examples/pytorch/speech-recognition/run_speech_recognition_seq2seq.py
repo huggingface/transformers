@@ -458,6 +458,7 @@ def main():
         model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
     else:
         model.generation_config.forced_decoder_ids = None
+        model.config.forced_decoder_ids = None
 
     if model_args.suppress_tokens is not None:
         logger.warning(
