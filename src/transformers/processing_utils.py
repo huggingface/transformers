@@ -483,7 +483,7 @@ class ProcessorMixin(PushToHubMixin):
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         args = []
-        processor_dict.update({k:v for k,v in kwargs.items() if k in processor_dict})
+        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict})
         for attribute_name in cls.attributes:
             class_name = processor_dict.pop(f"{attribute_name}_class", getattr(cls, f"{attribute_name}_class"))
             if isinstance(class_name, tuple):
