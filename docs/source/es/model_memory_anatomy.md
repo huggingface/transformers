@@ -14,24 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Model training anatomy
+# Anatomía del entrenamiento de los modelos
 
-To understand performance optimization techniques that one can apply to improve efficiency of model training 
-speed and memory utilization, it's helpful to get familiar with how GPU is utilized during training, and how compute 
-intensity varies depending on an operation performed.
+Para entender las técnicas de optimización del rendimiento que se pueden aplicar para mejorar la eficiencia en la velocidad del entrenamiento de los modelos y la utilización de la memoria, es útil familiarizarse con cómo se utiliza la GPU durante el entrenamiento y cómo varía la intensidad de cálculo según la operación realizada.
 
-Let's start by exploring a motivating example of GPU utilization and the training run of a model. For the demonstration, 
-we'll need to install a few libraries: 
+Empecemos explorando un ejemplo enfocado en la utilización de la GPU y la ejecución del entrenamiento de un modelo. Para la demostración, necesitaremos instalar algunas bibliotecas:
 
 ```bash
 pip install transformers datasets accelerate nvidia-ml-py3
 ```
 
-The `nvidia-ml-py3` library allows us to monitor the memory usage of the models from within Python. You might be familiar 
-with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly.
+La biblioteca `nvidia-ml-py3` nos permite monitorear la utilización de memoria de los modelos desde Python. Es posible que estés familiarizado con el comando `nvidia-smi` en la terminal, esta biblioteca nos permite acceder a la misma información en Python directamente.
 
-Then, we create some dummy data: random token IDs between 100 and 30000 and binary labels for a classifier. 
-In total, we get 512 sequences each with length 512 and store them in a [`~datasets.Dataset`] with PyTorch format.
+Luego, creamos algunos datos ficticios: IDs de tokens aleatorios entre 100 y 30000 y etiquetas binarias para un clasificador. En total, obtenemos 512 secuencias cada una con longitud 512 y las almacenamos en un [`~datasets.Dataset`] con formato PyTorch.
 
 
 ```py
@@ -48,7 +43,7 @@ In total, we get 512 sequences each with length 512 and store them in a [`~datas
 >>> ds.set_format("pt")
 ```
 
-To print summary statistics for the GPU utilization and the training run with the [`Trainer`] we define two helper functions:
+Para imprimir estadísticas resumidas para la utilización de la GPU y la ejecución del entrenamiento con [`Trainer`], definimos dos funciones auxiliares:
 
 ```py
 >>> from pynvml import *
@@ -67,17 +62,14 @@ To print summary statistics for the GPU utilization and the training run with th
 ...     print_gpu_utilization()
 ```
 
-Let's verify that we start with a free GPU memory:
+Comencemos comprobando que la memoria GPU este libre:
 
 ```py
 >>> print_gpu_utilization()
 GPU memory occupied: 0 MB.
 ```
 
-That looks good: the GPU memory is not occupied as we would expect before we load any models. If that's not the case on 
-your machine make sure to stop all processes that are using GPU memory. However, not all free GPU memory can be used by 
-the user. When a model is loaded to the GPU the kernels are also loaded, which can take up 1-2GB of memory. To see how 
-much it is we load a tiny tensor into the GPU which triggers the kernels to be loaded as well.
+Parece estar bien: la memoria de la GPU no está ocupada como esperaríamos antes de cargar cualquier modelo. Si no es el caso en tu máquina, asegúrate de detener todos los procesos que estén utilizando la memoria de la GPU. Sin embargo, no toda la memoria libre de la GPU puede ser utilizada por el usuario. Cuando se carga un modelo en la GPU, también se cargan los kernels, lo que puede ocupar 1-2GB de memoria. Para ver cuánta es, cargemos un tensor diminuto en la GPU, lo que también desencadena la carga de los kernels.
 
 ```py
 >>> import torch
@@ -88,13 +80,11 @@ much it is we load a tiny tensor into the GPU which triggers the kernels to be l
 GPU memory occupied: 1343 MB.
 ```
 
-We see that the kernels alone take up 1.3GB of GPU memory. Now let's see how much space the model uses.
+Vemos que los kernels solos ocupan 1,3GB de memoria de la GPU. Ahora, veamos cuánto espacio ocupa el modelo.
 
-## Load Model
+## Cargar el Modelo
 
-First, we load the `google-bert/bert-large-uncased` model. We load the model weights directly to the GPU so that we can check 
-how much space just the weights use.
-
+Primero, cargamos el modelo `google-bert/bert-large-uncased`. Los pesos del modelo son cargados directamente en la GPU para que podamos verificar cuánto espacio ocupan solo los pesos.
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -105,11 +95,7 @@ how much space just the weights use.
 GPU memory occupied: 2631 MB.
 ```
 
-We can see that the model weights alone take up 1.3 GB of GPU memory. The exact number depends on the specific 
-GPU you are using. Note that on newer GPUs a model can sometimes take up more space since the weights are loaded in an 
-optimized fashion that speeds up the usage of the model. Now we can also quickly check if we get the same result 
-as with `nvidia-smi` CLI:
-
+Podemos ver que los pesos del modelo solos ocupan 1,3 GB de memoria de la GPU. El número exacto depende de la GPU específica que estés utilizando. Ten en cuenta que en GPUs más modernas, un modelo puede ocupar más espacio ya que los pesos se cargan de manera optimizada lo cual acelera el uso del modelo. Ahora también podemos verificar rápidamente si obtenemos el mismo resultado que con la CLI de `nvidia-smi`:
 
 ```bash
 nvidia-smi
@@ -138,9 +124,7 @@ Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 ```
 
-We get the same number as before and you can also see that we are using a V100 GPU with 16GB of memory. So now we can 
-start training the model and see how the GPU memory consumption changes. First, we set up a few standard training 
-arguments:
+Obtenemos el mismo número que antes y también puedes ver que estamos utilizando una GPU V100 con 16GB de memoria. Ahora podemos empezar a entrenar el modelo y ver cómo cambia el consumo de memoria de la GPU. Primero, configuramos algunos argumentos de entrenamiento estándar:
 
 ```py
 default_args = {
@@ -154,8 +138,7 @@ default_args = {
 
 <Tip>
 
- If you plan to run multiple experiments, in order to properly clear the memory between experiments, restart the Python 
- kernel between experiments.
+Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prueba para borrar correctamente la memoria.
 
 </Tip>
 
