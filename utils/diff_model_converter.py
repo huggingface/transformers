@@ -40,18 +40,9 @@ class ClassFinder(CSTVisitor):
 
     def visit_SimpleStatementLine(self, node):
         match node:
-            # note: this is just a plain copy & paste of the pattern as seen in the CST
-            case cst.SimpleStatementLine(
-                body=[
-                    cst.Assign(
-                        targets=[_],
-                        value=_,
-                    ),
-                ],
-            ):
+            case cst.SimpleStatementLine(body=[cst.Assign(targets=[_], value=_)]):
                 if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
                     self.assignments[node.body[0]] = node
-
             case cst.SimpleStatementLine(body=[cst.Import(names=[_])]):
                 self.imports[node.body[0].names] = node
             case cst.SimpleStatementLine(body=[cst.ImportFrom(_)]):
@@ -137,14 +128,7 @@ class DiffConverterTransformer(CSTTransformer):
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
         match updated_node:
             # note: this is just a plain copy & paste of the pattern as seen in the CST
-            case cst.SimpleStatementLine(
-                body=[
-                    cst.Assign(
-                        targets=[_],
-                        value=_,
-                    ),
-                ],
-            ):
+            case cst.SimpleStatementLine(body=[cst.Assign(targets=[_], value=_)]):
                 assign = self.python_module.code_for_node(original_node.body[0])
                 node = original_node.body[0]
                 if m.matches(node.value, m.Name()) and assign in self.class_mapping:
@@ -152,6 +136,7 @@ class DiffConverterTransformer(CSTTransformer):
         return updated_node
 
     def leave_ClassDef(self, original_node: cst.Assign, node):
+        # THIS IS TODO: deal with inherited classes and modules
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):
@@ -169,10 +154,6 @@ if __name__ == "__main__":
     with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/diff_gemma.py", "r") as file:
         code = file.read()
     module = cst.parse_module(code)
-    # find_modeling_imports(code)
-    # Use the visitor to find imports
-    # visitor = ImportVisitor(module)
-    # module.visit(visitor)
 
     transformers = DiffConverterTransformer(module)
     new_mod = module.visit(transformers)
