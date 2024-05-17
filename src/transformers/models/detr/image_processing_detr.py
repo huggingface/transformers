@@ -896,27 +896,6 @@ class DetrImageProcessor(BaseImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
-    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a v4.33. "
-            "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
-            "does not return the image anymore.",
-        )
-        target = self.prepare_annotation(image, target, return_segmentation_masks, masks_path, self.format)
-        return image, target
-
-    def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
-        return convert_coco_poly_to_mask(*args, **kwargs)
-
-    def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_detection_annotation(*args, **kwargs)
-
-    def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_panoptic_annotation(*args, **kwargs)
-
     def resize(
         self,
         image: np.ndarray,
