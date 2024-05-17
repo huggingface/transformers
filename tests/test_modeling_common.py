@@ -441,7 +441,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    # @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -454,7 +453,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -468,7 +466,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
