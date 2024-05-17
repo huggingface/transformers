@@ -21,7 +21,7 @@ import sys
 from collections import OrderedDict, namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union,TypeAlias
 
 import numpy as np
 import requests
@@ -1122,12 +1122,14 @@ class SelfAttention(nn.Module):
 
 
 class WorldModelEnv:
+    # Define a type alias for gym.Env
+    GymEnv: TypeAlias = f'gym.Env'
     def __init__(
         self,
         tokenizer: torch.nn.Module,
         world_model: torch.nn.Module,
         device: Union[str, torch.device],
-        env: Optional['gym.Env'] = None,
+        env: Optional[GymEnv] = None,
     ) -> None:
         self.device = torch.device(device)
         self.world_model = world_model.to(self.device).eval()
