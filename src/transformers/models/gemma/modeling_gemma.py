@@ -13,6 +13,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import math
+import warnings
+from typing import List, Optional, Tuple, Union
+
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from flash_attn import flash_attn_func, flash_attn_varlen_func
+from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from ...activations import ACT2FN
+from ...cache_utils import Cache, StaticCache
+from ...modeling_outputs import (
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+    replace_return_docstrings,
+)
+from .configuration_gemma import GemmaConfig
+
+
 """ PyTorch Gemma model."""
 
 import math
@@ -24,13 +55,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaFlashAttention2,
-    LlamaForCausalLM,
     LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaSdpaAttention,
-    LlamaForSequenceClassification,
     apply_rotary_pos_emb,
     repeat_kv,
 )

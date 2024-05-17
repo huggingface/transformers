@@ -20,7 +20,7 @@ def get_module_source_from_name(module_name: str) -> str:
     return source_code
 
 
-from libcst import ClassDef, CSTTransformer, CSTVisitor, Name
+from libcst import ClassDef, CSTTransformer, CSTVisitor
 
 
 class ClassFinder(CSTVisitor):
@@ -47,17 +47,14 @@ class ClassFinder(CSTVisitor):
                 ],
             ):
                 pass
-                # self.assignments[node.assignements] = node.assignements 
+                # self.assignments[node.assignements] = node.assignements
 
-            case cst.SimpleStatementLine(body=cst.Import(_)):
-                self.imports[node.names] = node 
-
-            
-    def visit_Import(self, node: cst.ImportFrom):
-        self.imports[node.names] = node
-
-    def visit_FunctionDef(self, node:cst.FunctionDef):
-        self.function_def[node.name.value] = node
+            case cst.SimpleStatementLine(body=[cst.Import(names=[_])]):
+                self.imports[node.body[0].names] = node
+            case cst.SimpleStatementLine(body=[cst.ImportFrom(_)]):
+                self.imports[node.body[0].names] = node
+            case cst.SimpleStatementLine(boyd=[cst.FunctionDef(_)]):
+                self.function_def[node.name.value] = node
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
@@ -78,33 +75,15 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
                 return self.new_name.lower()
             else:
                 return self.new_name.title()
-
         return self.regex.sub(replace, text)
 
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
-        update = self.preserve_case_replace(updated_node.value) 
+        update = self.preserve_case_replace(updated_node.value)
         if update != original_node.value:
             print(f"changed: {updated_node.value} -> {update}")
         return updated_node.with_changes(value=self.preserve_case_replace(updated_node.value))
-
-
-    # def leave_Name(self, original_node: Name, updated_node: Name) -> Name:
-    #     updated_value = self.preserve_case_replace(updated_node.value)
-    #     return updated_node.with_changes(value=updated_value)
-
-    # def leave_SimpleString(self, orignal_node, updated_node):
-    #     """Replace imports that match our criteria."""
-
-    #     updated_value = self.preserve_case_replace(updated_node.value)
-    #     return updated_node.with_changes(value=updated_value)
-
-    # def leave_Comment(self, orignal_node, updated_node):
-    #     """Replace imports that match our criteria."""
-
-    #     updated_value = self.preserve_case_replace(updated_node.value)
-    #     return updated_node.with_changes(value=updated_value)
 
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     transformer = ReplaceNameTransformer(old_id, new_id)
@@ -165,12 +144,19 @@ class DiffConverterTransformer(CSTTransformer):
     def leave_ClassDef(self, original_node: cst.Assign, node):
         return node
 
-    # def leave_Module(self, original_node: cst.Assign, node):
-    #     return node.with_changes(
-    #         body=[
-    #            *node.body 
-    #         ]
-    #     )
+    def leave_Module(self, original_node: cst.Assign, node):
+        new_body = []
+        for visiter in self.visited_module.values():
+            new_body += list(visiter.imports.values())
+            new_body += list(visiter.assignments.values())
+            new_body += list(visiter.function_def.values())
+
+        return node.with_changes(
+            body=[
+                *new_body,
+               *node.body
+            ]
+        )
 
 if __name__ == "__main__":
     # Parse the Python file
