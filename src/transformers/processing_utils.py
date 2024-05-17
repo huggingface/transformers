@@ -84,19 +84,6 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-            class_name = arg if isinstance(arg,str) else getattr(self, f"{attribute_name}_class")
-            # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
-            class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
-            if isinstance(class_name, tuple):
-                proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
-            else:
-                proper_class = getattr(transformers_module, class_name)
-
-            if not isinstance(arg, proper_class):
-                raise ValueError(
-                    f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
-                )
-
             setattr(self, attribute_name, arg)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -496,6 +483,7 @@ class ProcessorMixin(PushToHubMixin):
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         args = []
+        processor_dict.update(kwargs)
         for attribute_name in cls.attributes:
             class_name = processor_dict.pop(f"{attribute_name}_class", getattr(cls, f"{attribute_name}_class"))
             if isinstance(class_name, tuple):
