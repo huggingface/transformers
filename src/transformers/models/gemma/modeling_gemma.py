@@ -287,7 +287,7 @@ class GemmaFlashAttention2(GemmaAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
+        # in fp32. (GemmaRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -346,7 +346,7 @@ class GemmaFlashAttention2(GemmaAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in GemmaFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -426,7 +426,7 @@ class GemmaSdpaAttention(GemmaAttention):
     SDPA API.
     """
 
-    # Adapted from LlamaAttention.forward
+    # Adapted from GemmaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
