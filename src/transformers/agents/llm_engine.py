@@ -72,10 +72,6 @@ class HfEngine:
         self.client = InferenceClient(model=self.model, timeout=120)
 
     def __call__(self, messages: List[Dict[str, str]], stop_sequences=[]) -> str:
-        if "Meta-Llama-3" in self.model:
-            if "<|eot_id|>" not in stop_sequences:
-                stop_sequences.append("<|eot_id|>")
-
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 

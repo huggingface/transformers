@@ -347,6 +347,7 @@ class Agent:
         return self._toolbox
 
     def initialize_for_run(self, task: str, **kwargs):
+        self.token_count = 0
         self.task = task
         if len(kwargs) > 0:
             self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
@@ -597,7 +598,31 @@ class ReactAgent(Agent):
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
 
-    def run(self, task: str, **kwargs):
+
+    def provide_final_answer(self, task) -> str:
+        """
+        This method provides a final answer to the task, based on the logs of the agent's interactions.
+        """
+        self.prompt = [
+            {
+                "role": MessageRole.SYSTEM,
+                "content": "An agent tried to answer an user query but it got stuck and failed to do so. You are tasked with providing an answer instead. Here is the agent's memory:",
+            }
+        ]
+        self.prompt += self.write_inner_memory_from_logs()[1:]
+        self.prompt += [
+            {
+                "role": MessageRole.USER,
+                "content": f"Based on the above, please provide an answer to the following user request:\n{task}",
+            }
+        ]
+        try:
+            return self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+        except Exception as e:
+            return f"Error in generating final llm output: {e}."
+
+
+    def run(self, task: str, stream: bool = False, **kwargs):
         """
         Runs the agent for the given task.
 
@@ -614,13 +639,53 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
+        if stream:
+            return self.stream_run(task, **kwargs)
+        else:
+            return self.direct_run(task, **kwargs)
+
+
+    def stream_run(self, task: str, **kwargs):
         self.initialize_for_run(task, **kwargs)
 
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
             try:
-                final_answer = self.step()
+                step_logs = self.step()
+                if 'final_answer' in step_logs:
+                    final_answer = step_logs['final_answer']
+            except AgentError as e:
+                self.logger.error(e, exc_info=1)
+                self.logs[-1]["error"] = e
+            finally:
+                iteration += 1
+                yield self.logs[-1]
+
+        if final_answer is None and iteration == self.max_iterations:
+            error_message = "Reached max iterations."
+            final_step_log = {
+                "error": AgentMaxIterationsError(error_message)
+            }
+            self.logs.append(final_step_log)
+            self.logger.error(error_message, exc_info=1)
+            final_answer = self.provide_final_answer(task)
+            final_step_log["final_answer"] = final_answer
+            yield final_step_log
+
+        return final_answer
+
+
+    def direct_run(self, task: str, **kwargs):
+        self.initialize_for_run(task, **kwargs)
+
+        final_answer = None
+        iteration = 0
+        while final_answer is None and iteration < self.max_iterations:
+            try:
+                step_logs = self.step()
+                if 'final_answer' in step_logs:
+                    final_answer = step_logs['final_answer']
             except AgentError as e:
                 self.logger.error(e, exc_info=1)
                 self.logs[-1]["error"] = e
@@ -629,26 +694,13 @@ class ReactAgent(Agent):
 
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
-            self.logs.append({"error": AgentMaxIterationsError(error_message)})
+            final_step_log = {
+                "error": AgentMaxIterationsError(error_message)
+            }
+            self.logs.append(final_step_log)
             self.logger.error(error_message, exc_info=1)
-
-            self.prompt = [
-                {
-                    "role": MessageRole.SYSTEM,
-                    "content": "An agent tried to answer a user query but it failed to do so. You are tasked with providing an answer instead. Here is the agent's memory:",
-                }
-            ]
-            self.prompt += self.write_inner_memory_from_logs()[1:]
-            self.prompt += [
-                {
-                    "role": MessageRole.USER,
-                    "content": f"Based on the above, please provide an answer to the following user request:\n{task}",
-                }
-            ]
-            try:
-                final_answer = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
-            except Exception as e:
-                final_answer = f"Error in generating final llm output: {e}."
+            final_answer = self.provide_final_answer(task)
+            final_step_log["final_answer"] = final_answer
 
         return final_answer
 
@@ -683,12 +735,14 @@ class ReactJsonAgent(ReactAgent):
         """
         agent_memory = self.write_inner_memory_from_logs()
 
-        self.logs[-1]["agent_memory"] = agent_memory.copy()
         self.prompt = agent_memory
         self.logger.debug("===== New step =====")
 
         # Add new step in logs
-        self.logs.append({})
+        current_step_logs = {}
+        self.logs.append(current_step_logs)
+        current_step_logs["agent_memory"] = agent_memory.copy()
+
         self.logger.info("===== Calling LLM with this last message: =====")
         self.logger.info(self.prompt[-1])
 
@@ -698,7 +752,7 @@ class ReactJsonAgent(ReactAgent):
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
-        self.logs[-1]["llm_output"] = llm_output
+        current_step_logs["llm_output"] = llm_output
 
         # Parse
         self.logger.debug("===== Extracting action =====")
@@ -709,8 +763,8 @@ class ReactJsonAgent(ReactAgent):
         except Exception as e:
             raise AgentParsingError(f"Could not parse the given action: {e}.")
 
-        self.logs[-1]["rationale"] = rationale
-        self.logs[-1]["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
+        current_step_logs["rationale"] = rationale
+        current_step_logs["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
         self.logger.warning(f"Calling tool: '{tool_name}' with arguments: {arguments}")
@@ -721,7 +775,8 @@ class ReactJsonAgent(ReactAgent):
                 answer = arguments
             if answer in self.state:  # if the answer is a state variable, return the value
                 answer = self.state[answer]
-            return answer
+            current_step_logs["final_answer"] = answer
+            return current_step_logs
         else:
             observation = self.execute_tool_call(tool_name, arguments)
             observation_type = type(observation)
@@ -740,8 +795,8 @@ class ReactJsonAgent(ReactAgent):
                 updated_information = f"Stored '{observation_name}' in memory."
 
             self.logger.info(updated_information)
-            self.logs[-1]["observation"] = updated_information
-            return None
+            current_step_logs["observation"] = updated_information
+            return current_step_logs
 
 
 class ReactCodeAgent(ReactAgent):
@@ -782,14 +837,15 @@ class ReactCodeAgent(ReactAgent):
         The errors are raised here, they are caught and logged in the run() method.
         """
         agent_memory = self.write_inner_memory_from_logs()
-        self.logs[-1]["agent_memory"] = agent_memory.copy()
 
         self.prompt = agent_memory.copy()
 
         self.logger.debug("===== New step =====")
 
         # Add new step in logs
-        self.logs.append({})
+        current_step_logs = {}
+        self.logs.append(current_step_logs)
+        current_step_logs["agent_memory"] = agent_memory.copy()
 
         self.logger.info("===== Calling LLM with these last messages: =====")
         self.logger.info(self.prompt[-2:])
@@ -801,7 +857,7 @@ class ReactCodeAgent(ReactAgent):
 
         self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
-        self.logs[-1]["llm_output"] = llm_output
+        current_step_logs["llm_output"] = llm_output
 
         # Parse
         self.logger.debug("===== Extracting action =====")
@@ -813,8 +869,8 @@ class ReactCodeAgent(ReactAgent):
             error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
             raise AgentParsingError(error_msg)
 
-        self.logs[-1]["rationale"] = rationale
-        self.logs[-1]["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
+        current_step_logs["rationale"] = rationale
+        current_step_logs["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
         self.log_code_action(code_action)
@@ -824,7 +880,7 @@ class ReactCodeAgent(ReactAgent):
             information = self.state["print_outputs"]
             self.logger.warning("Print outputs:")
             self.logger.log(32, information)
-            self.logs[-1]["observation"] = information
+            current_step_logs["observation"] = information
         except Exception as e:
             error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
@@ -834,5 +890,5 @@ class ReactCodeAgent(ReactAgent):
             if line[: len("final_answer")] == "final_answer":
                 self.logger.warning(">>> Final answer:")
                 self.logger.log(32, result)
-                return result
-        return None
+                current_step_logs["final_answer"] = result
+        return current_step_logs

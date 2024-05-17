@@ -129,7 +129,7 @@ Remember to make sure that variables you use are all defined.
 Be sure to provide a 'Code:\n```' sequence before the code and '```<end_action>' after, else you will get an error.
 DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
 
-Now Begin!
+Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """
 
 
@@ -255,7 +255,11 @@ Action:
 Above example were using notional tools that might not exist for you. You only have acces to those tools:
 <<tool_descriptions>>
 
-ALWAYS provide a 'Thought:' and an 'Action:' sequence. You MUST provide at least the 'Action:' sequence to move forward.
+Here are the rules you should always follow to solve your task:
+1. ALWAYS provide a 'Thought:' sequence, and an 'Action:' sequence that ends with <end_action>, else you will fail.
+2. Always use the right arguments for the tools. Never use variable names in the 'action_input' field, use the value instead.
+3. Call a tool only when needed: do not call the search agent if you do not need information, try to solve the task yourself.
+4. Never re-do a tool call that you previously did with the exact same parameters.
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """
@@ -348,12 +352,13 @@ Above example were using notional tools that might not exist for you. You only h
 
 You also can perform computations in the python code you generate.
 
-These are the rules you should always follow to solve your task:
-1. Always provide a 'Thought:' and an 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will get an error.
-2. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
-3. Make sure the variable you use are all defined.
-3. Do not perform too many operations in a single code block. Split the task into intermediate code blocks. Then use print() to save the intermediate result. Finally, use final_answer() to return the final result.
-4. Call a tool only when needed: do not call the search agent if you do not need information, try to solve the task yourself. Never re-do a tool call that you previously did with the exact same parameters.
+Here are the rules you should always follow to solve your task:
+1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
+2. Make sure the variable you use are all defined.
+3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
+4. Do not perform too many operations in a single code block. Split the task into intermediate code blocks. Then use print() to save the intermediate result. Finally, use final_answer() to return the final result.
+5. Call a tool only when needed: do not call the search agent if you do not need information, try to solve the task yourself.
+6. Never re-do a tool call that you previously did with the exact same parameters.
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """
