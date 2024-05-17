@@ -62,6 +62,7 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+# Copied from models.clip.image_procesing_clip.CLIPImageProcessor with CLIP->ImageBind
 class ImageBindImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ImageBind image processor.

@@ -93,7 +93,7 @@ def create_rename_keys(config):
 
     # Convert Text
     rename_keys.extend([
-        ("modality_preprocessors.text.pos_embed", "text_model.embeddings.position_embeddings.weight"),
+        ("modality_preprocessors.text.pos_embed", "text_model.embeddings.position_embedding.weight"),
         ("modality_preprocessors.text.token_embedding.weight", "text_model.embeddings.token_embedding.weight"),
         ("modality_heads.text.proj.0.weight", "text_model.layernorm.weight"),
         ("modality_heads.text.proj.0.bias", "text_model.layernorm.bias"),

@@ -184,6 +184,9 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         std (`float`, *optional*, defaults to 9.138):
             The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
             by default.
+        do_sample (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        clip_duration (`<fill_type>`, *optional*, defaults to 2.0): <fill_docstring>
+        num_clips (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~ImageBindAudioFeatureExtractor.__call__`] should return `attention_mask`.
     """
