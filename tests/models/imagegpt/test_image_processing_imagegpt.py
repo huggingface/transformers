@@ -168,6 +168,8 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname)
 
             image_processor_first = image_processor_first.to_dict()
+            image_processor_second = image_processor_second.to_dict()
+
             for key, value in image_processor_first.items():
                 if key == "clusters":
                     self.assertTrue(np.array_equal(value, image_processor_second[key]))
