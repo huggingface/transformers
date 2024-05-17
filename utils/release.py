@@ -116,36 +116,6 @@ def global_version_update(version: str, patch: bool = False):
         update_version_in_examples(version)
 
 
-def clean_main_ref_in_model_list():
-    """
-    Replace the links from main doc to stable doc in the model list of the README.
-    """
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    _start_prompt = "🤗 Transformers currently provides the following architectures"
-    _end_prompt = "1. Want to contribute a new model?"
-    with open(README_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-
-    # Find the start of the list.
-    start_index = 0
-    while not lines[start_index].startswith(_start_prompt):
-        start_index += 1
-    start_index += 1
-
-    index = start_index
-    # Update the lines in the model list.
-    while not lines[index].startswith(_end_prompt):
-        if lines[index].startswith("1."):
-            lines[index] = lines[index].replace(
-                "https://huggingface.co/docs/transformers/main/model_doc",
-                "https://huggingface.co/docs/transformers/model_doc",
-            )
-        index += 1
-
-    with open(README_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.writelines(lines)
-
-
 def get_version() -> packaging.version.Version:
     """
     Reads the current version in the main __init__.
@@ -184,9 +154,6 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    if not patch:
-        print("Cleaning main README, don't forget to run `make fix-copies`.")
-        clean_main_ref_in_model_list()
 
 
 def post_release_work():
@@ -208,8 +175,6 @@ def post_release_work():
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-    print("Cleaning main README, don't forget to run `make fix-copies`.")
-    clean_main_ref_in_model_list()
 
 
 if __name__ == "__main__":

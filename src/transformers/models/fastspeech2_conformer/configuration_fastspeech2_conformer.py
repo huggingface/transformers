@@ -23,13 +23,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import (  # noqa: F401, E402
-    FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
-    FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
-    FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
-)
-
-
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to

@@ -58,9 +58,6 @@ _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "remote control, remote"
 
 
-from ..deprecated._archive_maps import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 # Copied from transformers.models.beit.modeling_beit.BeitModelOutputWithPooling with Beit->Data2VecVision
 class Data2VecVisionModelOutputWithPooling(BaseModelOutputWithPooling):

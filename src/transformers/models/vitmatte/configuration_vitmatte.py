@@ -25,9 +25,6 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class VitMatteConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to

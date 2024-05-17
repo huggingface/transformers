@@ -53,9 +53,6 @@ _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
 
-from ..deprecated._archive_maps import TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 LARGE_NEGATIVE = -1e8
 
 

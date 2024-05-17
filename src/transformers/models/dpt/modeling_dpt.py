@@ -55,9 +55,6 @@ _CHECKPOINT_FOR_DOC = "Intel/dpt-large"
 _EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
 
 
-from ..deprecated._archive_maps import DPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     """

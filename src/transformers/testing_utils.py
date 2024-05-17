@@ -74,6 +74,7 @@ from .utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -201,7 +202,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
-_run_tool_tests = parse_flag_from_env("RUN_TOOL_TESTS", default=False)
+_run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
 
 
@@ -276,19 +277,19 @@ def is_pipeline_test(test_case):
             return pytest.mark.is_pipeline_test()(test_case)
 
 
-def is_tool_test(test_case):
+def is_agent_test(test_case):
     """
-    Decorator marking a test as a tool test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
+    Decorator marking a test as an agent test. If RUN_TOOL_TESTS is set to a falsy value, those tests will be skipped.
     """
-    if not _run_tool_tests:
-        return unittest.skip("test is a tool test")(test_case)
+    if not _run_agent_tests:
+        return unittest.skip("test is an agent test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
         except ImportError:
             return test_case
         else:
-            return pytest.mark.is_tool_test()(test_case)
+            return pytest.mark.is_agent_test()(test_case)
 
 
 def slow(test_case):
@@ -374,6 +375,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_gguf(test_case):
+    """
+    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    """
+    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):

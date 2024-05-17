@@ -21,9 +21,6 @@ from ...utils import is_detectron2_available, logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 # soft dependency
 if is_detectron2_available():
     import detectron2

@@ -64,8 +64,8 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 >>> for box, score, label in zip(boxes, scores, labels):
 ...     box = [round(i, 2) for i in box.tolist()]
 ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
-Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
+Detected a photo of a cat with confidence 0.614 at location [341.67, 23.39, 642.32, 371.35]
+Detected a photo of a cat with confidence 0.665 at location [6.75, 51.96, 326.62, 473.13]
 ```
 
 ## Resources

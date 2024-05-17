@@ -24,9 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class SEWDConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to instantiate a SEW-D
@@ -281,11 +278,6 @@ class SEWDConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
-
-    @property
-    def hidden_dropout(self):
-        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
-        return self._hidden_dropout
 
     def to_dict(self):
         """

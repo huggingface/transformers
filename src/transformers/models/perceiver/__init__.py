@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverOnnxConfig"],
+    "configuration_perceiver": ["PerceiverConfig", "PerceiverOnnxConfig"],
     "tokenization_perceiver": ["PerceiverTokenizer"],
 }
 
@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_perceiver"] = [
-        "PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PerceiverForImageClassificationConvProcessing",
         "PerceiverForImageClassificationFourier",
         "PerceiverForImageClassificationLearned",
@@ -58,7 +57,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverOnnxConfig
+    from .configuration_perceiver import PerceiverConfig, PerceiverOnnxConfig
     from .tokenization_perceiver import PerceiverTokenizer
 
     try:
@@ -77,7 +76,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_perceiver import (
-            PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PerceiverForImageClassificationConvProcessing,
             PerceiverForImageClassificationFourier,
             PerceiverForImageClassificationLearned,

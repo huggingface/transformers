@@ -19,7 +19,6 @@ from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ..deprecated._archive_maps import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class AlbertConfig(PretrainedConfig):

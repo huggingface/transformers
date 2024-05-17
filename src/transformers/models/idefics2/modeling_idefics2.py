@@ -53,11 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Idefics2Config"
 
-IDEFICS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HuggingFaceM4/idefics2-8b",
-    # See all IDEFICS2 models at https://huggingface.co/models?filter=idefics2
-]
-
 
 @dataclass
 class Idefics2BaseModelOutputWithPast(ModelOutput):
@@ -1346,6 +1341,7 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics2 isn't meant for training from scratch - only
@@ -1596,9 +1592,10 @@ class Idefics2Model(Idefics2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_seen_tokens = 0
-        if use_cache:
-            if not isinstance(past_key_values, Cache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_seen_tokens = past_key_values.get_usable_length(seq_length)
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1671,6 +1668,9 @@ class Idefics2Model(Idefics2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if return_legacy_cache:
+            outputs.past_key_values = outputs.past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
@@ -1776,9 +1776,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
+                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `Idefics2ForConditionalGeneration`).
+                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         Returns:
 
         Example:
