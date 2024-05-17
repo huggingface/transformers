@@ -153,7 +153,7 @@ class TestTrainerDistributed(TestCasePlus):
             {self.test_file_dir}/test_trainer_distributed.py
         """.split()
         output_dir = self.get_auto_remove_tmp_dir()
-        args = f"--output_dir {output_dir}".split()
+        args = f"--output_dir {output_dir} --report_to none".split()
         cmd = ["torchrun"] + distributed_args + args
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call

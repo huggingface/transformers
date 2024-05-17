@@ -74,6 +74,7 @@ from .utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -374,6 +375,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_gguf(test_case):
+    """
+    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    """
+    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):
