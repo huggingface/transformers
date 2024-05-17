@@ -1406,7 +1406,7 @@ class LlamaConverter(SpmConverter):
                 sequence += [normalizers.Prepend(prepend="▁")]
             sequence += [normalizers.Replace(pattern=" ", content="▁")]
             return normalizers.Sequence(sequence)
-        return normalizers.Strip(left=False, right=True)
+        return None
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         if not getattr(self.original_tokenizer, "legacy", self.legacy):
