@@ -21,16 +21,19 @@ def get_module_source_from_name(module_name: str) -> str:
 
 
 from libcst import ClassDef, CSTTransformer, CSTVisitor
+from libcst.metadata import MetadataWrapper, ParentNodeProvider
 
 
 class ClassFinder(CSTVisitor):
+    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+
     def __init__(self, python_module):
         self.module = python_module
-        self.classes = {}      # class LlamaAttentino
-        self.imports = {}      # from flash_attn import
-        self.function_def = {} # def repeat_kv
+        self.classes = {}  # class LlamaAttentino
+        self.imports = {}  # from flash_attn import
+        self.function_def = {}  # def repeat_kv
         self.assignments = {}  # LLAMA_DOCSTRING
-        self.protected_imports = {} # if is_xxx_available()
+        self.protected_imports = {}  # if is_xxx_available()
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.classes[node.name.value] = node
@@ -53,8 +56,10 @@ class ClassFinder(CSTVisitor):
                 self.imports[node.body[0].names] = node
             case cst.SimpleStatementLine(body=[cst.ImportFrom(_)]):
                 self.imports[node.body[0].names] = node
-            case cst.SimpleStatementLine(boyd=[cst.FunctionDef(_)]):
-                self.function_def[node.name.value] = node
+
+    def visit_FunctionDef(self, node):
+        if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
+            self.function_def[node.name.value] = node
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
@@ -75,8 +80,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
                 return self.new_name.lower()
             else:
                 return self.new_name.title()
-        return self.regex.sub(replace, text)
 
+        return self.regex.sub(replace, text)
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
@@ -85,9 +90,12 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
             print(f"changed: {updated_node.value} -> {update}")
         return updated_node.with_changes(value=self.preserve_case_replace(updated_node.value))
 
+
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     transformer = ReplaceNameTransformer(old_id, new_id)
     new_module = module.visit(transformer)
+
+    new_module = MetadataWrapper(new_module)
 
     class_finder = ClassFinder(new_module)
     new_module.visit(class_finder)
@@ -122,7 +130,9 @@ class DiffConverterTransformer(CSTTransformer):
                 if parent_package not in self.visited_module:
                     class_finder = find_classes_in_file(self.transformers_imports[parent_package])
                     self.visited_module[parent_package] = class_finder
-                self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[parent_package].classes[node.targets[0].target.value]
+                self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[
+                    parent_package
+                ].classes[node.targets[0].target.value]
 
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
         match updated_node:
@@ -151,12 +161,8 @@ class DiffConverterTransformer(CSTTransformer):
             new_body += list(visiter.assignments.values())
             new_body += list(visiter.function_def.values())
 
-        return node.with_changes(
-            body=[
-                *new_body,
-               *node.body
-            ]
-        )
+        return node.with_changes(body=[*new_body, *node.body])
+
 
 if __name__ == "__main__":
     # Parse the Python file
