@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch OWLv2 model."""
 
-import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple, Union
@@ -1197,16 +1196,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         if return_loss:
             loss = owlv2_loss(logits_per_text)
 
-        if return_base_image_embeds:
-            warnings.warn(
-                "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can"
-                " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
-                FutureWarning,
-            )
-            last_hidden_state = vision_outputs[0]
-            image_embeds = self.vision_model.post_layernorm(last_hidden_state)
-        else:
-            text_embeds = text_embeds_norm
+        text_embeds = text_embeds_norm
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
