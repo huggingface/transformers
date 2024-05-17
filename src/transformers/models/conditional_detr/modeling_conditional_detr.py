@@ -90,7 +90,7 @@ class ConditionalDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    reference_points: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -132,7 +132,7 @@ class ConditionalDetrModelOutput(Seq2SeqModelOutput):
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    reference_points: Optional[Tuple[torch.FloatTensor]] = None
+    reference_points: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -191,12 +191,12 @@ class ConditionalDetrObjectDetectionOutput(ModelOutput):
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -262,12 +262,12 @@ class ConditionalDetrSegmentationOutput(ModelOutput):
     pred_masks: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->ConditionalDetr
@@ -584,7 +584,7 @@ class DetrAttention(nn.Module):
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, ...]]]:
         """Input shape: Batch x Time x Channel"""
 
         position_embeddings = kwargs.pop("position_ebmeddings", None)
@@ -747,7 +747,7 @@ class ConditionalDetrAttention(nn.Module):
         key_states: Optional[torch.Tensor] = None,
         value_states: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, ...]]]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, target_len, _ = hidden_states.size()
@@ -1603,7 +1603,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], ConditionalDetrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], ConditionalDetrModelOutput]:
         r"""
         Returns:
 
@@ -1765,7 +1765,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], ConditionalDetrObjectDetectionOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], ConditionalDetrObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -1949,7 +1949,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], ConditionalDetrSegmentationOutput]:
+    ) -> Union[Tuple[torch.FloatTensor, ...], ConditionalDetrSegmentationOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each

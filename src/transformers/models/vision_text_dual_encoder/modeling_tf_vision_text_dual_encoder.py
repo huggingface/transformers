@@ -358,7 +358,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFCLIPOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFCLIPOutput]:
         r"""
         Returns:
 

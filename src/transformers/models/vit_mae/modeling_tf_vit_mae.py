@@ -78,8 +78,8 @@ class TFViTMAEModelOutput(ModelOutput):
     last_hidden_state: tf.Tensor = None
     mask: tf.Tensor = None
     ids_restore: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -101,8 +101,8 @@ class TFViTMAEDecoderOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -133,8 +133,8 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     logits: tf.Tensor = None
     mask: tf.Tensor = None
     ids_restore: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -408,7 +408,7 @@ class TFViTMAESelfAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
@@ -506,7 +506,7 @@ class TFViTMAEAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
@@ -607,7 +607,7 @@ class TFViTMAELayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         attention_outputs = self.attention(
             # in ViTMAE, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states),
@@ -669,7 +669,7 @@ class TFViTMAEEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -742,7 +742,7 @@ class TFViTMAEMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor, ...]]:
         embedding_output, mask, ids_restore = self.embeddings(
             pixel_values=pixel_values, training=training, noise=noise
         )
@@ -903,7 +903,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 
@@ -1202,7 +1202,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFViTMAEForPreTrainingOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEForPreTrainingOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 

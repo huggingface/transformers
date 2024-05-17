@@ -93,8 +93,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 class TFData2VecVisionDropPath(keras.layers.Layer):
@@ -309,7 +309,7 @@ class TFData2VecVisionSelfAttention(keras.layers.Layer):
         output_attentions: bool,
         relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
@@ -419,7 +419,7 @@ class TFData2VecVisionAttention(keras.layers.Layer):
         output_attentions: bool,
         relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         self_outputs = self.attention(
             hidden_states=input_tensor,
             head_mask=head_mask,
@@ -573,7 +573,7 @@ class TFData2VecVisionLayer(keras.layers.Layer):
         output_attentions: bool,
         relative_position_bias: Optional["TFData2VecVisionRelativePositionBias"] = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         self_attention_outputs = self.attention(
             # in Data2VecVision, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states),

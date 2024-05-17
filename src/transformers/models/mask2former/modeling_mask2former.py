@@ -74,9 +74,9 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
             or when `config.output_attentions=True`
     """
 
-    multi_scale_features: Tuple[torch.FloatTensor] = None
+    multi_scale_features: Tuple[torch.FloatTensor, ...] = None
     mask_features: torch.FloatTensor = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -105,10 +105,10 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[torch.FloatTensor] = None
-    masks_queries_logits: Tuple[torch.FloatTensor] = None
-    intermediate_hidden_states: Tuple[torch.FloatTensor] = None
+    masks_queries_logits: Tuple[torch.FloatTensor, ...] = None
+    intermediate_hidden_states: Tuple[torch.FloatTensor, ...] = None
 
 
 @dataclass
@@ -137,9 +137,9 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     """
 
     encoder_last_hidden_state: torch.FloatTensor = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_last_hidden_state: torch.FloatTensor = None
-    decoder_hidden_states: Tuple[torch.FloatTensor] = None
+    decoder_hidden_states: Tuple[torch.FloatTensor, ...] = None
 
 
 @dataclass
@@ -180,12 +180,12 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor = None
     pixel_decoder_last_hidden_state: torch.FloatTensor = None
     transformer_decoder_last_hidden_state: torch.FloatTensor = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    transformer_decoder_intermediate_states: Tuple[torch.FloatTensor] = None
-    masks_queries_logits: Tuple[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    transformer_decoder_intermediate_states: Tuple[torch.FloatTensor, ...] = None
+    masks_queries_logits: Tuple[torch.FloatTensor, ...] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -239,10 +239,10 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor = None
     pixel_decoder_last_hidden_state: torch.FloatTensor = None
     transformer_decoder_last_hidden_state: torch.FloatTensor = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -1443,7 +1443,7 @@ class Mask2FormerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         key_value_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor, ...]]]:
         """Input shape: Batch x Time x Channel"""
 
         hidden_states = hidden_states.permute(1, 0, 2) if hidden_states is not None else None

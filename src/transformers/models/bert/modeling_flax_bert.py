@@ -84,8 +84,8 @@ class FlaxBertForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jnp.ndarray = None
     seq_relationship_logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 BERT_START_DOCSTRING = r"""

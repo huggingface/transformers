@@ -305,7 +305,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
+    ) -> Union[Tuple[torch.Tensor, ...], CLIPOutput]:
         r"""
         Returns:
 

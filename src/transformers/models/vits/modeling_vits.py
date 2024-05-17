@@ -70,9 +70,9 @@ class VitsModelOutput(ModelOutput):
 
     waveform: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
-    spectrogram: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    spectrogram: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -103,8 +103,8 @@ class VitsTextEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     prior_means: torch.FloatTensor = None
     prior_log_variances: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @torch.jit.script
@@ -1207,7 +1207,7 @@ class VitsTextEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], VitsTextEncoderOutput]:
+    ) -> Union[Tuple[torch.Tensor, ...], VitsTextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(

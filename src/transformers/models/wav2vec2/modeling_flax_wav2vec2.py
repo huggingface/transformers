@@ -67,8 +67,8 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: jnp.ndarray = None
     extract_features: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 @flax.struct.dataclass
@@ -102,8 +102,8 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     projected_states: jnp.ndarray = None
     projected_quantized_states: jnp.ndarray = None
     codevector_perplexity: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 def _compute_mask_indices(

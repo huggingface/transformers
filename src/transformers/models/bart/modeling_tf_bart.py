@@ -182,7 +182,7 @@ class TFBartAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor, tf.Tensor], ...] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
@@ -430,7 +430,7 @@ class TFBartDecoderLayer(keras.layers.Layer):
         cross_attn_layer_head_mask: tf.Tensor | None = None,
         past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor, tf.Tensor], ...]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -711,7 +711,7 @@ BART_INPUTS_DOCSTRING = r"""
         encoder_outputs (`tf.FloatTensor`, *optional*):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`Tuple[Tuple[tf.Tensor, tf.Tensor], ...]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -781,7 +781,7 @@ class TFBartEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         """
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -945,7 +945,7 @@ class TFBartDecoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor, ...]]:
         r"""
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
@@ -989,7 +989,7 @@ class TFBartDecoder(keras.layers.Layer):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`Tuple[Tuple[tf.Tensor, tf.Tensor], ...]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
 
@@ -1178,7 +1178,7 @@ class TFBartMainLayer(keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor, ...]]:
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1308,7 +1308,7 @@ class TFBartModel(TFBartPretrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1440,7 +1440,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1611,7 +1611,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSeq2SeqSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqSequenceClassifierOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,

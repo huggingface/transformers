@@ -1389,7 +1389,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,  # needs kwargs for generation
-    ) -> Union[Tuple[tf.Tensor], TFRetrievAugLMMarginOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFRetrievAugLMMarginOutput]:
         r"""
         exclude_bos_score (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when computing

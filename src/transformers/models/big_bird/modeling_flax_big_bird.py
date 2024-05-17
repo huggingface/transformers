@@ -81,8 +81,8 @@ class FlaxBigBirdForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jnp.ndarray = None
     seq_relationship_logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 @flax.struct.dataclass
@@ -113,8 +113,8 @@ class FlaxBigBirdForQuestionAnsweringModelOutput(ModelOutput):
     start_logits: jnp.ndarray = None
     end_logits: jnp.ndarray = None
     pooled_output: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 BIG_BIRD_START_DOCSTRING = r"""

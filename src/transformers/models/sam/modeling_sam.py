@@ -924,7 +924,7 @@ class SamVisionLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)

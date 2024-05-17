@@ -154,7 +154,7 @@ class BaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -236,7 +236,7 @@ class BaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -281,7 +281,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -328,12 +328,12 @@ class MoECausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     z_loss: torch.FloatTensor = None
     aux_loss: torch.FloatTensor = None
-    router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -365,7 +365,7 @@ class MoEModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    router_probs: Optional[Tuple[torch.FloatTensor]] = None
+    router_probs: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -404,10 +404,10 @@ class MoeModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -453,10 +453,10 @@ class MoeCausalLMOutputWithPast(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     aux_loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -505,11 +505,11 @@ class MoEModelOutputWithPastAndCrossAttentions(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    router_probs: Optional[Tuple[torch.FloatTensor]] = None
+    router_probs: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -564,7 +564,7 @@ class Seq2SeqModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -634,15 +634,15 @@ class Seq2SeqMoEModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -705,7 +705,7 @@ class CausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -748,7 +748,7 @@ class CausalLMOutputWithCrossAttentions(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -785,7 +785,7 @@ class SequenceClassifierOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -870,7 +870,7 @@ class Seq2SeqLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -943,15 +943,15 @@ class Seq2SeqMoEOutput(ModelOutput):
     decoder_z_loss: torch.FloatTensor = None
     encoder_aux_loss: torch.FloatTensor = None
     decoder_aux_loss: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    decoder_router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    encoder_router_logits: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_router_logits: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1064,7 +1064,7 @@ class Seq2SeqSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1219,7 +1219,7 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: torch.FloatTensor = None
     end_logits: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1456,7 +1456,7 @@ class BackboneOutput(ModelOutput):
             heads.
     """
 
-    feature_maps: Tuple[torch.FloatTensor] = None
+    feature_maps: Tuple[torch.FloatTensor, ...] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -1495,7 +1495,7 @@ class BaseModelOutputWithPoolingAndProjection(ModelOutput):
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    projection_state: Optional[Tuple[torch.FloatTensor]] = None
+    projection_state: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1549,7 +1549,7 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     spectrogram: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1618,7 +1618,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
@@ -1689,8 +1689,8 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    params: Optional[Tuple[torch.FloatTensor]] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    params: Optional[Tuple[torch.FloatTensor, ...]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor], ...]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None

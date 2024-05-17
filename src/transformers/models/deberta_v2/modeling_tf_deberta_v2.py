@@ -197,7 +197,7 @@ class TFDebertaV2Attention(keras.layers.Layer):
         rel_embeddings: tf.Tensor = None,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         self_outputs = self.self(
             hidden_states=input_tensor,
             attention_mask=attention_mask,
@@ -311,7 +311,7 @@ class TFDebertaV2Layer(keras.layers.Layer):
         rel_embeddings: tf.Tensor = None,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         attention_outputs = self.attention(
             input_tensor=hidden_states,
             attention_mask=attention_mask,
@@ -491,7 +491,7 @@ class TFDebertaV2Encoder(keras.layers.Layer):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         if len(shape_list(attention_mask)) <= 2:
             input_mask = attention_mask
         else:
@@ -724,7 +724,7 @@ class TFDebertaV2DisentangledSelfAttention(keras.layers.Layer):
         rel_embeddings: tf.Tensor = None,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         """
         Call the module
 
@@ -1186,7 +1186,7 @@ class TFDebertaV2MainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1369,7 +1369,7 @@ class TFDebertaV2Model(TFDebertaV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1430,7 +1430,7 @@ class TFDebertaV2ForMaskedLM(TFDebertaV2PreTrainedModel, TFMaskedLanguageModelin
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1521,7 +1521,7 @@ class TFDebertaV2ForSequenceClassification(TFDebertaV2PreTrainedModel, TFSequenc
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1615,7 +1615,7 @@ class TFDebertaV2ForTokenClassification(TFDebertaV2PreTrainedModel, TFTokenClass
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1699,7 +1699,7 @@ class TFDebertaV2ForQuestionAnswering(TFDebertaV2PreTrainedModel, TFQuestionAnsw
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor, ...]]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1799,7 +1799,7 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`

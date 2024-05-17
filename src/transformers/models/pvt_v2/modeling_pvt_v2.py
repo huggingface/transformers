@@ -183,7 +183,7 @@ class PvtV2SelfAttention(nn.Module):
         height: int,
         width: int,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         batch_size, seq_len, num_channels = hidden_states.shape
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 

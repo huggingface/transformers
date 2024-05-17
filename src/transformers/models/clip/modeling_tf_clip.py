@@ -307,7 +307,7 @@ class TFCLIPAttention(keras.layers.Layer):
         causal_attention_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size = shape_list(hidden_states)[0]
@@ -424,7 +424,7 @@ class TFCLIPEncoderLayer(keras.layers.Layer):
         causal_attention_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -499,7 +499,7 @@ class TFCLIPEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -561,7 +561,7 @@ class TFCLIPTextTransformer(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         input_shape = shape_list(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
@@ -682,7 +682,7 @@ class TFCLIPTextMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -729,7 +729,7 @@ class TFCLIPVisionTransformer(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         embedding_output = self.embeddings(pixel_values=pixel_values)
         embedding_output = self.pre_layernorm(inputs=embedding_output)
 
@@ -795,7 +795,7 @@ class TFCLIPVisionMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -958,7 +958,7 @@ class TFCLIPMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCLIPOutput, Tuple[tf.Tensor, ...]]:
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
         if pixel_values is None:
@@ -1196,7 +1196,7 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 
@@ -1255,7 +1255,7 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 
@@ -1403,7 +1403,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFCLIPOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCLIPOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 

@@ -91,11 +91,11 @@ class LxmertModelOutput(ModelOutput):
     language_output: Optional[torch.FloatTensor] = None
     vision_output: Optional[torch.FloatTensor] = None
     pooled_output: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    language_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -131,11 +131,11 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    language_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -179,11 +179,11 @@ class LxmertForPreTrainingOutput(ModelOutput):
     prediction_logits: Optional[torch.FloatTensor] = None
     cross_relationship_score: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
-    language_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    language_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    language_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    language_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    cross_encoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
@@ -909,7 +909,7 @@ class LxmertModel(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1162,7 +1162,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertForPreTrainingOutput, Tuple[torch.FloatTensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1393,7 +1393,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[LxmertForQuestionAnsweringOutput, Tuple[torch.FloatTensor, ...]]:
         r"""
         labels (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer

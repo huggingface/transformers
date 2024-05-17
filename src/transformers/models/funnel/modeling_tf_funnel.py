@@ -1106,8 +1106,8 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 FUNNEL_START_DOCSTRING = r"""
@@ -1229,7 +1229,7 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1285,7 +1285,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1342,7 +1342,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[Tuple[tf.Tensor], TFFunnelForPreTrainingOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFFunnelForPreTrainingOutput]:
         r"""
         Returns:
 
@@ -1432,7 +1432,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFMaskedLMOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1515,7 +1515,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1604,7 +1604,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1711,7 +1711,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFTokenClassifierOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1800,7 +1800,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
+    ) -> Union[Tuple[tf.Tensor, ...], TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

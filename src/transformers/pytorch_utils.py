@@ -180,7 +180,7 @@ def apply_chunking_to_forward(
             The chunk size of a chunked tensor: `num_chunks = len(input_tensors[0]) / chunk_size`.
         chunk_dim (`int`):
             The dimension over which the `input_tensors` should be chunked.
-        input_tensors (`Tuple[torch.Tensor]`):
+        input_tensors (`Tuple[torch.Tensor, ...]`):
             The input tensors of `forward_fn` which will be chunked
 
     Returns:

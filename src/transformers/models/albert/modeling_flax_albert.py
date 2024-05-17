@@ -77,8 +77,8 @@ class FlaxAlbertForPreTrainingOutput(ModelOutput):
 
     prediction_logits: jnp.ndarray = None
     sop_logits: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 ALBERT_START_DOCSTRING = r"""

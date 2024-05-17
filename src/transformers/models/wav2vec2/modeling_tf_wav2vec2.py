@@ -81,8 +81,8 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     extract_features: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 def _sample_without_replacement(distribution, num_samples):
@@ -727,7 +727,7 @@ class TFWav2Vec2Attention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor, tf.Tensor], ...] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
@@ -925,7 +925,7 @@ class TFWav2Vec2EncoderLayer(keras.layers.Layer):
         attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states, attention_mask=attention_mask, training=training
@@ -984,7 +984,7 @@ class TFWav2Vec2EncoderLayerStableLayerNorm(keras.layers.Layer):
         attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, ...]:
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
@@ -1036,7 +1036,7 @@ class TFWav2Vec2Encoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1118,7 +1118,7 @@ class TFWav2Vec2EncoderStableLayerNorm(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1521,7 +1521,7 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor, ...]]:
         """
 
         Returns:
@@ -1628,7 +1628,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1796,7 +1796,7 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         return_dict: bool | None = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor]:
+    ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor, ...]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 

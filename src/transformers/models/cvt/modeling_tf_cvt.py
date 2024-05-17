@@ -770,7 +770,7 @@ class TFCvtEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor, ...]]:
         all_hidden_states = () if output_hidden_states else None
         hidden_state = pixel_values
         # When running on CPU, `keras.layers.Conv2D` doesn't support (batch_size, num_channels, height, width)
@@ -825,7 +825,7 @@ class TFCvtMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor, ...]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -933,7 +933,7 @@ class TFCvtModel(TFCvtPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor, ...]]:
         r"""
         Returns:
 
@@ -1019,7 +1019,7 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFImageClassifierOutputWithNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFImageClassifierOutputWithNoAttention, Tuple[tf.Tensor, ...]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

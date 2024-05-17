@@ -103,7 +103,7 @@ class BeamScorer(ABC):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         **kwargs,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         raise NotImplementedError("This is an abstract method.")
 
     @abstractmethod
@@ -328,7 +328,7 @@ class BeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.LongTensor]:
+    ) -> Tuple[torch.LongTensor, ...]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
@@ -521,7 +521,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, ...]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size * num_beams, sequence_length)`):
@@ -821,7 +821,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
         decoder_prompt_len: Optional[int] = 0,
-    ) -> Tuple[torch.LongTensor]:
+    ) -> Tuple[torch.LongTensor, ...]:
         batch_size = len(self._beam_hyps)
 
         if eos_token_id is not None and not isinstance(eos_token_id, torch.Tensor):
