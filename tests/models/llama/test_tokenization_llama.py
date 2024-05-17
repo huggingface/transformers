@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 from datasets import load_dataset
+from parameterized import parameterized
 
 from transformers import (
     SPIECE_UNDERLINE,
@@ -601,11 +602,15 @@ class LlamaIntegrationTest(unittest.TestCase):
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "hello")
 
-    def test_no_prefix_space(self):
-        tokenizer = LlamaTokenizerFast.from_pretrained(
-            "huggyllama/llama-7b", legacy=False, from_slow=True, add_prefix_space=False
+    @parameterized.expand([LlamaTokenizerFast, LlamaTokenizer])
+    def test_no_prefix_space(self, tokenizer_class):
+        tokenizer = tokenizer_class.from_pretrained(
+            "huggyllama/llama-7b",
+            legacy=False,
+            from_slow=tokenizer_class == LlamaTokenizerFast,
+            add_prefix_space=False,
         )
-        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
+        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=False, lstrip=True)], special_tokens=False)
 
         example_inputs = tokenizer.tokenize("<REPR_END>inform<s>. Hey.       .")
         self.assertEqual(example_inputs, ["<REPR_END>", "in", "form", "<s>", ".", "▁Hey", ".", "▁▁▁▁▁▁", "▁."])
@@ -617,13 +622,16 @@ class LlamaIntegrationTest(unittest.TestCase):
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
         self.assertEqual(out1, "<REPR_END>inform")
+        outs = tokenizer.encode("Me <REPR_END> inform", add_special_tokens=False)
+        tokens = tokenizer.convert_ids_to_tokens(outs)
+        self.assertEqual(tokens, ["Me", "<REPR_END>", "▁inform"])
         out2 = tokenizer.decode(
-            tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
+            tokenizer.encode("Me <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
         # decoding strips the added prefix space.
-        self.assertEqual(out2, "<REPR_END>inform")
-        input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
+        self.assertEqual(out2, "Me<REPR_END> inform")
+        input_ids = tokenizer.encode("Me<REPR_END> inform", add_special_tokens=False)
+        self.assertEqual(input_ids, [6816, 32000, 1871])
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -658,8 +666,17 @@ class LlamaIntegrationTest(unittest.TestCase):
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, "hello")
 
-    def test_some_edge_cases(self):
-        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+        input_ids = tokenizer.encode("<s>hello<s>", add_special_tokens=False)
+        self.assertEqual(input_ids, [1, 12199, 1])
+        decoded_tokens = tokenizer.decode(input_ids)
+        self.assertEqual(decoded_tokens, "<s>hello<s>")
+
+        decoded_tokens = tokenizer.decode(input_ids, skip_special_tokens=True)
+        self.assertEqual(decoded_tokens, "hello")
+
+    @parameterized.expand([LlamaTokenizerFast, LlamaTokenizer])
+    def test_some_edge_cases(self, tokenizer_class):
+        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b", legacy=False)
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
         self.assertEqual(sp_tokens, ["<", "s", ">>"])
@@ -700,8 +717,9 @@ class LlamaIntegrationTest(unittest.TestCase):
             tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
 
     @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+    @parameterized.expand([LlamaTokenizerFast, LlamaTokenizer])
+    def test_tokenization_for_chat(self, tokenizer_class):
+        tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b", legacy=False)
 
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
@@ -730,96 +748,45 @@ class LlamaIntegrationTest(unittest.TestCase):
 @require_tokenizers
 class CommonSpmIntegrationTests(unittest.TestCase):
     """
-    A class that regroups important test to make sure that we properly handle the special tokens.
+    A class that regroups important tests to make sure that we properly handle the special tokens.
     """
 
     @classmethod
     def setUpClass(cls):
-        tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
-        cls.tokenizer = tokenizer
-        return cls
+        cls.tokenizers = []
+        for tokenizer_class in [LlamaTokenizer, LlamaTokenizerFast]:
+            tokenizer = tokenizer_class(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False, from_slow=tokenizer_class==LlamaTokenizerFast)
+            tokenizer.add_special_tokens(
+                {"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]}
+            )
+            cls.tokenizers.append(tokenizer)
 
-    def test_add_dummy_prefix(self):
-        # make sure `'▁'` is prepended, and outputs match sp_model's
-        # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
-        input_ids = self.tokenizer.encode(". Hello")
-        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
-        sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        self.assertEqual(input_ids, [7] + sp_encode)
-        tokens = self.tokenizer.tokenize(". Hello")
-        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+    # fmt: off
+    @parameterized.expand([
+        ('. Hello', [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll", "o"]),
+        ('', [], []),
+        (' ', [], []),
+        ('▁', [], []),
+        ("       . Hello", [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll"]),
+        (" . Hello", [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll", "o"]),
+        ("▁He is not", [156, 46, 44], ["▁He", "▁is", "▁not"]),
+        ("▁He is not<s>             ▁He", [156, 46, 44, 1, 156], ["▁He", "▁is", "▁not", "<s>", "▁He"]),
+        ("▁He is not             ▁He", [156, 46, 44, 156], ["▁He", "▁is", "▁not", "▁He"]),
+        ("Hey <s>I", [156, 30, 1, 100], ["<s>", "I"]),
+        ("Hello, <s>,", [156, 86, 20, 3, 1, 3], ["▁He", "ll", "o", ",", "<s>", ","]),
+        (" <s> ,", [1, 7, 3], ["<s>", "▁", ","]),
+        ("No <s> ▁He", [284, 1, 156], ["▁No", "<s>", "▁He"]),
+    ])
+    # fmt: on
+    def test_tokenization(self, text, expected_input_ids, expected_tokens):
+        for tokenizer in self.tokenizers:
+            input_ids = tokenizer.encode(text)
+            with self.subTest(tokenizer=type(tokenizer).__name__, mode="encode  "):
+                self.assertEqual(input_ids, expected_input_ids)
 
-        tokens = self.tokenizer.tokenize("")
-        self.assertEqual(tokens, [])
-        self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
+            tokens = tokenizer.tokenize(text)
+            with self.subTest(tokenizer=type(tokenizer).__name__,mode="tokenize"): 
+                self.assertEqual(tokens, expected_tokens)
 
-        tokens = self.tokenizer.tokenize(" ")
-        self.assertEqual(tokens, [])
-        self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
-
-        tokens = self.tokenizer.tokenize("▁")
-        self.assertEqual(tokens, [])
-        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
-
-    def test_remove_extra_whitespaces(self):
-        # make sure the extra spaces are eaten. Since the sample vocab does not have
-        # `______`. sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
-
-        input_ids = self.tokenizer.encode("       . Hello")
-        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
-        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, [7] + sp_encode)
-        tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
-
-        # `'▁'` is also a whitespace
-        input_ids = self.tokenizer.encode("▁He is not")
-        self.assertEqual(input_ids, [156, 46, 44])
-        tokens = self.tokenizer.tokenize("▁He is not")
-        sp_encode = [
-            self.tokenizer.sp_model.piece_to_id("▁He"),
-            self.tokenizer.sp_model.piece_to_id("▁is"),
-            self.tokenizer.sp_model.piece_to_id("▁not"),
-        ]
-        self.assertEqual(input_ids, sp_encode)
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
-
-        input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 1, 156])
-        tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
-        # make sure that the output after the extra id is the same as if
-        # extra_id was not there
-        input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 156])
-        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
-
-    def test_character_after_special_token(self):
-        # Make sure that `tokenizer.tokenize` is similar to
-        # adding the equivalent special token to the vocab
-        input_ids = self.tokenizer.encode("Hey <s>I")
-        self.assertEqual(input_ids, [156, 30, 1, 100])
-        sp_encode = self.tokenizer.sp_model.encode("Hey .I")
-        # the last token should be 100
-        self.assertEqual(input_ids[-1], sp_encode[-1])
-        tokens = self.tokenizer.tokenize("<s>I")
-        self.assertEqual(tokens, ["<s>", "I"])
-
-        input_ids = self.tokenizer.encode("Hello, <s>,")
-        self.assertEqual(input_ids, [156, 86, 20, 3, 1, 3])
-        tokens = self.tokenizer.tokenize("Hello, <s>,")
-        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<s>", ","])
-
-    def test_special_tokens_strip(self):
-        input_ids = self.tokenizer.encode(" <s> ,")
-        self.assertEqual(input_ids, [1, 7, 3])
-        tokens = self.tokenizer.tokenize(" <s> ,")
-        # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
-        self.assertEqual(tokens, ["<s>", "▁", ","])
-
-        input_ids = self.tokenizer.encode("No <s> ▁He")
-        self.assertEqual(input_ids, [284, 1, 156])
-        tokens = self.tokenizer.tokenize("No <s> ▁He")
-        self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
+            with self.subTest(tokenizer=type(tokenizer).__name__,mode="decode  "):
+                self.assertEqual(tokenizer.decode(tokenizer.encode(text,add_special_tokens=False),spaces_between_special_tokens=False),text)

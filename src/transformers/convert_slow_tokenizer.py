@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -1352,14 +1353,17 @@ class LlamaConverter(SpmConverter):
         return unk_id
 
     def decoder(self, replacement, add_prefix_space):
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
-        if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-        return decoders.Sequence(sequence)
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
+            if add_prefix_space:
+                sequence += [decoders.Strip(content=" ", left=1)]
+            return decoders.Sequence(sequence)
+        else:
+            return super().decoder(replacement, add_prefix_space)
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
