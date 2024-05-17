@@ -13,20 +13,16 @@
 # limitations under the License.
 import unittest
 
-
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoTokenizer, LlavaProcessor
 
 
 @require_vision
 class LlavaProcessorTest(unittest.TestCase):
-
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
             processor = LlavaProcessor.from_pretrained(checkpoint)
