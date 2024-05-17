@@ -1168,11 +1168,13 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def patchify(self, pixel_values, interpolate_pos_encoding=False):
+    def patchify(self, pixel_values, interpolate_pos_encoding: bool = False):
         """
         Args:
             pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)` or `(batch_size, num_channels, height, width)`):
                 Pixel values.
+            interpolate_pos_encoding (`bool`, default `False`):
+                interpolation flag passed during the forward pass.
 
         Returns:
             `tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
@@ -1218,11 +1220,13 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values, original_image_size=None):
+    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[Tuple[int, int]] = None):
         """
         Args:
             patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
+            original_image_size (`Tuple[int, int]`, default `None`):
+                Original image size.
 
         Returns:
             `tf.Tensor` of shape `(batch_size, height, width, num_channels)`:
@@ -1257,7 +1261,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
         return pixel_values
 
-    def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding=False):
+    def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding: bool = False):
         """
         Args:
             pixel_values (`tf.Tensor` of shape `(batch_size, height, width, num_channels)`):
@@ -1266,6 +1270,8 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
                 Predicted pixel values.
             mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
+            interpolate_pos_encoding (`bool`, default `False`):
+                interpolation flag passed during the forward pass.
 
         Returns:
             `tf.Tensor`: Pixel reconstruction loss.

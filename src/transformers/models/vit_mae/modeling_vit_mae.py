@@ -254,7 +254,7 @@ class ViTMAEEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        if int(h0) != patch_pos_embed.shape[-2] and int(w0) != patch_pos_embed.shape[-1]:
+        if int(h0) != patch_pos_embed.shape[-2] or int(w0) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
@@ -291,7 +291,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         return sequence_unmasked, mask, ids_restore
 
-    def forward(self, pixel_values, noise=None, interpolate_pos_encoding=False):
+    def forward(self, pixel_values, noise=None, interpolate_pos_encoding: bool = False):
         batch_size, num_channels, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         if interpolate_pos_encoding:
@@ -334,7 +334,7 @@ class ViTMAEPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values, interpolate_pos_encoding=False):
+    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -652,7 +652,7 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, *optional* default `False`):
+        interpolate_pos_encoding (`bool`, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
 """
@@ -696,7 +696,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, ViTMAEModelOutput]:
         r"""
         Returns:
@@ -844,8 +844,7 @@ class ViTMAEDecoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        interpolate_pos_encoding=False,
-        pixel_values=None,
+        interpolate_pos_encoding: bool = False,
     ):
         # embed tokens
         x = self.decoder_embed(hidden_states)
@@ -939,11 +938,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def patchify(self, pixel_values, interpolate_pos_encoding=False):
+    def patchify(self, pixel_values, interpolate_pos_encoding: bool = False):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values.
+            interpolate_pos_encoding (`bool`, default `False`):
+                interpolation flag passed during the forward pass.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
@@ -973,11 +974,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values, original_image_size=None):
+    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[Tuple[int, int]] = None):
         """
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
+            original_image_size (`Tuple[int, int]`, default `None`):
+                Original image size.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`:
@@ -1017,7 +1020,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         )
         return pixel_values
 
-    def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding=False):
+    def forward_loss(self, pixel_values, pred, mask, interpolate_pos_encoding: bool = False):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1026,6 +1029,8 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
                 Predicted pixel values.
             mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
+            interpolate_pos_encoding (`bool`, default `False`):
+                interpolation flag passed during the forward pass.
 
         Returns:
             `torch.FloatTensor`: Pixel reconstruction loss.
@@ -1051,7 +1056,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, ViTMAEForPreTrainingOutput]:
         r"""
         Returns:
@@ -1091,9 +1096,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
-        decoder_outputs = self.decoder(
-            latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding, pixel_values=pixel_values
-        )
+        decoder_outputs = self.decoder(latent, ids_restore, interpolate_pos_encoding=interpolate_pos_encoding)
         logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
 
         loss = self.forward_loss(pixel_values, logits, mask, interpolate_pos_encoding=interpolate_pos_encoding)
