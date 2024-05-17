@@ -484,9 +484,9 @@ class ProcessorMixin(PushToHubMixin):
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = []
         for attribute_name in cls.attributes:
-                class_name = getattr(cls, f"{attribute_name}_class")
-                attribute_class = getattr(transformers_module, class_name)
-                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            class_name = getattr(cls, f"{attribute_name}_class")
+            attribute_class = getattr(transformers_module, class_name)
+            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
     @property
