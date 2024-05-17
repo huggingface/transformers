@@ -240,10 +240,6 @@ if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
 
 
-if is_lomo_available():
-    pass
-
-
 def _is_peft_model(model):
     if is_peft_available():
         classes_to_check = (PeftModel,) if is_peft_available() else ()
