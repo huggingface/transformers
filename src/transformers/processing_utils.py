@@ -449,8 +449,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
@@ -481,22 +481,12 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = []
-        processor_dict.update({k: v for k, v in kwargs.items() if k in processor_dict})
         for attribute_name in cls.attributes:
-            class_name = processor_dict.pop(f"{attribute_name}_class", getattr(cls, f"{attribute_name}_class"))
-            if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
-                use_fast = kwargs.get("use_fast", True)
-                if use_fast and classes[1] is not None:
-                    attribute_class = classes[1]
-                else:
-                    attribute_class = classes[0]
-            else:
+                class_name = getattr(cls, f"{attribute_name}_class")
                 attribute_class = getattr(transformers_module, class_name)
-
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
     @property

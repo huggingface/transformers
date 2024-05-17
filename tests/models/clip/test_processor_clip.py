@@ -126,7 +126,7 @@ class CLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, CLIPTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
