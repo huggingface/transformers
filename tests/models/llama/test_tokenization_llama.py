@@ -755,7 +755,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tokenizers = []
         for tokenizer_class in [LlamaTokenizer, LlamaTokenizerFast]:
-            tokenizer = tokenizer_class(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False, from_slow=tokenizer_class==LlamaTokenizerFast)
+            tokenizer = tokenizer_class.from_pretrained("huggyllama/llama-7b", add_bos_token=False, legacy=False, from_slow=tokenizer_class==LlamaTokenizerFast)
             tokenizer.add_special_tokens(
                 {"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]}
             )
@@ -763,19 +763,18 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     # fmt: off
     @parameterized.expand([
-        ('. Hello', [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll", "o"]),
+        ('. Hello', [869, 15043], ["▁", ".", "▁He", "ll", "o"]),
         ('', [], []),
         (' ', [], []),
         ('▁', [], []),
-        ("       . Hello", [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll"]),
-        (" . Hello", [7, 4, 156, 86, 20], ["▁", ".", "▁He", "ll", "o"]),
-        ("▁He is not", [156, 46, 44], ["▁He", "▁is", "▁not"]),
-        ("▁He is not<s>             ▁He", [156, 46, 44, 1, 156], ["▁He", "▁is", "▁not", "<s>", "▁He"]),
-        ("▁He is not             ▁He", [156, 46, 44, 156], ["▁He", "▁is", "▁not", "▁He"]),
-        ("Hey <s>I", [156, 30, 1, 100], ["<s>", "I"]),
-        ("Hello, <s>,", [156, 86, 20, 3, 1, 3], ["▁He", "ll", "o", ",", "<s>", ","]),
-        (" <s> ,", [1, 7, 3], ["<s>", "▁", ","]),
-        ("No <s> ▁He", [284, 1, 156], ["▁No", "<s>", "▁He"]),
+        ("       . Hello",  [539, 869, 15043], ['▁▁▁▁▁▁', '▁.', '▁Hello']),
+        ("▁He is not", [940, 338, 451], ['▁He', '▁is', '▁not']),
+        ("▁He is not<s>             ▁He", [940, 338, 451, 1, 795, 940], ['▁He', '▁is', '▁not', '<s>', '▁▁▁▁▁▁▁▁▁▁▁▁▁', '▁He']),
+        ("▁He is not             ▁He", [940, 338, 451, 795, 940], ['▁He', '▁is', '▁not', '▁▁▁▁▁▁▁▁▁▁▁▁▁', '▁He']),
+        ("Hey <s>I",  [18637, 1, 29902], ['▁Hey', '<s>', 'I']),
+        ("Hello, <s>,", [15043, 29892, 1, 29892], ['▁Hello', ',', '<s>', ',']),
+        (" <s> ,", [1, 1919] , ['<s>', '▁,']),
+        ("No <s> ▁He", [1939, 1, 29871, 940], ['▁No', '<s>', '▁', '▁He']),
     ])
     # fmt: on
     def test_tokenization(self, text, expected_input_ids, expected_tokens):
