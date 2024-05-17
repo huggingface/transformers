@@ -545,6 +545,10 @@ class QDQBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         # feed forward chunking is not supported in QDQBert
         pass
 
+    @require_pytorch_quantization
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
 
 @require_torch
 @require_pytorch_quantization
