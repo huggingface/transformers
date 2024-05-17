@@ -21,7 +21,6 @@ import os.path
 import random
 import re
 import tempfile
-import unittest
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
