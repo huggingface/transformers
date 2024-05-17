@@ -137,6 +137,8 @@
     title: Troubleshoot
   - local: hf_quantizer
     title: Contribute new quantization method
+  - local: gguf
+    title: Interoperability with GGUF files
   title: Developer guides
 - sections:
   - local: performance
@@ -806,6 +808,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llava
+        title: VideoLlava
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava

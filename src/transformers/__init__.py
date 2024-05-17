@@ -733,6 +733,7 @@ _import_structure = {
         "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
+    "models.video_llava": ["VideoLlavaConfig"],
     "models.videomae": ["VideoMAEConfig"],
     "models.vilt": [
         "ViltConfig",
@@ -1159,6 +1160,7 @@ else:
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
+    _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -3239,6 +3241,13 @@ else:
             "UperNetPreTrainedModel",
         ]
     )
+    _import_structure["models.video_llava"].extend(
+        [
+            "VideoLlavaForConditionalGeneration",
+            "VideoLlavaPreTrainedModel",
+            "VideoLlavaProcessor",
+        ]
+    )
     _import_structure["models.videomae"].extend(
         [
             "VideoMAEForPreTraining",
@@ -5309,6 +5318,7 @@ if TYPE_CHECKING:
         UnivNetFeatureExtractor,
     )
     from .models.upernet import UperNetConfig
+    from .models.video_llava import VideoLlavaConfig
     from .models.videomae import VideoMAEConfig
     from .models.vilt import (
         ViltConfig,
@@ -5749,6 +5759,7 @@ if TYPE_CHECKING:
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
+        from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -7424,6 +7435,11 @@ if TYPE_CHECKING:
         from .models.upernet import (
             UperNetForSemanticSegmentation,
             UperNetPreTrainedModel,
+        )
+        from .models.video_llava import (
+            VideoLlavaForConditionalGeneration,
+            VideoLlavaPreTrainedModel,
+            VideoLlavaProcessor,
         )
         from .models.videomae import (
             VideoMAEForPreTraining,

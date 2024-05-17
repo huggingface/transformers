@@ -152,6 +152,7 @@ _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
+_is_gguf_available = _is_package_available("gguf")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -808,6 +809,10 @@ def is_sentencepiece_available():
 
 def is_seqio_available():
     return _is_seqio_available
+
+
+def is_gguf_available():
+    return _is_gguf_available
 
 
 def is_protobuf_available():
