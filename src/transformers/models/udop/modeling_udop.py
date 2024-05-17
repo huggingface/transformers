@@ -1275,6 +1275,8 @@ class UdopStack(UdopPreTrainedModel):
     embeddings.
     """
 
+    _no_split_modules = ["UdopCellEmbeddings"]
+
     def __init__(self, config, embed_tokens=None, embed_patches=None):
         super().__init__(config)
 
