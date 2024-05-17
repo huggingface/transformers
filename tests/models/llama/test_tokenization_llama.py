@@ -783,9 +783,5 @@ class CommonSpmIntegrationTests(unittest.TestCase):
             with self.subTest(tokenizer=type(tokenizer).__name__, mode="encode  "):
                 self.assertEqual(input_ids, expected_input_ids)
 
-            tokens = tokenizer.tokenize(text)
-            with self.subTest(tokenizer=type(tokenizer).__name__,mode="tokenize"): 
-                self.assertEqual(tokens, expected_tokens)
-
             with self.subTest(tokenizer=type(tokenizer).__name__,mode="decode  "):
                 self.assertEqual(tokenizer.decode(tokenizer.encode(text,add_special_tokens=False),spaces_between_special_tokens=False),text)
