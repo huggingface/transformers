@@ -84,7 +84,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-            class_name = getattr(self, f"{attribute_name}_class")
+            class_name = arg if isinstance(arg,str) else getattr(self, f"{attribute_name}_class")
             # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
             if isinstance(class_name, tuple):
@@ -111,21 +111,21 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = sig.parameters
-        # Don't save attributes like `tokenizer`, `image processor` etc.
-        attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
+        attrs_to_save = list(sig.parameters)
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
         output = {k: v for k, v in output.items() if k in attrs_to_save}
 
         output["processor_class"] = self.__class__.__name__
-
         if "tokenizer" in output:
+            output["tokenizer_class"] = self.tokenizer.__class__.__name__
             del output["tokenizer"]
         if "image_processor" in output:
+            output["image_processor_class"] = self.image_processor.__class__.__name__
             del output["image_processor"]
         if "feature_extractor" in output:
+            output["feature_extractor_class"] = self.feature_extractor.__class__.__name__
             del output["feature_extractor"]
 
         # Some attributes have different names but containing objects that are not simple strings
@@ -462,8 +462,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
@@ -494,10 +494,10 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         args = []
         for attribute_name in cls.attributes:
-            class_name = getattr(cls, f"{attribute_name}_class")
+            class_name = processor_dict.pop(f"{attribute_name}_class", getattr(cls, f"{attribute_name}_class"))
             if isinstance(class_name, tuple):
                 classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
                 use_fast = kwargs.get("use_fast", True)
