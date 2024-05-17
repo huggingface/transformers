@@ -321,31 +321,31 @@ def deprecate_models(models):
         print("Adding tip message to model doc page")
         insert_tip_to_model_doc(model_info["model_doc_path"], tip_message)
 
-    #     # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
-    #     print("Moving model files to deprecated for model")
-    #     move_model_files_to_deprecated(model)
+        # Move the model file to deprecated: src/transfomers/models/model -> src/transformers/models/deprecated/model
+        print("Moving model files to deprecated for model")
+        move_model_files_to_deprecated(model)
 
-    #     # Delete the model tests: tests/models/model
-    #     print("Deleting model tests")
-    #     delete_model_tests(model)
+        # Delete the model tests: tests/models/model
+        print("Deleting model tests")
+        delete_model_tests(model)
 
-    # # # We do the following with all models passed at once to avoid having to re-write the file multiple times
-    # print("Updating __init__.py file to point to the deprecated models")
-    # update_main_init_file(models)
+    # # We do the following with all models passed at once to avoid having to re-write the file multiple times
+    print("Updating __init__.py file to point to the deprecated models")
+    update_main_init_file(models)
 
-    # # Remove model references from other files
-    # print("Removing model references from other files")
-    # remove_model_references_from_file(
-    #     "src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(",")
-    # )
-    # remove_model_references_from_file(
-    #     "utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line
-    # )
-    # remove_model_references_from_file("utils/not_doctested.txt", models, lambda line, model: "/" + model + "/" in line)
+    # Remove model references from other files
+    print("Removing model references from other files")
+    remove_model_references_from_file(
+        "src/transformers/models/__init__.py", models, lambda line, model: model == line.strip().strip(",")
+    )
+    remove_model_references_from_file(
+        "utils/slow_documentation_tests.txt", models, lambda line, model: "/" + model + "/" in line
+    )
+    remove_model_references_from_file("utils/not_doctested.txt", models, lambda line, model: "/" + model + "/" in line)
 
-    # # Add models to DEPRECATED_MODELS in the configuration_auto.py
-    # print("Adding models to DEPRECATED_MODELS in configuration_auto.py")
-    # add_models_to_deprecated_models_in_config_auto(models)
+    # Add models to DEPRECATED_MODELS in the configuration_auto.py
+    print("Adding models to DEPRECATED_MODELS in configuration_auto.py")
+    add_models_to_deprecated_models_in_config_auto(models)
 
 
 if __name__ == "__main__":
