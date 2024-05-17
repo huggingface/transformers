@@ -49,8 +49,8 @@ class ClassFinder(CSTVisitor):
                     ),
                 ],
             ):
-                pass
-                # self.assignments[node.assignements] = node.assignements
+                if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
+                    self.assignments[node.body[0]] = node
 
             case cst.SimpleStatementLine(body=[cst.Import(names=[_])]):
                 self.imports[node.body[0].names] = node
