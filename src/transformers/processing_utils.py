@@ -84,6 +84,19 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
+            class_name = getattr(self, f"{attribute_name}_class")
+            # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
+            class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
+            if isinstance(class_name, tuple):
+                proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
+            else:
+                proper_class = getattr(transformers_module, class_name)
+
+            if not isinstance(arg, proper_class):
+                raise ValueError(
+                    f"Received a {type(arg).__name__} for argument {attribute_name}, but a {class_name} was expected."
+                )
+
             setattr(self, attribute_name, arg)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -98,21 +111,21 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = list(sig.parameters)
+        attrs_to_save = sig.parameters
+        # Don't save attributes like `tokenizer`, `image processor` etc.
+        attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
         output = {k: v for k, v in output.items() if k in attrs_to_save}
 
         output["processor_class"] = self.__class__.__name__
+
         if "tokenizer" in output:
-            output["tokenizer_class"] = self.tokenizer.__class__.__name__
             del output["tokenizer"]
         if "image_processor" in output:
-            output["image_processor_class"] = self.image_processor.__class__.__name__
             del output["image_processor"]
         if "feature_extractor" in output:
-            output["feature_extractor_class"] = self.feature_extractor.__class__.__name__
             del output["feature_extractor"]
 
         # Some attributes have different names but containing objects that are not simple strings
@@ -485,7 +498,16 @@ class ProcessorMixin(PushToHubMixin):
         args = []
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
-            attribute_class = getattr(transformers_module, class_name)
+            if isinstance(class_name, tuple):
+                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                use_fast = kwargs.get("use_fast", True)
+                if use_fast and classes[1] is not None:
+                    attribute_class = classes[1]
+                else:
+                    attribute_class = classes[0]
+            else:
+                attribute_class = getattr(transformers_module, class_name)
+
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
