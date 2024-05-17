@@ -10,7 +10,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                 x: The input
             """
             return x
 
@@ -46,7 +47,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                x: The input
             """
             return x
 
@@ -67,7 +69,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                x: The input
             """
             return x
 
@@ -88,7 +91,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                 x: The input
             """
             return x
 
@@ -105,7 +109,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                x: The input
             """
             return x
 
@@ -132,8 +137,9 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
-            :param y: Also the input
+            Args:
+                x: The input
+                y: Also the input
             """
             return x
 
@@ -157,8 +163,9 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
-            :param y: Also the input
+            Args:
+                x: The input
+                y: Also the input
             """
             return x
 
@@ -203,7 +210,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                 x: The input
             """
             return x
 
@@ -215,7 +223,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
+            Args:
+                x: The input
             """
             return x
 
@@ -236,8 +245,12 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             Test function
 
-            :param x: The input
-            :returns: The output
+            Args:
+                x: The input
+
+
+            Returns:
+                The output
             """
             return x
 

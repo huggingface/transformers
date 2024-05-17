@@ -26,8 +26,9 @@ def get_json_schema(func):
     >>>    '''
     >>>    A function that multiplies two numbers
     >>>
-    >>>    :param x: The first number to multiply
-    >>>    :param y: The second number to multiply
+    >>>    Args:
+    >>>        x: The first number to multiply
+    >>>        y: The second number to multiply
     >>>    '''
     >>>    return x * y
     >>>
@@ -57,10 +58,11 @@ def get_json_schema(func):
     >>>    '''
     >>>    A function that multiplies two numbers
     >>>
-    >>>    :param x: The first number to multiply
-    >>>    :param y: The second number to multiply
-    >>>    '''
+    >>>    Args:
+    >>>        x: The first number to multiply
+    >>>        y: The second number to multiply
     >>>    return x * y
+    >>>    '''
     >>>
     >>> multiply_schema = get_json_schema(multiply)
     >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
@@ -83,7 +85,7 @@ def get_json_schema(func):
     if not doc:
         raise ValueError(f"Cannot generate JSON schema for {func.__name__} because it has no docstring!")
     doc = doc.strip()
-    main_doc, param_descriptions, return_doc = _get_argument_descriptions_from_docstring(doc)
+    main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
     json_schema = _convert_type_hints_to_json_schema(func)
     for arg in json_schema["properties"]:
@@ -138,13 +140,41 @@ def add_json_schema(func):
     return func
 
 
-def _get_argument_descriptions_from_docstring(doc):
-    param_pattern = r":param (\w+): (.+)"
-    params = re.findall(param_pattern, doc)
-    return_pattern = r":returns?: (.+)"
-    return_doc = re.search(return_pattern, doc)
-    main_doc = doc.split(":param")[0].strip()
-    return main_doc, dict(params), return_doc.group(1) if return_doc else None
+def parse_google_format_docstring(docstring):
+    """
+    Parses a Google-style docstring to extract the function description,
+    argument descriptions, and return description.
+
+    Args:
+        docstring (str): The docstring to parse.
+
+    Returns:
+        dict: A dictionary containing the function description, arguments, and return description.
+    """
+    # Regular expressions to match the sections
+    description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
+    args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+    returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
+
+    # Extract the sections
+    description_match = description_re.search(docstring)
+    args_match = args_re.search(docstring)
+    returns_match = returns_re.search(docstring)
+
+    # Clean and store the sections
+    description = description_match.group(1).strip() if description_match else None
+    args = args_match.group(1).strip() if args_match else None
+    returns = returns_match.group(1).strip() if returns_match else None
+
+    # Parsing the arguments into a dictionary
+    args_dict = {}
+    if args is not None:
+        arg_lines = args.split("\n")
+        for line in arg_lines:
+            arg_name, arg_desc = line.split(":", 1)
+            args_dict[arg_name.strip()] = arg_desc.strip()
+
+    return description, args_dict, returns
 
 
 def _convert_type_hints_to_json_schema(func):
