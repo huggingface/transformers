@@ -59,6 +59,7 @@ class ViTMSNModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -77,6 +78,7 @@ class ViTMSNModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in ViT MSN, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -106,6 +108,7 @@ class ViTMSNModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
