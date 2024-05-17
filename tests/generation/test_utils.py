@@ -1833,11 +1833,13 @@ class GenerationTesterMixin:
                 output_dynamic = model.generate(model_inputs, **generation_kwargs)
 
                 # eager static cache
+                torch.compiler.reset()
                 model.generation_config.cache_implementation = "static"
                 output_static = model.generate(model_inputs, **generation_kwargs)
                 self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
 
                 # compiled static cache
+                torch.compiler.reset()
                 generation_config = copy.deepcopy(model.generation_config)
                 generation_config.update(**generation_kwargs)
                 compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")

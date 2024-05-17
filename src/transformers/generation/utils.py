@@ -1151,7 +1151,7 @@ class GenerationMixin:
         Confirms that the model class is compatible with generation. If not, raises an exception that points to the
         right class to use.
         """
-        if not self.can_generate():
+        if not is_torchdynamo_compiling() and not self.can_generate():
             generate_compatible_mappings = [
                 MODEL_FOR_CAUSAL_LM_MAPPING,
                 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -1835,6 +1835,15 @@ class GenerationMixin:
                 )
                 use_dynamic_cache_by_default = True
 
+            if generation_config.cache_implementation == "static" and not self._supports_static_cache:
+                raise ValueError(
+                    "This model does not support `cache_implementation='static'`. Please check the following "
+                    "issue: https://github.com/huggingface/transformers/issues/28981"
+                )
+            model_kwargs["past_key_values"] = self._get_cache(
+                generation_config.cache_implementation, batch_size, generation_config.max_length, device=device
+            )
+
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
@@ -1845,7 +1854,7 @@ class GenerationMixin:
                 "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
             )
 
-        if self.device.type != input_ids.device.type:
+        if not is_torchdynamo_compiling() and self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
