@@ -31,4 +31,4 @@ class LlavaProcessorTest(unittest.TestCase):
         for checkpoint in ["Intel/llava-gemma-2b", "llava-hf/llava-1.5-7b-hf"]:
             processor = LlavaProcessor.from_pretrained(checkpoint)
             tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer, tokenizer)
+            self.assertDictEqual(processor.tokenizer.__dict__, tokenizer.__dict__)
