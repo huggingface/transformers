@@ -300,10 +300,12 @@ function that has a valid docstring with parameter annotations and valid type hi
 from transformers.utils import get_json_schema
 
 def multiply(a: float, b: float):
-    """Multiply two numbers together.
+    """
+    A function that multiplies two numbers
     
-    :param a: The first number to multiply.
-    :param b: The second number to multiply.
+    Args:
+        a: The first number to multiply
+        b: The second number to multiply
     """
     return a * b
 
@@ -348,10 +350,12 @@ def current_time():
 
 @add_json_schema
 def multiply(a: float, b: float):
-    """Multiply two numbers together.
+    """
+    A function that multiplies two numbers
     
-    :param a: The first number to multiply.
-    :param b: The second number to multiply.
+    Args:
+        a: The first number to multiply
+        b: The second number to multiply
     """
     return a * b
 
@@ -362,6 +366,16 @@ model_input = tokenizer.apply_chat_template(
     tools=tools
 )
 ```
+
+#### Notes on automatic conversion
+
+`get_json_schema` and `add_json_schema` both expect a specific docstring format. The docstring should
+begin with a description of the function, followed by an `Args:` block that describes each argument. It can also
+optionally include a `Returns:` block that describes the value(s) returned by the function. Many templates ignore this,
+because the model will see the return format after calling the function anyway, but some require it.
+
+Argument descriptions in the docstring should not include the argument types - these are read from the type hints
+in the function signature instead.
 
 ### Arguments for RAG
 
