@@ -237,12 +237,11 @@ if is_accelerate_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
 if is_accelerate_available("0.28.0"):
-    from accelerate.optimizer import AcceleratedOptimizer
     from accelerate.utils import DataLoaderConfiguration
 
 
 if is_lomo_available():
-    from lomo_optim import AdaLomo, Lomo
+    pass
 
 
 def _is_peft_model(model):
@@ -255,12 +254,6 @@ def _is_peft_model(model):
             classes_to_check = (*classes_to_check, PeftMixedModel)
         return isinstance(model, classes_to_check)
     return False
-
-
-def _unwrap_optimizer(optimizer):
-    if isinstance(optimizer, AcceleratedOptimizer):
-        optimizer = optimizer.optimizer
-    return optimizer
 
 
 def _get_fsdp_ckpt_kwargs():
@@ -410,7 +403,6 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
-        self._is_lomo_optimizer = False
 
         self.create_accelerator_and_postprocess()
 
@@ -1083,11 +1075,6 @@ class Trainer:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
-
-            # LOMO has a slightly different optimizer API, see: https://github.com/OpenLMLab/LOMO/issues/73#issuecomment-2049612639
-            self._is_lomo_optimizer = is_lomo_available() and isinstance(
-                _unwrap_optimizer(self.optimizer), (Lomo, AdaLomo)
-            )
 
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
@@ -2089,7 +2076,7 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
-        elif self._is_lomo_optimizer:
+        elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             # In this case we are in DDP + LOMO, which should be supported
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
@@ -3288,7 +3275,7 @@ class Trainer:
         kwargs = {}
 
         # For LOMO optimizers you need to explicitly use the learnign rate
-        if self._is_lomo_optimizer:
+        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             kwargs["learning_rate"] = self._get_learning_rate()
 
         if self.args.n_gpu > 1:
