@@ -195,7 +195,7 @@ Hemos visto que al entrenar un modelo se utiliza mucha más memoria que solo pon
 1. pesos del modelo
 2. estados del optimizador
 3. gradientes
-4. forward activations guardadas para el cálculo del gradiente
+4. activaciones hacia adelante guardadas para el cálculo del gradiente
 5. buffers temporales
 6. memoria específica de funcionalidad
 
@@ -218,11 +218,11 @@ Veámoslo a detalle:
 
 - 4 bytes por número de parámetros para entrenamiento en fp32 o precisión mixta (los gradientes siempre se mantienen en fp32)
 
-**Forward Activations**
+**Activaciones hacia Adelante**
 
 - El tamaño depende de muchos factores, los principales siendo la longitud de la secuencia, el tamaño oculto y el tamaño de lote.
 
-Hay entradas y salidas que se pasan y se devuelven por las funciones hacia adelante y hacia atrás, y las activaciones hacia adelante (*forward activations*) guardadas para el cálculo de gradientes.
+Hay entradas y salidas que se pasan y se devuelven por las funciones hacia adelante y hacia atrás, y las activaciones hacia adelante (*forward activations*) guardadas para el cálculo del gradiente.
 
 **Memoria Temporal**
 
