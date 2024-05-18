@@ -196,6 +196,7 @@ class DiffConverterTransformer(CSTTransformer):
 
         return node.with_changes(body=[*new_body, *node.body])
 
+
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
@@ -266,7 +267,9 @@ class SuperTransformer(cst.CSTTransformer):
                 return updated_node.with_changes(value=updated_return_value)
         return updated_node
 
+
 from check_copies import run_ruff
+
 
 if __name__ == "__main__":
     # Parse the Python file
