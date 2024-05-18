@@ -41,8 +41,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification, GemmaModel, GemmaTokenizer
-
+    from transformers import (
+        GemmaForCausalLM,
+        GemmaForSequenceClassification,
+        GemmaForTokenClassification,
+        GemmaModel,
+        GemmaTokenizer,
+    )
 
 
 class GemmaModelTester:
