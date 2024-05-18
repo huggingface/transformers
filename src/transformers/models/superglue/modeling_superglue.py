@@ -106,12 +106,15 @@ class ImageMatchingOutput(ModelOutput):
             Index of keypoint matched in the other image.
         matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
             Scores of predicted matches.
+        keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+            Absolute (x, y) coordinates of predicted keypoints in a given image.
     """
 
     last_hidden_state: torch.FloatTensor = None
     mask: torch.FloatTensor = None
     matches: torch.FloatTensor = None
     matching_scores: torch.FloatTensor = None
+    keypoints: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -469,6 +472,8 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         list_matches_1 = []
         list_matching_scores_0 = []
         list_matching_scores_1 = []
+        list_keypoints_0 = []
+        list_keypoints_1 = []
         list_last_hidden_state_0 = []
         list_last_hidden_state_1 = []
         if output_hidden_states:
@@ -533,6 +538,8 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
             list_matches_1.append(matches_1)
             list_matching_scores_0.append(matching_scores_0)
             list_matching_scores_1.append(matching_scores_1)
+            list_keypoints_0.append(image0_keypoints)
+            list_keypoints_1.append(image1_keypoints)
             list_last_hidden_state_0.append(last_hidden_state_0)
             list_last_hidden_state_1.append(last_hidden_state_1)
             if output_hidden_states:
@@ -556,6 +563,10 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
             (batch_size, 2, maximum_matches),
             device=pixel_values.device,
             dtype=torch.int,
+        )
+        keypoints = torch.zeros(
+            (batch_size, 2, maximum_matches, 2),
+            device=pixel_values.device,
         )
         last_hidden_state = torch.zeros(
             (batch_size, 2, self.config.descriptor_dim, maximum_matches),
@@ -582,6 +593,8 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
             _matches_1,
             _matching_scores_0,
             _matching_scores_1,
+            _keypoints_0,
+            _keypoints_1,
             _last_hidden_state_0,
             _last_hidden_state_1,
         ) in enumerate(
@@ -590,6 +603,8 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                 list_matches_1,
                 list_matching_scores_0,
                 list_matching_scores_1,
+                list_keypoints_0,
+                list_keypoints_1,
                 list_last_hidden_state_0,
                 list_last_hidden_state_1,
             )
@@ -600,6 +615,8 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
             matching_scores[i, 1, : _matching_scores_1.shape[1]] = _matching_scores_1
             matches_mask[i, 0, : _matches_0.shape[1]] = 1
             matches_mask[i, 1, : _matches_1.shape[1]] = 1
+            keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
+            keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
             last_hidden_state[i, 0, :, : _last_hidden_state_0.shape[2]] = _last_hidden_state_0
             last_hidden_state[i, 1, :, : _last_hidden_state_1.shape[2]] = _last_hidden_state_1
 
@@ -618,6 +635,7 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                     matches_mask,
                     matches,
                     matching_scores,
+                    keypoints,
                     hidden_states,
                 ]
                 if v is not None
@@ -628,5 +646,6 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
             mask=matches_mask,
             matches=matches,
             matching_scores=matching_scores,
+            keypoints=keypoints,
             hidden_states=hidden_states,
         )
