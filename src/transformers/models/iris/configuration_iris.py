@@ -46,9 +46,9 @@ class IrisConfig(PretrainedConfig):
             Number of channels for tokens encoded by Encoder which in turn will be the input for Decoder
         ch (`int`, *optional*, defaults to 64):
             For calculation of number of in channels and out channels in ResnetBlock for Tokenizer
-        ch_mult (`list`, *optional*, defaults to [1, 1, 1, 1, 1]):
+        ch_mult (`list`, *optional*, defaults to `[1, 1, 1, 1, 1]`):
             len of it is equal to number of resolutions in Encoder and Decoder of Tokenizer and is used for calculation of number of in channels and out channels in ResnetBlock for Tokenizer.
-        num_res_blocks (`int`, *optional*,defaults to 2):
+        num_res_blocks (`int`, *optional*, defaults to 2):
             Number of Resnet Blocks in Encoder and Decoder of Tokenizer.
         attn_resolutions (`list`, *optional*, defaults to `[8, 16]`):
             Resolution for Attention Block for Encoder and Decoder of Tokenizer.
@@ -56,7 +56,7 @@ class IrisConfig(PretrainedConfig):
             Number of out channels for Decoder.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for ResnetBlocks in Encoder and Decoder.
-        use_original_obs_actor_critic (`bool`, *optional*, defaults to 'False'):
+        use_original_obs_actor_critic (`bool`, *optional*, defaults to `False`):
             Tells wheter the actor critic should use original observation or reconstructed image from Decoder for predicting action
         tokens_per_block (`int`, *optional*, defaults to 17):
             Number of tokens per block in World Model's transformer
@@ -80,7 +80,7 @@ class IrisConfig(PretrainedConfig):
             Number of epochs for training
         grad_acc_steps_tokenizer (`int`, *optional*, defaults to 1):
             Number of Gradient steps for Tokenizer
-        grad_acc_steps_world_model (`int`, *optional*, defaults to 20):
+        grad_acc_steps_world_model (`int`, *optional*, defaults to 1):
             Number of Gradient steps for World Model
         weight_decay (`float`, *optional*, defaults to 0.01):
             Weight decay rate for optimizer of World Model
@@ -96,6 +96,12 @@ class IrisConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 50256):
+            Id of the beginning of sentence token in the vocabulary.
+        eos_token_id (`int`, *optional*, defaults to 50256):
+            Id of the end of sentence token in the vocabulary.
 
 
     Example:
