@@ -223,12 +223,22 @@ class SuperTransformer(cst.CSTTransformer):
                     ]
                 ),
             ):
-                # TODO here we have the body, we can most probably remove the duplicates!
-                new_body.extend(self.original_methods[func_name].body.body)
+                new_body = self.update_body(new_body, self.original_methods[func_name].body.body)
             else:
                 new_body.append(expr)
         return node.with_changes(body=new_body)
 
+    def update_body(self, existing_body, new_statements):
+        """
+        Helper method to update the body by removing duplicates before adding new statements.
+        """
+        existing_nodes = {node for node in existing_body if isinstance(node, cst.CSTNode)}
+        for stmt in new_statements:
+            if isinstance(stmt, cst.CSTNode) and stmt not in existing_nodes:
+                existing_body.append(stmt)
+                existing_nodes.add(stmt)
+        return existing_body
+    
         if m.matches(
             updated_node.value,
             m.Call(func=m.Attribute(value=m.Call(func=m.Name(value="super")), attr=m.Name("__init__"))),
