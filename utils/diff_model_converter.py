@@ -196,7 +196,6 @@ class DiffConverterTransformer(CSTTransformer):
 
         return node.with_changes(body=[*new_body, *node.body])
 
-
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
