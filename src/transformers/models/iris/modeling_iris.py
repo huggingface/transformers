@@ -1123,7 +1123,8 @@ class SelfAttention(nn.Module):
 
 class WorldModelEnv:
     # Define a type alias for gym.Env
-    GymEnv: Type = 'gym.Env'
+    GymEnv: Type = "gym.Env"
+
     def __init__(
         self,
         tokenizer: torch.nn.Module,
