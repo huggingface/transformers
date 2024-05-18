@@ -1167,6 +1167,10 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         _length=None,
         **kwargs,
     ):
+        # TODO: Move this to `src/transformers/generation/utils.py`
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
