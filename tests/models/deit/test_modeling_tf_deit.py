@@ -71,6 +71,7 @@ class TFDeiTModelTester:
         num_labels=3,
         scope=None,
         encoder_stride=2,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,6 +91,7 @@ class TFDeiTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
+        self.attn_implementation = attn_implementation
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
@@ -121,6 +123,7 @@ class TFDeiTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

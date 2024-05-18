@@ -492,7 +492,9 @@ class TFVisionEncoderDecoderMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             tf_model.save_pretrained(tmpdirname, safe_serialization=False)
-            pt_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
+            pt_model = VisionEncoderDecoderModel.from_pretrained(
+                tmpdirname, from_tf=True, attn_implementation=tf_model.config._attn_implementation
+            )
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 

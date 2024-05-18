@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.41.0.dev0"
+__version__ = "4.42.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -448,6 +448,7 @@ _import_structure = {
         "InstructBlipVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.jetmoe": ["JetMoeConfig"],
     "models.jukebox": [
         "JukeboxConfig",
         "JukeboxPriorConfig",
@@ -581,6 +582,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.paligemma": ["PaliGemmaConfig"],
     "models.patchtsmixer": ["PatchTSMixerConfig"],
     "models.patchtst": ["PatchTSTConfig"],
     "models.pegasus": [
@@ -731,6 +733,7 @@ _import_structure = {
         "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
+    "models.video_llava": ["VideoLlavaConfig"],
     "models.videomae": ["VideoMAEConfig"],
     "models.vilt": [
         "ViltConfig",
@@ -1157,6 +1160,7 @@ else:
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
+    _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2210,6 +2214,14 @@ else:
             "JambaPreTrainedModel",
         ]
     )
+    _import_structure["models.jetmoe"].extend(
+        [
+            "JetMoeForCausalLM",
+            "JetMoeForSequenceClassification",
+            "JetMoeModel",
+            "JetMoePreTrainedModel",
+        ]
+    )
     _import_structure["models.jukebox"].extend(
         [
             "JukeboxModel",
@@ -2648,6 +2660,13 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
+        ]
+    )
+    _import_structure["models.paligemma"].extend(
+        [
+            "PaliGemmaForConditionalGeneration",
+            "PaliGemmaPreTrainedModel",
+            "PaliGemmaProcessor",
         ]
     )
     _import_structure["models.patchtsmixer"].extend(
@@ -3228,6 +3247,13 @@ else:
         [
             "UperNetForSemanticSegmentation",
             "UperNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.video_llava"].extend(
+        [
+            "VideoLlavaForConditionalGeneration",
+            "VideoLlavaPreTrainedModel",
+            "VideoLlavaProcessor",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -4981,6 +5007,7 @@ if TYPE_CHECKING:
         InstructBlipVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.jetmoe import JetMoeConfig
     from .models.jukebox import (
         JukeboxConfig,
         JukeboxPriorConfig,
@@ -5123,6 +5150,9 @@ if TYPE_CHECKING:
         OwlViTProcessor,
         OwlViTTextConfig,
         OwlViTVisionConfig,
+    )
+    from .models.paligemma import (
+        PaliGemmaConfig,
     )
     from .models.patchtsmixer import (
         PatchTSMixerConfig,
@@ -5296,6 +5326,7 @@ if TYPE_CHECKING:
         UnivNetFeatureExtractor,
     )
     from .models.upernet import UperNetConfig
+    from .models.video_llava import VideoLlavaConfig
     from .models.videomae import VideoMAEConfig
     from .models.vilt import (
         ViltConfig,
@@ -5736,6 +5767,7 @@ if TYPE_CHECKING:
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
+        from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -6607,6 +6639,12 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
+        from .models.jetmoe import (
+            JetMoeForCausalLM,
+            JetMoeForSequenceClassification,
+            JetMoeModel,
+            JetMoePreTrainedModel,
+        )
         from .models.jukebox import (
             JukeboxModel,
             JukeboxPreTrainedModel,
@@ -6955,6 +6993,11 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
+        )
+        from .models.paligemma import (
+            PaliGemmaForConditionalGeneration,
+            PaliGemmaPreTrainedModel,
+            PaliGemmaProcessor,
         )
         from .models.patchtsmixer import (
             PatchTSMixerForPrediction,
@@ -7408,6 +7451,11 @@ if TYPE_CHECKING:
         from .models.upernet import (
             UperNetForSemanticSegmentation,
             UperNetPreTrainedModel,
+        )
+        from .models.video_llava import (
+            VideoLlavaForConditionalGeneration,
+            VideoLlavaPreTrainedModel,
+            VideoLlavaProcessor,
         )
         from .models.videomae import (
             VideoMAEForPreTraining,
