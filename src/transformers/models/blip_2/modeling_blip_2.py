@@ -1164,7 +1164,6 @@ class Blip2TextEmbeddings(nn.Module):
         input_ids: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         query_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             seq_length = input_ids.size()[1]
@@ -1172,7 +1171,7 @@ class Blip2TextEmbeddings(nn.Module):
             seq_length = 0
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, :seq_length]
 
         if input_ids is not None:
             input_ids = input_ids.to(self.word_embeddings.weight.device)
