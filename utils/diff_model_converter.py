@@ -223,7 +223,7 @@ class SuperTransformer(cst.CSTTransformer):
                     ]
                 ),
             ):
-                new_body = self.update_body(new_body, self.original_methods[func_name].body.body)
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
             else:
                 new_body.append(expr)
         return node.with_changes(body=new_body)
@@ -232,21 +232,17 @@ class SuperTransformer(cst.CSTTransformer):
         """
         Helper method to update the body by removing duplicates before adding new statements.
         """
-        existing_nodes = {node for node in existing_body if isinstance(node, cst.CSTNode)}
-        for stmt in new_statements:
-            if isinstance(stmt, cst.CSTNode) and stmt not in existing_nodes:
-                existing_body.append(stmt)
+        de_duplicated_new_body = []
+        existing_nodes = {
+            self.python_module.code_for_node(node) for node in new_statements if isinstance(node, cst.CSTNode)
+        }
+        for stmt in existing_body:
+            if self.python_module.code_for_node(stmt) not in existing_nodes:
+                de_duplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
-        return existing_body
-
-        if m.matches(
-            updated_node.value,
-            m.Call(func=m.Attribute(value=m.Call(func=m.Name(value="super")), attr=m.Name("__init__"))),
-        ):
-            # func_def = self.get_metadata(ParentNodeProvider, original_node)
-            # Replace super() calls in __init__ to ensure it references the correct class
-            return updated_node.with_changes(body=self.original_methods.body)
-        return updated_node
+            else:
+                print(f"found duplicate: {self.python_module.code_for_node(stmt)}")
+        return de_duplicated_new_body
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
         if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):

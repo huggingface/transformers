@@ -851,6 +851,7 @@ class GemmaModel(GemmaPreTrainedModel):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
+
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
@@ -869,20 +870,6 @@ class GemmaModel(GemmaPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)

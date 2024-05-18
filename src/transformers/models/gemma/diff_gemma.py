@@ -251,6 +251,7 @@ class GemmaModel(LlamaModel):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
+
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
