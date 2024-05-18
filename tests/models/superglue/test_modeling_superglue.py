@@ -49,7 +49,7 @@ class SuperGlueModelTester:
             "keypoint_decoder_dim": 65,
             "descriptor_decoder_dim": 64,
             "keypoint_threshold": 0.005,
-            "max_keypoints": -1,
+            "max_keypoints": 256,
             "nms_radius": 4,
             "border_removal_distance": 4,
         },
