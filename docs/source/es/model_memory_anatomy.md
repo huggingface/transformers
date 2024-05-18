@@ -142,9 +142,9 @@ Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prue
 
 </Tip>
 
-## Memory utilization at vanilla training
+## Utilización de la memoria en el entrenamiento
 
-Let's use the [`Trainer`] and train the model without using any GPU performance optimization techniques and a batch size of 4:
+Vamos a utilizar el [`Trainer`] y entrenar el modelo sin utilizar ninguna técnica de optimización del rendimiento de la GPU y un tamaño de lote de 4:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer, logging
@@ -164,92 +164,76 @@ Samples/second: 8.86
 GPU memory occupied: 14949 MB.
 ```
 
-We see that already a relatively small batch size almost fills up our GPU's entire memory. However, a larger batch size 
-can often result in faster model convergence or better end performance. So ideally we want to tune the batch size to our
-model's needs and not to the GPU limitations. What's interesting is that we use much more memory than the size of the model. 
-To understand a bit better why this is the case let's have a look at a model's operations and memory needs.
+Vemos que incluso un tamaño de lote relativamente pequeño casi llena toda la memoria de nuestra GPU. Sin embargo, un tamaño de lote más grande a menudo puede resultar en una convergencia del modelo más rápida o un mejor rendimiento final. Así que idealmente queremos ajustar el tamaño del lote a las necesidades del modelo y no a las limitaciones de la GPU. Lo interesante es que utilizamos mucha más memoria que el tamaño del modelo. 
+Para entender un poco mejor por qué es el caso, echemos un vistazo a las operaciones y necesidades de memoria de un modelo.
 
-## Anatomy of Model's Operations
+## Anatomía de las Operaciones del Modelo
 
-Transformers architecture includes 3 main groups of operations grouped below by compute-intensity.
+La arquitectura de los transformers incluye 3 grupos principales de operaciones agrupadas a continuación por intensidad de cálculo.
 
-1. **Tensor Contractions**
+1. **Contracciones de Tensores**
 
-    Linear layers and components of Multi-Head Attention all do batched **matrix-matrix multiplications**. These operations are the most compute-intensive part of training a transformer.
+    Las capas lineales y componentes de la Atención Multi-Head realizan **multiplicaciones matriciales por lotes**. Estas operaciones son la parte más intensiva en cálculo del entrenamiento de los transformers.
 
-2. **Statistical Normalizations**
+2. **Normalizaciones Estadísticas**
 
-    Softmax and layer normalization are less compute-intensive than tensor contractions, and involve one or more **reduction operations**, the result of which is then applied via a map.
+    Softmax y normalización de capas son menos intensivas en cálculo que las contracciones de tensores, e implican una o más **operaciones de reducción**, cuyo resultado se aplica luego mediante un mapa.
 
-3. **Element-wise Operators**
+3. **Operadores por Elemento**
 
-    These are the remaining operators: **biases, dropout, activations, and residual connections**. These are the least compute-intensive operations.
+    Estos son los operadores restantes: **sesgos, dropout, activaciones y conexiones residuales**. Estas son las operaciones menos intensivas en cálculo.
 
-This knowledge can be helpful to know when analyzing performance bottlenecks.
+Este conocimiento puede ser útil al analizar cuellos de botella de rendimiento.
 
-This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+Este resumen se deriva de [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
 
 
-## Anatomy of Model's Memory
+## Anatomía de la Memoria del Modelo
 
-We've seen that training the model uses much more memory than just putting the model on the GPU. This is because there 
-are many components during training that use GPU memory. The components on GPU memory are the following:
+Hemos visto que al entrenar un modelo se utiliza mucha más memoria que solo poner el modelo en la GPU. Esto se debe a que hay muchos componentes durante el entrenamiento que utilizan memoria de la GPU. Los componentes en memoria de la GPU son los siguientes:
 
-1. model weights
-2. optimizer states
-3. gradients
-4. forward activations saved for gradient computation
-5. temporary buffers
-6. functionality-specific memory
+1. pesos del modelo
+2. estados del optimizador
+3. gradientes
+4. forward activations guardadas para el cálculo del gradiente
+5. buffers temporales
+6. memoria específica de funcionalidad
 
-A typical model trained in mixed precision with AdamW requires 18 bytes per model parameter plus activation memory. For 
-inference there are no optimizer states and gradients, so we can subtract those. And thus we end up with 6 bytes per 
-model parameter for mixed precision inference, plus activation memory.
+Un modelo típico entrenado en precisión mixta con AdamW requiere 18 bytes por parámetro del modelo más memoria de activación. Para la inferencia no hay estados del optimizador ni gradientes, por lo que podemos restarlos. Y así terminamos con 6 bytes por parámetro del modelo para la inferencia en precisión mixta, más la memoria de activación.
 
-Let's look at the details.
+Veámoslo a detalle:
 
-**Model Weights:**
+**Pesos del Modelo:**
 
-- 4 bytes * number of parameters for fp32 training
-- 6 bytes * number of parameters for mixed precision training (maintains a model in fp32 and one in fp16 in memory)
+- 4 bytes por número de parámetros para entrenamiento en fp32
+- 6 bytes por número de parámetros para entrenamiento en precisión mixta (mantiene un modelo en fp32 y uno en fp16 en memoria)
 
-**Optimizer States:**
+**Estados del Optimizador:**
 
-- 8 bytes * number of parameters for normal AdamW (maintains 2 states)
-- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
-- 4 bytes * number of parameters for optimizers like SGD with momentum (maintains only 1 state)
+- 8 bytes por número de parámetros para un AdamW normal (mantiene 2 estados)
+- 2 bytes por número de parámetros para optimizadores de 8 bits como [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+- 4 bytes por número de parámetros para optimizadores como SGD con momentum (mantiene solo 1 estado)
 
-**Gradients**
+**Gradientes**
 
-- 4 bytes * number of parameters for either fp32 or mixed precision training (gradients are always kept in fp32)
+- 4 bytes por número de parámetros para entrenamiento en fp32 o precisión mixta (los gradientes siempre se mantienen en fp32)
 
 **Forward Activations**
 
-- size depends on many factors, the key ones being sequence length, hidden size and batch size.
+- El tamaño depende de muchos factores, los principales siendo la longitud de la secuencia, el tamaño oculto y el tamaño de lote.
 
-There are the input and output that are being passed and returned by the forward and the backward functions and the 
-forward activations saved for gradient computation.
+Hay entradas y salidas que se pasan y se devuelven por las funciones hacia adelante y hacia atrás, y las activaciones hacia adelante (*forward activations*) guardadas para el cálculo de gradientes.
 
-**Temporary Memory**
+**Memoria Temporal**
 
-Additionally, there are all kinds of temporary variables which get released once the calculation is done, but in the 
-moment these could require additional memory and could push to OOM. Therefore, when coding it's crucial to think 
-strategically about such temporary variables and sometimes to explicitly free those as soon as they are no longer needed.
+Además, hay todas clases de variables temporales que se liberan una vez que se completa el cálculo, pero en el momento podrían requerir memoria adicional y podrían provocar un error de memoria insuficiente. Por lo tanto, al codificar es crucial pensar estratégicamente sobre tales variables temporales y a veces liberarlas explícitamente tan pronto como ya no se necesitan.
 
-**Functionality-specific memory**
+**Memoria Específica de Funcionalidad**
 
-Then, your software could have special memory needs. For example, when generating text using beam search, the software 
-needs to maintain multiple copies of inputs and outputs.
+Entonces, su software podría tener necesidades especiales de memoria. Por ejemplo, al generar texto mediante la búsqueda por haz, el software necesita mantener múltiples copias de las entradas y salidas.
 
-**`forward` vs `backward` Execution Speed**
+**Velocidad de Ejecución `forward` vs `backward`**
 
-For convolutions and linear layers there are 2x flops in the backward compared to the forward, which generally translates 
-into ~2x slower (sometimes more, because sizes in the backward tend to be more awkward). Activations are usually 
-bandwidth-limited, and it’s typical for an activation to have to read more data in the backward than in the forward 
-(e.g. activation forward reads once, writes once, activation backward reads twice, gradOutput and output of the forward, 
-and writes once, gradInput).
+Para convoluciones y capas lineales, hay 2x flops en la ejecución hacia atrás (`backward`) en comparación con la ejecución hacia adelante (`forward`), lo que generalmente se traduce en ~2x más lento (a veces más, porque los tamaños en la ejecución hacia atrás tienden a ser más complejos). Las activaciones suelen ser limitadas por ancho de banda, y es típico que una activación tenga que leer más datos en la ejecución hacia atrás que en la ejecución hacia adelante (por ejemplo, la activación hacia adelante lee una vez, escribe una vez, la activación hacia atrás lee dos veces, gradOutput y salida de la ejecución hacia adelante, y escribe una vez, gradInput).
 
-As you can see, there are potentially a few places where we could save GPU memory or speed up operations. 
-Now that you understand what affects GPU utilization and computation speed, refer to 
-the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one) documentation page to learn about 
-performance optimization techniques. 
+Como puedes ver, hay potencialmente unos pocos lugares donde podríamos ahorrar memoria de la GPU o acelerar operaciones. Ahora que entiendes qué afecta la utilización de la GPU y la velocidad de cálculo, consulta la página de documentación [Métodos y herramientas para entrenamiento eficiente en una sola GPU](https://huggingface.co/docs/transformers/perf_train_gpu_one) para aprender sobre técnicas de optimización del rendimiento.
