@@ -279,11 +279,6 @@ class SEWDConfig(PretrainedConfig):
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
-    @property
-    def hidden_dropout(self):
-        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
-        return self._hidden_dropout
-
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary.
