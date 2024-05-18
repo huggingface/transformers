@@ -145,7 +145,7 @@ class DiffConverterTransformer(CSTTransformer):
                 if m.matches(node.value, m.Name()) and assign in self.class_mapping:
                     return self.class_mapping[assign]
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import | m.ImportFrom])):
-            return updated_node.with_changes(body=[])
+            return updated_node
         return updated_node
 
     def leave_ClassDef(self, original_node: cst.Assign, updated_node):

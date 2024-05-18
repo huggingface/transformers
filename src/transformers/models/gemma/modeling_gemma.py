@@ -216,6 +216,32 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 """ PyTorch Gemma model."""
 
+import math
+from typing import List, Optional, Tuple, Union
+
+import torch
+import torch.utils.checkpoint
+from torch import nn
+
+from transformers.models.llama.modeling_llama import (
+    LlamaDecoderLayer,
+    LlamaFlashAttention2,
+    LlamaForCausalLM,
+    LlamaForSequenceClassification,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaSdpaAttention,
+    apply_rotary_pos_emb,
+    repeat_kv,
+)
+
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...modeling_outputs import CausalLMOutputWithPast
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import logging
+from .configuration_gemma import GemmaConfig
+
 
 logger = logging.get_logger(__name__)
 
