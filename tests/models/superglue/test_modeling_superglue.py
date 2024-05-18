@@ -216,7 +216,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in self.pretrained_from_ids:
+        for model_name in self.from_pretrained_ids:
             model = SuperGlueForImageMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -254,54 +254,45 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForImageMatching.from_pretrained("stevenbucaille/superglue_outdoor").to(torch_device)
+        model = SuperGlueForImageMatching.from_pretrained("stevenbucaille/superglue_outdoor", matching_threshold=0.2).to(torch_device)
         preprocessor = self.default_image_processor
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs = model(**inputs)
-        expected_number_keypoints_image0 = 567
-        expected_number_keypoints_image1 = 830
+
+        expected_number_keypoints_image0 = 559
+        expected_number_keypoints_image1 = 592
         expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
-        expected_keypoints_shape = torch.Size((len(images), expected_max_number_keypoints, 2))
-        expected_scores_shape = torch.Size(
-            (
-                len(images),
-                expected_max_number_keypoints,
-            )
-        )
-        expected_descriptors_shape = torch.Size((len(images), expected_max_number_keypoints, 256))
+        expected_matches_shape = torch.Size((1, len(images), expected_max_number_keypoints))
+        expected_matching_scores_shape = torch.Size((1, len(images), expected_max_number_keypoints))
+
         # Check output shapes
-        self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
-        self.assertEqual(outputs.scores.shape, expected_scores_shape)
-        self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
-        expected_keypoints_image0_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
-        expected_scores_image0_values = torch.tensor(
-            [0.0064, 0.0137, 0.0589, 0.0723, 0.5166, 0.0174, 0.1515, 0.2054, 0.0334]
-        ).to(torch_device)
-        expected_descriptors_image0_value = torch.tensor(-0.1096).to(torch_device)
-        predicted_keypoints_image0_values = outputs.keypoints[0, :3]
-        predicted_scores_image0_values = outputs.scores[0, :9]
-        predicted_descriptors_image0_value = outputs.descriptors[0, 0, 0]
-        # Check output values
+        self.assertEqual(outputs.matches.shape, expected_matches_shape)
+        self.assertEqual(outputs.matching_scores.shape, expected_matching_scores_shape)
+
+        expected_matches_values = torch.tensor([-1, 0, 2, 4, -1, 3, 6, -1, -1, -1], dtype=torch.int32).to(torch_device)
+        expected_matching_scores_values = torch.tensor([1.1161e-5, 9.8031e-1, 8.8953e-1, 9.6738e-1, 0, 9.767e-1, 8.1111e-1, 2.1811e-2, 9.7602e-4, 1.0968e-3]).to(torch_device)
+
+        predicted_matches_values = outputs.matches[0, 0, : 10]
+        predicted_matching_scores_values = outputs.matching_scores[0, 0, : 10]
+
         self.assertTrue(
             torch.allclose(
-                predicted_keypoints_image0_values,
-                expected_keypoints_image0_values,
-                atol=1e-4,
+                predicted_matches_values,
+                expected_matches_values,
+                atol=1e-4
             )
         )
-        self.assertTrue(torch.allclose(predicted_scores_image0_values, expected_scores_image0_values, atol=1e-4))
+
         self.assertTrue(
             torch.allclose(
-                predicted_descriptors_image0_value,
-                expected_descriptors_image0_value,
-                atol=1e-4,
+                predicted_matching_scores_values,
+                expected_matching_scores_values,
+                atol=1e-4
             )
         )
-        # Check mask values
-        self.assertTrue(outputs.mask[0, expected_number_keypoints_image0 - 1].item() == 1)
-        self.assertTrue(outputs.mask[0, expected_number_keypoints_image0].item() == 0)
-        self.assertTrue(torch.all(outputs.mask[0, : expected_number_keypoints_image0 - 1]))
-        self.assertTrue(torch.all(torch.logical_not(outputs.mask[0, expected_number_keypoints_image0:])))
-        self.assertTrue(torch.all(outputs.mask[1]))
+
+        expected_number_of_matches = 144
+        predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
+        self.assertEqual(predicted_number_of_matches, expected_number_of_matches)

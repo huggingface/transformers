@@ -14,9 +14,7 @@ from transformers import (
     SuperGlueForImageMatching,
     SuperGlueImageProcessor,
 )
-from transformers.models.superpoint.modeling_superpoint import (
-    ImagePointDescriptionOutput,
-)
+from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
 def get_superglue_config():
@@ -234,7 +232,7 @@ def prepare_imgs_for_image_processor():
 
 
 def extract_keypoint_information_from_image_point_description_output(
-    output: ImagePointDescriptionOutput, i: int
+    output: SuperPointKeypointDescriptionOutput, i: int
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     indices = torch.nonzero(output.mask[i]).squeeze()
     keypoints = torch.unsqueeze(output.keypoints[i][indices], dim=0)
