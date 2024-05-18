@@ -1624,9 +1624,9 @@ class MixtralForTokenClassification(MixtralPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = MixtralModel(config)
-        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
+        if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
-        elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
+        elif getattr(config, "hidden_dropout", None) is not None:
             classifier_dropout = config.hidden_dropout
         else:
             classifier_dropout = 0.1
