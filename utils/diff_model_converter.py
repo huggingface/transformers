@@ -135,9 +135,39 @@ class DiffConverterTransformer(CSTTransformer):
                     return self.class_mapping[assign]
         return updated_node
 
-    def leave_ClassDef(self, original_node: cst.Assign, node):
-        # THIS IS TODO: deal with inherited classes and modules
-        return node
+    def leave_ClassDef(self, original_node: cst.Assign, updated_node):
+        for base in original_node.bases:
+            base_name = self.python_module.code_for_node(base)
+            if base_name in self.transformers_mapping:
+                super_classes = self.visited_module[self.transformers_mapping[base_name]].classes
+                replacement_class = super_classes[updated_node.name.value]
+                # Copy methods from original node to replacement node, preserving decorators
+                updated_methods = {f.name.value: f for f in updated_node.body.body if isinstance(f, cst.FunctionDef)}
+                replacement_methods = {
+                    f.name.value: f for f in replacement_class.body.body if isinstance(f, cst.FunctionDef)
+                }
+
+                for name, func in updated_methods.items():
+                    if name in replacement_methods:
+                        # Replace the method in the replacement class
+                        replacement_methods[name] = func
+
+                # Rebuild the class body with updated methods
+                new_body = [
+                    replacement_methods.get(f.name.value, f) if isinstance(f, cst.FunctionDef) else f
+                    for f in replacement_class.body.body
+                ]
+
+                new_replacement_class = replacement_class.with_changes(body=cst.IndentedBlock(body=new_body))
+
+                # Ensure calls to `super()` in `__init__` are preserved
+                new_replacement_class = (
+                    cst.Module(body=[new_replacement_class]).visit(SuperTransformer(updated_methods)).body[0]
+                )
+
+                return new_replacement_class
+
+        return updated_node
 
     def leave_Module(self, original_node: cst.Assign, node):
         new_body = []
@@ -147,6 +177,42 @@ class DiffConverterTransformer(CSTTransformer):
             new_body += list(visiter.function_def.values())
 
         return node.with_changes(body=[*new_body, *node.body])
+
+
+class SuperTransformer(cst.CSTTransformer):
+    def __init__(self, original_methods):
+        self.original_methods = original_methods
+
+    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
+        if m.matches(updated_node, m.Call(func=m.Attribute(attr=m.Name("super")))):
+            func_def = self.get_metadata(ParentNodeProvider, updated_node)
+            if isinstance(func_def, cst.FunctionDef) and func_def.name.value in self.original_methods:
+                # Replace super() calls in __init__ to ensure it references the correct class
+                if func_def.name.value == "__init__":
+                    return updated_node.with_changes(
+                        args=[
+                            cst.Arg(
+                                value=cst.Call(
+                                    func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))]
+                                )
+                            )
+                        ]
+                    )
+        return updated_node
+
+    def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
+        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
+            func_def = self.get_metadata(ParentNodeProvider, updated_node)
+            if isinstance(func_def, cst.FunctionDef) and func_def.name.value in self.original_methods:
+                updated_return_value = updated_node.value.with_changes(
+                    args=[
+                        cst.Arg(
+                            value=cst.Call(func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))])
+                        )
+                    ]
+                )
+                return updated_node.with_changes(value=updated_return_value)
+        return updated_node
 
 
 if __name__ == "__main__":
