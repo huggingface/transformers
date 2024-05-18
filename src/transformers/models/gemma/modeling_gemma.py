@@ -572,7 +572,7 @@ class GemmaSdpaAttention(GemmaAttention):
         # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        if _length > 0:
+        if _length > 0 and isinstance(past_key_value, StaticCache):
             key_states = key_states[:, :, :_length, :]
             value_states = value_states[:, :, :_length, :]
             causal_mask = causal_mask[:, :, :, :_length] if causal_mask is not None else causal_mask
