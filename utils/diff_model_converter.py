@@ -238,7 +238,7 @@ class SuperTransformer(cst.CSTTransformer):
                 existing_body.append(stmt)
                 existing_nodes.add(stmt)
         return existing_body
-    
+
         if m.matches(
             updated_node.value,
             m.Call(func=m.Attribute(value=m.Call(func=m.Name(value="super")), attr=m.Name("__init__"))),
