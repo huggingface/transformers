@@ -164,10 +164,15 @@ class DiffConverterTransformer(CSTTransformer):
 
                 new_replacement_class = replacement_class.with_changes(body=cst.IndentedBlock(body=new_body))
 
+                temp_module = cst.Module(body=[new_replacement_class])
+                new_module = MetadataWrapper(temp_module)
                 # Ensure calls to `super()` in `__init__` are preserved
-                new_replacement_class = (
-                    cst.Module(body=[new_replacement_class]).visit(SuperTransformer(updated_methods)).body[0]
-                )
+                new_replacement_class = new_module.visit(
+                    SuperTransformer(
+                        temp_module,
+                        {f.name.value: f for f in replacement_class.body.body if isinstance(f, cst.FunctionDef)},
+                    )
+                ).body[0]
 
                 return new_replacement_class
 
@@ -184,24 +189,53 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 class SuperTransformer(cst.CSTTransformer):
-    def __init__(self, original_methods):
-        self.original_methods = original_methods
+    METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
-    def leave_Call(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
-        if m.matches(updated_node, m.Call(func=m.Attribute(attr=m.Name("super")))):
-            func_def = self.get_metadata(ParentNodeProvider, updated_node)
-            if isinstance(func_def, cst.FunctionDef) and func_def.name.value in self.original_methods:
-                # Replace super() calls in __init__ to ensure it references the correct class
-                if func_def.name.value == "__init__":
-                    return updated_node.with_changes(
-                        args=[
-                            cst.Arg(
-                                value=cst.Call(
-                                    func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))]
-                                )
-                            )
-                        ]
-                    )
+    def __init__(self, python_module, original_methods):
+        self.original_methods = original_methods
+        self.python_module = python_module
+
+    def leave_FunctionDef(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
+        if updated_node.name.value in self.original_methods:
+            updated_body = cst.ensure_type(updated_node.body, cst.IndentedBlock)
+            new_body = self.replace_super_calls(updated_body, updated_node.name.value)
+            return updated_node.with_changes(body=new_body)
+        return updated_node
+
+    def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
+        new_body = []
+        for expr in node.body:
+            if m.matches(
+                expr,
+                m.SimpleStatementLine(
+                    body=[m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))]
+                ),
+            ):
+                # Replace the SimpleStatementLine containing super().__init__() with the new body from func_to_body_mapping
+                new_body.extend(self.original_methods[func_name].body.body)
+            elif m.matches(
+                expr,
+                m.SimpleStatementLine(
+                    body=[
+                        m.Return(
+                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
+                        )
+                    ]
+                ),
+            ):
+                # TODO here we have the body, we can most probably remove the duplicates!
+                new_body.extend(self.original_methods[func_name].body.body)
+            else:
+                new_body.append(expr)
+        return node.with_changes(body=new_body)
+
+        if m.matches(
+            updated_node.value,
+            m.Call(func=m.Attribute(value=m.Call(func=m.Name(value="super")), attr=m.Name("__init__"))),
+        ):
+            # func_def = self.get_metadata(ParentNodeProvider, original_node)
+            # Replace super() calls in __init__ to ensure it references the correct class
+            return updated_node.with_changes(body=self.original_methods.body)
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
@@ -224,7 +258,6 @@ if __name__ == "__main__":
     with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/diff_gemma.py", "r") as file:
         code = file.read()
     module = cst.parse_module(code)
-
     transformers = DiffConverterTransformer(module)
     new_mod = module.visit(transformers)
     with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/modeling_gemma.py", "w") as f:
