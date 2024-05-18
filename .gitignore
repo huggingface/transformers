@@ -167,6 +167,3 @@ tags
 
 # ruff
 .ruff_cache
-
-.iristransformers
-.dreamertransformers
