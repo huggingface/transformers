@@ -28,7 +28,7 @@ class ClassFinder(CSTVisitor):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
 
     def __init__(self, python_module):
-        self.module = python_module
+        self.python_module = python_module
         self.classes = {}  # class LlamaAttentino
         self.imports = {}  # from flash_attn import
         self.function_def = {}  # def repeat_kv
@@ -51,6 +51,15 @@ class ClassFinder(CSTVisitor):
     def visit_FunctionDef(self, node):
         if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
             self.function_def[node.name.value] = node
+
+    def leave_If(self, node):
+        if any(
+            m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()]))
+            for stmt in node.body.body
+            if isinstance(stmt, cst.SimpleStatementLine)
+        ):
+            print(f"\n{30*'#'}found protected{self.python_module.code_for_node(node)}{30*'#'}")
+            self.imports[node.body] = node
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
@@ -86,10 +95,10 @@ def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     transformer = ReplaceNameTransformer(old_id, new_id)
     new_module = module.visit(transformer)
 
-    new_module = MetadataWrapper(new_module)
+    wrapper = MetadataWrapper(new_module)
 
     class_finder = ClassFinder(new_module)
-    new_module.visit(class_finder)
+    wrapper.visit(class_finder)
     return class_finder
 
 
@@ -234,14 +243,14 @@ class SuperTransformer(cst.CSTTransformer):
         """
         de_duplicated_new_body = []
         existing_nodes = {
-            self.python_module.code_for_node(node) for node in new_statements if isinstance(node, cst.CSTNode)
+            self.python_module.code_for_node(node).strip() for node in new_statements if isinstance(node, cst.CSTNode)
         }
         for stmt in existing_body:
-            if self.python_module.code_for_node(stmt) not in existing_nodes:
+            if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
                 de_duplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
-                print(f"found duplicate: {self.python_module.code_for_node(stmt)}")
+                print(f"\n{30*'#'}found duplicate{self.python_module.code_for_node(stmt)}{30*'#'}")
         return de_duplicated_new_body
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
@@ -258,6 +267,7 @@ class SuperTransformer(cst.CSTTransformer):
                 return updated_node.with_changes(value=updated_return_value)
         return updated_node
 
+from check_copies import run_ruff
 
 if __name__ == "__main__":
     # Parse the Python file
@@ -266,6 +276,7 @@ if __name__ == "__main__":
     module = cst.parse_module(code)
     transformers = DiffConverterTransformer(module)
     new_mod = module.visit(transformers)
+    ruffed_code = run_ruff(new_mod.code)
     with open("/Users/arthurzucker/Work/transformers/src/transformers/models/gemma/modeling_gemma.py", "w") as f:
-        f.write(new_mod.code)
+        f.write(ruffed_code)
     exit(0)
