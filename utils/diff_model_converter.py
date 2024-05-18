@@ -149,8 +149,12 @@ class DiffConverterTransformer(CSTTransformer):
 
                 for name, func in updated_methods.items():
                     if name in replacement_methods:
-                        # Replace the method in the replacement class
-                        replacement_methods[name] = func
+                        # Replace the method in the replacement class, preserving decorators
+                        replacement_func = replacement_methods[name].with_changes(
+                            decorators=replacement_methods[name].decorators,  # TODO a union or set might be better
+                            body=func.body,
+                        )
+                        replacement_methods[name] = replacement_func
 
                 # Rebuild the class body with updated methods
                 new_body = [

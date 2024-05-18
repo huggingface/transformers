@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
+    BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
@@ -833,6 +834,7 @@ class GemmaModel(GemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -840,13 +842,12 @@ class GemmaModel(GemmaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions | self.config.output_attentions
         output_hidden_states = output_hidden_states | self.config.output_hidden_states
         return_dict = return_dict | self.config.use_return_dict
