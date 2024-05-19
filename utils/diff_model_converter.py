@@ -136,6 +136,23 @@ class DiffConverterTransformer(CSTTransformer):
                     parent_package
                 ].classes[node.targets[0].target.value]
 
+    def visit_ClassDef(self, node: cst.Assign) -> None:
+        if m.matches(node.name, m.Name()):
+            super_class = [k.value.value for k in node.bases if k.value.value in self.transformers_mapping]
+            class_name = node.name.value
+            if len(super_class)>0:
+                super_class = super_class[0]
+                parent_package = self.transformers_mapping.get(super_class, None)
+                if parent_package:
+                    if parent_package not in self.visited_module:
+                        old_name = re.findall(r'[A-Z][a-z0-9]*', super_class)[0].lower()
+                        new_name = re.findall(r'[A-Z][a-z0-9]*', class_name)[0].lower()
+                        class_finder = find_classes_in_file(self.transformers_imports[parent_package], old_name, new_name)
+                        self.visited_module[parent_package] = class_finder
+                    self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[
+                        parent_package
+                    ].classes[class_name]
+
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
         match updated_node:
             # note: this is just a plain copy & paste of the pattern as seen in the CST
