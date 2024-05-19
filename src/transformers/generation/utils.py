@@ -1968,15 +1968,10 @@ class GenerationMixin:
             result = self._dola_decoding(
                 input_ids,
                 dola_layers=generation_config.dola_layers,
-                do_sample=generation_config.do_sample,
                 logits_processor=prepared_logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
                 stopping_criteria=prepared_stopping_criteria,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                output_logits=generation_config.output_logits,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
+                generation_config=generation_config,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
                 **model_kwargs,
@@ -4543,6 +4538,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     # Return a new object of the inferred class with the concatenated attributes
     return model_output_cls(**concatenated_data)
 
+
 def _relative_top_filter(
     scores: torch.FloatTensor,
     baseline_scores: torch.FloatTensor,
@@ -4567,6 +4563,7 @@ def _relative_top_filter(
     scores_normalized[scores_normalized < probs_thresh] = filter_value
     return scores_normalized, baseline_scores_normalized
 
+
 def _dola_select_contrast(
     candidate_premature_layers: List[int],
     candidate_premature_logits: Dict[int, torch.FloatTensor],
@@ -4579,9 +4576,7 @@ def _dola_select_contrast(
         return logits
 
     # 1. Stacking all premature_layers into a new dimension
-    stacked_premature_layers = torch.stack(
-        [candidate_premature_logits[i] for i in candidate_premature_layers], dim=0
-    )
+    stacked_premature_layers = torch.stack([candidate_premature_logits[i] for i in candidate_premature_layers], dim=0)
 
     # 2. Calculate the softmax values for mature_layer and all premature_layers
     # shape: (batch_size, vocab_size)
