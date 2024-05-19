@@ -21,23 +21,24 @@ The SuperGlue model was proposed
 in [SuperGlue: Learning Feature Matching with Graph Neural Networks](https://arxiv.org/abs/1911.11763) by Paul-Edouard Sarlin, Daniel
 DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 
- TODO: Add a description of the model
-
-[//]: # (This model is the result of a self-supervised training of a fully-convolutional network for interest point detection and)
-
-[//]: # (description. The model is able to detect interest points that are repeatable under homographic transformations and)
-
-[//]: # (provide a descriptor for each point. The use of the model in its own is limited, but it can be used as a feature)
-
-[//]: # (extractor for other tasks such as homography estimation, image matching, etc.)
+This model consists of matching two sets of interest points detected in an image. Paired with the 
+[SuperPoint model](https://huggingface.co/magic-leap-community/superpoint), it can be used to match two images and 
+estimate the pose between them. This model is useful for tasks such as image matching, homography estimation, etc.
 
 The abstract from the paper is the following:
 
-*This paper introduces SuperGlue, a neural network that matches two sets of local features by jointly finding correspondences and rejecting non-matchable points. Assignments are estimated by solving a differentiable optimal transport problem, whose costs are predicted by a graph neural network. We introduce a flexible context aggregation mechanism based on attention, enabling SuperGlue to reason about the underlying 3D scene and feature assignments jointly. Compared to traditional, hand-designed heuristics, our technique learns priors over geometric transformations and regularities of the 3D world through end-to-end training from image pairs. SuperGlue outperforms other learned approaches and achieves state-of-the-art results on the task of pose estimation in challenging real-world indoor and outdoor environments. The proposed method performs matching in real-time on a modern GPU and can be readily integrated into modern SfM or SLAM systems. The code and trained weights are publicly available at this [URL](https://github.com/magicleap/SuperGluePretrainedNetwork).*
+*This paper introduces SuperGlue, a neural network that matches two sets of local features by jointly finding correspondences 
+and rejecting non-matchable points. Assignments are estimated by solving a differentiable optimal transport problem, whose costs 
+are predicted by a graph neural network. We introduce a flexible context aggregation mechanism based on attention, enabling 
+SuperGlue to reason about the underlying 3D scene and feature assignments jointly. Compared to traditional, hand-designed heuristics, 
+our technique learns priors over geometric transformations and regularities of the 3D world through end-to-end training from image 
+pairs. SuperGlue outperforms other learned approaches and achieves state-of-the-art results on the task of pose estimation in 
+challenging real-world indoor and outdoor environments. The proposed method performs matching in real-time on a modern GPU and 
+can be readily integrated into modern SfM or SLAM systems. The code and trained weights are publicly available at this [URL](https://github.com/magicleap/SuperGluePretrainedNetwork).*
 
 ## How to use
 
-Here is a quick example of using the model to detect interest points in an image:
+Here is a quick example of using the model. Since this model is an image matching model, it requires pairs of images to be matched:
 
 ```python
 from transformers import AutoImageProcessor, AutoModel
@@ -45,20 +46,21 @@ import torch
 from PIL import Image
 import requests
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
+im1 = Image.open(requests.get(url, stream=True).raw)
+url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
+im2 = Image.open(requests.get(url, stream=True).raw)
+images = [im1, im2]
 
-processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-model = AutoModel.from_pretrained("magic-leap-community/superpoint")
+processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
+model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
 
-inputs = processor(image, return_tensors="pt")
+inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)
 ```
 
-The outputs contain the list of keypoint coordinates with their respective score and description (a 256-long vector).
-
-You can also feed multiple images to the model. Due to the nature of SuperPoint, to output a dynamic number of keypoints,
-you will need to use the mask attribute to retrieve the respective information :
+The outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding matching scores.
+Due to the nature of SuperGlue, to output a dynamic number of matches, you will need to use the mask attribute to retrieve the respective information :
 
 ```python
 from transformers import AutoImageProcessor, AutoModel
@@ -73,32 +75,61 @@ image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 
 images = [image_1, image_2]
 
-processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-model = AutoModel.from_pretrained("magic-leap-community/superpoint")
+processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
+model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
 
 inputs = processor(images, return_tensors="pt")
 outputs = model(**inputs)
 
-for i in range(len(images)):
-    image_mask = outputs.mask[i]
-    image_indices = torch.nonzero(image_mask).squeeze()
-    image_keypoints = outputs.keypoints[i][image_indices]
-    image_scores = outputs.scores[i][image_indices]
-    image_descriptors = outputs.descriptors[i][image_indices]
+for i in len(images) // 2:
+    image0_mask = outputs.mask[i, 0]
+    image0_indices = torch.nonzero(image0_mask).squeeze()
+    image0_matches = outputs.matches[i, 0][image0_indices]
+    image0_matching_scores = outputs.matching_scores[i, 0][image0_indices]
+    image1_mask = outputs.mask[i, 1]
+    image1_indices = torch.nonzero(image1_mask).squeeze()
+    image1_matches = outputs.matches[i, 1][image1_indices]
+    image1_matching_scores = outputs.matching_scores[i, 1][image1_indices]
 ```
 
-You can then print the keypoints on the image to visualize the result :
+You can then print the matched keypoints on a side-by-side image to visualize the result :
 ```python
 import cv2
-for keypoint, score in zip(image_keypoints, image_scores):
-    keypoint_x, keypoint_y = int(keypoint[0].item()), int(keypoint[1].item())
-    color = tuple([score.item() * 255] * 3)
-    image = cv2.circle(image, (keypoint_x, keypoint_y), 2, color)
-cv2.imwrite("output_image.png", image)
+import numpy as np
+
+# Create side by side image
+input_data = inputs.data['pixel_values']
+height, width = input_data.shape[-2:]
+matched_image = np.zeros((height, width * 2, 3))
+matched_image[:, :width] = input_data.squeeze()[0].permute(1, 2, 0).cpu().numpy()
+matched_image[:, width:] = input_data.squeeze()[1].permute(1, 2, 0).cpu().numpy()
+matched_image = (matched_image * 255).astype(np.uint8)
+
+# Retrieve matches by looking at which keypoints in image0 actually matched with keypoints in image1
+image0_mask = outputs.mask[0, 0]
+image0_indices = torch.nonzero(image0_mask).squeeze()
+image0_matches_indices = torch.nonzero(outputs.matches[0, 0][image0_indices] != -1).squeeze()
+image0_keypoints = outputs.keypoints[0, 0][image0_matches_indices]
+image0_matches = outputs.matches[0, 0][image0_matches_indices]
+image0_matching_scores = outputs.matching_scores[0, 0][image0_matches_indices]
+# Retrieve matches from image1
+image1_mask = outputs.mask[0, 1]
+image1_indices = torch.nonzero(image1_mask).squeeze()
+image1_keypoints = outputs.keypoints[0, 1][image0_matches]
+
+# Draw matches
+for i, (keypoint0, keypoint1, score) in enumerate(
+        zip(image0_keypoints, image1_keypoints, image0_matching_scores)
+):
+    keypoint0_x, keypoint0_y = int(keypoint0[0].item()), int(keypoint0[1].item())
+    keypoint1_x, keypoint1_y = int(keypoint1[0].item() + width), int(keypoint1[1].item())
+    color = tuple([int(score.item() * 255)] * 3)
+    matched_image = cv2.line(matched_image, (keypoint0_x, keypoint0_y), (keypoint1_x, keypoint1_y), color)
+cv2.imwrite(f"matched_image.png", matched_image)
 ```
 
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
-The original code can be found [here](https://github.com/magicleap/SuperPointPretrainedNetwork).
+The original code can be found [here](https://github.com/magicleap/SuperGluePretrainedNetwork).
 
 ## SuperGlueConfig
 
