@@ -43,7 +43,7 @@ Luego, creamos algunos datos ficticios: IDs de tokens aleatorios entre 100 y 300
 >>> ds.set_format("pt")
 ```
 
-Para imprimir estadísticas resumidas para la utilización de la GPU y la ejecución del entrenamiento con [`Trainer`], definimos dos funciones auxiliares:
+Para imprimir estadísticas resumidas para la utilización de la GPU y la ejecución del entrenamiento con [`Trainer`](https://huggingface.co/docs/transformers/v4.41.0/en/main_classes/trainer#transformers.Trainer), definimos dos funciones auxiliares:
 
 ```py
 >>> from pynvml import *
@@ -69,7 +69,7 @@ Comencemos comprobando que la memoria GPU este libre:
 GPU memory occupied: 0 MB.
 ```
 
-Parece estar bien: la memoria de la GPU no está ocupada como esperaríamos antes de cargar cualquier modelo. Si no es el caso en tu máquina, asegúrate de detener todos los procesos que estén utilizando la memoria de la GPU. Sin embargo, no toda la memoria libre de la GPU puede ser utilizada por el usuario. Cuando se carga un modelo en la GPU, también se cargan los kernels, lo que puede ocupar 1-2GB de memoria. Para ver cuánta es, cargemos un tensor diminuto en la GPU, lo que también desencadena la carga de los kernels.
+Parece estar bien: la memoria de la GPU no está ocupada como esperaríamos antes de cargar cualquier modelo. Si no es el caso en tu máquina, asegúrate de detener todos los procesos que estén utilizando la memoria de la GPU. Sin embargo, no toda la memoria libre de la GPU puede ser utilizada por el usuario. Cuando se carga un modelo en la GPU, también se cargan los kernels, lo que puede ocupar 1-2GB de memoria. Para ver cuánta memoria será ocupada por defecto, cargemos un tensor diminuto en la GPU, lo que también desencadena la carga de los kernels.
 
 ```py
 >>> import torch
@@ -144,7 +144,7 @@ Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prue
 
 ## Utilización de la memoria en el entrenamiento
 
-Vamos a utilizar el [`Trainer`] y entrenar el modelo sin utilizar ninguna técnica de optimización del rendimiento de la GPU y un tamaño de lote de 4:
+Vamos a utilizar el [`Trainer`](https://huggingface.co/docs/transformers/v4.41.0/en/main_classes/trainer#transformers.Trainer) y entrenar el modelo sin utilizar ninguna técnica de optimización del rendimiento de la GPU y un tamaño de lote de 4:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer, logging
