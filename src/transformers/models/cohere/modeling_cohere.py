@@ -262,29 +262,6 @@ class CohereRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         # For BC we register cos and sin cached
         self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-        t = t / self.scaling_factor
-        freqs = torch.outer(t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("_cos_cached", emb.cos().to(torch.get_default_dtype()), persistent=False)
-        self.register_buffer("_sin_cached", emb.sin().to(torch.get_default_dtype()), persistent=False)
-
-    @property
-    def sin_cached(self):
-        logger.warning_once(
-            "The sin_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `CohereAttention` class"
-        )
-        return self._sin_cached
-
-    @property
-    def cos_cached(self):
-        logger.warning_once(
-            "The cos_cached attribute will be removed in 4.39. Bear in mind that its contents changed in v4.38. Use "
-            "the forward method of RoPE from now on instead. It is not used in the `CohereAttention` class"
-        )
-        return self._cos_cached
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -792,20 +769,6 @@ class CohereDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
