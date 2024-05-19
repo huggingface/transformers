@@ -1168,6 +1168,13 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         **kwargs,
     ):
         # TODO: Move this to `src/transformers/generation/utils.py`
+        # This avoids the many conversions between `DynamicCache` and the legacy cache format (tuple).
+        # However, this also introduces the overhead of passing large tensors to `GemmaForCausalLM` then `GemmaModel`
+        # that overweights the gain (if any) of avoiding the conversion.
+        # See:
+        #   - commits: 68b71c85 v.s. e513b609
+        #   - [A10]_[idx=005]_[commit=68b71c85]_[layer=1]_[static=no]_[compile=no]_[len=optimal].json
+        #   - [A10]_[idx=006]_[commit=468f7cca]_[layer=1]_[static=no]_[compile=no]_[len=optimal].json
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
