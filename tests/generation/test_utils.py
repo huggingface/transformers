@@ -1274,7 +1274,7 @@ class GenerationTesterMixin:
                 self.skipTest("DoLa is not supported for models that don't return layerwise hidden states")
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
-            config, input_ids, attention_mask, _ = self._get_input_ids_and_config(batch_size=1)
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
 
             # Some models don't support the cache and returning past_key_values
             if not hasattr(config, "use_cache"):
