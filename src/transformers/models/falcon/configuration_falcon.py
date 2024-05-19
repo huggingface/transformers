@@ -77,13 +77,31 @@ class FalconConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports four scaling
+            strategies: linear, dynamic, yarn and dynamic-yarn. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
+        yarn_rope_scaling (`Dict`, *optional*, defaults to `{'original_max_position_embeddings': 2048, 'extrapolation_factor': 1.0, 'attention_factor': 1.0, 'beta_fast': 32.0, 'beta_slow': 1.0, 'finetuned': False}`):
+            Dictionary containing the YaRN-specific scaling configuration for the RoPE embeddings. The expected format is
+            `{"original_max_position_embeddings": int, "extrapolation_factor": float, "attention_factor": float,
+            "beta_fast": float, "beta_slow": float,"finetuned": bool}`.
+            Fields:
+                original_max_position_embeddings (`int`, *optional*, defaults to 2048):
+                    The original maximum sequence length. This is used to scale the RoPE embeddings.
+                extrapolation_factor (`float`, defaults to 1):
+                    Factor to ajust the n-dimensional rotational scaling for extrapolation.
+                attention_factor (`float`, *optional*, defaults to 1):
+                    Factor to adjust the weight attention scaling mechanism.
+                beta_fast (`float`, *optional*, defaults to 32):
+                    Parameter to set the boundary for extrapolation (only) in the linear ramp function.
+                beta_slow (`float`, *optional*, defaults to 1):
+                    Parameter to set the boundary for interpolation (only) in the linear ramp function.
+                finetuned (`bool`, *optional*, defaults to `False`):
+                    [Dynamic] Whether the model is finetuned or not.
+            For more details please refer to https://arxiv.org/abs/2309.00071.
         bos_token_id (`int`, *optional*, defaults to 11):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 11):
@@ -133,6 +151,14 @@ class FalconConfig(PretrainedConfig):
         max_position_embeddings=2048,
         rope_theta=10000.0,
         rope_scaling=None,
+        yarn_rope_scaling={
+            "original_max_position_embeddings": 2048,
+            "extrapolation_factor": 1.0,
+            "attention_factor": 1.0,
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "finetuned": False,
+        },
         bos_token_id=11,
         eos_token_id=11,
         ffn_hidden_size=None,
@@ -162,12 +188,14 @@ class FalconConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.yarn_rope_scaling = yarn_rope_scaling
         self.activation = activation
         if ffn_hidden_size is None:
             self.ffn_hidden_size = hidden_size * 4
         else:
             self.ffn_hidden_size = ffn_hidden_size
         self._rope_scaling_validation()
+        self._yarn_rope_scaling_validation()
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -201,3 +229,55 @@ class FalconConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._yarn_rope_scaling_validation
+    def _yarn_rope_scaling_validation(self):
+        """
+        Validate the `yarn_rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) > 6:
+            raise ValueError(
+                "`yarn_rope_scaling` must be a dictionary with a maximum of six fields, `original_max_position_embeddings`, "
+                "`extrapolation_factor`, `attention_factor`, `beta_fast`, `beta_slow`, `finetuned`, "
+                f"got {self.rope_scaling}"
+            )
+        original_max_position_embeddings = self.rope_scaling.get("original_max_position_embeddings", None)
+        extrapolation_factor = self.rope_scaling.get("extrapolation_factor", None)
+        attention_factor = self.rope_scaling.get("attention_factor", None)
+        beta_fast = self.rope_scaling.get("beta_fast", None)
+        beta_slow = self.rope_scaling.get("beta_slow", None)
+        finetuned = self.rope_scaling.get("finetuned", None)
+
+        if original_max_position_embeddings is not None and not isinstance(original_max_position_embeddings, int):
+            raise ValueError(
+                f"`yarn_rope_scaling`'s original_max_position_embeddings field must be an int, got {original_max_position_embeddings}"
+            )
+        if (
+            extrapolation_factor is not None
+            and not isinstance(extrapolation_factor, float)
+            or extrapolation_factor < 0
+            or extrapolation_factor > 1
+        ):
+            raise ValueError(
+                f"`yarn_rope_scaling`'s extrapolation_factor field must be a float between 0 and 1, got {extrapolation_factor}"
+            )
+        if attention_factor is not None and not isinstance(attention_factor, float) or attention_factor < 0:
+            raise ValueError(
+                f"`yarn_rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+            )
+        if beta_fast is not None and not isinstance(beta_fast, float):
+            raise ValueError(f"`yarn_rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
+        if beta_slow is not None and not isinstance(beta_slow, float):
+            raise ValueError(f"`yarn_rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
+        if finetuned is not None and not isinstance(finetuned, bool):
+            raise ValueError(f"`yarn_rope_scaling`'s finetuned field must be a bool, got {finetuned}")
+
+        b_fast = beta_fast if beta_fast is not None else 32
+        b_slow = beta_slow if beta_slow is not None else 1
+        if b_fast < b_slow:
+            raise ValueError(
+                f"`yarn_rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={b_fast} and beta_slow={b_slow}"
+            )
