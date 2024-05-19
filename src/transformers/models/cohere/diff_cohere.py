@@ -1,3 +1,25 @@
+# coding=utf-8
+# Copyright 2024 Cohere team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This file is based on the LLama model definition file in transformers
+
 from transformers.models.llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, LlamaMLP, LlamaPreTrainedModel, LlamaModel, LlamaForCausalLM
 import torch
 from typing import *
@@ -100,4 +122,20 @@ class CohereDecoderLayer(nn.Module):
 
 CoherePreTrainedModel = LlamaPreTrainedModel
 CohereModel = LlamaModel
-CohereForCausalLM = LlamaForCausalLM
+
+from typing import TypedDict, Unpack
+
+
+class CohereForCausalLM(LlamaForCausalLM):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    # Ignore copy
+    def __init__(self, config):
+        super().__init__(config)
+        self.logit_scale = config.logit_scale
+        self.tie_word_embeddings = config.tie_word_embeddings
+
+    def forward(self, **kwargs):
+        output = super().forward(**kwargs)
+        logits = self.lm_head(output[1])
+        logits = logits * self.logit_scale
