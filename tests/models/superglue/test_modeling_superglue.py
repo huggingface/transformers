@@ -97,8 +97,20 @@ class SuperGlueModelTester:
         result = model(pixel_values)
         maximum_num_matches = result.mask.shape[-1]
         self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, 2, self.keypoint_encoder_sizes[-1], maximum_num_matches),
+            result.mask.shape,
+            (self.batch_size, 2, maximum_num_matches),
+        )
+        self.parent.assertEqual(
+            result.keypoints.shape,
+            (self.batch_size, 2, maximum_num_matches, 2),
+        )
+        self.parent.assertEqual(
+            result.matches.shape,
+            (self.batch_size, 2, maximum_num_matches),
+        )
+        self.parent.assertEqual(
+            result.matching_scores.shape,
+            (self.batch_size, 2, maximum_num_matches),
         )
 
     def prepare_config_and_inputs_for_common(self):
