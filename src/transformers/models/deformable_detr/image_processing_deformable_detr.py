@@ -101,8 +101,8 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     if max_size is not None:
         min_original_size = float(min((height, width)))
         max_original_size = float(max((height, width)))
+        raw_size = max_size * min_original_size / max_original_size
         if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
             size = int(round(raw_size))
 
     if (height <= width and height == size) or (width <= height and width == size):
