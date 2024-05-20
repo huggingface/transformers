@@ -521,7 +521,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
             [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3 :]]
         )
 
-        key = str(window_size[1]) + "," + str(window_size[0])
+        key = window_size
         if key not in self.relative_position_indices.keys():
             self.relative_position_indices[key] = self.generate_relative_position_index(window_size)
 

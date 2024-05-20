@@ -220,6 +220,9 @@ def rename_key(name):
     if "conv2" in name and "metric_head" not in name and "attractors" not in name and "relative_head" not in name:
         name = name.replace("conv2", "metric_head.conv2")
 
+    if "transformer_encoder.layers" in name:
+        name = name.replace("transformer_encoder.layers", "transformer_encoder")
+
     return name
 
 
@@ -286,6 +289,10 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     )
     original_model.eval()
     state_dict = original_model.state_dict()
+
+    print("Original state dict:")
+    for name, param in state_dict.items():
+        print(name, param.shape)
 
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
