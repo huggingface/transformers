@@ -128,7 +128,7 @@ inputs = processor(images=images, text=text, return_tensors="pt").to(device)
 
 labels = inputs.input_ids.clone()
 labels[labels == processor.tokenizer.pad_token_id] = -100
-labels[labels == processor.image_processor.image_token_id] = -100
+labels[labels == model.config.image_token_id] = -100
 
 inputs["labels"] = labels
 
