@@ -1098,10 +1098,10 @@ class GenerationMixin:
             raise TypeError(exception_message)
 
     def _validate_assistant(self, assistant_model):
-        if assistant_model is None or not self.config.is_encoder_decoder:
+        if assistant_model is None:
             return
 
-        if not assistant_model.config.is_encoder_decoder:
+        if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
             attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
             attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
             are_equal = all(
