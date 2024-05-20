@@ -247,8 +247,7 @@ def _is_peft_model(model):
             from peft import PeftMixedModel
 
             classes_to_check = (*classes_to_check, PeftMixedModel)
-        is_peft = isinstance(model, classes_to_check)
-        if is_peft:
+        if isinstance(model, classes_to_check):
             return True
         else:
             for submodule in model.modules():
