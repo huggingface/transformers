@@ -61,7 +61,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the transformers-all-latest-gpu-push-ci docker build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -106,7 +106,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu docker build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -156,7 +156,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu-push-ci docker build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -191,7 +191,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the huggingface/transformers-doc-builder docker build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -238,7 +238,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the huggingface/transformers-pytorch-gpudocker build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -286,7 +286,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the huggingface/transformers-pytorch-amd-gpu-push-ci build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -323,7 +323,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the huggingface/transformers-tensorflow-gpu build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -371,7 +371,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the transformers-pytorch-deepspeed-amd-gpu build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
@@ -408,7 +408,7 @@ jobs:
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          slack_channel: "C073ZTN10A1"
+          slack_channel: ${{ secrets.CI_DOCKER_CHANNEL }}
           title: 🤗 Results of the transformers-quantization-latest-gpu build 
           status: ${{ job.status }}
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
