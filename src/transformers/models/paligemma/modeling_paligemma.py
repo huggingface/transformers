@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PaliGemmamodel."""
+"""PyTorch PaliGemmamodel."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -282,9 +283,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def construct_causal_mask_with_block_attention(
-        self, attention_mask, input_ids, text_mask, inputs_embeds
-    ):
+    def construct_causal_mask_with_block_attention(self, attention_mask, input_ids, text_mask, inputs_embeds):
         # Modified from gemma
         target_length = attention_mask.shape[-1]
         dtype, device = inputs_embeds.dtype, inputs_embeds.device
@@ -302,34 +301,25 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         mask = input_ids == self.config.prefix_suffix_separator_index
         # Get the index of the first \n in each row
         indices = mask.int().cumsum(dim=1).eq(1).int().argmax(dim=1, keepdim=True)
-        range_tensor = (
-            torch.arange(mask.size(1), device=device).unsqueeze(0).unsqueeze(1)
-        )  # [1, 1, l]
+        range_tensor = torch.arange(mask.size(1), device=device).unsqueeze(0).unsqueeze(1)  # [1, 1, l]
 
         # Create the full block attention mask
         prefix_and_image_and_pad_mask = range_tensor < indices.view(-1, 1, 1)
-        prefix_and_image_and_pad_mask = prefix_and_image_and_pad_mask.expand(
-            -1, mask.size(1), -1
-        )
+        prefix_and_image_and_pad_mask = prefix_and_image_and_pad_mask.expand(-1, mask.size(1), -1)
         causal_mask = causal_mask[None, :].expand(input_ids.shape[0], -1, -1)
         causal_mask[prefix_and_image_and_pad_mask] = 0
         causal_mask = causal_mask[:, None, :, :].expand(-1, 1, -1, -1)
         if attention_mask is not None:
-            causal_mask = (
-                causal_mask.clone()
-            )  # copy to contiguous memory for in-place edit
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
             # padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
             padding_mask = attention_mask[:, None, None, :]
             padding_mask = padding_mask == 0
-            causal_mask[:, :, :, :mask_length] = causal_mask[
-                :, :, :, :mask_length
-            ].masked_fill(padding_mask, min_dtype)
+            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                padding_mask, min_dtype
+            )
         boolean_mask = (
-            text_mask.unsqueeze(1)
-            .unsqueeze(2)
-            .expand(-1, causal_mask.size(1), causal_mask.size(2), -1)
-            == 0
+            text_mask.unsqueeze(1).unsqueeze(2).expand(-1, causal_mask.size(1), causal_mask.size(2), -1) == 0
         )
 
         causal_mask.masked_fill_(boolean_mask, 0)
@@ -358,7 +348,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features
         )
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
-        causal_mask = self.construct_causal_mask_with_block_attention(attention_mask, input_ids, text_mask, inputs_embeds)
+        causal_mask = self.construct_causal_mask_with_block_attention(
+            attention_mask, input_ids, text_mask, inputs_embeds
+        )
 
         # position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
         # position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PaliGemmamodel configuration"""
+"""PaliGemmamodel configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -92,7 +92,7 @@ class PaliGemmaConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.vision_config = vision_config
         self.is_encoder_decoder = False
-        self.prefix_suffix_separator_index = prefix_suffix_separator_index # always \n
+        self.prefix_suffix_separator_index = prefix_suffix_separator_index  # always \n
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = (
