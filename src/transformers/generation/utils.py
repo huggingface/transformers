@@ -1109,7 +1109,7 @@ class GenerationMixin:
             )
             if not are_equal:
                 raise ValueError(
-                    "The main model and the assistant don't have encoders of the same size. "
+                    "The main model and the assistant don't have compatible encoder-dependent input shapes. "
                     "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
                 )
 
