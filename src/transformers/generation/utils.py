@@ -2526,7 +2526,7 @@ class GenerationMixin:
 
         t = datetime.datetime.now()
         e = (t - s).total_seconds()
-        idx = 0
+        idx = -1
         if idx not in timing:
             timing[idx] = {"name": "before while loop", "timing": 0.0}
         timing[idx]["timing"] += e
