@@ -74,7 +74,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Starcoder2
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Starcoder2
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -119,7 +119,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -590,7 +590,7 @@ class Starcoder2FlashAttention2(Starcoder2Attention):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Starcoder2
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralSdpaAttention with Mixtral->Starcoder2
 class Starcoder2SdpaAttention(Starcoder2Attention):
     """
     Starcoder2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -703,7 +703,7 @@ class Starcoder2DecoderLayer(nn.Module):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
+    # Copied from transformers.models.qwen2.modeling_qwen2.Qwen2DecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -780,7 +780,7 @@ STARCODER2_START_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralPreTrainedModel with Mistral->Starcoder2
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Starcoder2
 class Starcoder2PreTrainedModel(PreTrainedModel):
     config_class = Starcoder2Config
     base_model_prefix = "model"
@@ -1057,7 +1057,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->STARCODER2,Mistral-7B-v0.1->starcoder2-7b_16k,Mistral->Starcoder2,mistralai->bigcode
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2ForCausalLM with QWEN2->STARCODER2,Qwen2->Starcoder2
 class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1090,6 +1090,7 @@ class Starcoder2ForCausalLM(Starcoder2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
