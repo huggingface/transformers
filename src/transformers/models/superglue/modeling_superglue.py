@@ -22,7 +22,6 @@ from torch import nn
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
-from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...utils import (
     ModelOutput,
     add_start_docstrings_to_model_forward,
@@ -46,32 +45,6 @@ def batch_hidden_states(hidden_states):
         return [batch_hidden_states(element) for element in list_of_tuples]
     elif hidden_states[0] is None:
         return None
-
-
-def batch_list_hidden_states(list_hidden_states):
-    list_length = len(list_hidden_states)
-
-    if list_length > 0:
-        return batch_hidden_states(list_hidden_states)
-    else:
-        return list_hidden_states
-
-
-def stack_hidden_states_tuples_pair(hidden_states_0, hidden_states_1):
-    hidden_states = ()
-    for hidden_state_0, hidden_state_1 in zip(hidden_states_0, hidden_states_1):
-        if hidden_state_0.size() == hidden_state_1.size():
-            hidden_states = hidden_states + (torch.cat([hidden_state_0, hidden_state_1]),)
-        else:
-            final_dims = []
-            for dim0, dim1 in zip(hidden_state_0.size(), hidden_state_1.size()):
-                final_dims.append(max(dim0, dim1))
-            new_hidden_state_0 = torch.zeros(final_dims)
-            new_hidden_state_1 = torch.zeros(final_dims)
-            new_hidden_state_0[: hidden_state_0.size(0)] = hidden_state_0
-            new_hidden_state_1[: hidden_state_1.size(0)] = hidden_state_1
-            hidden_states = hidden_states + (torch.cat([new_hidden_state_0, new_hidden_state_1]),)
-    return hidden_states
 
 
 def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -156,8 +129,6 @@ class ImageMatchingOutput(ModelOutput):
     matches: torch.FloatTensor = None
     matching_scores: torch.FloatTensor = None
     keypoints: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -182,15 +153,9 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
     def forward(
         self,
         input: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
-        all_hidden_states = () if output_hidden_states else None
-        for layer in self.layers:
-            input = layer(input)
-            if output_hidden_states and isinstance(layer, nn.Conv1d):
-                all_hidden_states = all_hidden_states + (input,)
-        output = input
-        return output, all_hidden_states
+    ) -> torch.Tensor:
+        output = self.layers(input)
+        return output
 
 
 class SuperGlueKeypointEncoder(nn.Module):
@@ -207,12 +172,11 @@ class SuperGlueKeypointEncoder(nn.Module):
         self,
         keypoints: torch.Tensor,
         scores: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
     ) -> torch.Tensor:
         keypoints = keypoints.transpose(1, 2)
         scores = scores.unsqueeze(1)
         inputs = torch.cat([keypoints, scores], dim=1)
-        return self.encoder(inputs, output_hidden_states=output_hidden_states)
+        return self.encoder(inputs)
 
 
 class SuperGlueMultiHeadAttention(nn.Module):
@@ -225,16 +189,17 @@ class SuperGlueMultiHeadAttention(nn.Module):
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
     def forward(
-        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+    ) -> torch.Tensor:
         batch_dim = query.size(0)
         query, key, value = [
             layer(x).view(batch_dim, self.dim, self.num_heads, -1) for layer, x in zip(self.proj, (query, key, value))
         ]
-        x, attention_probs = attention(query, key, value)
+        x, _ = attention(query, key, value)
         output = self.merge(x.contiguous().view(batch_dim, self.dim * self.num_heads, -1))
-
-        output = (output, attention_probs) if output_attentions else (output,)
 
         return output
 
@@ -254,24 +219,11 @@ class SuperGlueAttentionalPropagation(nn.Module):
         )
         nn.init.constant_(self.mlp.layers[-1].bias, 0.0)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        source: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> tuple:
-        attention_outputs = self.attention(x, source, source, output_attentions=output_attentions)
-        output = attention_outputs[0]
-        attention = attention_outputs[1:]
-
-        output = torch.cat([x, output], dim=1)
-        layer_outputs = self.mlp(output, output_hidden_states=output_hidden_states)
-
-        last_hidden_state = layer_outputs[0]
-        hidden_states = layer_outputs[1]
-
-        return last_hidden_state, hidden_states, attention
+    def forward(self, x: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+        message = self.attention(x, source, source)
+        message = torch.cat([x, message], dim=1)
+        message = self.mlp(message)
+        return message
 
 
 class SuperGlueAttentionalGNN(nn.Module):
@@ -297,42 +249,18 @@ class SuperGlueAttentionalGNN(nn.Module):
         self,
         descriptors_0: torch.Tensor,
         descriptors_1: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[tuple], Optional[tuple]]:
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (torch.cat([descriptors_0, descriptors_1]),)
-
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         for gnn_layer, type in zip(self.layers, self.layers_types):
             if type == "cross":
                 source_0, source_1 = descriptors_1, descriptors_0
             else:  # if type == 'self':
                 source_0, source_1 = descriptors_0, descriptors_1
 
-            gnn_outputs0 = gnn_layer(
-                descriptors_0, source_0, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-            )
-            gnn_outputs1 = gnn_layer(
-                descriptors_1, source_1, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-            )
-
-            delta0 = gnn_outputs0[0]
-            delta1 = gnn_outputs1[0]
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + stack_hidden_states_tuples_pair(
-                    gnn_outputs0[1], gnn_outputs1[1]
-                )
-
-            if output_attentions:
-                all_attentions = all_attentions + stack_hidden_states_tuples_pair(gnn_outputs0[2], gnn_outputs1[2])
-
+            delta0 = gnn_layer(descriptors_0, source_0)
+            delta1 = gnn_layer(descriptors_1, source_1)
             descriptors_0 = descriptors_0 + delta0
             descriptors_1 = descriptors_1 + delta1
-        return descriptors_0, descriptors_1, all_hidden_states, all_attentions
+        return descriptors_0, descriptors_1
 
 
 class SuperGlueFinalProjection(nn.Module):
@@ -444,12 +372,7 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         image1_scores: torch.Tensor,
         height: int,
         width: int,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
+    ):
         if image0_keypoints.shape[1] == 0 or image1_keypoints.shape[1] == 0:  # no keypoints
             shape0, shape1 = image0_keypoints.shape[:-1], image1_keypoints.shape[:-1]
             return (
@@ -457,8 +380,6 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                 image1_keypoints.new_full(shape1, -1, dtype=torch.int),
                 image0_keypoints.new_zeros(shape0),
                 image1_keypoints.new_zeros(shape1),
-                all_hidden_states,
-                all_attentions,
             )
 
         descriptors_0 = torch.transpose(image0_descriptors, -1, -2)
@@ -468,28 +389,15 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         keypoints0 = normalize_keypoints(image0_keypoints, height, width)
         keypoints1 = normalize_keypoints(image1_keypoints, height, width)
 
-        encoded_keypoints0 = self.keypoint_encoder(
-            keypoints0, image0_scores, output_hidden_states=output_hidden_states
-        )
-        encoded_keypoints1 = self.keypoint_encoder(
-            keypoints1, image1_scores, output_hidden_states=output_hidden_states
-        )
-
-        last_hidden_state_0 = encoded_keypoints0[0]
-        last_hidden_state_1 = encoded_keypoints1[0]
+        encoded_keypoints0 = self.keypoint_encoder(keypoints0, image0_scores)
+        encoded_keypoints1 = self.keypoint_encoder(keypoints1, image1_scores)
 
         # Keypoint MLP encoder.
-        descriptors_0 = descriptors_0 + last_hidden_state_0
-        descriptors_1 = descriptors_1 + last_hidden_state_1
+        descriptors_0 = descriptors_0 + encoded_keypoints0
+        descriptors_1 = descriptors_1 + encoded_keypoints1
 
         # Multi-layer Transformer network.
-        gnn_outputs = self.gnn(
-            descriptors_0,
-            descriptors_1,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-        )
-        descriptors_0, descriptors_1 = gnn_outputs[:2]
+        descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
 
         # Final MLP projection.
         projected_descriptors_0 = self.final_projection(descriptors_0)
@@ -515,23 +423,11 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + stack_hidden_states_tuples_pair(
-                encoded_keypoints0[1], encoded_keypoints1[1]
-            )
-            all_hidden_states = all_hidden_states + gnn_outputs[2]
-            all_hidden_states = all_hidden_states + (torch.cat([projected_descriptors_0, projected_descriptors_1]),)
-
-        if output_attentions:
-            all_attentions = all_attentions + gnn_outputs[3]
-
         return (
             matches_0,
             matches_1,
             matching_scores_0,
             matching_scores_1,
-            all_hidden_states,
-            all_attentions,
         )
 
     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
@@ -539,25 +435,21 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         self,
         pixel_values: torch.FloatTensor = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImageMatchingOutput]:
+        loss = None
         if labels is not None:
             raise ValueError(
                 f"SuperGlue is not trainable, no labels should be provided. Therefore, labels should be None but were {type(labels)}"
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if len(pixel_values.size()) != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
 
-        batch_size, _, _, height, width = pixel_values.shape
+        batch_size, _, channels, height, width = pixel_values.shape
 
         list_matches_0 = []
         list_matches_1 = []
@@ -565,29 +457,29 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
         list_matching_scores_1 = []
         list_keypoints_0 = []
         list_keypoints_1 = []
-        list_hidden_states = []
-        list_attentions = []
 
         for i in range(pixel_values.size(0)):
             image_pair = pixel_values[i]
-            keypoint_detection_output = self.keypoint_detector(
+            keypoint_detector_output = self.keypoint_detector(
                 image_pair,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
             )
 
-            keypoints, scores, descriptors, mask = keypoint_detection_output[:4]
+            image0_indices = torch.nonzero(keypoint_detector_output.mask[0]).squeeze()
+            image0_keypoints = torch.unsqueeze(keypoint_detector_output.keypoints[0][image0_indices], dim=0)
+            image0_descriptors = torch.unsqueeze(keypoint_detector_output.descriptors[0][image0_indices], dim=0)
+            image0_scores = torch.unsqueeze(keypoint_detector_output.scores[0][image0_indices], dim=0)
+            image1_indices = torch.nonzero(keypoint_detector_output.mask[1]).squeeze()
+            image1_keypoints = torch.unsqueeze(keypoint_detector_output.keypoints[1][image1_indices], dim=0)
+            image1_descriptors = torch.unsqueeze(keypoint_detector_output.descriptors[1][image1_indices], dim=0)
+            image1_scores = torch.unsqueeze(keypoint_detector_output.scores[1][image1_indices], dim=0)
 
-            image0_indices = torch.nonzero(mask[0]).squeeze()
-            image0_keypoints = torch.unsqueeze(keypoints[0][image0_indices], dim=0)
-            image0_descriptors = torch.unsqueeze(descriptors[0][image0_indices], dim=0)
-            image0_scores = torch.unsqueeze(scores[0][image0_indices], dim=0)
-            image1_indices = torch.nonzero(mask[1]).squeeze()
-            image1_keypoints = torch.unsqueeze(keypoints[1][image1_indices], dim=0)
-            image1_descriptors = torch.unsqueeze(descriptors[1][image1_indices], dim=0)
-            image1_scores = torch.unsqueeze(scores[1][image1_indices], dim=0)
-
-            match_image_output = self.match_image_pair(
+            (
+                matches_0,
+                matches_1,
+                matching_scores_0,
+                matching_scores_1,
+            ) = self.match_image_pair(
                 image0_keypoints,
                 image0_descriptors,
                 image0_scores,
@@ -596,26 +488,14 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                 image1_scores,
                 height,
                 width,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
             )
 
-            (
-                matches_0,
-                matches_1,
-                matching_scores_0,
-                matching_scores_1,
-                hidden_states,
-                attentions,
-            ) = match_image_output
             list_matches_0.append(matches_0)
             list_matches_1.append(matches_1)
             list_matching_scores_0.append(matching_scores_0)
             list_matching_scores_1.append(matching_scores_1)
             list_keypoints_0.append(image0_keypoints)
             list_keypoints_1.append(image1_keypoints)
-            list_attentions.append(attentions)
-            list_hidden_states.append(hidden_states)
 
             maximum_matches = max(
                 [
@@ -666,21 +546,13 @@ class SuperGlueForImageMatching(SuperGluePreTrainedModel):
                 keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
                 keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
 
-            hidden_states = batch_list_hidden_states(list_hidden_states)
-            attentions = batch_list_hidden_states(list_attentions)
-
             if not return_dict:
-                return tuple(
-                    v
-                    for v in [matches_mask, matches, matching_scores, keypoints, hidden_states, attentions]
-                    if v is not None
-                )
+                return tuple(v for v in [loss, matches_mask, matches, matching_scores, keypoints] if v is not None)
 
             return ImageMatchingOutput(
+                loss=loss,
                 mask=matches_mask,
                 matches=matches,
                 matching_scores=matching_scores,
                 keypoints=keypoints,
-                hidden_states=hidden_states,
-                attentions=attentions,
             )
