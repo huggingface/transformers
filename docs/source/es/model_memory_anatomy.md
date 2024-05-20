@@ -43,7 +43,7 @@ Luego, creamos algunos datos ficticios: IDs de tokens aleatorios entre 100 y 300
 >>> ds.set_format("pt")
 ```
 
-Para imprimir estadísticas resumidas para la utilización de la GPU y la ejecución del entrenamiento con [`Trainer`](https://huggingface.co/docs/transformers/v4.41.0/en/main_classes/trainer#transformers.Trainer), definimos dos funciones auxiliares:
+Para imprimir estadísticas resumidas para la utilización de la GPU y la ejecución del entrenamiento con [`Trainer`](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer), definimos dos funciones auxiliares:
 
 ```py
 >>> from pynvml import *
@@ -144,7 +144,7 @@ Si planeas ejecutar varias pruebas, reinicie el kernel de Python entre cada prue
 
 ## Utilización de la memoria en el entrenamiento
 
-Vamos a utilizar el [`Trainer`](https://huggingface.co/docs/transformers/v4.41.0/en/main_classes/trainer#transformers.Trainer) y entrenar el modelo sin utilizar ninguna técnica de optimización del rendimiento de la GPU y un tamaño de lote de 4:
+Vamos a utilizar el [`Trainer`](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer) y entrenar el modelo sin utilizar ninguna técnica de optimización del rendimiento de la GPU y un tamaño de lote de 4:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer, logging
