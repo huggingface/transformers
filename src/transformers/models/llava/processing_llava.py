@@ -41,11 +41,12 @@ class LlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
+    image_processor_class = "CLIPImageProcessor"
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+
 
     def __call__(
         self,
@@ -105,11 +106,28 @@ class LlavaProcessor(ProcessorMixin):
             pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         else:
             pixel_values = None
+        
+        # Replace the image token with the expanded image token sequence
+        image_str = self.image_token.content
+        num_image_tokens = self._get_number_of_features()
+        prompt_strings = []
+        for sample in text:
+            sample = sample.replace(image_str, image_str * num_image_tokens)
+            prompt_strings.append(sample)
+        
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+
+    def _get_number_of_features(self) -> int:
+        image_size = self.config.vision_config.image_size
+        patch_size = self.config.vision_config.patch_size
+
+        num_patches = (image_size // patch_size) ** 2
+        num_features = num_patches + 1
+        return num_features
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
