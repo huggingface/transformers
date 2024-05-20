@@ -16,6 +16,7 @@
 
 import copy
 import inspect
+import json
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
@@ -2332,6 +2333,14 @@ class GenerationMixin:
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+        import datetime
+        from collections import OrderedDict
+        timing = OrderedDict()
+
+        s_gen = datetime.datetime.now()
+
+        s = datetime.datetime.now()
+
         # init values
         pad_token_id = generation_config.pad_token_id
         output_attentions = generation_config.output_attentions
@@ -2367,9 +2376,43 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = -1
+        if idx not in timing:
+            timing[idx] = {"name": "before while loop", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        s_while = datetime.datetime.now()
+        while True:
+
+            s = datetime.datetime.now()
+
+            not_stop = self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device)
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 0
+            if idx not in timing:
+                timing[idx] = {"name": "_has_unfinished_sequences", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            if not not_stop:
+                break
+
+            s = datetime.datetime.now()
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 1
+            if idx not in timing:
+                timing[idx] = {"name": "prepare_inputs_for_generation", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
 
             # forward pass to get next token
             outputs = self(
@@ -2378,6 +2421,16 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 2
+            if idx not in timing:
+                timing[idx] = {"name": "model forward", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -2388,6 +2441,16 @@ class GenerationMixin:
             next_token_scores = logits_processor(input_ids, next_token_logits)
             if do_sample:
                 next_token_scores = logits_warper(input_ids, next_token_scores)
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 3
+            if idx not in timing:
+                timing[idx] = {"name": "logits_processor", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2409,6 +2472,15 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 4
+            if idx not in timing:
+                timing[idx] = {"name": "prepare outputs", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
             # token selection
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -2424,14 +2496,57 @@ class GenerationMixin:
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 5
+            if idx not in timing:
+                timing[idx] = {"name": "next_tokens", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
             )
 
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 6
+            if idx not in timing:
+                timing[idx] = {"name": "_update_model_kwargs_for_generation", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 7
+            if idx not in timing:
+                timing[idx] = {"name": "stopping_criteria", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            s = datetime.datetime.now()
+
             this_peer_finished = unfinished_sequences.max() == 0
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 8
+            if idx not in timing:
+                timing[idx] = {"name": "final part in while", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+        e1 = (t - s_gen).total_seconds()
+        e2 = (t - s_while).total_seconds()
+        print(f"generation time: {e1}")
+        print(f"while time: {e2}")
+        print(json.dumps(timing, indent=4))
+        breakpoint()
 
         if streamer is not None:
             streamer.end()
