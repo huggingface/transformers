@@ -38,11 +38,12 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchvision_available,
     logging,
     replace_return_docstrings,
-    is_torchvision_available,
 )
 from .configuration_iris import IrisConfig
+
 
 if is_torchvision_available():
     import torchvision
@@ -1674,6 +1675,12 @@ class IrisModel(IrisPreTrainedModel):
         super().__init__(config)
 
         self.cfg = config
+        self.entropy_weight = self.cfg.entropy_weight
+        self.gamma = self.cfg.gamma
+        self.lambda_ = self.cfg.lambda_
+        self.grad_acc_steps_actor_critic = self.cfg.grad_acc_steps_actor_critic
+        self.grad_acc_steps_tokenizer = self.cfg.grad_acc_steps_tokenizer
+        self.grad_acc_steps_world_model = self.cfg.grad_acc_steps_world_model
         config_enc_dec = EncoderDecoderConfig(
             self.cfg.resolution,
             self.cfg.in_channels,
@@ -1687,7 +1694,12 @@ class IrisModel(IrisPreTrainedModel):
         )
         encoder = Encoder(config_enc_dec)
         decoder = Decoder(config_enc_dec)
-        tokenizer = Tokenizer(self.cfg.vocab_size, self.cfg.embed_dim_tokenizer, encoder, decoder)
+        tokenizer = Tokenizer(
+            self.cfg.vocab_size,
+            self.cfg.embed_dim_tokenizer,
+            encoder,
+            decoder,
+        )
         transformer_config = TransformerConfig(
             self.cfg.tokens_per_block,
             self.cfg.max_blocks,
@@ -1700,10 +1712,13 @@ class IrisModel(IrisPreTrainedModel):
             self.cfg.attn_pdrop,
         )
         world_model = WorldModel(
-            obs_vocab_size=tokenizer.vocab_size, act_vocab_size=self.cfg.num_actions, config=transformer_config
+            obs_vocab_size=tokenizer.vocab_size,
+            act_vocab_size=self.cfg.num_actions,
+            config=transformer_config,
         )
         actor_critic = ActorCritic(
-            act_vocab_size=self.cfg.num_actions, use_original_obs=self.cfg.use_original_obs_actor_critic
+            act_vocab_size=self.cfg.num_actions,
+            use_original_obs=self.cfg.use_original_obs_actor_critic,
         )
         self.agent = Agent(tokenizer, world_model, actor_critic)
 
@@ -1864,11 +1879,11 @@ class IrisModel(IrisPreTrainedModel):
         cfg_actor_critic = {
             "tokenizer": self.agent.tokenizer,
             "world_model": self.agent.world_model,
-            "grad_acc_steps": self.cfg.grad_acc_steps_actor_critic,
+            "grad_acc_steps": self.grad_acc_steps_actor_critic,
             "imagine_horizon": self.cfg.imagine_horizon_train_actor_critic,
-            "gamma": self.cfg.gamma,
+            "gamma": self.gamma,
             "lambda_": self.cfg.lambda_,
-            "entropy_weight": self.cfg.entropy_weight,
+            "entropy_weight": self.entropy_weight,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
@@ -1895,12 +1910,18 @@ class IrisModel(IrisPreTrainedModel):
             "mask_padding": mask_padding[2],
         }
 
-        losses_tokenizer, tokenizer_outputs, all_hidden_states_tokenizer, all_attentions_tokenizer = (
-            self.component_losses(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
-        )
-        losses_world_model, world_model_outputs, all_hidden_states_world_model, all_attentions_world_model = (
-            self.component_losses(self.agent.world_model, batch_world_model, **cfg_world_model)
-        )
+        (
+            losses_tokenizer,
+            tokenizer_outputs,
+            all_hidden_states_tokenizer,
+            all_attentions_tokenizer,
+        ) = self.component_losses(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
+        (
+            losses_world_model,
+            world_model_outputs,
+            all_hidden_states_world_model,
+            all_attentions_world_model,
+        ) = self.component_losses(self.agent.world_model, batch_world_model, **cfg_world_model)
         losses_actor_critic, actor_critic_outputs, all_hidden_states_actor_critic, _ = self.component_losses(
             self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic
         )

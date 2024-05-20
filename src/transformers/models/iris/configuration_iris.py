@@ -76,14 +76,10 @@ class IrisConfig(PretrainedConfig):
             The dropout probability for attention layers applied to last state in World Model's Transformer
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for attention weights softmax layers in World Model's Transformer
-        epochs (`int`, *optional*, defaults to 600):
-            Number of epochs for training
         grad_acc_steps_tokenizer (`int`, *optional*, defaults to 1):
             Number of Gradient steps for Tokenizer
         grad_acc_steps_world_model (`int`, *optional*, defaults to 1):
             Number of Gradient steps for World Model
-        weight_decay (`float`, *optional*, defaults to 0.01):
-            Weight decay rate for optimizer of World Model
         grad_acc_steps_actor_critic (`int`, *optional*, defaults to 1):
             Number of Gradient steps for Actor Critic
         gamma (`float`, *optional*, defaults to 0.995):
@@ -152,10 +148,8 @@ class IrisConfig(PretrainedConfig):
         embed_pdrop=0.1,
         resid_pdrop=0.1,
         attn_pdrop=0.1,
-        epochs=600,
         grad_acc_steps_tokenizer=1,
         grad_acc_steps_world_model=1,
-        weight_decay=0.01,
         grad_acc_steps_actor_critic=1,
         gamma=0.995,
         lambda_=0.95,
@@ -189,11 +183,9 @@ class IrisConfig(PretrainedConfig):
         self.embed_pdrop = embed_pdrop
         self.resid_pdrop = resid_pdrop
         self.attn_pdrop = attn_pdrop
-        self.epochs = epochs
         self.sequence_length = self.max_blocks
         self.grad_acc_steps_tokenizer = grad_acc_steps_tokenizer
         self.grad_acc_steps_world_model = grad_acc_steps_world_model
-        self.weight_decay = weight_decay
         self.grad_acc_steps_actor_critic = grad_acc_steps_actor_critic
         self.imagine_horizon_train_actor_critic = self.sequence_length
         self.gamma = gamma
