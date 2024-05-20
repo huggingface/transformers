@@ -15,6 +15,7 @@
 """ PyTorch ZoeDepth model. """
 
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -790,10 +791,79 @@ class ZoeDepthProjector(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.grounding_dino.modeling_grounding_dino.GroundingDinoMultiheadAttention with GroundingDino->ZoeDepth
+class ZoeDepthMultiheadAttention(nn.Module):
+    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
+
+    # Ignore copy
+    def __init__(self, d_model, nhead, dropout):
+        super().__init__()
+        if d_model % nhead != 0:
+            raise ValueError(
+                f"The hidden size ({d_model}) is not a multiple of the number of attention " f"heads ({nhead})"
+            )
+
+        self.num_attention_heads = nhead
+        self.attention_head_size = int(d_model / nhead)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(d_model, self.all_head_size)
+        self.key = nn.Linear(d_model, self.all_head_size)
+        self.value = nn.Linear(d_model, self.all_head_size)
+
+        self.out_proj = nn.Linear(d_model, d_model)
+
+        self.dropout = nn.Dropout(dropout)
+
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        query_layer = self.transpose_for_scores(self.query(queries))
+        key_layer = self.transpose_for_scores(self.key(keys))
+        value_layer = self.transpose_for_scores(self.value(values))
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in ZoeDepthModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        context_layer = self.out_proj(context_layer)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
 class ZoeDepthTransformerEncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn = ZoeDepthMultiheadAttention(d_model, nhead, dropout=dropout)
 
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -813,8 +883,8 @@ class ZoeDepthTransformerEncoderLayer(nn.Module):
         src_key_padding_mask: Optional[torch.Tensor] = None,
         is_causal=False,
     ):
-        q = k = src
-        src2 = self.self_attn(q, k, value=src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask)[0]
+        queries = keys = src
+        src2 = self.self_attn(queries=queries, keys=keys, values=src, attention_mask=src_mask)[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))

@@ -226,6 +226,31 @@ def rename_key(name):
     return name
 
 
+def read_in_q_k_v_metric_head(state_dict):
+    hidden_size = 128
+    for i in range(4):
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"patch_transformer.transformer_encoder.layers.{i}.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.query.weight"] = in_proj_weight[
+            :hidden_size, :
+        ]
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.key.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.value.weight"] = in_proj_weight[
+            -hidden_size:, :
+        ]
+        state_dict[f"patch_transformer.transformer_encoder.{i}.self_attn.value.bias"] = in_proj_bias[-hidden_size:]
+
+
 def convert_state_dict(orig_state_dict):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
@@ -296,6 +321,9 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
+    if model_name == "ZoeD_NK":
+        read_in_q_k_v_metric_head(state_dict)
+
     # rename keys
     state_dict = convert_state_dict(state_dict)
     # remove certain keys
