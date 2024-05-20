@@ -54,13 +54,10 @@ class ClassFinder(CSTVisitor):
             self.function_def[node.name.value] = node
 
     def leave_If(self, node):
-        if any(
-            m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()]))
-            for stmt in node.body.body
-            if m.matches(stmt, m.SimpleStatementLine())
-        ):
-            print(f"\n{30*'#'}found protected{self.python_module.code_for_node(node)}{30*'#'}")
-            self.imports[node.body] = node
+
+        for stmt in node.body.body:
+            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                self.imports[stmt.body[0].names] = node # match the visit simple statement line to overwrite it
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):

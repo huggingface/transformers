@@ -566,7 +566,7 @@ def run_ruff(code):
     return stdout.decode()
 
 def fix_ruff(code):
-    command = ["ruff", "check", "-", "--config", "pyproject.toml", "--fix"]
+    command = ["ruff", "check", "-", "--config", "pyproject.toml", "--fix", "--exit-non-zero-on-fix"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
