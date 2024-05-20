@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "alibaba-damo/mgp-str-base": "https://huggingface.co/alibaba-damo/mgp-str-base/resolve/main/config.json",
-}
-
 
 class MgpstrConfig(PretrainedConfig):
     r"""

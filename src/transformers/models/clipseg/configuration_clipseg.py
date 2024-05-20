@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "CIDAS/clipseg-rd64": "https://huggingface.co/CIDAS/clipseg-rd64/resolve/main/config.json",
-}
-
 
 class CLIPSegTextConfig(PretrainedConfig):
     r"""

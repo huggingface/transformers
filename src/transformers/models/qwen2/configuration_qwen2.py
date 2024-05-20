@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Qwen/Qwen2-7B-beta": "https://huggingface.co/Qwen/Qwen2-7B-beta/resolve/main/config.json",
-}
-
 
 class Qwen2Config(PretrainedConfig):
     r"""

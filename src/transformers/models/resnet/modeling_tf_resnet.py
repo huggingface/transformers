@@ -24,7 +24,13 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPoolingAndNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    keras,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_resnet import ResNetConfig
@@ -43,13 +49,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "microsoft/resnet-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
-TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/resnet-50",
-    # See all resnet models at https://huggingface.co/models?filter=resnet
-]
 
-
-class TFResNetConvLayer(tf.keras.layers.Layer):
+class TFResNetConvLayer(keras.layers.Layer):
     def __init__(
         self,
         in_channels: int,
@@ -61,12 +62,12 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
     ) -> None:
         super().__init__(**kwargs)
         self.pad_value = kernel_size // 2
-        self.conv = tf.keras.layers.Conv2D(
+        self.conv = keras.layers.Conv2D(
             out_channels, kernel_size=kernel_size, strides=stride, padding="valid", use_bias=False, name="convolution"
         )
         # Use same default momentum and epsilon as PyTorch equivalent
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
-        self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
+        self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.activation = ACT2FN[activation] if activation is not None else keras.layers.Activation("linear")
         self.in_channels = in_channels
         self.out_channels = out_channels
 
@@ -95,7 +96,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
                 self.normalization.build([None, None, None, self.out_channels])
 
 
-class TFResNetEmbeddings(tf.keras.layers.Layer):
+class TFResNetEmbeddings(keras.layers.Layer):
     """
     ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
@@ -110,7 +111,7 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
             activation=config.hidden_act,
             name="embedder",
         )
-        self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="valid", name="pooler")
+        self.pooler = keras.layers.MaxPool2D(pool_size=3, strides=2, padding="valid", name="pooler")
         self.num_channels = config.num_channels
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -137,7 +138,7 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
                 self.pooler.build(None)
 
 
-class TFResNetShortCut(tf.keras.layers.Layer):
+class TFResNetShortCut(keras.layers.Layer):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
     downsample the input using `stride=2`.
@@ -145,11 +146,11 @@ class TFResNetShortCut(tf.keras.layers.Layer):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.convolution = tf.keras.layers.Conv2D(
+        self.convolution = keras.layers.Conv2D(
             out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
         # Use same default momentum and epsilon as PyTorch equivalent
-        self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.normalization = keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.in_channels = in_channels
         self.out_channels = out_channels
 
@@ -171,7 +172,7 @@ class TFResNetShortCut(tf.keras.layers.Layer):
                 self.normalization.build([None, None, None, self.out_channels])
 
 
-class TFResNetBasicLayer(tf.keras.layers.Layer):
+class TFResNetBasicLayer(keras.layers.Layer):
     """
     A classic ResNet's residual layer composed by two `3x3` convolutions.
     """
@@ -186,7 +187,7 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else tf.keras.layers.Activation("linear", name="shortcut")
+            else keras.layers.Activation("linear", name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
@@ -214,7 +215,7 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
                 self.shortcut.build(None)
 
 
-class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
+class TFResNetBottleNeckLayer(keras.layers.Layer):
     """
     A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
 
@@ -240,7 +241,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         self.shortcut = (
             TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
-            else tf.keras.layers.Activation("linear", name="shortcut")
+            else keras.layers.Activation("linear", name="shortcut")
         )
         self.activation = ACT2FN[activation]
 
@@ -272,7 +273,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
                 self.shortcut.build(None)
 
 
-class TFResNetStage(tf.keras.layers.Layer):
+class TFResNetStage(keras.layers.Layer):
     """
     A ResNet stage composed of stacked layers.
     """
@@ -306,7 +307,7 @@ class TFResNetStage(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFResNetEncoder(tf.keras.layers.Layer):
+class TFResNetEncoder(keras.layers.Layer):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
@@ -375,7 +376,7 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
 
 RESNET_START_DOCSTRING = r"""
     This model is a TensorFlow
-    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
+    [keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
     regular TensorFlow Module and refer to the TensorFlow documentation for all matter related to general usage and
     behavior.
 
@@ -401,7 +402,7 @@ RESNET_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFResNetMainLayer(tf.keras.layers.Layer):
+class TFResNetMainLayer(keras.layers.Layer):
     config_class = ResNetConfig
 
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
@@ -409,7 +410,7 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embedder = TFResNetEmbeddings(config, name="embedder")
         self.encoder = TFResNetEncoder(config, name="encoder")
-        self.pooler = tf.keras.layers.GlobalAveragePooling2D(keepdims=True)
+        self.pooler = keras.layers.GlobalAveragePooling2D(keepdims=True)
 
     @unpack_inputs
     def call(
@@ -530,14 +531,14 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         self.resnet = TFResNetMainLayer(config, name="resnet")
         # classification head
         self.classifier_layer = (
-            tf.keras.layers.Dense(config.num_labels, name="classifier.1")
+            keras.layers.Dense(config.num_labels, name="classifier.1")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="classifier.1")
+            else keras.layers.Activation("linear", name="classifier.1")
         )
         self.config = config
 
     def classifier(self, x: tf.Tensor) -> tf.Tensor:
-        x = tf.keras.layers.Flatten()(x)
+        x = keras.layers.Flatten()(x)
         logits = self.classifier_layer(x)
         return logits
 

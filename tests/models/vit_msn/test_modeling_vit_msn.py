@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTMSNForImageClassification, ViTMSNModel
-    from transformers.models.vit_msn.modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -60,6 +59,7 @@ class ViTMSNModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -78,6 +78,7 @@ class ViTMSNModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in ViT MSN, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -107,6 +108,7 @@ class ViTMSNModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -152,7 +154,7 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
+        {"image-feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -192,9 +194,9 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTMSNModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/vit-msn-small"
+        model = ViTMSNModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

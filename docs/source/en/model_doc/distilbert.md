@@ -34,7 +34,7 @@ The DistilBERT model was proposed in the blog post [Smaller, faster, cheaper, li
 distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5), and the paper [DistilBERT, a
 distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108). DistilBERT is a
 small, fast, cheap and light Transformer model trained by distilling BERT base. It has 40% less parameters than
-*bert-base-uncased*, runs 60% faster while preserving over 95% of BERT's performances as measured on the GLUE language
+*google-bert/bert-base-uncased*, runs 60% faster while preserving over 95% of BERT's performances as measured on the GLUE language
 understanding benchmark.
 
 The abstract from the paper is the following:
@@ -152,8 +152,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 >>> device = "cuda" # the device to load the model onto
 
->>> tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
->>> model = AutoModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+>>> tokenizer = AutoTokenizer.from_pretrained('distilbert/distilbert-base-uncased')
+>>> model = AutoModel.from_pretrained("distilbert/distilbert-base-uncased", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
 
 >>> text = "Replace me by any text you'd like."
 

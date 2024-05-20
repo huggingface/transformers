@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import EfficientNetForImageClassification, EfficientNetModel
-    from transformers.models.efficientnet.modeling_efficientnet import EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -130,7 +129,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
+        {"image-feature-extraction": EfficientNetModel, "image-classification": EfficientNetForImageClassification}
         if is_torch_available()
         else {}
     )
@@ -212,9 +211,15 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/efficientnet-b7"
+        model = EfficientNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @is_pipeline_test
+    @require_vision
+    @slow
+    def test_pipeline_image_feature_extraction(self):
+        super().test_pipeline_image_feature_extraction()
 
     @is_pipeline_test
     @require_vision

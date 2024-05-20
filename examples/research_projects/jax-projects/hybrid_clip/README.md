@@ -32,7 +32,7 @@ Models written in JAX/Flax are **immutable** and updated in a purely functional
 way which enables simple and efficient model parallelism.
 
 In this example we will use the vision model from [CLIP](https://huggingface.co/models?filter=clip)
-as the image encoder and [`roberta-base`](https://huggingface.co/roberta-base) as the text encoder.
+as the image encoder and [`FacebookAI/roberta-base`](https://huggingface.co/FacebookAI/roberta-base) as the text encoder.
 Note that one can also use the [ViT](https://huggingface.co/models?filter=vit) model as image encoder and any other BERT or ROBERTa model as text encoder.
 To train the model on languages other than English one should choose a text encoder trained on the desired
 language and a image-text dataset in that language. One such dataset is [WIT](https://github.com/google-research-datasets/wit).	
@@ -43,17 +43,17 @@ Here we call the model `"clip-roberta-base"`, but you can change the model name 
 You can do this either directly on [huggingface.co](https://huggingface.co/new) (assuming that
 you are logged in) or via the command line:
 
-```
+```bash
 huggingface-cli repo create clip-roberta-base
 ```
 Next we clone the model repository to add the tokenizer and model files.
-```
+```bash
 git clone https://huggingface.co/<your-username>/clip-roberta-base
 ```
 To ensure that all tensorboard traces will be uploaded correctly, we need to 
 track them. You can run the following command inside your model repo to do so.
 
-```
+```bash
 cd clip-roberta-base
 git lfs track "*tfevents*"
 ```
@@ -76,7 +76,7 @@ Here is an example of how to load the model using pre-trained text and vision mo
 ```python
 from modeling_hybrid_clip import FlaxHybridCLIP
 
-model = FlaxHybridCLIP.from_text_vision_pretrained("bert-base-uncased", "openai/clip-vit-base-patch32")
+model = FlaxHybridCLIP.from_text_vision_pretrained("google-bert/bert-base-uncased", "openai/clip-vit-base-patch32")
 
 # save the model
 model.save_pretrained("bert-clip")
@@ -89,7 +89,7 @@ If the checkpoints are in PyTorch then one could pass `text_from_pt=True` and `v
 PyTorch checkpoints convert them to flax and load the model.
 
 ```python
-model = FlaxHybridCLIP.from_text_vision_pretrained("bert-base-uncased", "openai/clip-vit-base-patch32", text_from_pt=True, vision_from_pt=True)
+model = FlaxHybridCLIP.from_text_vision_pretrained("google-bert/bert-base-uncased", "openai/clip-vit-base-patch32", text_from_pt=True, vision_from_pt=True)
 ```
 
 This loads both the text and vision encoders using pre-trained weights, the projection layers are randomly
@@ -154,9 +154,9 @@ Next we can run the example script to train the model:
 ```bash
 python run_hybrid_clip.py \
     --output_dir ${MODEL_DIR} \
-    --text_model_name_or_path="roberta-base" \
+    --text_model_name_or_path="FacebookAI/roberta-base" \
     --vision_model_name_or_path="openai/clip-vit-base-patch32" \
-    --tokenizer_name="roberta-base" \
+    --tokenizer_name="FacebookAI/roberta-base" \
     --train_file="coco_dataset/train_dataset.json" \
     --validation_file="coco_dataset/validation_dataset.json" \
     --do_train --do_eval \

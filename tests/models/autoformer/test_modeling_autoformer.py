@@ -107,6 +107,7 @@ class AutoformerModelTester:
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
             moving_average=self.moving_average,
+            scaling="std",  # we need std to get non-zero `loc`
         )
 
     def prepare_autoformer_inputs_dict(self, config):

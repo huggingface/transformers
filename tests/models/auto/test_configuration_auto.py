@@ -46,7 +46,7 @@ class AutoConfigTest(unittest.TestCase):
         self.assertIsNotNone(importlib.util.find_spec("transformers.models.auto"))
 
     def test_config_from_model_shortcut(self):
-        config = AutoConfig.from_pretrained("bert-base-uncased")
+        config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
         self.assertIsInstance(config, BertConfig)
 
     def test_config_model_type_from_local_file(self):

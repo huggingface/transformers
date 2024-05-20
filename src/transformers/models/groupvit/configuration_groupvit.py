@@ -30,10 +30,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/groupvit-gcc-yfcc": "https://huggingface.co/nvidia/groupvit-gcc-yfcc/resolve/main/config.json",
-}
-
 
 class GroupViTTextConfig(PretrainedConfig):
     r"""
@@ -177,7 +173,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):

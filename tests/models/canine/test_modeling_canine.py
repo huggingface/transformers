@@ -36,7 +36,6 @@ if is_torch_available():
         CanineForTokenClassification,
         CanineModel,
     )
-    from transformers.models.canine.modeling_canine import CANINE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class CanineModelTester:
@@ -503,6 +502,10 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # ViT does not use inputs_embeds
         pass
 
+    @unittest.skip(reason="Canine Tower does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")
     def test_model_common_attributes(self):
         pass
@@ -527,9 +530,9 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CANINE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CanineModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/canine-s"
+        model = CanineModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

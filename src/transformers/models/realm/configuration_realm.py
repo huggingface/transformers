@@ -20,26 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-REALM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/realm-cc-news-pretrained-embedder": (
-        "https://huggingface.co/google/realm-cc-news-pretrained-embedder/resolve/main/config.json"
-    ),
-    "google/realm-cc-news-pretrained-encoder": (
-        "https://huggingface.co/google/realm-cc-news-pretrained-encoder/resolve/main/config.json"
-    ),
-    "google/realm-cc-news-pretrained-scorer": (
-        "https://huggingface.co/google/realm-cc-news-pretrained-scorer/resolve/main/config.json"
-    ),
-    "google/realm-cc-news-pretrained-openqa": (
-        "https://huggingface.co/google/realm-cc-news-pretrained-openqa/aresolve/main/config.json"
-    ),
-    "google/realm-orqa-nq-openqa": "https://huggingface.co/google/realm-orqa-nq-openqa/resolve/main/config.json",
-    "google/realm-orqa-nq-reader": "https://huggingface.co/google/realm-orqa-nq-reader/resolve/main/config.json",
-    "google/realm-orqa-wq-openqa": "https://huggingface.co/google/realm-orqa-wq-openqa/resolve/main/config.json",
-    "google/realm-orqa-wq-reader": "https://huggingface.co/google/realm-orqa-wq-reader/resolve/main/config.json",
-    # See all REALM models at https://huggingface.co/models?filter=realm
-}
-
 
 class RealmConfig(PretrainedConfig):
     r"""
@@ -82,7 +62,7 @@ class RealmConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):

@@ -25,6 +25,7 @@ class DistilBertTokenizationTest(BertTokenizationTest):
     tokenizer_class = DistilBertTokenizer
     rust_tokenizer_class = DistilBertTokenizerFast
     test_rust_tokenizer = True
+    from_pretrained_id = "distilbert/distilbert-base-uncased"
 
     @slow
     def test_sequence_builders(self):

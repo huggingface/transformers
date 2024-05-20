@@ -2,7 +2,7 @@ name: Self-hosted runner (nightly-ci)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
-# For example for `run_all_tests_torch_cuda_extensions_gpu` the docker image is
+# For example for `run_torch_cuda_extensions_gpu` the docker image is
 # `huggingface/transformers-pytorch-deepspeed-latest-gpu`, which can be found at
 # `docker/transformers-pytorch-deepspeed-latest-gpu/Dockerfile`
 
@@ -115,9 +115,9 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
@@ -176,14 +176,14 @@ jobs:
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
-  run_all_tests_torch_cuda_extensions_gpu:
+  run_torch_cuda_extensions_gpu:
     name: Torch CUDA extension tests
     strategy:
       fail-fast: false
@@ -231,19 +231,19 @@ jobs:
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
         run: |
-          python -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
+          python -m pytest -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: Test suite reports artifacts
+      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports_postfix_nightly"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports_postfix_nightly
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
+          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports_postfix_nightly
+          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   send_results:
     name: Send results to webhook
@@ -253,7 +253,7 @@ jobs:
       setup,
       run_tests_single_gpu,
       run_tests_multi_gpu,
-      run_all_tests_torch_cuda_extensions_gpu
+      run_torch_cuda_extensions_gpu
     ]
     steps:
       - name: Preliminary job status
@@ -262,8 +262,8 @@ jobs:
         run: |
           echo "Setup status: ${{ needs.setup.result }}"
 
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}

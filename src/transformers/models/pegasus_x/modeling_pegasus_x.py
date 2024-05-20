@@ -49,13 +49,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
 
 
-PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-x-base",
-    "google/pegasus-x-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus-x
-]
-
-
 @dataclasses.dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""
@@ -91,6 +84,20 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->PegasusX
+class PegasusXScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 class PegasusXSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -109,7 +116,7 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
-            torch.arange(half_d_feature, device=input_embeds.device, dtype=input_embeds.dtype)
+            torch.arange(half_d_feature, device=input_embeds.device, dtype=torch.int64).type_as(input_embeds)
             * -(np.log(float(self.max_scale)) / (half_d_feature - 1))
         )
         pe[:, :half_d_feature] = torch.sin(positions * div_term)
@@ -884,13 +891,16 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
+        padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim)
+            self.embed_tokens = PegasusXScaledWordEmbedding(
+                config.vocab_size, embed_dim, padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
@@ -992,7 +1002,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         embed_pos = self.embed_positions(inputs_embeds)
 
@@ -1090,12 +1100,15 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        padding_idx = config.pad_token_id
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+            self.embed_tokens = PegasusXScaledWordEmbedding(
+                config.vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+            )
 
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -1200,7 +1213,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -1311,7 +1324,11 @@ class PegasusXModel(PegasusXPreTrainedModel):
         super().__init__(config)
 
         vocab_size = config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model)
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        padding_idx = config.pad_token_id
+        self.shared = PegasusXScaledWordEmbedding(
+            vocab_size, config.d_model, padding_idx=padding_idx, embed_scale=embed_scale
+        )
 
         self.encoder = PegasusXEncoder(config, self.shared)
         self.decoder = PegasusXDecoder(config, self.shared)

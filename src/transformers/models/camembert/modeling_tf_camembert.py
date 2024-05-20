@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -61,12 +62,8 @@ from .configuration_camembert import CamembertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "camembert-base"
+_CHECKPOINT_FOR_DOC = "almanach/camembert-base"
 _CONFIG_FOR_DOC = "CamembertConfig"
-
-TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all CamemBERT models at https://huggingface.co/models?filter=camembert
-]
 
 
 CAMEMBERT_START_DOCSTRING = r"""
@@ -75,7 +72,7 @@ CAMEMBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -168,7 +165,7 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings
-class TFCamembertEmbeddings(tf.keras.layers.Layer):
+class TFCamembertEmbeddings(keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -181,8 +178,8 @@ class TFCamembertEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -274,11 +271,11 @@ class TFCamembertEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Camembert
-class TFCamembertPooler(tf.keras.layers.Layer):
+class TFCamembertPooler(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -304,7 +301,7 @@ class TFCamembertPooler(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Camembert
-class TFCamembertSelfAttention(tf.keras.layers.Layer):
+class TFCamembertSelfAttention(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -319,16 +316,16 @@ class TFCamembertSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
         self.config = config
@@ -437,15 +434,15 @@ class TFCamembertSelfAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Camembert
-class TFCamembertSelfOutput(tf.keras.layers.Layer):
+class TFCamembertSelfOutput(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -468,7 +465,7 @@ class TFCamembertSelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Camembert
-class TFCamembertAttention(tf.keras.layers.Layer):
+class TFCamembertAttention(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -520,11 +517,11 @@ class TFCamembertAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Camembert
-class TFCamembertIntermediate(tf.keras.layers.Layer):
+class TFCamembertIntermediate(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -550,15 +547,15 @@ class TFCamembertIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Camembert
-class TFCamembertOutput(tf.keras.layers.Layer):
+class TFCamembertOutput(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -581,7 +578,7 @@ class TFCamembertOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Camembert
-class TFCamembertLayer(tf.keras.layers.Layer):
+class TFCamembertLayer(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -685,7 +682,7 @@ class TFCamembertLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Camembert
-class TFCamembertEncoder(tf.keras.layers.Layer):
+class TFCamembertEncoder(keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -765,7 +762,7 @@ class TFCamembertEncoder(tf.keras.layers.Layer):
 
 @keras_serializable
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaMainLayer with Roberta->Camembert
-class TFCamembertMainLayer(tf.keras.layers.Layer):
+class TFCamembertMainLayer(keras.layers.Layer):
     config_class = CamembertConfig
 
     def __init__(self, config, add_pooling_layer=True, **kwargs):
@@ -785,7 +782,7 @@ class TFCamembertMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFCamembertEmbeddings(config, name="embeddings")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
@@ -1068,7 +1065,7 @@ class TFCamembertModel(TFCamembertPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead with Roberta->Camembert
-class TFCamembertLMHead(tf.keras.layers.Layer):
+class TFCamembertLMHead(keras.layers.Layer):
     """Camembert Head for masked language modeling."""
 
     def __init__(self, config, input_embeddings, **kwargs):
@@ -1076,10 +1073,10 @@ class TFCamembertLMHead(tf.keras.layers.Layer):
 
         self.config = config
         self.hidden_size = config.hidden_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
@@ -1222,12 +1219,12 @@ class TFCamembertForMaskedLM(TFCamembertPreTrainedModel, TFMaskedLanguageModelin
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaClassificationHead
-class TFCamembertClassificationHead(tf.keras.layers.Layer):
+class TFCamembertClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -1236,8 +1233,8 @@ class TFCamembertClassificationHead(tf.keras.layers.Layer):
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.out_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
         self.config = config
@@ -1371,8 +1368,8 @@ class TFCamembertForTokenClassification(TFCamembertPreTrainedModel, TFTokenClass
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1463,8 +1460,8 @@ class TFCamembertForMultipleChoice(TFCamembertPreTrainedModel, TFMultipleChoiceL
         super().__init__(config, *inputs, **kwargs)
 
         self.roberta = TFCamembertMainLayer(config, name="roberta")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1568,7 +1565,7 @@ class TFCamembertForQuestionAnswering(TFCamembertPreTrainedModel, TFQuestionAnsw
         self.num_labels = config.num_labels
 
         self.roberta = TFCamembertMainLayer(config, add_pooling_layer=False, name="roberta")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config

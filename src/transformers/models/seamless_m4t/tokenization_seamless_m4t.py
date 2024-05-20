@@ -32,23 +32,11 @@ from ...utils import PaddingStrategy, logging
 
 logger = logging.get_logger(__name__)
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/hf-seamless-m4t-medium": (
-            "https://huggingface.co/facebook/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
-        ),
-    }
-}
 
 SPIECE_UNDERLINE = "▁"
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
-
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/hf-seamless-m4t-medium": 2048,
-}
 
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
@@ -120,11 +108,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be
             supported by the tokenizer.
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -144,6 +133,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         tgt_lang="fra",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
+        add_prefix_space=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -173,6 +163,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             bos_token=bos_token,
@@ -186,6 +177,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -441,7 +433,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return tokenizer
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -449,7 +441,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        text = text.replace(SPIECE_UNDERLINE, " ")
+        if self.add_prefix_space:
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
@@ -488,7 +484,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        if tokens[0].startswith(SPIECE_UNDERLINE):
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
             tokens[0] = tokens[0][1:]
 
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()

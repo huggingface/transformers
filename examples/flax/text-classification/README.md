@@ -31,7 +31,7 @@ GLUE is made up of a total of 9 different tasks. Here is how to run the script o
 export TASK_NAME=mrpc
 
 python run_flax_glue.py \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path google-bert/bert-base-cased \
   --task_name ${TASK_NAME} \
   --max_seq_length 128 \
   --learning_rate 2e-5 \

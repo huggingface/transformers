@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-🤗 Transformers にはいくつかの多言語モデルがあり、それらの推論の使用方法は単一言語モデルとは異なります。ただし、多言語モデルの使用方法がすべて異なるわけではありません。 [bert-base-multilingual-uncased](https://huggingface.co/bert-base-multilingual-uncased) などの一部のモデルは、単一言語モデルと同様に使用できます。 このガイドでは、推論のために使用方法が異なる多言語モデルをどのように使うかを示します。
+🤗 Transformers にはいくつかの多言語モデルがあり、それらの推論の使用方法は単一言語モデルとは異なります。ただし、多言語モデルの使用方法がすべて異なるわけではありません。 [google-bert/bert-base-multilingual-uncased](https://huggingface.co/google-bert/bert-base-multilingual-uncased) などの一部のモデルは、単一言語モデルと同様に使用できます。 このガイドでは、推論のために使用方法が異なる多言語モデルをどのように使うかを示します。
 
 ## XLM
 
@@ -28,24 +28,24 @@ XLM には10の異なるチェックポイントがあり、そのうちの1つ�
 
 次の XLM モデルは、言語の埋め込みを使用して、推論で使用される言語を指定します。
 
-- `xlm-mlm-ende-1024` (マスク化された言語モデリング、英語-ドイツ語)
-- `xlm-mlm-enfr-1024` (マスク化された言語モデリング、英語-フランス語)
-- `xlm-mlm-enro-1024` (マスク化された言語モデリング、英語-ルーマニア語)
-- `xlm-mlm-xnli15-1024` (マスク化された言語モデリング、XNLI 言語)
-- `xlm-mlm-tlm-xnli15-1024` (マスク化された言語モデリング + 翻訳 + XNLI 言語)
-- `xlm-clm-enfr-1024` (因果言語モデリング、英語-フランス語)
-- `xlm-clm-ende-1024` (因果言語モデリング、英語-ドイツ語)
+- `FacebookAI/xlm-mlm-ende-1024` (マスク化された言語モデリング、英語-ドイツ語)
+- `FacebookAI/xlm-mlm-enfr-1024` (マスク化された言語モデリング、英語-フランス語)
+- `FacebookAI/xlm-mlm-enro-1024` (マスク化された言語モデリング、英語-ルーマニア語)
+- `FacebookAI/xlm-mlm-xnli15-1024` (マスク化された言語モデリング、XNLI 言語)
+- `FacebookAI/xlm-mlm-tlm-xnli15-1024` (マスク化された言語モデリング + 翻訳 + XNLI 言語)
+- `FacebookAI/xlm-clm-enfr-1024` (因果言語モデリング、英語-フランス語)
+- `FacebookAI/xlm-clm-ende-1024` (因果言語モデリング、英語-ドイツ語)
 
 言語の埋め込みは、モデルに渡される `input_ids` と同じ形状のテンソルとして表されます。 これらのテンソルの値は、使用される言語に依存し、トークナイザーの `lang2id` および `id2lang` 属性によって識別されます。
 
-この例では、`xlm-clm-enfr-1024` チェックポイントをロードします (因果言語モデリング、英語-フランス語)。
+この例では、`FacebookAI/xlm-clm-enfr-1024` チェックポイントをロードします (因果言語モデリング、英語-フランス語)。
 
 ```py
 >>> import torch
 >>> from transformers import XLMTokenizer, XLMWithLMHeadModel
 
->>> tokenizer = XLMTokenizer.from_pretrained("xlm-clm-enfr-1024")
->>> model = XLMWithLMHeadModel.from_pretrained("xlm-clm-enfr-1024")
+>>> tokenizer = XLMTokenizer.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
+>>> model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-clm-enfr-1024")
 ```
 
 トークナイザーの `lang2id` 属性は、このモデルの言語とその ID を表示します。
@@ -83,8 +83,8 @@ XLM には10の異なるチェックポイントがあり、そのうちの1つ�
 
 次の XLM モデルは、推論中に言語の埋め込みを必要としません。
 
-- `xlm-mlm-17-1280` (マスク化された言語モデリング、17の言語)
-- `xlm-mlm-100-1280` (マスク化された言語モデリング、100の言語)
+- `FacebookAI/xlm-mlm-17-1280` (マスク化された言語モデリング、17の言語)
+- `FacebookAI/xlm-mlm-100-1280` (マスク化された言語モデリング、100の言語)
 
 これらのモデルは、以前の XLM チェックポイントとは異なり、一般的な文の表現に使用されます。
 
@@ -92,8 +92,8 @@ XLM には10の異なるチェックポイントがあり、そのうちの1つ�
 
 以下の BERT モデルは、多言語タスクに使用できます。
 
-- `bert-base-multilingual-uncased` (マスク化された言語モデリング + 次の文の予測、102の言語)
-- `bert-base-multilingual-cased` (マスク化された言語モデリング + 次の文の予測、104の言語)
+- `google-bert/bert-base-multilingual-uncased` (マスク化された言語モデリング + 次の文の予測、102の言語)
+- `google-bert/bert-base-multilingual-cased` (マスク化された言語モデリング + 次の文の予測、104の言語)
 
 これらのモデルは、推論中に言語の埋め込みを必要としません。 文脈から言語を識別し、それに応じて推測する必要があります。
 
@@ -101,8 +101,8 @@ XLM には10の異なるチェックポイントがあり、そのうちの1つ�
 
 次の XLM-RoBERTa モデルは、多言語タスクに使用できます。
 
-- `xlm-roberta-base` (マスク化された言語モデリング、100の言語)
-- `xlm-roberta-large` (マスク化された言語モデリング、100の言語)
+- `FacebookAI/xlm-roberta-base` (マスク化された言語モデリング、100の言語)
+- `FacebookAI/xlm-roberta-large` (マスク化された言語モデリング、100の言語)
 
 XLM-RoBERTa は、100の言語で新しく作成およびクリーニングされた2.5 TB の CommonCrawl データでトレーニングされました。 これは、分類、シーケンスのラベル付け、質問応答などのダウンストリームタスクで、mBERT や XLM などの以前にリリースされた多言語モデルを大幅に改善します。
 

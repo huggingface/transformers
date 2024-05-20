@@ -39,7 +39,7 @@ Wheel files are available for the following Python versions:
 | 1.12.0            |            | √          | √          | √          | √           |
 
 Please run `pip list | grep torch` to get your `pytorch_version`.
-```
+```bash
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
 where `{pytorch_version}` should be your PyTorch version, for instance 2.1.0.
@@ -59,13 +59,13 @@ Use this standards-based MPI implementation to deliver flexible, efficient, scal
 oneccl_bindings_for_pytorch is installed along with the MPI tool set. Need to source the environment before using it.
 
 for Intel® oneCCL >= 1.12.0
-```
+```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
 ```
 
 for Intel® oneCCL whose version < 1.12.0
-```
+```bash
 torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
 source $torch_ccl_path/env/setvars.sh
 ```
@@ -90,7 +90,7 @@ The following command enables training with 2 processes on one Xeon node, with o
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -119,7 +119,7 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
  python3 run_qa.py \
- --model_name_or_path bert-large-uncased \
+ --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
  --do_eval \
@@ -154,7 +154,7 @@ This example assumes that you have:
 
 The snippet below is an example of a Dockerfile that uses a base image that supports distributed CPU training and then
 extracts a Transformers release to the `/workspace` directory, so that the example scripts are included in the image:
-```
+```dockerfile
 FROM intel/ai-workflows:torch-2.0.1-huggingface-multinode-py3.9
 
 WORKDIR /workspace
@@ -210,7 +210,7 @@ spec:
                 - torchrun
                 - /workspace/transformers/examples/pytorch/question-answering/run_qa.py
                 - --model_name_or_path
-                - "bert-large-uncased"
+                - "google-bert/bert-large-uncased"
                 - --dataset_name
                 - "squad"
                 - --do_train
@@ -286,7 +286,7 @@ set the same CPU and memory amounts for both the resource limits and requests.
 
 After the PyTorchJob spec has been updated with values appropriate for your cluster and training job, it can be deployed
 to the cluster using:
-```
+```bash
 kubectl create -f pytorchjob.yaml
 ```
 
@@ -304,7 +304,7 @@ transformers-pytorchjob-worker-3                         1/1     Running        
 ```
 
 The logs for worker can be viewed using `kubectl logs -n kubeflow <pod name>`. Add `-f` to stream the logs, for example:
-```
+```bash
 kubectl logs -n kubeflow transformers-pytorchjob-worker-0 -f
 ```
 

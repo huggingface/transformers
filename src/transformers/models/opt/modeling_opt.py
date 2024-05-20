@@ -60,24 +60,13 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
-OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/opt-125m",
-    "facebook/opt-350m",
-    "facebook/opt-1.3b",
-    "facebook/opt-2.7b",
-    "facebook/opt-6.7b",
-    "facebook/opt-13b",
-    "facebook/opt-30b",
-    # See all OPT models at https://huggingface.co/models?filter=opt
-]
-
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -120,27 +109,10 @@ class OPTAttention(nn.Module):
     ):
         super().__init__()
         self.config = config
-
-        def _handle_deprecated_argument(config_arg_name, config, fn_arg_name, kwargs):
-            """
-            If a the deprecated argument `fn_arg_name` is passed, raise a deprecation
-            warning and return that value, otherwise take the equivalent config.config_arg_name
-            """
-            val = None
-            if fn_arg_name in kwargs:
-                logging.warning(
-                    "Passing in {} to {self.__class__.__name__} is deprecated and won't be supported from v4.38."
-                    " Please set it in the config instead"
-                )
-                val = kwargs.pop(fn_arg_name)
-            else:
-                val = getattr(config, config_arg_name)
-            return val
-
-        self.embed_dim = _handle_deprecated_argument("hidden_size", config, "embed_dim", kwargs)
-        self.num_heads = _handle_deprecated_argument("num_attention_heads", config, "num_heads", kwargs)
-        self.dropout = _handle_deprecated_argument("attention_dropout", config, "dropout", kwargs)
-        self.enable_bias = _handle_deprecated_argument("enable_bias", config, "bias", kwargs)
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.attention_dropout
+        self.enable_bias = config.enable_bias
 
         self.head_dim = self.embed_dim // self.num_heads
         self.is_causal = True
@@ -411,7 +383,7 @@ class OptFlashAttention2(OPTAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)

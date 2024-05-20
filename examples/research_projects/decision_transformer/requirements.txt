@@ -1,5 +1,5 @@
 absl-py==1.0.0
-aiohttp==3.8.5
+aiohttp==3.9.0
 aiosignal==1.2.0
 alembic==1.7.7
 appdirs==1.4.4
@@ -15,7 +15,7 @@ backcall==0.2.0
 backoff==1.11.1
 backports.zoneinfo==0.2.1
 binaryornot==0.4.4
-black==22.1.0
+black==24.3.0
 boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
@@ -34,11 +34,11 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==41.0.2
+cryptography==42.0.0
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
-dash==2.3.0
+dash==2.15.0
 dash-bootstrap-components==1.0.3
 dash-core-components==2.0.0
 dash-html-components==2.0.0
@@ -67,13 +67,13 @@ fsspec==2022.2.0
 fugashi==1.1.2
 gast==0.5.3
 gitdb==4.0.9
-GitPython==3.1.32
+GitPython==3.1.41
 glfw==2.5.1
 google-auth==2.6.2
 google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
 greenlet==1.1.2
-grpcio==1.44.0
+grpcio==1.53.2
 gym==0.23.1
 gym-notices==0.0.6
 h5py==3.6.0
@@ -92,7 +92,7 @@ itsdangerous==2.1.1
 jax==0.3.4
 jaxlib==0.3.2
 jedi==0.18.1
-Jinja2==3.1.3
+Jinja2==3.1.4
 jinja2-time==0.2.0
 jmespath==0.10.0
 joblib==1.2.0
@@ -119,7 +119,7 @@ nltk==3.7
 numba==0.55.1
 numpy==1.22.3
 oauthlib==3.2.2
-onnx==1.13.0
+onnx>=1.15.0
 onnxconverter-common==1.9.0
 opt-einsum==3.3.0
 optax==0.1.1
@@ -133,7 +133,7 @@ pbr==5.8.1
 pexpect==4.8.0
 phonemizer==3.0.1
 pickleshare==0.7.5
-Pillow==10.0.1
+Pillow==10.2.0
 Pint==0.16.1
 plac==1.3.4
 platformdirs==2.5.1
@@ -150,7 +150,7 @@ ptyprocess==0.7.0
 pure-eval==0.2.2
 py==1.11.0
 py-cpuinfo==8.0.0
-pyarrow==7.0.0
+pyarrow==15.0.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycodestyle==2.8.0
@@ -174,7 +174,7 @@ python-slugify==6.1.1
 pytz==2022.1
 pytz-deprecation-shim==0.1.0.post0
 PyYAML==6.0
-ray==1.11.0
+ray>2.6.3
 redis==4.5.4
 regex==2022.3.15
 requests==2.31.0
@@ -205,7 +205,7 @@ tensorboard==2.8.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5
-tensorflow==2.8.1
+tensorflow==2.11.1
 tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 text-unidecode==1.3
@@ -217,10 +217,10 @@ timm==0.5.4
 tokenizers==0.11.6
 tomli==2.0.1
 toolz==0.11.2
-torch==1.11.0
+torch==1.13.1
 torchaudio==0.11.0
 torchvision==0.12.0
-tqdm==4.63.0
+tqdm==4.66.3
 traitlets==5.1.1
 -e git+git@github.com:edbeeching/transformers.git@77b90113ca0a0e4058b046796c874bdc98f1da61#egg=transformers
 typing-extensions==4.1.1
@@ -233,7 +233,7 @@ urllib3==1.26.18
 wasabi==0.9.0
 wcwidth==0.2.5
 websocket-client==1.3.1
-Werkzeug==3.0.1
+Werkzeug==3.0.3
 wrapt==1.14.0
 xxhash==3.0.0
 yarl==1.7.2

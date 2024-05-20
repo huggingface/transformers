@@ -76,7 +76,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_accumulation_steps="2" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -111,7 +111,7 @@ torchrun \
 	--per_device_train_batch_size="4" \
 	--learning_rate="3e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="400" \
@@ -162,7 +162,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 	--gradient_accumulation_steps="2" \
 	--learning_rate="5e-4" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--save_steps="500" \
 	--eval_steps="500" \
@@ -277,7 +277,7 @@ language or concept the adapter layers shall be trained. The adapter weights wil
 accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
-```
+```bash
 huggingface-cli login
 ```
 
@@ -293,7 +293,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -330,7 +330,7 @@ python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="32" \
 	--learning_rate="1e-3" \
 	--warmup_steps="100" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="200" \
@@ -368,6 +368,7 @@ python run_speech_recognition_seq2seq.py \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--dataset_config_name="hi" \
 	--language="hindi" \
+	--task="transcribe" \
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--max_steps="5000" \
@@ -378,18 +379,16 @@ python run_speech_recognition_seq2seq.py \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
 	--generation_max_length="225" \
 	--preprocessing_num_workers="16" \
-	--length_column_name="input_length" \
 	--max_duration_in_seconds="30" \
 	--text_column_name="sentence" \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
-	--group_by_length \
 	--fp16 \
 	--overwrite_output_dir \
 	--do_train \
@@ -399,7 +398,8 @@ python run_speech_recognition_seq2seq.py \
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
-If training on a different language, you should be sure to change the `language` argument. The `language` argument should be omitted for English speech recognition.
+If training on a different language, you should be sure to change the `language` argument. The `language` and `task` 
+arguments should be omitted for English speech recognition.
 
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 2 GPU devices in half-precision:
@@ -410,6 +410,7 @@ torchrun \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
 	--dataset_config_name="hi" \
 	--language="hindi" \
+	--task="transcribe" \
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--max_steps="5000" \
@@ -419,18 +420,16 @@ torchrun \
 	--logging_steps="25" \
 	--learning_rate="1e-5" \
 	--warmup_steps="500" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--eval_steps="1000" \
 	--save_strategy="steps" \
 	--save_steps="1000" \
 	--generation_max_length="225" \
 	--preprocessing_num_workers="16" \
-	--length_column_name="input_length" \
 	--max_duration_in_seconds="30" \
 	--text_column_name="sentence" \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
-	--group_by_length \
 	--fp16 \
 	--overwrite_output_dir \
 	--do_train \
@@ -446,7 +445,7 @@ A very common use case is to leverage a pretrained speech encoder model,
 
 By pairing a pretrained speech model with a pretrained text model, the warm-started model has prior knowledge of both the source audio and target text domains. However, the cross-attention weights between the encoder and decoder are randomly initialised. Thus, the model requires fine-tuning to learn the cross-attention weights and align the encoder mapping with that of the decoder. We can perform this very fine-tuning procedure using the example script.
 
-As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEnocderDecoderModel` framework. First create an empty repo on `hf.co`:
+As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
 huggingface-cli repo create wav2vec2-2-bart-base
@@ -506,7 +505,7 @@ Having warm-started the speech-encoder-decoder model under `<your-user-name>/wav
 In the script [`run_speech_recognition_seq2seq`], we load the warm-started model, 
 feature extractor, and tokenizer, process a speech recognition dataset, 
 and subsequently make use of the [`Seq2SeqTrainer`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Seq2SeqTrainer) to train our system.
-Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains captilized letters in the transcriptions,
+Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains capitalized letters in the transcriptions,
 whereas BART was pretrained mostly on normalized text. Thus, it is recommended to add the argument 
 `--do_lower_case` to the fine-tuning script when using a warm-started `SpeechEncoderDecoderModel`. 
 The model is fine-tuned on the standard cross-entropy language modeling
@@ -547,7 +546,7 @@ python run_speech_recognition_seq2seq.py \
 	--gradient_accumulation_steps="8" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \
@@ -589,7 +588,7 @@ torchrun \
 	--gradient_accumulation_steps="1" \
 	--learning_rate="3e-4" \
 	--warmup_steps="400" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="text" \
 	--save_steps="400" \
 	--eval_steps="400" \

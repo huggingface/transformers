@@ -43,13 +43,13 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 - For better results, we recommend users to prompt the model with the correct prompt format: 
 
 ```bash
-"USER: <image>\n<prompt>ASSISTANT:"
+"USER: <image>\n<prompt> ASSISTANT:"
 ```
 
 For multiple turns conversation:
 
 ```bash
-"USER: <image>\n<prompt1>ASSISTANT: <answer1>USER: <prompt2>ASSISTANT: <answer2>USER: <prompt3>ASSISTANT:"
+"USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
 
 ### Using Flash Attention 2

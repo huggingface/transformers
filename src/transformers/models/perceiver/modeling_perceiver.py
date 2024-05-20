@@ -51,11 +51,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "deepmind/language-perceiver"
 _CONFIG_FOR_DOC = "PerceiverConfig"
 
-PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "deepmind/language-perceiver",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-]
-
 
 @dataclass
 class PerceiverModelOutput(ModelOutput):

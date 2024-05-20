@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_vit_hybrid import ViTHybridConfig
 
 
@@ -45,12 +45,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/vit-hybrid-base-bit-384"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-hybrid-base-bit-384",
-    # See all ViT hybrid models at https://huggingface.co/models?filter=vit-hybrid
-]
 
 
 class ViTHybridEmbeddings(nn.Module):
@@ -150,7 +144,7 @@ class ViTHybridPatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
 
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         if self.backbone.config.model_type != "bit":
             raise ValueError(f"Backbone model type {self.backbone.model_type} is not supported.")
         feature_dim = self.backbone.channels[-1]
@@ -254,6 +248,38 @@ class ViTHybridSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaSelfAttention with ViT->ViTHybrid
+class ViTHybridSdpaSelfAttention(ViTHybridSelfAttention):
+    def __init__(self, config: ViTHybridConfig) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTHybrid
 class ViTHybridSelfOutput(nn.Module):
     """
@@ -313,6 +339,13 @@ class ViTHybridAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->ViTHybrid
+class ViTHybridSdpaAttention(ViTHybridAttention):
+    def __init__(self, config: ViTHybridConfig) -> None:
+        super().__init__(config)
+        self.attention = ViTHybridSdpaSelfAttention(config)
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->ViTHybrid
 class ViTHybridIntermediate(nn.Module):
     def __init__(self, config: ViTHybridConfig) -> None:
@@ -346,6 +379,12 @@ class ViTHybridOutput(nn.Module):
         return hidden_states
 
 
+VIT_HYBRID_ATTENTION_CLASSES = {
+    "eager": ViTHybridAttention,
+    "sdpa": ViTHybridSdpaAttention,
+}
+
+
 class ViTHybridLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -353,7 +392,7 @@ class ViTHybridLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViTHybridAttention(config)
+        self.attention = VIT_HYBRID_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = ViTHybridIntermediate(config)
         self.output = ViTHybridOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -453,6 +492,7 @@ class ViTHybridPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTHybridEmbeddings", "ViTHybridLayer"]
+    _supports_sdpa = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

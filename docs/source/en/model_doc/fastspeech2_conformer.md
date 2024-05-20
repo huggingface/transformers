@@ -24,7 +24,7 @@ This model was contributed by [Connor Henderson](https://huggingface.co/connor-h
 
 
 ## 🤗 Model Architecture
-FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with with conformer blocks as done in the ESPnet library.
+FastSpeech2's general structure with a Mel-spectrogram decoder was implemented, and the traditional transformer blocks were replaced with conformer blocks as done in the ESPnet library.
 
 #### FastSpeech2 Model Architecture
 ![FastSpeech2 Model Architecture](https://www.microsoft.com/en-us/research/uploads/prod/2021/04/fastspeech2-1.png)
@@ -41,7 +41,7 @@ You can run FastSpeech2Conformer locally with the 🤗 Transformers library.
 
 1. First install the 🤗 [Transformers library](https://github.com/huggingface/transformers), g2p-en:
 
-```
+```bash
 pip install --upgrade pip
 pip install --upgrade transformers g2p-en
 ```

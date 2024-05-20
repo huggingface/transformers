@@ -20,10 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
-}
-
 
 class SeamlessM4Tv2Config(PretrainedConfig):
     r"""
@@ -183,7 +179,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         t2u_variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers of the text-to-unit's duration predictor.
         t2u_variance_pred_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probabilitiy of the text-to-unit's duration predictor.
+            The dropout probability of the text-to-unit's duration predictor.
 
          > Hifi-Gan Vocoder specific parameters
 
@@ -225,7 +221,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
         variance_predictor_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the duration predictor. Applies to the vocoder only.
         var_pred_dropout (`float`, *optional*, defaults to 0.5):
-            The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
+            The dropout probability of the duration predictor. Applies to the vocoder only.
         vocoder_offset (`int`, *optional*, defaults to 4):
             Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
 

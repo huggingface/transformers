@@ -16,6 +16,7 @@
 import json
 import os
 import re
+import warnings
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
@@ -36,54 +37,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_file": "tokenizer.json",
     "merges_file": "merges.txt",
     "normalizer_file": "normalizer.json",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai/whisper-tiny": "https://huggingface.co/openai/whisper-tiny/resolve/main/vocab.json",
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
-        "openai/whisper-small": "https://huggingface.co/openai/whisper-small/resolve/main/vocab.json",
-        "openai/whisper-medium": "https://huggingface.co/openai/whisper-medium/resolve/main/vocab.json",
-        "openai/whisper-large": "https://huggingface.co/openai/whisper-large/resolve/main/vocab.json",
-        "openai/whisper-tiny.en": "https://huggingface.co/openai/whisper-tiny.en/resolve/main/vocab.json",
-        "openai/whisper-base.en": "https://huggingface.co/openai/whisper-base.en/resolve/main/vocab.json",
-        "openai/whisper-small.en": "https://huggingface.co/openai/whisper-small.en/resolve/main/vocab.json",
-        "openai/whisper-medium.en": "https://huggingface.co/openai/whisper-medium.en/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "openai/whisper-tiny": "https://huggingface.co/openai/whisper-tiny/resolve/main/merges.txt",
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges.txt",
-        "openai/whisper-small": "https://huggingface.co/openai/whisper-small/resolve/main/merges.txt",
-        "openai/whisper-medium": "https://huggingface.co/openai/whisper-medium/resolve/main/merges.txt",
-        "openai/whisper-large": "https://huggingface.co/openai/whisper-large/resolve/main/merges.txt",
-        "openai/whisper-tiny.en": "https://huggingface.co/openai/whisper-tiny.en/resolve/main/merges.txt",
-        "openai/whisper-base.en": "https://huggingface.co/openai/whisper-base.en/resolve/main/merges.txt",
-        "openai/whisper-small.en": "https://huggingface.co/openai/whisper-small.en/resolve/main/merges.txt",
-        "openai/whisper-medium.en": "https://huggingface.co/openai/whisper-medium.en/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "openai/whisper-tiny": "https://huggingface.co/openai/whisper-tiny/resolve/main/tokenizer.json",
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/tokenizer.json",
-        "openai/whisper-small": "https://huggingface.co/openai/whisper-small/resolve/main/tokenizer.json",
-        "openai/whisper-medium": "https://huggingface.co/openai/whisper-medium/resolve/main/tokenizer.json",
-        "openai/whisper-large": "https://huggingface.co/openai/whisper-large/resolve/main/tokenizer.json",
-        "openai/whisper-tiny.en": "https://huggingface.co/openai/whisper-tiny.en/resolve/main/tokenizer.json",
-        "openai/whisper-base.en": "https://huggingface.co/openai/whisper-base.en/resolve/main/tokenizer.json",
-        "openai/whisper-small.en": "https://huggingface.co/openai/whisper-small.en/resolve/main/tokenizer.json",
-        "openai/whisper-medium.en": "https://huggingface.co/openai/whisper-medium.en/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai/whisper-tiny": 1500,
-    "openai/whisper-base": 1500,
-    "openai/whisper-small": 1500,
-    "openai/whisper-medium": 1500,
-    "openai/whisper-large": 1500,
-    "openai/whisper-tiny.en": 1500,
-    "openai/whisper-base.en": 1500,
-    "openai/whisper-small.en": 1500,
-    "openai/whisper-medium.en": 1500,
 }
 
 
@@ -127,8 +80,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = WhisperTokenizer
 
@@ -427,6 +378,22 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
     def _normalize(self, text):
+        warnings.warn(
+            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
+        )
+        return self.normalize(text)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
+    def _basic_normalize(self, text, remove_diacritics=False):
+        warnings.warn(
+            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
+        )
+        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
+    def normalize(self, text):
         """
         Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
         english text.
@@ -435,8 +402,8 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return normalizer(text)
 
     @staticmethod
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(text, remove_diacritics=False):
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
+    def basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
@@ -577,12 +544,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_decoder_prompt_ids

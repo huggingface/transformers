@@ -23,6 +23,7 @@ from parameterized import parameterized
 from transformers import PersimmonConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
+    require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -43,7 +44,13 @@ if is_torch_available():
         AutoTokenizer,
         PersimmonForCausalLM,
         PersimmonForSequenceClassification,
+        PersimmonForTokenClassification,
         PersimmonModel,
+    )
+    from transformers.models.persimmon.modeling_persimmon import (
+        PersimmonDynamicNTKScalingRotaryEmbedding,
+        PersimmonLinearScalingRotaryEmbedding,
+        PersimmonRotaryEmbedding,
     )
 
 
@@ -277,12 +284,15 @@ class PersimmonModelTester:
 @require_torch
 class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
+        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
+        if is_torch_available()
+        else ()
     )
     pipeline_model_mapping = (
         {
             "feature-extraction": PersimmonModel,
             "text-classification": PersimmonForSequenceClassification,
+            "token-classification": PersimmonForTokenClassification,
             # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.
             # "text-generation": PersimmonForCausalLM,
             # "zero-shot": PersimmonForSequenceClassification,
@@ -359,14 +369,30 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Persimmon,llama->persimmon
+    def test_persimmon_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = PersimmonForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
     @unittest.skip("Persimmon buffers include complex numbers, which breaks this test")
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_save_load_fast_init_from_base
     def test_save_load_fast_init_from_base(self):
         pass
 
     @parameterized.expand([("linear",), ("dynamic",)])
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling with Llama->Persimmon
-    def test_model_rope_scaling(self, scaling_type):
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->Persimmon
+    def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
@@ -396,10 +422,72 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    # Copied from tests.models.falcon.test_modeling_falcon.FalconModelTest.test_model_rope_scaling with Falcon->Persimmon
+    def test_model_rope_scaling(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        hidden_size = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = hidden_size // num_heads
+        scaling_factor = 10
+        short_input_length = 10
+        long_input_length = int(config.max_position_embeddings * 1.5)
+
+        # Inputs
+        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+
+        # Sanity check original RoPE
+        original_rope = PersimmonRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+        ).to(torch_device)
+        original_cos_short, original_sin_short = original_rope(x, short_input_length)
+        original_cos_long, original_sin_long = original_rope(x, long_input_length)
+        torch.testing.assert_close(original_cos_short, original_cos_long[:short_input_length, :])
+        torch.testing.assert_close(original_sin_short, original_sin_long[:short_input_length, :])
+
+        # Sanity check linear RoPE scaling
+        # New position "x" should match original position with index "x/scaling_factor"
+        linear_scaling_rope = PersimmonLinearScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, short_input_length)
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, long_input_length)
+        torch.testing.assert_close(linear_cos_short, linear_cos_long[:short_input_length, :])
+        torch.testing.assert_close(linear_sin_short, linear_sin_long[:short_input_length, :])
+        for new_position in range(0, long_input_length, scaling_factor):
+            original_position = int(new_position // scaling_factor)
+            torch.testing.assert_close(linear_cos_long[new_position, :], original_cos_long[original_position, :])
+            torch.testing.assert_close(linear_sin_long[new_position, :], original_sin_long[original_position, :])
+
+        # Sanity check Dynamic NTK RoPE scaling
+        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
+        # with scaling_factor (or that `inv_freq` decreases)
+        ntk_scaling_rope = PersimmonDynamicNTKScalingRotaryEmbedding(
+            head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta,
+            scaling_factor=scaling_factor,
+        ).to(torch_device)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, short_input_length)
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, long_input_length)
+        torch.testing.assert_close(ntk_cos_short, original_cos_short)
+        torch.testing.assert_close(ntk_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(ntk_sin_long, original_sin_long)
+        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+
 
 @require_torch
 class PersimmonIntegrationTest(unittest.TestCase):
     @slow
+    @require_torch_accelerator
+    @require_bitsandbytes
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained(
@@ -427,6 +515,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_torch_fp16
+    @require_bitsandbytes
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"

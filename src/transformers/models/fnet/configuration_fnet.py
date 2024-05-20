@@ -20,12 +20,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/config.json",
-    "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/config.json",
-    # See all FNet models at https://huggingface.co/models?filter=fnet
-}
-
 
 class FNetConfig(PretrainedConfig):
     r"""
@@ -52,7 +46,7 @@ class FNetConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).

@@ -24,22 +24,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "roberta-base": "https://huggingface.co/roberta-base/resolve/main/config.json",
-    "roberta-large": "https://huggingface.co/roberta-large/resolve/main/config.json",
-    "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/config.json",
-    "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/config.json",
-    "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/config.json",
-    "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/config.json",
-}
-
 
 class RobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
     used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
-    [roberta-base](https://huggingface.co/roberta-base) architecture.
+    [FacebookAI/roberta-base](https://huggingface.co/FacebookAI/roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

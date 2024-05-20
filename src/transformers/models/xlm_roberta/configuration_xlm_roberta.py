@@ -24,30 +24,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/config.json",
-    "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/config.json",
-    "xlm-roberta-large-finetuned-conll02-dutch": (
-        "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/config.json"
-    ),
-    "xlm-roberta-large-finetuned-conll02-spanish": (
-        "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/config.json"
-    ),
-    "xlm-roberta-large-finetuned-conll03-english": (
-        "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/config.json"
-    ),
-    "xlm-roberta-large-finetuned-conll03-german": (
-        "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/config.json"
-    ),
-}
-
 
 class XLMRobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMRobertaModel`] or a [`TFXLMRobertaModel`]. It
     is used to instantiate a XLM-RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the XLMRoBERTa
-    [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
+    [FacebookAI/xlm-roberta-base](https://huggingface.co/FacebookAI/xlm-roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -101,10 +84,10 @@ class XLMRobertaConfig(PretrainedConfig):
     ```python
     >>> from transformers import XLMRobertaConfig, XLMRobertaModel
 
-    >>> # Initializing a XLM-RoBERTa xlm-roberta-base style configuration
+    >>> # Initializing a XLM-RoBERTa FacebookAI/xlm-roberta-base style configuration
     >>> configuration = XLMRobertaConfig()
 
-    >>> # Initializing a model (with random weights) from the xlm-roberta-base style configuration
+    >>> # Initializing a model (with random weights) from the FacebookAI/xlm-roberta-base style configuration
     >>> model = XLMRobertaModel(configuration)
 
     >>> # Accessing the model configuration

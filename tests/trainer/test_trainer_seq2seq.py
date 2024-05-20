@@ -22,7 +22,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     T5Tokenizer,
 )
-from transformers.testing_utils import TestCasePlus, require_torch, slow
+from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
 from transformers.utils import is_datasets_available
 
 
@@ -30,12 +30,13 @@ if is_datasets_available():
     import datasets
 
 
+@require_sentencepiece
 class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_torch
     def test_finetune_bert2bert(self):
         bert2bert = EncoderDecoderModel.from_encoder_decoder_pretrained("prajjwal1/bert-tiny", "prajjwal1/bert-tiny")
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         bert2bert.config.vocab_size = bert2bert.config.encoder.vocab_size
         bert2bert.config.eos_token_id = tokenizer.sep_token_id
@@ -112,12 +113,13 @@ class Seq2seqTrainerTester(TestCasePlus):
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             predict_with_generate=True,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             do_train=True,
             do_eval=True,
             warmup_steps=0,
             eval_steps=2,
             logging_steps=2,
+            report_to="none",
         )
 
         # instantiate trainer
@@ -144,14 +146,14 @@ class Seq2seqTrainerTester(TestCasePlus):
         MAX_TARGET_LENGTH = 256
 
         dataset = datasets.load_dataset("gsm8k", "main", split="train[:38]")
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
         gen_config = GenerationConfig.from_pretrained(
-            "t5-small", max_length=None, min_length=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
+            "google-t5/t5-small", max_length=None, min_length=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
         )
 
-        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True)
+        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, report_to="none")
 
         trainer = Seq2SeqTrainer(
             model=model,
@@ -159,6 +161,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=lambda x: {"samples": x[0].shape[0]},
+            report_to="none",
         )
 
         def prepare_data(examples):
@@ -181,3 +184,24 @@ class Seq2seqTrainerTester(TestCasePlus):
             assert (
                 metrics["eval_samples"] == dataset_len * num_return_sequences
             ), f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+
+    @require_torch
+    def test_bad_generation_config_fail_early(self):
+        # Tests that a bad geneartion config causes the trainer to fail early
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
+        gen_config = GenerationConfig(do_sample=False, top_p=0.9)  # bad: top_p is not compatible with do_sample=False
+
+        training_args = Seq2SeqTrainingArguments(
+            ".", predict_with_generate=True, generation_config=gen_config, report_to="none"
+        )
+        with self.assertRaises(ValueError) as exc:
+            _ = Seq2SeqTrainer(
+                model=model,
+                args=training_args,
+                tokenizer=tokenizer,
+                data_collator=data_collator,
+                compute_metrics=lambda x: {"samples": x[0].shape[0]},
+            )
+        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))

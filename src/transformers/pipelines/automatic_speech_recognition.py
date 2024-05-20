@@ -57,7 +57,7 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, rescale=True, dtype=None):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for chunk_start_idx in range(0, inputs_len, step):
@@ -73,13 +73,6 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
 
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
-        if "input_features" in processed:
-            processed_len = processed["input_features"].shape[-1]
-        elif "input_values" in processed:
-            processed_len = processed["input_values"].shape[-1]
-        if processed_len != chunk.shape[-1] and rescale:
-            ratio = processed_len / chunk_len
-            stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
         if is_last:
@@ -318,14 +311,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
-            forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+            forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
                     "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
                     " only 1 version"
                 )
-            forward_params["generate_kwargs"].update(generate_kwargs)
+            forward_params.update(generate_kwargs)
 
         postprocess_params = {}
         if decoder_kwargs is not None:
@@ -436,10 +429,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
-            rescale = self.type != "seq2seq_whisper"
-            # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, rescale, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
             ):
                 yield item
         else:
@@ -452,9 +443,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     return_tensors="pt",
                 )
             else:
-                processed = self.feature_extractor(
-                    inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                )
+                if self.type == "seq2seq_whisper" and stride is None:
+                    processed = self.feature_extractor(
+                        inputs,
+                        sampling_rate=self.feature_extractor.sampling_rate,
+                        return_tensors="pt",
+                        return_token_timestamps=True,
+                    )
+                    extra["num_frames"] = processed.pop("num_frames")
+                else:
+                    processed = self.feature_extractor(
+                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                    )
 
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
@@ -465,13 +465,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
-        if generate_kwargs is None:
-            generate_kwargs = {}
-
+    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
+        num_frames = model_inputs.pop("num_frames", None)
         is_last = model_inputs.pop("is_last")
+
+        if stride is not None and num_frames is not None:
+            raise ValueError("num_frames must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
             encoder = self.model.get_encoder()
@@ -492,12 +493,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 generate_kwargs["return_timestamps"] = return_timestamps
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
+                    generate_kwargs["return_segments"] = True
 
                     if stride is not None:
                         if isinstance(stride, tuple):
                             generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
                         else:
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
+
+                    else:
+                        generate_kwargs["num_frames"] = num_frames
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs
@@ -508,8 +513,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
+            # whisper longform generation stores timestamps in "segments"
             if return_timestamps == "word" and self.type == "seq2seq_whisper":
-                out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
+                if "segments" not in tokens:
+                    out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
+                else:
+                    token_timestamps = [
+                        torch.cat([segment["token_timestamps"] for segment in segment_list])
+                        for segment_list in tokens["segments"]
+                    ]
+                    out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":

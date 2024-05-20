@@ -16,16 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Utilities for Generation
 
-This page lists all the utility functions used by [`~generation.GenerationMixin.generate`],
-[`~generation.GenerationMixin.greedy_search`],
-[`~generation.GenerationMixin.contrastive_search`],
-[`~generation.GenerationMixin.sample`],
-[`~generation.GenerationMixin.beam_search`],
-[`~generation.GenerationMixin.beam_sample`],
-[`~generation.GenerationMixin.group_beam_search`], and
-[`~generation.GenerationMixin.constrained_beam_search`].
-
-Most of those are only useful if you are studying the code of the generate methods in the library.
+This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
 ## Generate Outputs
 
@@ -38,8 +29,8 @@ Here's an example:
 ```python
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
 inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
@@ -176,6 +167,9 @@ generation.
 [[autodoc]] MinNewTokensLengthLogitsProcessor
     - __call__
 
+[[autodoc]] MinPLogitsWarper
+    - __call__
+
 [[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 
@@ -214,6 +208,10 @@ generation.
 
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
+
+[[autodoc]] WatermarkLogitsProcessor
+    - __call__
+
 
 ### TensorFlow
 
@@ -319,6 +317,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] MaxTimeCriteria
     - __call__
 
+[[autodoc]] StopStringCriteria
+    - __call__
+
+[[autodoc]] EosTokenCriteria
+    - __call__
+
 ## Constraints
 
 A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
@@ -345,12 +349,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - process
     - finalize
 
-## Utilities
-
-[[autodoc]] top_k_top_p_filtering
-
-[[autodoc]] tf_top_k_top_p_filtering
-
 ## Streamers
 
 [[autodoc]] TextStreamer
@@ -373,3 +371,15 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - get_seq_length
     - reorder_cache
+
+[[autodoc]] StaticCache
+    - update
+    - get_seq_length
+    - reorder_cache
+
+
+## Watermark Utils
+
+[[autodoc]] WatermarkDetector
+    - __call__
+

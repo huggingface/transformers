@@ -37,9 +37,7 @@ if is_tf_available():
         TFEfficientFormerForImageClassificationWithTeacher,
         TFEfficientFormerModel,
     )
-    from transformers.models.efficientformer.modeling_tf_efficientformer import (
-        TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -298,9 +296,9 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFEfficientFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "snap-research/efficientformer-l1-300"
+        model = TFEfficientFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -355,7 +353,7 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
             # These are maximally general inputs for the model, with multiple None dimensions
             # Hopefully this will catch any conditionals that fail for flexible shapes
             functional_inputs = {
-                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                key: keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
                 for key, val in model.input_signature.items()
                 if key in model.dummy_inputs
             }

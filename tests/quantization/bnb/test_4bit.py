@@ -239,6 +239,23 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_generate_quality_dequantize(self):
+        r"""
+        Test that loading the model and unquantize it produce correct results
+        """
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        model_4bit.dequantize()
+
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
@@ -283,7 +300,7 @@ class Bnb4BitTest(Base4bitTest):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_4bit=True, device_map="auto")
+        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_4bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
 
@@ -295,7 +312,7 @@ class Bnb4BitTest(Base4bitTest):
 class Bnb4BitT5Test(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model_name = "t5-small"
+        cls.model_name = "google-t5/t5-small"
         cls.dense_act_model_name = "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.input_text = "Translate in German: Hello, my dog is cute"
@@ -311,7 +328,7 @@ class Bnb4BitT5Test(unittest.TestCase):
     def test_inference_without_keep_in_fp32(self):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
-        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
         from transformers import T5ForConditionalGeneration
@@ -319,7 +336,7 @@ class Bnb4BitT5Test(unittest.TestCase):
         modules = T5ForConditionalGeneration._keep_in_fp32_modules
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
-        # test with `t5-small`
+        # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
@@ -335,12 +352,12 @@ class Bnb4BitT5Test(unittest.TestCase):
     def test_inference_with_keep_in_fp32(self):
         r"""
         Test whether it is possible to mix both `4bit` and `fp32` weights when using `keep_in_fp32_modules` correctly.
-        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
         from transformers import T5ForConditionalGeneration
 
-        # test with `t5-small`
+        # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
 
         # there was a bug with decoders - this test checks that it is fixed
@@ -362,7 +379,7 @@ class Classes4BitModelTest(Base4bitTest):
         super().setUp()
         # model_name
         self.model_name = "bigscience/bloom-560m"
-        self.seq_to_seq_name = "t5-small"
+        self.seq_to_seq_name = "google-t5/t5-small"
 
         # Different types of model
 
@@ -509,7 +526,7 @@ class Bnb4BitTestTraining(Base4bitTest):
 
 
 class Bnb4BitGPT2Test(Bnb4BitTest):
-    model_name = "gpt2-xl"
+    model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187
 
 
@@ -647,4 +664,19 @@ class GPTSerializationTest(BaseSerializationTest):
     default BaseSerializationTest config tested with GPT family model
     """
 
-    model_name = "gpt2-xl"
+    model_name = "openai-community/gpt2-xl"
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch_gpu
+@slow
+class Bnb4BitTestBasicConfigTest(unittest.TestCase):
+    def test_load_in_4_and_8_bit_fails(self):
+        with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
+            AutoModelForCausalLM.from_pretrained("facebook/opt-125m", load_in_4bit=True, load_in_8bit=True)
+
+    def test_set_load_in_8_bit(self):
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        with self.assertRaisesRegex(ValueError, "load_in_4bit and load_in_8bit are both True"):
+            quantization_config.load_in_8bit = True

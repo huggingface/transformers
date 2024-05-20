@@ -104,6 +104,7 @@ class TimeSeriesTransformerModelTester:
             num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
+            scaling="std",  # we need std to get non-zero `loc`
         )
 
     def prepare_time_series_transformer_inputs_dict(self, config):

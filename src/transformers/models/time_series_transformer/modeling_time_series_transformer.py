@@ -46,12 +46,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
 
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/time-series-transformer-tourism-monthly",
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
-]
-
-
 class TimeSeriesFeatureEmbedder(nn.Module):
     """
     Embed a sequence of categorical features.

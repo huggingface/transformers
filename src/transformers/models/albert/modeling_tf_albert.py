@@ -44,6 +44,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -61,20 +62,8 @@ from .configuration_albert import AlbertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "albert-base-v2"
+_CHECKPOINT_FOR_DOC = "albert/albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
-
-TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "albert-base-v1",
-    "albert-large-v1",
-    "albert-xlarge-v1",
-    "albert-xxlarge-v1",
-    "albert-base-v2",
-    "albert-large-v2",
-    "albert-xlarge-v2",
-    "albert-xxlarge-v2",
-    # See all ALBERT models at https://huggingface.co/models?filter=albert
-]
 
 
 class TFAlbertPreTrainingLoss:
@@ -84,9 +73,7 @@ class TFAlbertPreTrainingLoss:
     """
 
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100
             # are taken into account as loss
@@ -133,7 +120,7 @@ class TFAlbertPreTrainingLoss:
         return tf.reshape(reduced_masked_lm_loss + reduced_masked_sop_loss, (1,))
 
 
-class TFAlbertEmbeddings(tf.keras.layers.Layer):
+class TFAlbertEmbeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: AlbertConfig, **kwargs):
@@ -143,8 +130,8 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         self.embedding_size = config.embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -217,7 +204,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFAlbertAttention(tf.keras.layers.Layer):
+class TFAlbertAttention(keras.layers.Layer):
     """Contains the complete attention sublayer, including both dropouts and layer norm."""
 
     def __init__(self, config: AlbertConfig, **kwargs):
@@ -235,22 +222,22 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
         self.output_attentions = config.output_attentions
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
-        self.attention_dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
-        self.output_dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.attention_dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.output_dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
@@ -334,12 +321,12 @@ class TFAlbertAttention(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
-class TFAlbertLayer(tf.keras.layers.Layer):
+class TFAlbertLayer(keras.layers.Layer):
     def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.attention = TFAlbertAttention(config, name="attention")
-        self.ffn = tf.keras.layers.Dense(
+        self.ffn = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn"
         )
 
@@ -348,13 +335,13 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         else:
             self.activation = config.hidden_act
 
-        self.ffn_output = tf.keras.layers.Dense(
+        self.ffn_output = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="ffn_output"
         )
-        self.full_layer_layer_norm = tf.keras.layers.LayerNormalization(
+        self.full_layer_layer_norm = keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="full_layer_layer_norm"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(
@@ -401,7 +388,7 @@ class TFAlbertLayer(tf.keras.layers.Layer):
                 self.full_layer_layer_norm.build([None, None, self.config.hidden_size])
 
 
-class TFAlbertLayerGroup(tf.keras.layers.Layer):
+class TFAlbertLayerGroup(keras.layers.Layer):
     def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -453,7 +440,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
                     layer.build(None)
 
 
-class TFAlbertTransformer(tf.keras.layers.Layer):
+class TFAlbertTransformer(keras.layers.Layer):
     def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -461,7 +448,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         self.num_hidden_groups = config.num_hidden_groups
         # Number of layers in a hidden group
         self.layers_per_group = int(config.num_hidden_layers / config.num_hidden_groups)
-        self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
+        self.embedding_hidden_mapping_in = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="embedding_hidden_mapping_in",
@@ -534,13 +521,13 @@ class TFAlbertPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "albert"
 
 
-class TFAlbertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: AlbertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFAlbertMLMHead(keras.layers.Layer):
+    def __init__(self, config: AlbertConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
         self.embedding_size = config.embedding_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.embedding_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         if isinstance(config.hidden_act, str):
@@ -548,7 +535,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         else:
             self.activation = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -570,7 +557,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.embedding_size])
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> keras.layers.Layer:
         return self.decoder
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -599,7 +586,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFAlbertMainLayer(tf.keras.layers.Layer):
+class TFAlbertMainLayer(keras.layers.Layer):
     config_class = AlbertConfig
 
     def __init__(self, config: AlbertConfig, add_pooling_layer: bool = True, **kwargs):
@@ -610,7 +597,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
         self.pooler = (
-            tf.keras.layers.Dense(
+            keras.layers.Dense(
                 units=config.hidden_size,
                 kernel_initializer=get_initializer(config.initializer_range),
                 activation="tanh",
@@ -620,7 +607,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             else None
         )
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -776,7 +763,7 @@ ALBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -942,7 +929,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         self.predictions = TFAlbertMLMHead(config, input_embeddings=self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.predictions
 
     @unpack_inputs
@@ -972,8 +959,8 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFAlbertForPreTraining
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-        >>> model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+        >>> model = TFAlbertForPreTraining.from_pretrained("albert/albert-base-v2")
 
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
         >>> # Batch size 1
@@ -1032,12 +1019,12 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
                 self.sop_classifier.build(None)
 
 
-class TFAlbertSOPHead(tf.keras.layers.Layer):
+class TFAlbertSOPHead(keras.layers.Layer):
     def __init__(self, config: AlbertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=config.classifier_dropout_prob)
+        self.classifier = keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
@@ -1070,7 +1057,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, input_embeddings=self.albert.embeddings, name="predictions")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.predictions
 
     @unpack_inputs
@@ -1104,8 +1091,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFAlbertForMaskedLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
-        >>> model = TFAlbertForMaskedLM.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
+        >>> model = TFAlbertForMaskedLM.from_pretrained("albert/albert-base-v2")
 
         >>> # add mask_token
         >>> inputs = tokenizer(f"The capital of [MASK] is Paris.", return_tensors="tf")
@@ -1184,8 +1171,8 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=config.classifier_dropout_prob)
+        self.classifier = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1283,8 +1270,8 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             if config.classifier_dropout_prob is not None
             else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=classifier_dropout_prob)
+        self.classifier = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config
@@ -1372,7 +1359,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
         self.config = config
@@ -1478,8 +1465,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         super().__init__(config, *inputs, **kwargs)
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config

@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "albert/albert-base-v1"
     tokenizer_class = AlbertTokenizer
     rust_tokenizer_class = AlbertTokenizerFast
     test_rust_tokenizer = True
@@ -127,6 +128,6 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="albert-base-v2",
+            model_name="albert/albert-base-v2",
             revision="6b6560eaf5ff2e250b00c50f380c5389a9c2d82e",
         )

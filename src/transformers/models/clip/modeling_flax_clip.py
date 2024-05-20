@@ -182,8 +182,8 @@ class FlaxCLIPTextModelOutput(ModelOutput):
 
     text_embeds: jnp.ndarray = None
     last_hidden_state: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
 
 
 @flax.struct.dataclass

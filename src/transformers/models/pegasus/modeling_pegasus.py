@@ -50,12 +50,6 @@ _CHECKPOINT_FOR_DOC = "google/pegasus-large"
 _CONFIG_FOR_DOC = "PegasusConfig"
 
 
-PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-large",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
-]
-
-
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -1664,7 +1658,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, use_cache=None, **kwargs
     ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1682,12 +1676,19 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
         # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids.contiguous()}
+
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+            }
+        )
+        return model_inputs
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

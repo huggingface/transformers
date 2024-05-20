@@ -80,7 +80,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/text-classification/run_glue_no_trainer.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
@@ -105,7 +105,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/language-modeling/run_clm_no_trainer.py
-            --model_name_or_path distilgpt2
+            --model_name_or_path distilbert/distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --block_size 128
@@ -133,7 +133,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/language-modeling/run_mlm_no_trainer.py
-            --model_name_or_path distilroberta-base
+            --model_name_or_path distilbert/distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -156,7 +156,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/token-classification/run_ner_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
@@ -181,7 +181,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/question-answering/run_qa_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -209,7 +209,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/multiple-choice/run_swag_no_trainer.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/swag/sample.json
             --validation_file tests/fixtures/tests_samples/swag/sample.json
             --output_dir {tmp_dir}
@@ -232,7 +232,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             {self.examples_dir}/pytorch/summarization/run_summarization_no_trainer.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --output_dir {tmp_dir}
@@ -331,3 +331,27 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertGreaterEqual(result["eval_accuracy"], 0.4)
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "step_1")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "image_classification_no_trainer")))
+
+    @slow
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
+    def test_run_object_detection_no_trainer(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            {self.examples_dir}/pytorch/object-detection/run_object_detection_no_trainer.py
+            --model_name_or_path qubvel-hf/detr-resnet-50-finetuned-10k-cppe5
+            --dataset_name qubvel-hf/cppe-5-sample
+            --output_dir {tmp_dir}
+            --max_train_steps=10
+            --num_warmup_steps=2
+            --learning_rate=1e-6
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --checkpointing_steps epoch
+        """.split()
+
+        run_command(self._launch_args + testargs)
+        result = get_results(tmp_dir)
+        self.assertGreaterEqual(result["test_map"], 0.10)

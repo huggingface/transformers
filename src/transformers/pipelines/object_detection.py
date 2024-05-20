@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -23,7 +23,7 @@ Prediction = Dict[str, Any]
 Predictions = List[Prediction]
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ObjectDetectionPipeline(Pipeline):
     """
     Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of objects
@@ -83,7 +83,7 @@ class ObjectDetectionPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            threshold (`float`, *optional*, defaults to 0.9):
+            threshold (`float`, *optional*, defaults to 0.5):
                 The probability necessary to make a prediction.
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
@@ -120,7 +120,7 @@ class ObjectDetectionPipeline(Pipeline):
             model_outputs["bbox"] = model_inputs["bbox"]
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.9):
+    def postprocess(self, model_outputs, threshold=0.5):
         target_size = model_outputs["target_size"]
         if self.tokenizer is not None:
             # This is a LayoutLMForTokenClassification variant.

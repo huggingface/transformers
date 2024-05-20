@@ -25,23 +25,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "camembert-base": "https://huggingface.co/camembert-base/resolve/main/config.json",
-    "umberto-commoncrawl-cased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json"
-    ),
-    "umberto-wikipedia-uncased-v1": (
-        "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json"
-    ),
-}
-
 
 class CamembertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`CamembertModel`] or a [`TFCamembertModel`]. It is
     used to instantiate a Camembert model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Camembert
-    [camembert-base](https://huggingface.co/camembert-base) architecture.
+    [almanach/camembert-base](https://huggingface.co/almanach/camembert-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -94,10 +84,10 @@ class CamembertConfig(PretrainedConfig):
     ```python
     >>> from transformers import CamembertConfig, CamembertModel
 
-    >>> # Initializing a Camembert camembert-base style configuration
+    >>> # Initializing a Camembert almanach/camembert-base style configuration
     >>> configuration = CamembertConfig()
 
-    >>> # Initializing a model (with random weights) from the camembert-base style configuration
+    >>> # Initializing a model (with random weights) from the almanach/camembert-base style configuration
     >>> model = CamembertModel(configuration)
 
     >>> # Accessing the model configuration

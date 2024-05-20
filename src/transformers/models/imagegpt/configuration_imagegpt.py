@@ -27,12 +27,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai/imagegpt-small": "",
-    "openai/imagegpt-medium": "",
-    "openai/imagegpt-large": "",
-}
-
 
 class ImageGPTConfig(PretrainedConfig):
     """

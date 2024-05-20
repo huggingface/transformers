@@ -35,6 +35,7 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
+    AnnotationType,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -45,6 +46,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
     validate_annotations,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     is_flax_available,
@@ -135,6 +137,42 @@ def get_resize_output_image_size(
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
+
+
+# Copied from transformers.models.detr.image_processing_detr.get_image_size_for_max_height_width
+def get_image_size_for_max_height_width(
+    input_image: np.ndarray,
+    max_height: int,
+    max_width: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        input_image (`np.ndarray`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
+    """
+    image_size = get_image_size(input_image, input_data_format)
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
@@ -473,8 +511,16 @@ class DetaImageProcessor(BaseImageProcessor):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
             overridden by the `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
-            Size of the image's (height, width) dimensions after resizing. Can be overridden by the `size` parameter in
-            the `preprocess` method.
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -492,9 +538,19 @@ class DetaImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
-            overridden by the `do_pad` parameter in the `preprocess` method.
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -510,7 +566,9 @@ class DetaImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
+        do_convert_annotations: bool = True,
         do_pad: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -518,6 +576,9 @@ class DetaImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         size = get_size_dict(size, default_to_square=False)
+
+        if do_convert_annotations is None:
+            do_convert_annotations = do_normalize
 
         super().__init__(**kwargs)
         self.format = format
@@ -527,9 +588,11 @@ class DetaImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
+        self.do_convert_annotations = do_convert_annotations
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+        self.pad_size = pad_size
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DETA
     def prepare_annotation(
@@ -564,31 +627,6 @@ class DetaImageProcessor(BaseImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a v4.33. "
-            "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
-            "does not return the image anymore.",
-        )
-        target = self.prepare_annotation(image, target, return_segmentation_masks, masks_path, self.format)
-        return image, target
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
-    def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
-        return convert_coco_poly_to_mask(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
-    def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_detection_annotation(*args, **kwargs)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
-    def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
-        return prepare_coco_panoptic_annotation(*args, **kwargs)
-
     def resize(
         self,
         image: np.ndarray,
@@ -606,7 +644,15 @@ class DetaImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                The desired output size. Can contain keys `shortest_edge` and `longest_edge` or `height` and `width`.
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use if resizing the image.
             data_format (`ChannelDimension`, *optional*):
@@ -618,18 +664,22 @@ class DetaImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(
+            new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
             )
         elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+            new_size = (size["height"], size["width"])
+        elif "max_height" in size and "max_width" in size:
+            new_size = get_image_size_for_max_height_width(
+                image, size["max_height"], size["max_width"], input_data_format=input_data_format
+            )
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
         image = resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format
+            image, size=new_size, resample=resample, data_format=data_format, input_data_format=input_data_format
         )
         return image
 
@@ -680,18 +730,64 @@ class DetaImageProcessor(BaseImageProcessor):
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
-        `[center_x, center_y, width, height]` format.
+        `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
         """
         return normalize_annotation(annotation, image_size=image_size)
+
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._update_annotation_for_padded_image
+    def _update_annotation_for_padded_image(
+        self,
+        annotation: Dict,
+        input_image_size: Tuple[int, int],
+        output_image_size: Tuple[int, int],
+        padding,
+        update_bboxes,
+    ) -> Dict:
+        """
+        Update the annotation for a padded image.
+        """
+        new_annotation = {}
+        new_annotation["size"] = output_image_size
+
+        for key, value in annotation.items():
+            if key == "masks":
+                masks = value
+                masks = pad(
+                    masks,
+                    padding,
+                    mode=PaddingMode.CONSTANT,
+                    constant_values=0,
+                    input_data_format=ChannelDimension.FIRST,
+                )
+                masks = safe_squeeze(masks, 1)
+                new_annotation["masks"] = masks
+            elif key == "boxes" and update_bboxes:
+                boxes = value
+                boxes *= np.asarray(
+                    [
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                        input_image_size[1] / output_image_size[1],
+                        input_image_size[0] / output_image_size[0],
+                    ]
+                )
+                new_annotation["boxes"] = boxes
+            elif key == "size":
+                new_annotation["size"] = output_image_size
+            else:
+                new_annotation[key] = value
+        return new_annotation
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
         output_size: Tuple[int, int],
+        annotation: Optional[Dict[str, Any]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
     ) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
@@ -710,25 +806,34 @@ class DetaImageProcessor(BaseImageProcessor):
             data_format=data_format,
             input_data_format=input_data_format,
         )
-        return padded_image
+        if annotation is not None:
+            annotation = self._update_annotation_for_padded_image(
+                annotation, (input_height, input_width), (output_height, output_width), padding, update_bboxes
+            )
+        return padded_image, annotation
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        update_bboxes: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            image (`np.ndarray`):
-                Image to pad.
+            images (List[`np.ndarray`]):
+                Images to pad.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                Annotations to transform according to the padding that is applied to the images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
@@ -744,29 +849,54 @@ class DetaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
+            update_bboxes (`bool`, *optional*, defaults to `True`):
+                Whether to update the bounding boxes in the annotations to match the padded images. If the
+                bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
+                format, the bounding boxes will not be updated.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        padded_images = [
-            self._pad_image(
+        annotation_list = annotations if annotations is not None else [None] * len(images)
+        padded_images = []
+        padded_annotations = []
+        for image, annotation in zip(images, annotation_list):
+            padded_image, padded_annotation = self._pad_image(
                 image,
-                pad_size,
+                padded_size,
+                annotation,
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
+                update_bboxes=update_bboxes,
             )
-            for image in images
-        ]
+            padded_images.append(padded_image)
+            padded_annotations.append(padded_annotation)
+
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in padded_annotations
+            ]
+
+        return encoded_inputs
 
     def preprocess(
         self,
@@ -782,11 +912,13 @@ class DetaImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_annotations: Optional[bool] = None,
         do_pad: Optional[bool] = None,
         format: Optional[Union[str, AnnotationFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -814,7 +946,15 @@ class DetaImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
-                Size of the image after resizing.
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
             resample (`PILImageResampling`, *optional*, defaults to self.resample):
                 Resampling filter to use when resizing the image.
             do_rescale (`bool`, *optional*, defaults to self.do_rescale):
@@ -827,8 +967,14 @@ class DetaImageProcessor(BaseImageProcessor):
                 Mean to use when normalizing the image.
             image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
+            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
+                Whether to convert the annotations to the format expected by the model. Converts the bounding
+                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
+                and in relative coordinates.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image.
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
@@ -844,6 +990,10 @@ class DetaImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -861,31 +1011,38 @@ class DetaImageProcessor(BaseImageProcessor):
         do_normalize = self.do_normalize if do_normalize is None else do_normalize
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
+        do_convert_annotations = (
+            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
+        )
         do_pad = self.do_pad if do_pad is None else do_pad
+        pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
 
-        if do_resize is not None and size is None:
-            raise ValueError("Size and max_size must be specified if do_resize is True.")
+        # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
 
-        if do_rescale is not None and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize is not None and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         if not is_batched(images):
             images = [images]
             annotations = [annotations] if annotations is not None else None
 
-        if annotations is not None and len(images) != len(annotations):
-            raise ValueError(
-                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
-            )
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+        if annotations is not None and len(images) != len(annotations):
+            raise ValueError(
+                f"The number of images ({len(images)}) and annotations ({len(annotations)}) do not match."
             )
 
         format = AnnotationFormat(format)
@@ -964,29 +1121,35 @@ class DetaImageProcessor(BaseImageProcessor):
             images = [
                 self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
             ]
-            if annotations is not None:
-                annotations = [
-                    self.normalize_annotation(annotation, get_image_size(image, input_data_format))
-                    for annotation, image in zip(annotations, images)
-                ]
+
+        if do_convert_annotations and annotations is not None:
+            annotations = [
+                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+                for annotation, image in zip(annotations, images)
+            ]
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-            data = self.pad(
-                images, return_pixel_mask=True, data_format=data_format, input_data_format=input_data_format
+            encoded_inputs = self.pad(
+                images,
+                annotations=annotations,
+                return_pixel_mask=True,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                return_tensors=return_tensors,
+                update_bboxes=do_convert_annotations,
+                pad_size=pad_size,
             )
         else:
             images = [
                 to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
                 for image in images
             ]
-            data = {"pixel_values": images}
-
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-        if annotations is not None:
-            encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
-            ]
+            encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+            if annotations is not None:
+                encoded_inputs["labels"] = [
+                    BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                ]
 
         return encoded_inputs
 

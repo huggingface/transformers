@@ -53,6 +53,7 @@ else:
 @require_tokenizers
 @require_pandas
 class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/tapas-large-finetuned-sqa"
     tokenizer_class = TapasTokenizer
     test_rust_tokenizer = False
     space_between_special_tokens = True
@@ -221,6 +222,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
+
+    @unittest.skip("Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
 
     def test_chinese(self):
         tokenizer = BasicTokenizer()
@@ -1262,10 +1267,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(segment_ids.tolist(), expected_results["segment_ids"])
         self.assertListEqual(column_ids.tolist(), expected_results["column_ids"])
         self.assertListEqual(row_ids.tolist(), expected_results["row_ids"])
-
-    @unittest.skip("Skip this test while all models are still to be uploaded.")
-    def test_pretrained_model_lists(self):
-        pass
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):

@@ -21,7 +21,7 @@ To install locally:
 
 In the root of the repo run:
 
-```
+```bash
 conda create -n vqganclip python=3.8
 conda activate vqganclip
 git-lfs install
@@ -30,7 +30,7 @@ pip install -r requirements.txt
 ```
 
 ### Generate new images
-```
+```python
 from VQGAN_CLIP import VQGAN_CLIP
 vqgan_clip = VQGAN_CLIP()
 vqgan_clip.generate("a picture of a smiling woman")
@@ -41,7 +41,7 @@ To get a test image, run
 `git clone https://huggingface.co/datasets/erwann/vqgan-clip-pic test_images`
 
 To edit:
-```
+```python
 from VQGAN_CLIP import VQGAN_CLIP
 vqgan_clip = VQGAN_CLIP()
 

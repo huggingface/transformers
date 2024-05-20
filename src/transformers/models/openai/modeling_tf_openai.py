@@ -34,6 +34,7 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -51,16 +52,11 @@ from .configuration_openai import OpenAIGPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai-gpt"
+_CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 
-TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
-]
 
-
-class TFAttention(tf.keras.layers.Layer):
+class TFAttention(keras.layers.Layer):
     def __init__(self, nx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
 
@@ -76,8 +72,8 @@ class TFAttention(tf.keras.layers.Layer):
 
         self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
-        self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
-        self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.attn_dropout = keras.layers.Dropout(config.attn_pdrop)
+        self.resid_dropout = keras.layers.Dropout(config.resid_pdrop)
         self.n_state = n_state
         self.pruned_heads = set()
 
@@ -166,14 +162,14 @@ class TFAttention(tf.keras.layers.Layer):
                 self.c_proj.build([None, None, self.n_state])
 
 
-class TFMLP(tf.keras.layers.Layer):
+class TFMLP(keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation("gelu")
-        self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.dropout = keras.layers.Dropout(config.resid_pdrop)
         self.nx = nx
         self.n_state = n_state
 
@@ -195,14 +191,14 @@ class TFMLP(tf.keras.layers.Layer):
                 self.c_proj.build([None, None, self.nx])
 
 
-class TFBlock(tf.keras.layers.Layer):
+class TFBlock(keras.layers.Layer):
     def __init__(self, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
         self.attn = TFAttention(nx, config, scale, name="attn")
-        self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
+        self.ln_1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.mlp = TFMLP(4 * nx, config, name="mlp")
-        self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
+        self.ln_2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
         self.nx = nx
 
     def call(self, x, attention_mask, head_mask, output_attentions, training=False):
@@ -235,7 +231,7 @@ class TFBlock(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
+class TFOpenAIGPTMainLayer(keras.layers.Layer):
     config_class = OpenAIGPTConfig
 
     def __init__(self, config, *inputs, **kwargs):
@@ -253,7 +249,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.tokens_embed = TFSharedEmbeddings(
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
-        self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.drop = keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
     def build(self, input_shape=None):
@@ -445,7 +441,7 @@ OPENAI_GPT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -730,8 +726,8 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> import tensorflow as tf
         >>> from transformers import AutoTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai-gpt")
-        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
+        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-community/openai-gpt")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> tokenizer.add_special_tokens({"cls_token": "[CLS]"})
@@ -833,7 +829,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.score = tf.keras.layers.Dense(
+        self.score = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="score",

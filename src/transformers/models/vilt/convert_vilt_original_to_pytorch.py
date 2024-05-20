@@ -224,7 +224,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Define processor
     image_processor = ViltImageProcessor(size=384)
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
     processor = ViltProcessor(image_processor, tokenizer)
 
     # Forward pass on example inputs (image + text)

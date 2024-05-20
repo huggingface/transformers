@@ -23,7 +23,6 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -35,12 +34,18 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_1
+from ...utils import is_accelerate_available, logging
+from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
 
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -48,11 +53,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
 _IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
-
-MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/mask2former-swin-small-coco-instance",
-    # See all mask2former models at https://huggingface.co/models?filter=mask2former
-]
 
 
 @dataclass
@@ -372,10 +372,9 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
-    loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
+    loss_pos = torch.matmul(cross_entropy_loss_pos / height_and_width, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg / height_and_width, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss / height_and_width
     return loss
 
 
@@ -787,8 +786,15 @@ class Mask2FormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
-        return num_masks_pt
+        num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_masks = reduce(num_masks)
+                world_size = PartialState().num_processes
+
+        num_masks = torch.clamp(num_masks / world_size, min=1)
+        return num_masks
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
@@ -860,7 +866,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=x.dtype, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1376,7 +1382,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        self.encoder = AutoBackbone.from_config(config.backbone_config)
+        self.encoder = load_backbone(config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -1993,12 +1999,22 @@ class Mask2FormerMaskPredictor(nn.Module):
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
-        batch_size, num_queries, num_channels = mask_embeddings.shape
-        _, _, height, width = pixel_embeddings.shape
-        outputs_mask = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
-        for c in range(num_channels):
-            outputs_mask += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
+        is_tracing = (
+            torch.jit.is_tracing()
+            or isinstance(outputs, torch.fx.Proxy)
+            or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
+        )
+        # Sum up over the channels
+        if is_tracing and not is_torch_greater_or_equal_than_2_1:
+            # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
+            batch_size, num_queries, num_channels = mask_embeddings.shape
+            _, _, height, width = pixel_embeddings.shape
+            outputs_mask = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
+            for c in range(num_channels):
+                outputs_mask += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
+
+        else:
+            outputs_mask = torch.einsum("bqc, bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
@@ -2129,7 +2145,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])

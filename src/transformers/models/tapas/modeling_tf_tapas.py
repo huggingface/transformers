@@ -38,6 +38,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -49,7 +50,6 @@ from ...utils import (
     is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
@@ -70,43 +70,19 @@ if is_tensorflow_probability_available():
             "It seems you have `tensorflow_probability` installed with the wrong tensorflow version. "
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -142,7 +118,7 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
     attentions: Tuple[tf.Tensor] | None = None
 
 
-class TFTapasEmbeddings(tf.keras.layers.Layer):
+class TFTapasEmbeddings(keras.layers.Layer):
     """
     Construct the embeddings from word, position and token_type embeddings. Same as BertEmbeddings but with a number of
     additional token type embeddings to encode tabular structure.
@@ -157,8 +133,8 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
@@ -257,7 +233,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Tapas
-class TFTapasSelfAttention(tf.keras.layers.Layer):
+class TFTapasSelfAttention(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -272,16 +248,16 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
         self.config = config
@@ -390,15 +366,15 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Tapas
-class TFTapasSelfOutput(tf.keras.layers.Layer):
+class TFTapasSelfOutput(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -421,7 +397,7 @@ class TFTapasSelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Tapas
-class TFTapasAttention(tf.keras.layers.Layer):
+class TFTapasAttention(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -473,11 +449,11 @@ class TFTapasAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Tapas
-class TFTapasIntermediate(tf.keras.layers.Layer):
+class TFTapasIntermediate(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -503,15 +479,15 @@ class TFTapasIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Tapas
-class TFTapasOutput(tf.keras.layers.Layer):
+class TFTapasOutput(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -534,7 +510,7 @@ class TFTapasOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Tapas
-class TFTapasLayer(tf.keras.layers.Layer):
+class TFTapasLayer(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -638,7 +614,7 @@ class TFTapasLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Tapas
-class TFTapasEncoder(tf.keras.layers.Layer):
+class TFTapasEncoder(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -717,11 +693,11 @@ class TFTapasEncoder(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Tapas
-class TFTapasPooler(tf.keras.layers.Layer):
+class TFTapasPooler(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -747,11 +723,11 @@ class TFTapasPooler(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Tapas
-class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
+class TFTapasPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -762,7 +738,7 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -785,8 +761,8 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Tapas
-class TFTapasLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFTapasLMPredictionHead(keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -808,7 +784,7 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -834,8 +810,8 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Tapas
-class TFTapasMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFTapasMLMHead(keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFTapasLMPredictionHead(config, input_embeddings, name="predictions")
@@ -855,11 +831,10 @@ class TFTapasMLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFTapasMainLayer(tf.keras.layers.Layer):
+class TFTapasMainLayer(keras.layers.Layer):
     config_class = TapasConfig
 
     def __init__(self, config: TapasConfig, add_pooling_layer: bool = True, **kwargs):
-        requires_backends(self, "tensorflow_probability")
         super().__init__(**kwargs)
 
         self.config = config
@@ -868,7 +843,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         self.encoder = TFTapasEncoder(config, name="encoder")
         self.pooler = TFTapasPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -1015,7 +990,7 @@ TAPAS_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1194,7 +1169,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.tapas = TFTapasMainLayer(config, add_pooling_layer=False, name="tapas")
         self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="cls")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.lm_head.predictions
 
     @unpack_inputs
@@ -1287,7 +1262,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
                 self.lm_head.build(None)
 
 
-class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
+class TFTapasComputeTokenLogits(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1301,7 +1276,7 @@ class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
                 trainable=True,
                 initializer=tf.zeros_initializer()
                 if config.init_cell_selection_weights_to_zero
-                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
             )
             self.output_bias = self.add_weight(
                 name="output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
@@ -1323,7 +1298,7 @@ class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
         return logits
 
 
-class TFTapasComputeColumnLogits(tf.keras.layers.Layer):
+class TFTapasComputeColumnLogits(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1335,7 +1310,7 @@ class TFTapasComputeColumnLogits(tf.keras.layers.Layer):
                 trainable=True,
                 initializer=tf.zeros_initializer()
                 if config.init_cell_selection_weights_to_zero
-                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
             )
             self.column_output_bias = self.add_weight(
                 name="column_output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
@@ -1400,14 +1375,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         self.tapas = TFTapasMainLayer(config, name="tapas")
 
         # dropout
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
 
         self.compute_token_logits = TFTapasComputeTokenLogits(config, name="compute_token_logits")
 
         self.compute_column_logits = TFTapasComputeColumnLogits(config, name="compute_column_logits")
 
         if config.num_aggregation_labels > 0:
-            self.aggregation_classifier = tf.keras.layers.Dense(
+            self.aggregation_classifier = keras.layers.Dense(
                 config.num_aggregation_labels,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="aggregation_classifier",
@@ -1740,8 +1715,8 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         self.num_labels = config.num_labels
 
         self.tapas = TFTapasMainLayer(config, name="tapas")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
         self.config = config

@@ -64,7 +64,7 @@ GPU가 과열될 때 정확한 적정 온도를 알기 어려우나, 아마도 +
 
 다중 GPU를 사용하는 경우 GPU 간의 연결 방식은 전체 훈련 시간에 큰 영향을 미칠 수 있습니다. 만약 GPU가 동일한 물리적 노드에 있을 경우, 다음과 같이 확인할 수 있습니다:
 
-```
+```bash
 nvidia-smi topo -m
 ```
 
@@ -117,7 +117,7 @@ GPU1    PHB      X      0-11            N/A
 
 따라서 `nvidia-smi topo -m`의 결과에서 `NVX`의 값이 높을수록 더 좋습니다. 세대는 GPU 아키텍처에 따라 다를 수 있습니다.
 
-그렇다면, gpt2를 작은 wikitext 샘플로 학습시키는 예제를 통해, NVLink가 훈련에 어떤 영향을 미치는지 살펴보겠습니다.
+그렇다면, openai-community/gpt2를 작은 wikitext 샘플로 학습시키는 예제를 통해, NVLink가 훈련에 어떤 영향을 미치는지 살펴보겠습니다.
 
 결과는 다음과 같습니다:
 
@@ -136,7 +136,7 @@ NVLink 사용 시 훈련이 약 23% 더 빠르게 완료됨을 확인할 수 있
 # DDP w/ NVLink
 
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train \
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -145,7 +145,7 @@ rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
 # DDP w/o NVLink
 
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 torchrun \
---nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
+--nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path openai-community/gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 

@@ -192,3 +192,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.random.randn(3, 249, 491)
         images = image_processing.pad_image(image)
         assert images.shape == (3, 256, 512)
+
+        image = np.random.randn(3, 249, 512)
+        images = image_processing.pad_image(image)
+        assert images.shape == (3, 256, 512)

@@ -42,6 +42,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
+    validate_preprocess_arguments,
 )
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -466,6 +468,25 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.repo_path = repo_path
         self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
         self.num_text = num_text
+        self._valid_processor_keys = [
+            "images",
+            "task_inputs",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "do_reduce_labels",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -708,20 +729,24 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        if do_resize is not None and size is None:
-            raise ValueError("If `do_resize` is True, `size` must be provided.")
-
-        if do_rescale is not None and rescale_factor is None:
-            raise ValueError("If `do_rescale` is True, `rescale_factor` must be provided.")
-
-        if do_normalize is not None and (image_mean is None or image_std is None):
-            raise ValueError("If `do_normalize` is True, `image_mean` and `image_std` must be provided.")
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
@@ -770,7 +795,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         )
         return encoded_inputs
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -798,7 +823,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
+    # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
@@ -1219,8 +1244,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             # if this is panoptic segmentation, we only keep the "thing" classes
             if task_type == "panoptic":
                 keep = torch.zeros_like(scores_per_image).bool()
-                for i, lab in enumerate(labels_per_image):
-                    keep[i] = lab in self.metadata["thing_ids"]
+                for j, lab in enumerate(labels_per_image):
+                    keep[j] = lab in self.metadata["thing_ids"]
 
                 scores_per_image = scores_per_image[keep]
                 labels_per_image = labels_per_image[keep]
@@ -1233,8 +1258,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 continue
 
             if "ade20k" in self.class_info_file and not is_demo and "instance" in task_type:
-                for i in range(labels_per_image.shape[0]):
-                    labels_per_image[i] = self.metadata["thing_ids"].index(labels_per_image[i].item())
+                for j in range(labels_per_image.shape[0]):
+                    labels_per_image[j] = self.metadata["thing_ids"].index(labels_per_image[j].item())
 
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None

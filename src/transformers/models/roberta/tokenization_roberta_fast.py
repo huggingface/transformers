@@ -28,50 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "roberta-base": "https://huggingface.co/roberta-base/resolve/main/vocab.json",
-        "roberta-large": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
-        "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/vocab.json",
-        "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/vocab.json",
-        "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/vocab.json",
-        "roberta-large-openai-detector": (
-            "https://huggingface.co/roberta-large-openai-detector/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "roberta-base": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
-        "roberta-large": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
-        "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/merges.txt",
-        "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/merges.txt",
-        "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/merges.txt",
-        "roberta-large-openai-detector": (
-            "https://huggingface.co/roberta-large-openai-detector/resolve/main/merges.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "roberta-base": "https://huggingface.co/roberta-base/resolve/main/tokenizer.json",
-        "roberta-large": "https://huggingface.co/roberta-large/resolve/main/tokenizer.json",
-        "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/tokenizer.json",
-        "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/tokenizer.json",
-        "roberta-base-openai-detector": (
-            "https://huggingface.co/roberta-base-openai-detector/resolve/main/tokenizer.json"
-        ),
-        "roberta-large-openai-detector": (
-            "https://huggingface.co/roberta-large-openai-detector/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "roberta-base": 512,
-    "roberta-large": 512,
-    "roberta-large-mnli": 512,
-    "distilroberta-base": 512,
-    "roberta-base-openai-detector": 512,
-    "roberta-large-openai-detector": 512,
-}
-
 
 class RobertaTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -84,7 +40,7 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import RobertaTokenizerFast
 
-    >>> tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+    >>> tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
     >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
 
@@ -155,8 +111,6 @@ class RobertaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = RobertaTokenizer
 

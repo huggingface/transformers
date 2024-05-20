@@ -33,9 +33,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ASTForAudioClassification, ASTModel
-    from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer import (
-        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
 if is_torchaudio_available():
@@ -66,6 +63,7 @@ class ASTModelTester:
         scope=None,
         frequency_stride=2,
         time_stride=2,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +84,7 @@ class ASTModelTester:
         self.scope = scope
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
+        self.attn_implementation = attn_implementation
 
         # in AST, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         frequency_out_dimension = (self.num_mel_bins - self.patch_size) // self.frequency_stride + 1
@@ -120,6 +119,7 @@ class ASTModelTester:
             initializer_range=self.initializer_range,
             frequency_stride=self.frequency_stride,
             time_stride=self.time_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, input_values, labels):
@@ -212,9 +212,9 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ASTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MIT/ast-finetuned-audioset-10-10-0.4593"
+        model = ASTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on some audio from AudioSet

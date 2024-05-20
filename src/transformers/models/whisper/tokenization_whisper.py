@@ -15,6 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
+import warnings
 from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
@@ -33,15 +34,6 @@ VOCAB_FILES_NAMES = {
     "normalizer_file": "normalizer.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
-    },
-    "merges_file": {"openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"},
-    "normalizer_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/normalizer.json"
-    },
-}
 
 MAX_MODEL_INPUT_SIZES = {
     "openai/whisper-base": 448,
@@ -256,8 +248,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -507,6 +497,20 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, "")
 
     def _normalize(self, text):
+        warnings.warn(
+            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
+        )
+        return self.normalize(text)
+
+    def _basic_normalize(self, text, remove_diacritics=False):
+        warnings.warn(
+            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
+        )
+        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
+
+    def normalize(self, text):
         """
         Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
         english text.
@@ -515,7 +519,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return normalizer(text)
 
     @staticmethod
-    def _basic_normalize(text, remove_diacritics=False):
+    def basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
@@ -745,10 +749,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         text = "".join(sub_texts)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
@@ -811,12 +815,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
-        logger.warning_once(
-            "\nNo chat template is defined for this tokenizer - using the default template "
-            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
-            "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
-        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):

@@ -550,7 +550,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
     # see https://github.com/huggingface/transformers/issues/13906)
 
     if args.tokenizer_name is None:
-        tokenizer_name = "gpt2"
+        tokenizer_name = "openai-community/gpt2"
     else:
         tokenizer_name = args.tokenizer_name
 

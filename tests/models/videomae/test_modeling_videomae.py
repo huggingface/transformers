@@ -41,7 +41,6 @@ if is_torch_available():
         VideoMAEForVideoClassification,
         VideoMAEModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -71,6 +70,7 @@ class VideoMAEModelTester:
         initializer_range=0.02,
         mask_ratio=0.9,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -92,6 +92,7 @@ class VideoMAEModelTester:
         self.initializer_range = initializer_range
         self.mask_ratio = mask_ratio
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in VideoMAE, the number of tokens equals num_frames/tubelet_size * num_patches per frame
         self.num_patches_per_frame = (image_size // patch_size) ** 2
@@ -133,6 +134,7 @@ class VideoMAEModelTester:
             decoder_intermediate_size=self.intermediate_size,
             decoder_num_attention_heads=self.num_attention_heads,
             decoder_num_hidden_layers=self.num_hidden_layers,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -198,7 +200,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             # hence we define a single mask, which we then repeat for each example in the batch
             mask = torch.ones((self.model_tester.num_masks,))
             mask = torch.cat([mask, torch.zeros(self.model_tester.seq_length - mask.size(0))])
-            bool_masked_pos = mask.expand(self.model_tester.batch_size, -1).bool()
+            batch_size = inputs_dict["pixel_values"].shape[0]
+            bool_masked_pos = mask.expand(batch_size, -1).bool()
             inputs_dict["bool_masked_pos"] = bool_masked_pos.to(torch_device)
 
         if return_labels:
@@ -237,9 +240,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VideoMAEModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "MCG-NJU/videomae-base"
+        model = VideoMAEModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if not self.has_attentions:

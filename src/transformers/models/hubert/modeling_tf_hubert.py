@@ -27,6 +27,7 @@ from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -44,10 +45,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
 
-TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/hubert-base-ls960",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-]
 
 LARGE_NEGATIVE = -1e8
 
@@ -169,7 +166,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNorm with Wav2Vec2->Hubert
-class TFHubertGroupNorm(tf.keras.layers.Layer):
+class TFHubertGroupNorm(keras.layers.Layer):
     """
     From tensorflow-addons https://www.tensorflow.org/addons/api_docs/python/tfa/layers/GroupNormalization
     """
@@ -181,12 +178,12 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         epsilon: float = 1e-3,
         center: bool = True,
         scale: bool = True,
-        beta_initializer: tf.keras.initializers.Initializer = "zeros",
-        gamma_initializer: tf.keras.initializers.Initializer = "ones",
-        beta_regularizer: tf.keras.regularizers.Regularizer = None,
-        gamma_regularizer: tf.keras.regularizers.Regularizer = None,
-        beta_constraint: tf.keras.constraints.Constraint = None,
-        gamma_constraint: tf.keras.constraints.Constraint = None,
+        beta_initializer: keras.initializers.Initializer = "zeros",
+        gamma_initializer: keras.initializers.Initializer = "ones",
+        beta_regularizer: keras.regularizers.Regularizer = None,
+        gamma_regularizer: keras.regularizers.Regularizer = None,
+        beta_constraint: keras.constraints.Constraint = None,
+        gamma_constraint: keras.constraints.Constraint = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -196,12 +193,12 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         self.epsilon = epsilon
         self.center = center
         self.scale = scale
-        self.beta_initializer = tf.keras.initializers.get(beta_initializer)
-        self.gamma_initializer = tf.keras.initializers.get(gamma_initializer)
-        self.beta_regularizer = tf.keras.regularizers.get(beta_regularizer)
-        self.gamma_regularizer = tf.keras.regularizers.get(gamma_regularizer)
-        self.beta_constraint = tf.keras.constraints.get(beta_constraint)
-        self.gamma_constraint = tf.keras.constraints.get(gamma_constraint)
+        self.beta_initializer = keras.initializers.get(beta_initializer)
+        self.gamma_initializer = keras.initializers.get(gamma_initializer)
+        self.beta_regularizer = keras.regularizers.get(beta_regularizer)
+        self.gamma_regularizer = keras.regularizers.get(gamma_regularizer)
+        self.beta_constraint = keras.constraints.get(beta_constraint)
+        self.gamma_constraint = keras.constraints.get(gamma_constraint)
         self._check_axis()
 
     def build(self, input_shape):
@@ -216,7 +213,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, inputs):
-        input_shape = tf.keras.backend.int_shape(inputs)
+        input_shape = keras.backend.int_shape(inputs)
         tensor_input_shape = tf.shape(inputs)
 
         reshaped_inputs, group_shape = self._reshape_into_groups(inputs, input_shape, tensor_input_shape)
@@ -238,12 +235,12 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
             "epsilon": self.epsilon,
             "center": self.center,
             "scale": self.scale,
-            "beta_initializer": tf.keras.initializers.serialize(self.beta_initializer),
-            "gamma_initializer": tf.keras.initializers.serialize(self.gamma_initializer),
-            "beta_regularizer": tf.keras.regularizers.serialize(self.beta_regularizer),
-            "gamma_regularizer": tf.keras.regularizers.serialize(self.gamma_regularizer),
-            "beta_constraint": tf.keras.constraints.serialize(self.beta_constraint),
-            "gamma_constraint": tf.keras.constraints.serialize(self.gamma_constraint),
+            "beta_initializer": keras.initializers.serialize(self.beta_initializer),
+            "gamma_initializer": keras.initializers.serialize(self.gamma_initializer),
+            "beta_regularizer": keras.regularizers.serialize(self.beta_regularizer),
+            "gamma_regularizer": keras.regularizers.serialize(self.gamma_regularizer),
+            "beta_constraint": keras.constraints.serialize(self.beta_constraint),
+            "gamma_constraint": keras.constraints.serialize(self.gamma_constraint),
         }
         base_config = super().get_config()
         return {**base_config, **config}
@@ -264,7 +261,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
             return inputs, group_shape
 
     def _apply_normalization(self, reshaped_inputs, input_shape):
-        group_shape = tf.keras.backend.int_shape(reshaped_inputs)
+        group_shape = keras.backend.int_shape(reshaped_inputs)
         group_reduction_axes = list(range(1, len(group_shape)))
         is_instance_norm = (input_shape[self.axis] // self.groups) == 1
         if not is_instance_norm:
@@ -342,7 +339,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
 
     def _create_input_spec(self, input_shape):
         dim = input_shape[self.axis]
-        self.input_spec = tf.keras.layers.InputSpec(ndim=len(input_shape), axes={self.axis: dim})
+        self.input_spec = keras.layers.InputSpec(ndim=len(input_shape), axes={self.axis: dim})
 
     def _add_gamma_weight(self, input_shape):
         dim = input_shape[self.axis]
@@ -386,7 +383,7 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2WeightNormConv1D with Wav2Vec2->Hubert
-class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
+class TFHubertWeightNormConv1D(keras.layers.Conv1D):
     """Adapted from https://www.tensorflow.org/probability/api_docs/python/tfp/layers/weight_norm/WeightNorm"""
 
     def __init__(self, filters, kernel_size, groups, explicit_padding, **kwargs):
@@ -443,13 +440,13 @@ class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2NoLayerNormConvLayer with Wav2Vec2->Hubert
-class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
+class TFHubertNoLayerNormConvLayer(keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = tf.keras.layers.Conv1D(
+        self.conv = keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
@@ -473,20 +470,20 @@ class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
-class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
+class TFHubertLayerNormConvLayer(keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = tf.keras.layers.Conv1D(
+        self.conv = keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
             use_bias=config.conv_bias,
             name="conv",
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(name="layer_norm", epsilon=config.layer_norm_eps)
+        self.layer_norm = keras.layers.LayerNormalization(name="layer_norm", epsilon=config.layer_norm_eps)
         self.activation = get_tf_activation(config.feat_extract_activation)
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -508,13 +505,13 @@ class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
-class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
+class TFHubertGroupNormConvLayer(keras.layers.Layer):
     def __init__(self, config: HubertConfig, layer_id: int = 0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = tf.keras.layers.Conv1D(
+        self.conv = keras.layers.Conv1D(
             filters=self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             strides=config.conv_stride[layer_id],
@@ -543,7 +540,7 @@ class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
-class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
+class TFHubertPositionalConvEmbedding(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.conv = TFHubertWeightNormConv1D(
@@ -573,7 +570,7 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
-class TFHubertSamePadLayer(tf.keras.layers.Layer):
+class TFHubertSamePadLayer(keras.layers.Layer):
     def __init__(self, num_conv_pos_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
@@ -584,7 +581,7 @@ class TFHubertSamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFHubertFeatureEncoder(tf.keras.layers.Layer):
+class TFHubertFeatureEncoder(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -630,18 +627,18 @@ class TFHubertFeatureExtractor(TFHubertFeatureEncoder):
         )
 
 
-class TFHubertFeatureProjection(tf.keras.layers.Layer):
+class TFHubertFeatureProjection(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.projection = tf.keras.layers.Dense(
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.projection = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
             name="projection",
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.feat_proj_dropout)
+        self.dropout = keras.layers.Dropout(rate=config.feat_proj_dropout)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -663,7 +660,7 @@ class TFHubertFeatureProjection(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFHubert
-class TFHubertAttention(tf.keras.layers.Layer):
+class TFHubertAttention(keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -679,7 +676,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -689,10 +686,10 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
@@ -834,13 +831,13 @@ class TFHubertAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2FeedForward with Wav2Vec2->Hubert
-class TFHubertFeedForward(tf.keras.layers.Layer):
+class TFHubertFeedForward(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.intermediate_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.intermediate_dropout = keras.layers.Dropout(config.activation_dropout)
 
-        self.intermediate_dense = tf.keras.layers.Dense(
+        self.intermediate_dense = keras.layers.Dense(
             units=config.intermediate_size,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
@@ -848,13 +845,13 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
         )
         self.intermediate_act_fn = get_tf_activation(config.hidden_act)
 
-        self.output_dense = tf.keras.layers.Dense(
+        self.output_dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
             name="output_dense",
         )
-        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.output_dropout = keras.layers.Dropout(config.hidden_dropout)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -879,7 +876,7 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayer with Wav2Vec2->Hubert
-class TFHubertEncoderLayer(tf.keras.layers.Layer):
+class TFHubertEncoderLayer(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFHubertAttention(
@@ -889,12 +886,10 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
             is_decoder=False,
             name="attention",
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.feed_forward = TFHubertFeedForward(config, name="feed_forward")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="final_layer_norm"
-        )
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="final_layer_norm")
         self.config = config
 
     def call(
@@ -941,7 +936,7 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
-class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
+class TFHubertEncoderLayerStableLayerNorm(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFHubertAttention(
@@ -951,12 +946,10 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
             is_decoder=False,
             name="attention",
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.feed_forward = TFHubertFeedForward(config, name="feed_forward")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="final_layer_norm"
-        )
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="final_layer_norm")
         self.config = config
 
     def call(
@@ -1001,13 +994,13 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2Encoder with Wav2Vec2->Hubert
-class TFHubertEncoder(tf.keras.layers.Layer):
+class TFHubertEncoder(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.pos_conv_embed = TFHubertPositionalConvEmbedding(config, name="pos_conv_embed")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
         self.layer = [TFHubertEncoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
 
     def call(
@@ -1082,13 +1075,13 @@ class TFHubertEncoder(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
-class TFHubertEncoderStableLayerNorm(tf.keras.layers.Layer):
+class TFHubertEncoderStableLayerNorm(keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.pos_conv_embed = TFHubertPositionalConvEmbedding(config, name="pos_conv_embed")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout)
         self.layer = [
             TFHubertEncoderLayerStableLayerNorm(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)
         ]
@@ -1165,7 +1158,7 @@ class TFHubertEncoderStableLayerNorm(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFHubertMainLayer(tf.keras.layers.Layer):
+class TFHubertMainLayer(keras.layers.Layer):
     config_class = HubertConfig
 
     def __init__(self, config: HubertConfig, **kwargs):
@@ -1339,7 +1332,7 @@ HUBERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1522,8 +1515,8 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.hubert = TFHubertMainLayer(config, name="hubert")
-        self.dropout = tf.keras.layers.Dropout(config.final_dropout)
-        self.lm_head = tf.keras.layers.Dense(config.vocab_size, name="lm_head")
+        self.dropout = keras.layers.Dropout(config.final_dropout)
+        self.lm_head = keras.layers.Dense(config.vocab_size, name="lm_head")
         self.output_hidden_size = (
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
         )

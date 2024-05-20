@@ -52,11 +52,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "RemBertConfig"
 _CHECKPOINT_FOR_DOC = "google/rembert"
 
-REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/rembert",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-]
-
 
 def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""

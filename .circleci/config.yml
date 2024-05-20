@@ -12,7 +12,7 @@ jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
         docker:
-            - image: cimg/python:3.8.12
+            - image: python:3.10-slim
         parallelism: 1
         steps:
             - run: echo $CIRCLE_PROJECT_USERNAME
@@ -26,13 +26,11 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.8.12
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
-            - run: pip install --upgrade --upgrade-strategy eager pip
-            - run: pip install -U --upgrade-strategy eager GitPython
-            - run: pip install -U --upgrade-strategy eager .
+            - run: uv pip install -U -e .
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -88,25 +86,22 @@ jobs:
                       echo "No tests to run, exiting early!"
                       circleci-agent step halt
                   fi
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
-                  path: test_preparation/generated_config.txt
+                path: test_preparation/generated_config.yml
             - store_artifacts:
-                  path: test_preparation/filtered_test_list_cross_tests.txt
+                path: test_preparation/filtered_test_list_cross_tests.txt
             - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
+                configuration_path: test_preparation/generated_config.yml
 
     # To run all tests for the nightly build
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.8.12
+            - image: huggingface/transformers-consistency
         parallelism: 1
         steps:
             - checkout
-            - run: pip install --upgrade --upgrade-strategy eager pip
-            - run: pip install -U --upgrade-strategy eager GitPython
-            - run: pip install -U --upgrade-strategy eager .
+            - run: uv pip install -e .
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
@@ -126,7 +121,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.8.12
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -134,29 +129,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.7-code_quality-pip-{{ checksum "setup.py" }}
-                      - v0.7-code-quality-pip
-            - restore_cache:
-                  keys:
-                      - v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
-                      - v0.7-code-quality-site-packages
-            - run: pip install --upgrade --upgrade-strategy eager pip
-            - run: pip install -U --upgrade-strategy eager .[all,quality]
-            - save_cache:
-                  key: v0.7-code_quality-pip-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - save_cache:
-                  key: v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.pyenv/versions/'
+            - run: uv pip install -e .
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
+            - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
             - run: ruff check examples tests src utils
             - run: ruff format tests src utils --check
             - run: python utils/custom_init_isort.py --check_only
@@ -166,7 +145,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.8.12
+            - image: huggingface/transformers-consistency
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -174,24 +153,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
-                      - v0.7-repository_consistency-pip
-            - restore_cache:
-                  keys:
-                      - v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
-                      - v0.7-repository_consistency-site-packages
-            - run: pip install --upgrade --upgrade-strategy eager pip
-            - run: pip install -U --upgrade-strategy eager .[all,quality]
-            - save_cache:
-                  key: v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - save_cache:
-                  key: v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.pyenv/versions/'
+            - run: uv pip install -e .
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -207,7 +169,6 @@ jobs:
             - run: python utils/check_doctest_list.py
             - run: make deps_table_check_updated
             - run: python utils/update_metadata.py --check-only
-            - run: python utils/check_task_guides.py
             - run: python utils/check_docstrings.py
             - run: python utils/check_support_list.py
 

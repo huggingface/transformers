@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Siglip model. """
+""" Testing suite for the PyTorch SigLIP model. """
 
 
 import inspect
@@ -47,8 +47,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
 
 
 if is_vision_available():
@@ -217,9 +216,9 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipTextModelTester:
@@ -374,9 +373,9 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class SiglipModelTester:
@@ -389,6 +388,7 @@ class SiglipModelTester:
         self.parent = parent
         self.text_model_tester = SiglipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = SiglipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
@@ -577,11 +577,69 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_from_pretrained with CLIPModel->SiglipModel, CLIP->SIGLIP
     def test_model_from_pretrained(self):
-        for model_name in SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SiglipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+
+class SiglipForImageClassificationModelTester(SiglipModelTester):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.batch_size = self.vision_model_tester.batch_size
+        self.num_hidden_layers = self.vision_model_tester.num_hidden_layers
+        self.hidden_size = self.vision_model_tester.hidden_size
+        self.seq_length = self.vision_model_tester.seq_length
+
+    def prepare_config_and_inputs(self):
+        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class SiglipForImageClassificationModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
+    fx_compatible = False
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+
+    def setUp(self):
+        self.model_tester = SiglipForImageClassificationModelTester(self)
+
+    @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    def test_initialization(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
@@ -629,3 +687,25 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         probs = torch.sigmoid(logits_per_image)  # these are the probabilities
         expected_probs = torch.tensor([[3.1937e-01, 3.2463e-05]], device=torch_device)
         self.assertTrue(torch.allclose(probs, expected_probs, atol=1e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name).to(torch_device)
+
+        # 640 x 480 image
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height": 480, "width": 640})
+
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the shape
+        # patch size = 16
+        # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
+        expected_shape = torch.Size((1, 1200, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)

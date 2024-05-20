@@ -22,10 +22,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtsmixer-etth1-pretrain": "https://huggingface.co/ibm/patchtsmixer-etth1-pretrain/resolve/main/config.json",
-}
-
 
 class PatchTSMixerConfig(PretrainedConfig):
     r"""
@@ -40,7 +36,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     Args:
         context_length (`int`, *optional*, defaults to 32):
             The context/history length for the input sequence.
-        patch_len (`int`, *optional*, defaults to 8):
+        patch_length (`int`, *optional*, defaults to 8):
             The patch length for the input sequence.
         num_input_channels (`int`, *optional*, defaults to 1):
             Number of input variates. For Univariate, set it to 1.
@@ -51,7 +47,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             The number of samples to generate in parallel for probabilistic forecast.
         d_model (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
-            patch_len). Larger value indicates more complex model.
+            patch_length). Larger value indicates more complex model.
         expansion_factor (`int`, *optional*, defaults to 2):
             Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
         num_layers (`int`, *optional*, defaults to 3):
@@ -155,7 +151,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self,
         # Time series specific configuration
         context_length: int = 32,
-        patch_len: int = 8,
+        patch_length: int = 8,
         num_input_channels: int = 1,
         patch_stride: int = 8,
         num_parallel_samples: int = 100,
@@ -198,7 +194,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     ):
         self.num_input_channels = num_input_channels
         self.context_length = context_length
-        self.patch_length = patch_len
+        self.patch_length = patch_length
         self.patch_stride = patch_stride
         self.d_model = d_model
         self.expansion_factor = expansion_factor
@@ -209,7 +205,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.norm_mlp = norm_mlp
         self.scaling = scaling
         self.head_dropout = head_dropout
-        self.num_patches = (max(context_length, patch_len) - patch_len) // patch_stride + 1
+        self.num_patches = (max(context_length, patch_length) - patch_length) // patch_stride + 1
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio
         self.num_forecast_mask_patches = num_forecast_mask_patches

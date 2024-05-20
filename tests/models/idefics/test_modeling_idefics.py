@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
+    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -40,7 +41,6 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
     is_torch_greater_or_equal_than_2_0 = False
@@ -560,11 +560,16 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
+        self.has_attentions = False
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = IdeficsModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "HuggingFaceM4/idefics-9b"
+        model = IdeficsModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @require_torch_sdpa
     @slow
@@ -657,7 +662,7 @@ class IdeficsModelIntegrationTest(TestCasePlus):
             "HuggingFaceM4/idefics-9b", quantization_config=quantization_config, device_map="auto"
         )
         processor = self.default_processor
-        inputs = processor(prompts, return_tensors="pt").to(torch_device)
+        inputs = processor(prompts, return_tensors="pt", padding="longest").to(torch_device)
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 

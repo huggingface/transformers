@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/mpnet-base"
     tokenizer_class = MPNetTokenizer
     rust_tokenizer_class = MPNetTokenizerFast
     test_rust_tokenizer = True

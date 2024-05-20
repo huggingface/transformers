@@ -29,7 +29,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Swin2SRForImageSuperResolution, Swin2SRModel
-    from transformers.models.swin2sr.modeling_swin2sr import SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -162,7 +161,7 @@ class Swin2SRModelTester:
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        {"image-feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
         if is_torch_available()
         else {}
     )
@@ -233,9 +232,9 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Swin2SRModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "caidas/swin2SR-classical-sr-x2-64"
+        model = Swin2SRModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwriting because of `logit_scale` parameter
     def test_initialization(self):

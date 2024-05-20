@@ -30,6 +30,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     direct_transformers_import,
@@ -273,7 +274,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -317,6 +318,7 @@ class ProcessorMixin(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -330,6 +332,13 @@ class ProcessorMixin(PushToHubMixin):
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {PROCESSOR_NAME} file"
                 )
+
+        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
+        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
+        # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
+        # However, for models added in the future, we won't get the expected error if this file is missing.
+        if resolved_processor_file is None:
+            return {}, kwargs
 
         try:
             # Load processor dict
@@ -347,10 +356,15 @@ class ProcessorMixin(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
 
-        if "auto_map" in processor_dict and not is_local:
-            processor_dict["auto_map"] = add_model_info_to_auto_map(
-                processor_dict["auto_map"], pretrained_model_name_or_path
-            )
+        if not is_local:
+            if "auto_map" in processor_dict:
+                processor_dict["auto_map"] = add_model_info_to_auto_map(
+                    processor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in processor_dict:
+                processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    processor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
 
         return processor_dict, kwargs
 
@@ -424,8 +438,7 @@ class ProcessorMixin(PushToHubMixin):
                 This can be either:
 
                 - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                  huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
                 - a path or url to a saved feature extractor JSON *file*, e.g.,
@@ -456,17 +469,7 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
-        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
-        # However, for models added in the future, we won't get the expected error if this file is missing.
-        try:
-            processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        except EnvironmentError as e:
-            if "does not appear to have a file named processor_config.json." in str(e):
-                processor_dict, kwargs = {}, kwargs
-            else:
-                raise
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 

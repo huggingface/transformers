@@ -15,22 +15,28 @@
 
 import builtins
 import collections
+import contextlib
 import functools
 import inspect
 import math
 import operator
 import os
 import random
+import sys
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import torch
+import torch.utils._pytree as pytree
 from torch import nn
-from torch.fx import Graph, GraphModule, Proxy, Tracer
+from torch.fx import Graph, GraphModule, Node, Proxy, Tracer
 from torch.fx._compatibility import compatibility
+from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
-from .. import PretrainedConfig, PreTrainedModel, logging
+from .. import logging
+from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -39,6 +45,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -53,7 +60,8 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import (
+from ..pytorch_utils import is_torch_greater_or_equal_than_2_0
+from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
     get_torch_version,
@@ -94,6 +102,7 @@ def _generate_supported_model_class_names(
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
         "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
+        "image-feature-extraction": MODEL_FOR_IMAGE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -132,17 +141,22 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "hubert",
     "layoutlm",
     "llama",
+    "cohere",
     "lxmert",
     "m2m_100",
     "marian",
     "mbart",
     "megatron-bert",
+    "mistral",
+    "mixtral",
     "mobilebert",
     "mt5",
     "nezha",
     "opt",
     "pegasus",
     "plbart",
+    "qwen2",
+    "qwen2_moe",
     "resnet",
     "roberta",
     "segformer",
@@ -183,6 +197,8 @@ _SPECIAL_SUPPORTED_MODELS = [
     # XLNetForQuestionAnswering,
 ]
 _SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)))
+
+_CURRENT_TRACER = None
 
 
 def torch_nn_embedding(self, input):
@@ -256,11 +272,14 @@ def torch_arange(*args, **kwargs):
 
 def torch_full(*args, **kwargs):
     args = list(args)
-    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
-        args[1] = 1  # Any value.
+    # We set the fill value to 1 as its value is not important as long as it's not a tensor on the `meta` device.
+    if len(args) > 1:
+        args[1] = 1
+    else:
+        kwargs["fill_value"] = 1
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
-    return torch.full(*args, **kwargs_without_device)
+    return torch.full(*args, **kwargs_without_device, device="meta")
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
@@ -608,12 +627,16 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.unique_consecutive: torch_unique_consecutive,
     torch.nn.functional.one_hot: torch_nn_functional_one_hot,
-    torch.nn.functional.scaled_dot_product_attention: torch_nn_functional_scaled_dot_product_attention,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
     operator.getitem: operator_getitem,
 }
+
+if is_torch_greater_or_equal_than_2_0:
+    _MANUAL_META_OVERRIDES[
+        torch.nn.functional.scaled_dot_product_attention
+    ] = torch_nn_functional_scaled_dot_product_attention
 
 
 class HFProxy(Proxy):
@@ -686,6 +709,97 @@ class MetaDeviceAttribute(HFAttribute):
     pass
 
 
+class HFCacheProxy(HFProxy):
+    """
+    Proxy that represents an instance of `transformers.cache_utils.Cache`.
+    """
+
+    def install_orig_cache_cls(self, orig_cache_cls: Type[Cache]):
+        self._orig_cache_cls = orig_cache_cls
+
+    @property
+    def __class__(self):
+        if not hasattr(self, "_orig_cache_cls"):
+            raise RuntimeError("The original Cache class must be installed to the HFCacheProxy.")
+        return self.tracer._CLASSES_TO_PATCH[self._orig_cache_cls]
+
+
+def create_wrapper(
+    function: Callable,
+    op_type: Union[Literal["call_function"], Literal["call_method"], Literal["get_attr"]],
+    proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+) -> Callable:
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        if not is_fx_tracing():
+            return function(*args, **kwargs)
+
+        found_proxies = []
+
+        def check_proxy(a):
+            if isinstance(a, Proxy):
+                found_proxies.append(a)
+
+        torch.fx.node.map_aggregate(args, check_proxy)
+        torch.fx.node.map_aggregate(kwargs, check_proxy)
+
+        if len(found_proxies) > 0:
+            tracer = found_proxies[0].tracer
+            if op_type == "call_function":
+                target = function
+            elif op_type == "call_method":
+                target = function.__name__
+            elif op_type == "get_attr":
+                target = function.__name__
+            else:
+                raise ValueError(f"op_type {op_type} not supported.")
+            return tracer.create_proxy(op_type, target, args, kwargs, proxy_factory_fn=proxy_factory_fn)
+        else:
+            return function(*args, **kwargs)
+
+    return wrapper
+
+
+class HFProxyableClassMeta(type):
+    """
+    Metaclass that creates a class with its main methods wrapped to be proxyable.
+    """
+
+    def __new__(
+        cls,
+        name: str,
+        bases: Tuple[Type, ...],
+        attrs: Dict[str, Any],
+        proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
+    ):
+        cls = super().__new__(cls, name, bases, attrs)
+        for attr_name in dir(cls):
+            attr = getattr(cls, attr_name, None)
+            if attr is None:
+                continue
+            if attr_name == "__init__":
+                op_type = "call_function"
+            elif attr_name.startswith("__"):
+                op_type = None
+            elif inspect.ismethod(attr):
+                op_type = "call_function"
+            elif inspect.isfunction(attr):
+                op_type = "call_method"
+            else:
+                op_type = None
+            if op_type is not None:
+                setattr(cls, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
+        return cls
+
+
+def gen_constructor_wrapper(target: Callable) -> Tuple[Callable, Callable]:
+    """
+    Wraps `target` to be proxyable. Used for tensor creators like `torch.ones`, `torch.arange` and so on.
+    """
+    wrapper = create_wrapper(target, "call_function")
+    return wrapper, target
+
+
 def _proxies_to_metas(v):
     """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
     if isinstance(v, MetaDeviceAttribute):
@@ -697,25 +811,40 @@ def _proxies_to_metas(v):
     return v
 
 
-def _gen_constructor_wrapper(target):
-    @functools.wraps(target)
-    def wrapper(*args, **kwargs):
-        proxy = None
+def create_cache_proxy_factory_fn(orig_cache_cls: Type[Cache]) -> Callable[[Node], HFCacheProxy]:
+    def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
+        global _CURRENT_TRACER
+        if not isinstance(_CURRENT_TRACER, HFTracer):
+            raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
+        cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)
+        cache_proxy.install_orig_cache_cls(orig_cache_cls)
+        return cache_proxy
 
-        def check_has_proxy(v):
-            if isinstance(v, Proxy):
-                nonlocal proxy
-                proxy = v
+    return cache_proxy_factory_fn
 
-        torch.fx.node.map_aggregate(args, check_has_proxy)
-        torch.fx.node.map_aggregate(kwargs, check_has_proxy)
 
-        if proxy is not None:
-            return proxy.tracer.create_proxy("call_function", target, args, kwargs)
-        else:
-            return target(*args, **kwargs)
-
-    return wrapper, target
+# Proxyable equivalent of the cache classes defined in `transformers.cache_utils`.
+ProxyableCache = HFProxyableClassMeta(
+    "ProxyableCache", (Cache,), {}, proxy_factory_fn=create_cache_proxy_factory_fn(Cache)
+)
+ProxyableDynamicCache = HFProxyableClassMeta(
+    "ProxyableDynamicCache",
+    (DynamicCache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(DynamicCache),
+)
+ProxyableSinkCache = HFProxyableClassMeta(
+    "ProxyableSinkCache",
+    (SinkCache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(SinkCache),
+)
+ProxyableStaticCache = HFProxyableClassMeta(
+    "ProxyableStaticCache",
+    (StaticCache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(StaticCache),
+)
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -747,7 +876,15 @@ class HFTracer(Tracer):
         "tensor",
         "clamp",
         "finfo",
+        "tril",
     ]
+    _CLASSES_TO_PATCH = {
+        Cache: ProxyableCache,
+        DynamicCache: ProxyableDynamicCache,
+        SinkCache: ProxyableSinkCache,
+        StaticCache: ProxyableStaticCache,
+    }
+
     supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
@@ -760,7 +897,7 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: PreTrainedModel, input_name: str, shape: List[int]
+        self, model: "PreTrainedModel", input_name: str, shape: List[int], input_names: List[str]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
@@ -768,6 +905,11 @@ class HFTracer(Tracer):
         model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
         device = model.device
         inputs_dict = {}
+
+        # when tracing a model with KV cache, we simply need to unsure that the KV cache length is larger than one to
+        # rightfully pass certain controlflows (Example: https://github.com/huggingface/transformers/blob/5c8d941d66734811d2ef6f57f15b44f7fb7a98c4/src/transformers/modeling_attn_mask_utils.py#L162).
+        # After tracing, the model can then still be used with arbitrary lengths different than the one used during tracing.
+        kv_cache_length = 5
 
         if input_name in ["labels", "start_positions", "end_positions"]:
             batch_size = shape[0]
@@ -878,7 +1020,14 @@ class HFTracer(Tracer):
             # Generating big sequence length for audio inputs.
             seq_length = _generate_random_int(low=10000, high=20000)
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
-        elif "mask" in input_name or "ids" in input_name:
+        elif "mask" in input_name:
+            if "past_key_values" in input_names:
+                mask_shape = [shape[0], shape[1] + kv_cache_length]
+            else:
+                mask_shape = shape
+
+            inputs_dict[input_name] = torch.zeros(mask_shape, dtype=torch.long, device=device)
+        elif "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
         elif "past_key_values" in input_name:
             if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
@@ -888,7 +1037,7 @@ class HFTracer(Tracer):
             num_heads = model.config.num_attention_heads
             head_dim = model.config.hidden_size // model.config.num_attention_heads
 
-            cache_shape = (shape[0], num_heads, 0, head_dim)
+            cache_shape = (shape[0], num_heads, kv_cache_length, head_dim)
             pkv = tuple(
                 (
                     torch.rand(cache_shape, dtype=torch.float, device=device),
@@ -923,6 +1072,11 @@ class HFTracer(Tracer):
             args_metas = torch.fx.node.map_aggregate(args, _proxies_to_metas)
             kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxies_to_metas)
 
+            should_install_metadata = True
+
+            self._disable_module_getattr = True
+            self._disable_call_module = True
+
             if kind == "call_function":
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
@@ -935,38 +1089,35 @@ class HFTracer(Tracer):
             elif kind == "call_module":
                 if not hasattr(self, "orig_forward"):
                     raise AttributeError(f"{self} does not have an attribute called orig_forward")
-                self._disable_module_getattr = True
-                try:
-                    mod = self.root.get_submodule(target)
-                    mod_type = type(mod)
-                    if mod_type in _MANUAL_META_OVERRIDES:
-                        meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
-                    else:
-                        meta_out = self.orig_forward(*args_metas, **kwargs_metas)
-                finally:
-                    self._disable_module_getattr = False
+                mod = self.root.get_submodule(target)
+                mod_type = type(mod)
+                if mod_type in _MANUAL_META_OVERRIDES:
+                    meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
+                else:
+                    meta_out = self.orig_forward(*args_metas, **kwargs_metas)
             elif kind == "get_attr":
-                self._disable_module_getattr = True
-                try:
-                    attr_itr = self.root
-                    atoms = target.split(".")
-                    for atom in atoms:
-                        attr_itr = getattr(attr_itr, atom)
-                    if isinstance(attr_itr, torch.Tensor):
-                        meta_out = attr_itr.to(device="meta")
-                    else:
-                        meta_out = attr_itr
-                finally:
-                    self._disable_module_getattr = False
+                attr_itr = self.root
+                atoms = target.split(".")
+                for atom in atoms:
+                    attr_itr = getattr(attr_itr, atom)
+                if isinstance(attr_itr, torch.Tensor):
+                    meta_out = attr_itr.to(device="meta")
+                else:
+                    meta_out = attr_itr
             else:
-                return rv
+                should_install_metadata = False
 
-            if not isinstance(rv, Proxy):
-                raise ValueError("Don't support composite output yet")
-            rv.install_metadata(meta_out)
+            if should_install_metadata:
+                if not isinstance(rv, Proxy):
+                    raise ValueError("Don't support composite output yet")
+                rv.install_metadata(meta_out)
+
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
                 warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+
+        self._disable_module_getattr = False
+        self._disable_call_module = False
 
         return rv
 
@@ -1013,11 +1164,50 @@ class HFTracer(Tracer):
         return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
+        if getattr(self, "_disable_call_module", False):
+            return forward(*args, **kwargs)
         self.orig_forward = forward
         return super().call_module(m, forward, args, kwargs)
 
     def proxy(self, node):
         return HFProxy(node, self)
+
+    @contextlib.contextmanager
+    def patch_for_tracing(self, root: Union[torch.nn.Module, Callable[..., Any]]):
+        # Patching torch functions
+        self.patched_torch_methods = {
+            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+        }
+        self.orig_fns = set()
+
+        for name, (wrapper, orig) in self.patched_torch_methods.items():
+            setattr(torch, name, wrapper)
+            self.orig_fns.add(orig)
+
+        # Patching classes
+        patched = []
+        module_of_model = inspect.getmodule(root)
+        for name, mod in sys.modules.items():
+            if module_of_model is not None and mod is not module_of_model:
+                continue
+            if not name.startswith("transformers"):
+                continue
+            for orig_cls, patched_cls in self._CLASSES_TO_PATCH.items():
+                for attr_name, attr in mod.__dict__.items():
+                    if attr is orig_cls:
+                        patched.append((mod, attr_name, orig_cls))
+                        setattr(mod, attr_name, patched_cls)
+
+        yield
+
+        # Restoring patched functions and classes.
+        for name, (_, orig) in self.patched_torch_methods.items():
+            setattr(torch, name, orig)
+        self.patched_torch_methods = {}
+        self.orig_fns = set()
+
+        for mod, attr_name, orig_cls in patched:
+            setattr(mod, attr_name, orig_cls)
 
     def trace(
         self,
@@ -1090,35 +1280,32 @@ class HFTracer(Tracer):
             if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
                 ("_deserialize_graph_module", "_CodeOnlyModule")
             ):
-                inputs.update(self._generate_dummy_input(root, input_name, shape))
+                inputs.update(self._generate_dummy_input(root, input_name, shape, input_names=input_names))
             else:
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"
                     " transformers.PreTrainedModel."
                 )
 
-        concrete_metas = {
-            input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
-            for input_name, input_ in inputs.items()
-        }
+        def to_meta(value):
+            if isinstance(value, torch.Tensor):
+                return value.to("meta")
+            return value
+
+        concrete_metas = pytree.tree_map(to_meta, inputs)
+
         for param in sig.parameters.values():
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
-        self.patched_torch_methods = {
-            target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
-        }
-        self.orig_fns = set()
 
-        for name, (wrapper, orig) in self.patched_torch_methods.items():
-            setattr(torch, name, wrapper)
-            self.orig_fns.add(orig)
-
-        try:
-            self.graph = super().trace(root, concrete_args=concrete_args)
-        finally:
-            for name, (_, orig) in self.patched_torch_methods.items():
-                setattr(torch, name, orig)
+        global _CURRENT_TRACER
+        _CURRENT_TRACER = self
+        with self.patch_for_tracing(root):
+            try:
+                self.graph = super().trace(root, concrete_args=concrete_args)
+            finally:
+                _CURRENT_TRACER = None
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
@@ -1228,11 +1415,11 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
 
-def is_model_supported(model: PreTrainedModel):
+def is_model_supported(model: "PreTrainedModel"):
     return model.__class__.__name__ in _SUPPORTED_MODELS
 
 
-def check_if_model_is_supported(model: PreTrainedModel):
+def check_if_model_is_supported(model: "PreTrainedModel"):
     if not is_model_supported(model):
         supported_model_names = ", ".join(_SUPPORTED_MODELS)
         raise NotImplementedError(
@@ -1241,7 +1428,7 @@ def check_if_model_is_supported(model: PreTrainedModel):
 
 
 def symbolic_trace(
-    model: PreTrainedModel,
+    model: "PreTrainedModel",
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
     tracer_cls: Type[HFTracer] = HFTracer,
@@ -1278,6 +1465,18 @@ def symbolic_trace(
 
     if not disable_check:
         check_if_model_is_supported(model)
+
+    if "past_key_values" in input_names and not getattr(model.config, "use_cache", False):
+        logger.warning(
+            "`past_key_values` were specified as input names, but model.config.use_cache = False, this might lead to "
+            "unexpected behavior."
+        )
+    if "past_key_values" not in input_names and getattr(model.config, "use_cache", False):
+        logger.warning(
+            "`past_key_values` were not specified as input names, but model.config.use_cache = True. Setting "
+            "model.config.use_cache = False."
+        )
+        model.config.use_cache = False
 
     # Tracing.
     tracer = tracer_cls()

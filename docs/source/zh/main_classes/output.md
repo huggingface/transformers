@@ -24,8 +24,8 @@ rendered properly in your Markdown viewer.
 from transformers import BertTokenizer, BertForSequenceClassification
 import torch
 
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
+tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+model = BertForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
 
 inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
 labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1

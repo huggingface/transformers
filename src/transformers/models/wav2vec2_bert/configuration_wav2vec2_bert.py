@@ -14,18 +14,12 @@
 # limitations under the License.
 """ Wav2Vec2Bert model configuration"""
 
-import functools
-import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/w2v-bert-2.0": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/main/config.json",
-}
 
 
 class Wav2Vec2BertConfig(PretrainedConfig):
@@ -66,7 +60,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the feature projection.
+            The dropout probability for the feature projection.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BertForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
@@ -311,4 +305,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
 
     @property
     def inputs_to_logits_ratio(self):
-        return functools.reduce(operator.mul, self.conv_stride, 1)
+        ratio = self.feature_projection_input_dim * 2
+        if self.add_adapter:
+            ratio = ratio * (self.adapter_stride**self.num_adapter_layers)
+        return ratio

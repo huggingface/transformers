@@ -36,7 +36,6 @@ if is_torch_available():
         MraForTokenClassification,
         MraModel,
     )
-    from transformers.models.mra.modeling_mra import MRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MraModelTester:
@@ -352,9 +351,9 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MraModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/mra-base-512-4"
+        model = MraModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="MRA does not output attentions")
     def test_attention_outputs(self):
@@ -376,6 +375,10 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip("Model has `nan` in hidden_states, see https://github.com/huggingface/transformers/issues/29373.")
+    def test_batching_equivalence(self):
         pass
 
 

@@ -27,8 +27,8 @@ The Phi-1.5 model was proposed in [Textbooks Are All You Need II: phi-1.5 techni
 In Phi-1 and Phi-1.5 papers, the authors showed how important the quality of the data is in training relative to the model size.
 They selected high quality "textbook" data alongside with synthetically generated data for training their small sized Transformer
 based model Phi-1 with 1.3B parameters. Despite this small scale, phi-1 attains pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP.
-They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable 
-to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability 
+They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable
+to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability
 to “think step by step” or perform some rudimentary in-context learning.
 With these two experiments the authors successfully showed the huge impact of quality of training data when training machine learning models.
 
@@ -84,15 +84,17 @@ Phi-2 has been integrated in the development version (4.37.0.dev) of `transforme
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("phi-2")
->>> tokenizer = AutoTokenizer.from_pretrained("phi-2")
+>>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
 
 >>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
 
 >>> outputs = model.generate(**inputs, max_length=30)
 >>> text = tokenizer.batch_decode(outputs)[0]
 >>> print(text)
-'Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce'
+Can you help me write a formal email to a potential business partner proposing a joint venture?
+Input: Company A: ABC Inc.
+Company B
 ```
 
 ### Example :
@@ -134,7 +136,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
 >>> # define the model and tokenizer and push the model and tokens to the GPU.
->>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
+>>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")  # doctest: +SKIP
 >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
 
 >>> # feel free to change the prompt to your liking.
@@ -144,9 +146,9 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> tokens = tokenizer(prompt, return_tensors="pt").to("cuda")
 
 >>> # use the model to generate new tokens.
->>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)  # doctest: +SKIP
 
->>> tokenizer.batch_decode(generated_output)[0]
+>>> tokenizer.batch_decode(generated_output)[0]  # doctest: +SKIP
 'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
 ```
 

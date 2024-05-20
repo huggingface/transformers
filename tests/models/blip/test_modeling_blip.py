@@ -57,7 +57,6 @@ if is_torch_available():
         BlipTextModel,
         BlipVisionModel,
     )
-    from transformers.models.blip.modeling_blip import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -223,9 +222,9 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class BlipTextModelTester:
@@ -369,9 +368,9 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)
@@ -387,6 +386,7 @@ class BlipModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -429,7 +429,11 @@ class BlipModelTester:
 class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": BlipModel, "image-to-text": BlipForConditionalGeneration}
+        {
+            "feature-extraction": BlipModel,
+            "image-to-text": BlipForConditionalGeneration,
+            "visual-question-answering": BlipForQuestionAnswering,
+        }
         if is_torch_available()
         else {}
     )
@@ -574,9 +578,66 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    def test_get_image_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["input_ids", "attention_mask", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        image_features = model.get_image_features(**inputs_dict)
+        self.assertEqual(
+            image_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_text_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["pixel_values", "return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        text_features = model.get_text_features(**inputs_dict)
+        self.assertEqual(
+            text_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
+
+    def test_get_multimodal_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["return_loss"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = BlipModel(config).to(torch_device)
+        model.eval()
+        multimodal_features = model.get_multimodal_features(**inputs_dict)
+        self.assertEqual(
+            multimodal_features.shape,
+            (
+                self.model_tester.batch_size,
+                model.projection_dim,
+            ),
+        )
 
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence(allow_missing_keys=True)
@@ -592,6 +653,7 @@ class BlipTextRetrievalModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -639,6 +701,8 @@ class BlipTextImageModelsModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for pt-tf equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -687,6 +751,7 @@ class BlipVQAModelTester:
         self.parent = parent
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -1030,9 +1095,9 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -1246,9 +1311,9 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BlipModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/blip-vqa-base"
+        model = BlipModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -1315,6 +1380,20 @@ class BlipModelIntegrationTest(unittest.TestCase):
             predictions[0].tolist(),
             [30522, 1037, 3861, 1997, 1037, 2450, 1998, 2014, 3899, 2006, 1996, 3509, 102],
         )
+
+    def test_inference_interpolate_pos_encoding(self):
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(torch_device)
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        processor.image_processor.size = {"height": 500, "width": 500}
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+
+        predictions = model.generate(**inputs, interpolate_pos_encoding=True)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 1037, 3899, 102])
+        self.assertEqual(generated_text, "a woman sitting on the beach with a dog")
 
     def test_inference_vqa(self):
         model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to(torch_device)

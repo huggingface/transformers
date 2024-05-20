@@ -47,11 +47,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VideoMAEConfig"
 _CHECKPOINT_FOR_DOC = "MCG-NJU/videomae-base"
 
-VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MCG-NJU/videomae-base",
-    # See all VideoMAE models at https://huggingface.co/models?filter=videomae
-]
-
 
 @dataclass
 class VideoMAEDecoderOutput(ModelOutput):
@@ -139,7 +134,6 @@ class VideoMAEEmbeddings(nn.Module):
 
         # add position embeddings
         embeddings = embeddings + self.position_embeddings.type_as(embeddings).to(embeddings.device).clone().detach()
-
         # only keep visible patches
         # ~bool_masked_pos means visible
         if bool_masked_pos is not None:
@@ -273,6 +267,40 @@ class VideoMAESelfAttention(nn.Module):
         return outputs
 
 
+class VideoMAESdpaSelfAttention(VideoMAESelfAttention):
+    def __init__(self, config: VideoMAEConfig) -> None:
+        super().__init__(config)
+        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
+        keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
+        values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
+        queries = nn.functional.linear(input=hidden_states, weight=self.query.weight, bias=self.q_bias)
+
+        key_layer = self.transpose_for_scores(keys)
+        value_layer = self.transpose_for_scores(values)
+        query_layer = self.transpose_for_scores(queries)
+
+        context_layer = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            self.attention_probs_dropout_prob if self.training else 0.0,
+            is_causal=False,
+            scale=None,
+        )
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        return context_layer, None
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
 class VideoMAESelfOutput(nn.Module):
     """
@@ -332,6 +360,13 @@ class VideoMAEAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->VideoMAE
+class VideoMAESdpaAttention(VideoMAEAttention):
+    def __init__(self, config: VideoMAEConfig) -> None:
+        super().__init__(config)
+        self.attention = VideoMAESdpaSelfAttention(config)
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
 class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig) -> None:
@@ -365,7 +400,10 @@ class VideoMAEOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE
+VIDEOMAE_ATTENTION_CLASSES = {"eager": VideoMAEAttention, "sdpa": VideoMAESdpaAttention}
+
+
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
 class VideoMAELayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -373,7 +411,7 @@ class VideoMAELayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = VideoMAEAttention(config)
+        self.attention = VIDEOMAE_ATTENTION_CLASSES[config._attn_implementation](config)
         self.intermediate = VideoMAEIntermediate(config)
         self.output = VideoMAEOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -470,6 +508,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

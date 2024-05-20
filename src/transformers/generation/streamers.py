@@ -58,8 +58,8 @@ class TextStreamer(BaseStreamer):
         ```python
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
-        >>> tok = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
         >>> streamer = TextStreamer(tok)
 
@@ -185,8 +185,8 @@ class TextIteratorStreamer(TextStreamer):
         >>> from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
         >>> from threading import Thread
 
-        >>> tok = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
         >>> streamer = TextIteratorStreamer(tok)
 
