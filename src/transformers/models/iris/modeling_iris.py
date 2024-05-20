@@ -117,7 +117,7 @@ class IrisPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(
-                mean=0.0, std=self.cfg.initializer_range
+                mean=0.0, std=self.config.initializer_range
             )  # self.config.initializer_range=0.02 (in original code)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
@@ -1674,51 +1674,44 @@ class IrisModel(IrisPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.cfg = config
-        self.entropy_weight = self.cfg.entropy_weight
-        self.gamma = self.cfg.gamma
-        self.lambda_ = self.cfg.lambda_
-        self.grad_acc_steps_actor_critic = self.cfg.grad_acc_steps_actor_critic
-        self.grad_acc_steps_tokenizer = self.cfg.grad_acc_steps_tokenizer
-        self.grad_acc_steps_world_model = self.cfg.grad_acc_steps_world_model
+        self.config = config
         config_enc_dec = EncoderDecoderConfig(
-            self.cfg.resolution,
-            self.cfg.in_channels,
-            self.cfg.z_channels,
-            self.cfg.ch,
-            self.cfg.ch_mult,
-            self.cfg.num_res_blocks,
-            self.cfg.attn_resolutions,
-            self.cfg.out_ch,
-            self.cfg.dropout,
+            self.config.resolution,
+            self.config.in_channels,
+            self.config.z_channels,
+            self.config.ch,
+            self.config.ch_mult,
+            self.config.num_res_blocks,
+            self.config.attn_resolutions,
+            self.config.out_ch,
+            self.config.dropout,
         )
         encoder = Encoder(config_enc_dec)
         decoder = Decoder(config_enc_dec)
         tokenizer = Tokenizer(
-            self.cfg.vocab_size,
-            self.cfg.embed_dim_tokenizer,
+            self.config.vocab_size,
+            self.config.embed_dim_tokenizer,
             encoder,
-            decoder,
-        )
+            decoder,)
         transformer_config = TransformerConfig(
-            self.cfg.tokens_per_block,
-            self.cfg.max_blocks,
-            self.cfg.attention,
-            self.cfg.num_layers,
-            self.cfg.num_heads,
-            self.cfg.embed_dim_world_model,
-            self.cfg.embed_pdrop,
-            self.cfg.resid_pdrop,
-            self.cfg.attn_pdrop,
+            self.config.tokens_per_block,
+            self.config.max_blocks,
+            self.config.attention,
+            self.config.num_layers,
+            self.config.num_heads,
+            self.config.embed_dim_world_model,
+            self.config.embed_pdrop,
+            self.config.resid_pdrop,
+            self.config.attn_pdrop,
         )
         world_model = WorldModel(
             obs_vocab_size=tokenizer.vocab_size,
-            act_vocab_size=self.cfg.num_actions,
+            act_vocab_size=self.config.num_actions,
             config=transformer_config,
         )
         actor_critic = ActorCritic(
-            act_vocab_size=self.cfg.num_actions,
-            use_original_obs=self.cfg.use_original_obs_actor_critic,
+            act_vocab_size=self.config.num_actions,
+            use_original_obs=self.config.use_original_obs_actor_critic,
         )
         self.agent = Agent(tokenizer, world_model, actor_critic)
 
@@ -1864,7 +1857,7 @@ class IrisModel(IrisPreTrainedModel):
         )
 
         cfg_tokenizer = {
-            "grad_acc_steps": self.cfg.grad_acc_steps_tokenizer,
+            "grad_acc_steps": self.config.grad_acc_steps_tokenizer,
             "should_preprocess": should_preprocess,
             "should_postprocess": should_postprocess,
             "output_hidden_states": output_hidden_states,
@@ -1872,18 +1865,18 @@ class IrisModel(IrisPreTrainedModel):
         }
         cfg_world_model = {
             "tokenizer": self.agent.tokenizer,
-            "grad_acc_steps": self.cfg.grad_acc_steps_world_model,
+            "grad_acc_steps": self.config.grad_acc_steps_world_model,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
         cfg_actor_critic = {
             "tokenizer": self.agent.tokenizer,
             "world_model": self.agent.world_model,
-            "grad_acc_steps": self.grad_acc_steps_actor_critic,
-            "imagine_horizon": self.cfg.imagine_horizon_train_actor_critic,
-            "gamma": self.gamma,
-            "lambda_": self.cfg.lambda_,
-            "entropy_weight": self.entropy_weight,
+            "grad_acc_steps": self.config.grad_acc_steps_actor_critic,
+            "imagine_horizon": self.config.imagine_horizon_train_actor_critic,
+            "gamma": self.config.gamma,
+            "lambda_": self.config.lambda_,
+            "entropy_weight": self.config.entropy_weight,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
