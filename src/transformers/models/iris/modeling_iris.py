@@ -1692,7 +1692,8 @@ class IrisModel(IrisPreTrainedModel):
             self.config.vocab_size,
             self.config.embed_dim_tokenizer,
             encoder,
-            decoder,)
+            decoder,
+        )
         transformer_config = TransformerConfig(
             self.config.tokens_per_block,
             self.config.max_blocks,
