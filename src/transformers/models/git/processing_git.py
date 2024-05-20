@@ -78,9 +78,7 @@ class GitProcessor(ProcessorMixin):
         """
         tokenizer_kwargs, image_processor_kwargs = {}, {}
         if kwargs:
-            tokenizer_kwargs = {
-                k: v for k, v in kwargs.items() if k not in self.image_processor._valid_processor_keys
-            }
+            tokenizer_kwargs = {k: v for k, v in kwargs.items() if k not in self.image_processor._valid_processor_keys}
             image_processor_kwargs = {
                 k: v for k, v in kwargs.items() if k in self.image_processor._valid_processor_keys
             }
