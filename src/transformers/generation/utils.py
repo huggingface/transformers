@@ -2532,7 +2532,21 @@ class GenerationMixin:
         timing[idx]["timing"] += e
 
         s_while = datetime.datetime.now()
-        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+        while True:
+
+            s = datetime.datetime.now()
+
+            not_stop = self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device)
+
+            t = datetime.datetime.now()
+            e = (t - s).total_seconds()
+            idx = 0
+            if idx not in timing:
+                timing[idx] = {"name": "_has_unfinished_sequences", "timing": 0.0}
+            timing[idx]["timing"] += e
+
+            if not not_stop:
+                break
 
             s = datetime.datetime.now()
             # prepare model inputs
