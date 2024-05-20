@@ -1668,7 +1668,7 @@ class GenerationTesterMixin:
                 "max_new_tokens": 5,
                 "cache_implementation": "quantized",
                 # careful with group size, should be divisor of model's hidden size
-                "cache_config": {"nbits": 2, "q_group_size": 8, "residual_length": 128},
+                "cache_config": {"backend": "quanto", "nbits": 2, "q_group_size": 8, "residual_length": 128},
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
@@ -1681,8 +1681,8 @@ class GenerationTesterMixin:
                     input_ids, attention_mask=attention_mask, past_key_valyes=DynamicCache(), **generation_kwargs
                 )
 
-            # setting incorrect cache_config args should raise an Error (i.e. int8 cache is not supported)
-            generation_kwargs["cache_config"] = {"nbits": 8, "q_group_size": 8, "residual_length": 128}
+            # setting incorrect cache_config args should raise an Error, i.e. nbits=60 does not make sense
+            generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
             with self.assertRaises(ValueError):
                 model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 

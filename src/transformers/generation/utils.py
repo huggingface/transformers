@@ -24,7 +24,14 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, QuantizedCacheConfig, QuantoQuantizedCache, StaticCache
+from ..cache_utils import (
+    Cache,
+    DynamicCache,
+    HQQQuantizedCache,
+    QuantizedCacheConfig,
+    QuantoQuantizedCache,
+    StaticCache,
+)
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -34,7 +41,14 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, is_accelerate_available, is_quanto_available, is_torchdynamo_compiling, logging
+from ..utils import (
+    ModelOutput,
+    is_accelerate_available,
+    is_hqq_available,
+    is_quanto_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -97,6 +111,7 @@ if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "quantized": QuantoQuantizedCache}
+QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
 @dataclass
@@ -1621,11 +1636,6 @@ class GenerationMixin:
                     )
                 model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
             elif generation_config.cache_implementation == "quantized":
-                if not is_quanto_available():
-                    raise ImportError(
-                        "You need to install `quanto` in order to use KV cache quantization. "
-                        "Please install it via  with `pip install quanto`"
-                    )
                 if not self._supports_quantized_cache:
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
@@ -1637,8 +1647,20 @@ class GenerationMixin:
                     if generation_config.cache_config is not None
                     else QuantizedCacheConfig()
                 )
+                cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
-                model_kwargs["past_key_values"] = QuantoQuantizedCache(**cache_config.to_dict())
+                if cache_config.backend == "quanto" and not is_quanto_available():
+                    raise ImportError(
+                        "You need to install `quanto` in order to use KV cache quantization with quanto backend. "
+                        "Please install it via  with `pip install quanto`"
+                    )
+                elif cache_config.backend == "HQQ" and not is_hqq_available():
+                    raise ImportError(
+                        "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
+                        "Please install it via  with `pip install hqq`"
+                    )
+
+                model_kwargs["past_key_values"] = cache_class(cache_config)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
