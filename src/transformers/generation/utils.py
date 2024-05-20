@@ -1370,29 +1370,25 @@ class GenerationMixin:
         """
 
         # Convert special tokens to tensors (if they exist)
-        def _tensor_or_none(token_from_kwargs, token_from_config, device=None):
+        def _tensor_or_none(token, device=None):
             if device is None:
                 device = self.device
 
-            token = token_from_kwargs if token_from_kwargs is not None else token_from_config
             if token is None or isinstance(token, torch.Tensor):
                 return token
             return torch.tensor(token, device=device, dtype=torch.long)
 
-        # If user passes a `GenerationConfig` type as kwargs, we have to check model's generation config for special tokens (#30892)
-        # Mostly user-define configs do not contain special tokens, and we do not update user-defined `GenerationConfig` with model's config
-        bos_token_id = _tensor_or_none(
-            generation_config.bos_token_id, self.generation_config.bos_token_id, device=device
+        bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
+        eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
+        pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
+        
+        # for BC we also check `decoder_start_token_id` from model's generation config
+        decoder_start_token_id = (
+            generation_config.decoder_start_token_id
+            if generation_config.decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
         )
-        eos_token_id = _tensor_or_none(
-            generation_config.eos_token_id, self.generation_config.eos_token_id, device=device
-        )
-        pad_token_id = _tensor_or_none(
-            generation_config.pad_token_id, self.generation_config.pad_token_id, device=device
-        )
-        decoder_start_token_id = _tensor_or_none(
-            generation_config.decoder_start_token_id, self.generation_config.decoder_start_token_id, device=device
-        )
+        decoder_start_token_id = _tensor_or_none(decoder_start_token_id, device=device)
         decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
