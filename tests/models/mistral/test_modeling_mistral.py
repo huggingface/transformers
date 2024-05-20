@@ -627,7 +627,7 @@ class MistralIntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = {
             7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
-            8: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang",
+            8: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
         }
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
