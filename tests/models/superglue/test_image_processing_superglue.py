@@ -11,12 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -24,7 +23,13 @@ from ...test_image_processing_common import (
 )
 
 
+if is_torch_available():
+    import numpy as np
+    import torch
+
 if is_vision_available():
+    from PIL import Image
+
     from transformers import SuperGlueImageProcessor
 
 
@@ -57,7 +62,7 @@ class SuperGlueImageProcessingTester(unittest.TestCase):
         }
 
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
+        return 2, self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -73,7 +78,7 @@ class SuperGlueImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SuperGlueImageProcessor if is_vision_available() else None
 
     def setUp(self) -> None:
@@ -117,3 +122,73 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for image_pair in pre_processed_images["pixel_values"]:
             for image in image_pair:
                 self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
+
+    def test_call_numpy(self):
+        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (expected_batch_size, *expected_output_image_shape))
+
+    def test_call_pil(self):
+        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL images
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (expected_batch_size, *expected_output_image_shape))
+
+    def test_call_pytorch(self):
+        # Test overwritten because SuperGlueImageProcessor combines images by pair to feed it into SuperGlue
+
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PyTorch tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        self.assertEqual(
+            tuple(encoded_images.shape),
+            (expected_batch_size, *expected_output_image_shape),
+        )
