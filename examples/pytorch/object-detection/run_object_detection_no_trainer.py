@@ -473,12 +473,10 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path,
-        # At this moment we recommend using external transform to pad and resize images.
-        # It`s faster and yields much better results for object-detection models.
-        do_pad=False,
-        do_resize=False,
-        # We will save image size parameter in config just for reference
-        size={"longest_edge": args.image_square_size},
+        do_resize=True,
+        size={"max_height": args.image_square_size, "max_width": args.image_square_size},
+        do_pad=True,
+        pad_size={"height": args.image_square_size, "width": args.image_square_size},
         **common_pretrained_args,
     )
 
@@ -486,10 +484,6 @@ def main():
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
     max_size = args.image_square_size
-    basic_transforms = [
-        A.LongestMaxSize(max_size=max_size),
-        A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-    ]
     train_augment_and_transform = A.Compose(
         [
             A.Compose(
@@ -511,12 +505,11 @@ def main():
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
             A.HueSaturationValue(p=0.1),
-            *basic_transforms,
         ],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
     validation_transform = A.Compose(
-        basic_transforms,
+        [],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 

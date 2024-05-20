@@ -206,10 +206,10 @@ Instantiate the image processor from the same checkpoint as the model you want t
 
 >>> image_processor = AutoImageProcessor.from_pretrained(
 ...     MODEL_NAME,
-...     # At this moment we recommend using external transform to pad and resize images.
-...     # It`s faster and yields better results for object-detection models.
-...     do_pad=False,
-...     do_resize=False,
+...     do_resize=True,
+...     size={"max_height": MAX_SIZE, "max_width": MAX_SIZE},
+...     do_pad=True,
+...     pad_size={"height": MAX_SIZE, "width": MAX_SIZE},
 ... )
 ```
 
@@ -229,26 +229,18 @@ flip it horizontally, and brighten it. For additional augmentation options, expl
 >>> max_size = IMAGE_SIZE
 
 >>> # Resize image longest edge to 480 and then pad image to square 480x480.
->>> # This padding and resizing strategy give better results, see
->>> # https://github.com/huggingface/transformers/pull/30422#discussion_r1584647408
->>> basic_transforms = [
-...     A.LongestMaxSize(max_size=max_size),
-...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-... ]
-
 >>> train_augment_and_transform = A.Compose(
 ...     [
 ...         A.Perspective(p=0.1),
 ...         A.HorizontalFlip(p=0.5),
 ...         A.RandomBrightnessContrast(p=0.5),
 ...         A.HueSaturationValue(p=0.1),
-...         *basic_transforms,
 ...     ],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
 ... )
 
 >>> validation_transform = A.Compose(
-...     basic_transforms,
+...     [],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
 ... )
 ```
@@ -1493,17 +1485,6 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 
 >>> url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
 >>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> # Define transformations for inference
->>> resize_and_pad = A.Compose([
-...     A.LongestMaxSize(max_size=max_size),
-...     A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-... ])
-
->>> # This one is for visualization with no padding
->>> resize_only = A.Compose([
-...     A.LongestMaxSize(max_size=max_size),
-... ])
 ```
 
 Load model and image processor from the Hugging Face Hub (skip to use already trained in this session):
@@ -1519,12 +1500,11 @@ Load model and image processor from the Hugging Face Hub (skip to use already tr
 And detect bounding boxes:
 
 ```py
->>> np_preprocessed_image = resize_and_pad(image=np.array(image))["image"]
 
 >>> with torch.no_grad():
-...     inputs = image_processor(images=[np_preprocessed_image], return_tensors="pt")
+...     inputs = image_processor(images=[image], return_tensors="pt")
 ...     outputs = model(inputs["pixel_values"].to(device))
-...     target_sizes = torch.tensor([np_preprocessed_image.shape[:2]])
+...     target_sizes = torch.tensor([image.size[1], image.size[0]])
 ...     results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
