@@ -48,6 +48,7 @@ class PaliGemmaConfig(PretrainedConfig):
             Dimension of the multimodal projection space.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden layer of the Language model.
+        prefix_suffix_separator_index (`<fill_type>`, *optional*, defaults to 108): <fill_docstring>
 
     Example:
 
