@@ -35,6 +35,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
+
 def augment_and_transform_batch(
     examples: Mapping[str, Any], transform: A.Compose, image_processor: Mask2FormerImageProcessor
 ) -> BatchFeature:
@@ -87,6 +88,7 @@ def collate_fn(examples):
     if "pixel_mask" in examples[0]:
         batch["pixel_mask"] = torch.stack([example["pixel_mask"] for example in examples])
     return batch
+
 
 @dataclass
 class ModelOutput:
@@ -151,119 +153,97 @@ def compute_metrics(
         for image_predictions, target_size in zip(post_processed_output, target_sizes):
             has_masks = bool(image_predictions["segments_info"])
             if has_masks:
-                # post_processed_predictions.append({
-                #     "masks": image_predictions["segmentation"].to(dtype=torch.bool),
-                #     "labels": torch.tensor([x["label_id"] for x in image_predictions["segments_info"]]),
-                #     "scores": torch.tensor([x["score"] for x in image_predictions["segments_info"]]),
-                # })
-                res = {
+                post_processed_image_prediction = {
                     "masks": image_predictions["segmentation"].to(dtype=torch.bool),
                     "labels": torch.tensor([x["label_id"] for x in image_predictions["segments_info"]]),
                     "scores": torch.tensor([x["score"] for x in image_predictions["segments_info"]]),
                 }
-                labels_map = {
-                    0: 0,
-                    2: 1,
-                    73: 2,
-                }
-                keep = [i for i, label in enumerate(res["labels"]) if label.item() in labels_map]
-                res["masks"] = res["masks"][keep]
-                res["labels"] = res["labels"][keep]
-                res["scores"] = res["scores"][keep]
-                res["labels"] = torch.tensor([labels_map[label.item()] for label in res["labels"]])
-                post_processed_predictions.append(res)
             else:
-                post_processed_predictions.append({
+                # for void predictions, we need to provide empty tensors
+                post_processed_image_prediction = {
                     "masks": torch.zeros([0, *target_size], dtype=torch.bool),
                     "labels": torch.tensor([]),
                     "scores": torch.tensor([]),
-                })
+                }
+            post_processed_predictions.append(post_processed_image_prediction)
 
     # Compute metrics
-    metric = MeanAveragePrecision(iou_type="segm")
+    metric = MeanAveragePrecision(iou_type="segm", class_metrics=True)
     metric.update(post_processed_predictions, post_processed_targets)
     metrics = metric.compute()
 
     # Replace list of per class metrics with separate metric for each class
-    # classes = metrics.pop("classes")
-    # map_per_class = metrics.pop("map_per_class")
-    # mar_100_per_class = metrics.pop("mar_100_per_class")
-    # for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
-    #     class_name = id2label[class_id.item()] if id2label is not None else class_id.item()
-    #     metrics[f"map_{class_name}"] = class_map
-    #     metrics[f"mar_100_{class_name}"] = class_mar
-    print()
+    classes = metrics.pop("classes")
+    map_per_class = metrics.pop("map_per_class")
+    mar_100_per_class = metrics.pop("mar_100_per_class")
+    for class_id, class_map, class_mar in zip(classes, map_per_class, mar_100_per_class):
+        class_name = id2label[class_id.item()] if id2label is not None else class_id.item()
+        metrics[f"map_{class_name}"] = class_map
+        metrics[f"mar_100_{class_name}"] = class_mar
+    
     metrics = {k: round(v.item(), 4) for k, v in metrics.items()}
 
     return metrics
 
 
-# dataset = load_dataset("scene_parse_150", "instance_segmentation")
-# dataset_df = pd.read_csv(
-#     "https://raw.githubusercontent.com/CSAILVision/placeschallenge/master/instancesegmentation/instanceInfo100_train.txt",
-#     sep="\t",
-# )
+# Dataset
+dataset = load_dataset("qubvel-hf/ade20k-mini")
+label2id = dataset["train"][0]["semantic_class_to_id"]
 
-# id2label = {row["Idx"]: row["Object Names"].strip() for _, row in dataset_df.iterrows()}
-# label2id = {label: id for id, label in id2label.items()}
-# print(id2label)
 
 checkpoint = "facebook/mask2former-swin-tiny-coco-instance"
 
-image_processor = Mask2FormerImageProcessor.from_pretrained(checkpoint, reduce_labels=True, ignore_index=255)
-model = Mask2FormerForUniversalSegmentation.from_pretrained(checkpoint)
 
-dataset = load_dataset("qubvel-hf/ade20k-mini")
-label2id = dataset["train"][0]["semantic_class_to_id"]
-label2id.pop("background")
-id2label = {v: k for k, v in label2id.items()}
+# Image transformations
+image_processor = Mask2FormerImageProcessor.from_pretrained(
+    checkpoint,
+    do_resize=True,
+    size={"height": 512, "width": 512},
+    reduce_labels=True,
+)
 
-# image_processor = Mask2FormerImageProcessor(
-#     do_resize=True,
-#     size={"height": 256, "width": 256},
-#     do_pad=False,
-#     do_rescale=True,
-#     do_normalize=True,
-#     reduce_labels=True,
-#     ignore_index=255,
-# )
 augmentation_transform = A.Compose([])
 
 train_augment_and_transform_batch = partial(augment_and_transform_batch, transform=augmentation_transform, image_processor=image_processor)
 valid_transform_batch = partial(augment_and_transform_batch, transform=augmentation_transform, image_processor=image_processor)
-test_transform_batch = partial(augment_and_transform_batch, transform=augmentation_transform, image_processor=image_processor)
-
 dataset["train"] = dataset["train"].with_transform(train_augment_and_transform_batch)
 dataset["validation"] = dataset["validation"].with_transform(valid_transform_batch)
-# dataset["test"] = dataset["test"].with_transform(test_transform_batch)
 
-# max_steps = 1000
-# if max_steps:
-#     dataset["train"] = dataset["train"].select(range(max_steps))
-dataset["validation"] = dataset["validation"].select(range(16))
-    # dataset["test"] = dataset["test"].select(range(max_steps))
+dataset["validation"] = dataset["train"].select(range(16))
+dataset["train"] = dataset["train"].select(list(range(16)) * 10)
 
-# model = Mask2FormerForUniversalSegmentation.from_pretrained(
-#     "facebook/mask2former-swin-tiny-ade-semantic",
-#     label2id=label2id,
-#     id2label=id2label,
-#     ignore_mismatched_sizes=True,
-# )
+
+# Model
+if image_processor.reduce_labels:
+    label2id.pop("background")
+    label2id = {k: i - 1 for k, i in label2id.items()}
+
+id2label = {v: k for k, v in label2id.items()}
+
+model = Mask2FormerForUniversalSegmentation.from_pretrained(
+    "facebook/mask2former-swin-tiny-ade-semantic",
+    label2id=label2id,
+    id2label=id2label,
+    ignore_mismatched_sizes=True,
+)
 
 args = TrainingArguments(
-    output_dir="./output-2",
+    output_dir="./finetune-instance-segmentation",
     num_train_epochs=100,
     do_train=True,
     do_eval=True,
     dataloader_num_workers=4,
-    per_device_train_batch_size=8,
+    dataloader_persistent_workers=True,
+    per_device_train_batch_size=4,
     gradient_accumulation_steps=1,
     remove_unused_columns=False,
     eval_do_concat_batches=False,
-    eval_strategy="epoch",
+    eval_strategy="steps",
+    eval_steps=50,
     save_strategy="epoch",
     learning_rate=1e-5,
-    max_steps=1,
+    lr_scheduler_type="constant"
+    # max_steps=1,
 )
 
 eval_compute_metrics = partial(compute_metrics, image_processor=image_processor, id2label=id2label)
@@ -272,23 +252,10 @@ trainer = Trainer(
     model=model,
     args=args,
     train_dataset=dataset["train"],
-    eval_dataset=dataset["validation"],
+    eval_dataset=dataset["train"], # overfit for debugging
     data_collator=collate_fn,
     compute_metrics=eval_compute_metrics,
 )
 
+trainer.train()
 trainer.evaluate()
-
-# example = dataset["train"][1]
-
-# image = np.array(example["image"])
-# annotation = np.array(example["annotation"])[..., :2]
-
-# semantic_seg = annotation[..., 0]
-# instance_seg = annotation[..., 1]
-
-# unique_semantic_instance_ids_pairs = np.unique(annotation.reshape(-1, 2), axis=0)
-# instance2semantic = {pair[1]: pair[0] for pair in unique_semantic_instance_ids_pairs}
-
-# inputs = processor(images=[image], segmentation_maps=[instance_seg], instance_id_to_semantic_id=instance2semantic, return_tensors="pt")
-# print()
