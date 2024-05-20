@@ -796,22 +796,23 @@ class ZoeDepthMultiheadAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
     # Ignore copy
-    def __init__(self, d_model, nhead, dropout):
+    def __init__(self, hidden_size, num_attention_heads, dropout):
         super().__init__()
-        if d_model % nhead != 0:
+        if hidden_size % num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({d_model}) is not a multiple of the number of attention " f"heads ({nhead})"
+                f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
+                f"heads ({num_attention_heads})"
             )
 
-        self.num_attention_heads = nhead
-        self.attention_head_size = int(d_model / nhead)
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(d_model, self.all_head_size)
-        self.key = nn.Linear(d_model, self.all_head_size)
-        self.value = nn.Linear(d_model, self.all_head_size)
+        self.query = nn.Linear(hidden_size, self.all_head_size)
+        self.key = nn.Linear(hidden_size, self.all_head_size)
+        self.value = nn.Linear(hidden_size, self.all_head_size)
 
-        self.out_proj = nn.Linear(d_model, d_model)
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
 
         self.dropout = nn.Dropout(dropout)
 
@@ -861,16 +862,21 @@ class ZoeDepthMultiheadAttention(nn.Module):
 
 
 class ZoeDepthTransformerEncoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+    def __init__(self, config, dropout=0.1, activation="relu"):
         super().__init__()
-        self.self_attn = ZoeDepthMultiheadAttention(d_model, nhead, dropout=dropout)
 
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        hidden_size = config.patch_transformer_hidden_size
+        intermediate_size = config.patch_transformer_intermediate_size
+        num_attention_heads = config.patch_transformer_num_attention_heads
+
+        self.self_attn = ZoeDepthMultiheadAttention(hidden_size, num_attention_heads, dropout=dropout)
+
+        self.linear1 = nn.Linear(hidden_size, intermediate_size)
         self.dropout = nn.Dropout(dropout)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        self.linear2 = nn.Linear(intermediate_size, hidden_size)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(hidden_size)
+        self.norm2 = nn.LayerNorm(hidden_size)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
 
@@ -880,8 +886,6 @@ class ZoeDepthTransformerEncoderLayer(nn.Module):
         self,
         src,
         src_mask: Optional[torch.Tensor] = None,
-        src_key_padding_mask: Optional[torch.Tensor] = None,
-        is_causal=False,
     ):
         queries = keys = src
         src2 = self.self_attn(queries=queries, keys=keys, values=src, attention_mask=src_mask)[0]
@@ -904,13 +908,14 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         super().__init__()
 
         in_channels = config.bottleneck_features
-        embedding_dim = 128
 
         self.transformer_encoder = nn.ModuleList(
-            [ZoeDepthTransformerEncoderLayer(embedding_dim, nhead=4, dim_feedforward=1024) for _ in range(4)]
+            [ZoeDepthTransformerEncoderLayer(config) for _ in range(config.num_patch_transformer_layers)]
         )
 
-        self.embedding_convPxP = nn.Conv2d(in_channels, embedding_dim, kernel_size=1, stride=1, padding=0)
+        self.embedding_convPxP = nn.Conv2d(
+            in_channels, config.patch_transformer_hidden_size, kernel_size=1, stride=1, padding=0
+        )
 
     def positional_encoding_1d(self, batch_size, sequence_length, embedding_dim, device="cpu", dtype=torch.float32):
         """Generate positional encodings

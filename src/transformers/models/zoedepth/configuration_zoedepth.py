@@ -109,6 +109,14 @@ class ZoeDepthConfig(PretrainedConfig):
             - `max_depth` (`float`): The maximum depth value to consider.
             In case only a single configuration is passed, the model will use a single head with the specified configuration.
             In case multiple configurations are passed, the model will use multiple heads with the specified configurations.
+        num_patch_transformer_layers (`int`, *optional*):
+            The number of transformer layers to use in the patch transformer. Only used in case of multiple bin configurations.
+        patch_transformer_hidden_size (`int`, *optional*):
+            The hidden size to use in the patch transformer. Only used in case of multiple bin configurations.
+        patch_transformer_intermediate_size (`int`, *optional*):
+            The intermediate size to use in the patch transformer. Only used in case of multiple bin configurations.
+        patch_transformer_num_attention_heads (`int`, *optional*):
+            The number of attention heads to use in the patch transformer. Only used in case of multiple bin configurations.
 
     Example:
 
@@ -155,6 +163,10 @@ class ZoeDepthConfig(PretrainedConfig):
         max_temp=50.0,
         bin_centers_type="softplus",
         bin_configurations=[{"n_bins": 64, "min_depth": 0.001, "max_depth": 10.0}],
+        num_patch_transformer_layers=None,
+        patch_transformer_hidden_size=None,
+        patch_transformer_intermediate_size=None,
+        patch_transformer_num_attention_heads=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -217,3 +229,7 @@ class ZoeDepthConfig(PretrainedConfig):
         self.max_temp = max_temp
         self.bin_centers_type = bin_centers_type
         self.bin_configurations = bin_configurations
+        self.num_patch_transformer_layers = num_patch_transformer_layers
+        self.patch_transformer_hidden_size = patch_transformer_hidden_size
+        self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
+        self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads

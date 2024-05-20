@@ -64,6 +64,10 @@ def get_zoedepth_config(model_name):
         neck_hidden_sizes=neck_hidden_sizes,
         bin_centers_type=bin_centers_type,
         bin_configurations=bin_configurations,
+        num_patch_transformer_layers=4 if model_name == "ZoeD_NK" else None,
+        patch_transformer_hidden_size=128 if model_name == "ZoeD_NK" else None,
+        patch_transformer_intermediate_size=1024 if model_name == "ZoeD_NK" else None,
+        patch_transformer_num_attention_heads=4 if model_name == "ZoeD_NK" else None,
     )
 
     return config, image_size
