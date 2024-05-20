@@ -209,8 +209,8 @@ valid_transform_batch = partial(augment_and_transform_batch, transform=augmentat
 dataset["train"] = dataset["train"].with_transform(train_augment_and_transform_batch)
 dataset["validation"] = dataset["validation"].with_transform(valid_transform_batch)
 
-dataset["validation"] = dataset["train"].select(range(16))
-dataset["train"] = dataset["train"].select(list(range(16)) * 10)
+# dataset["validation"] = dataset["train"].select(range(16))
+# dataset["train"] = dataset["train"].select(list(range(16)) * 10)
 
 
 # Model
@@ -228,21 +228,23 @@ model = Mask2FormerForUniversalSegmentation.from_pretrained(
 )
 
 args = TrainingArguments(
-    output_dir="./finetune-instance-segmentation",
-    num_train_epochs=100,
+    output_dir="finetune-instance-segmentation-ade20k-mini",
+    num_train_epochs=40,
     do_train=True,
     do_eval=True,
+    fp16=True,
     dataloader_num_workers=4,
     dataloader_persistent_workers=True,
-    per_device_train_batch_size=4,
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=1,
     remove_unused_columns=False,
     eval_do_concat_batches=False,
-    eval_strategy="steps",
-    eval_steps=50,
+    eval_strategy="epoch",
     save_strategy="epoch",
     learning_rate=1e-5,
-    lr_scheduler_type="constant"
+    lr_scheduler_type="constant",
+    load_best_model_at_end=True,
+    save_total_limit=2,
     # max_steps=1,
 )
 
@@ -252,7 +254,7 @@ trainer = Trainer(
     model=model,
     args=args,
     train_dataset=dataset["train"],
-    eval_dataset=dataset["train"], # overfit for debugging
+    eval_dataset=dataset["validation"], # overfit for debugging
     data_collator=collate_fn,
     compute_metrics=eval_compute_metrics,
 )
