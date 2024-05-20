@@ -43,9 +43,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
 
-from ..deprecated._archive_maps import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:

@@ -21,9 +21,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
-
-
 class DecisionTransformerConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to

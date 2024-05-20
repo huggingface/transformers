@@ -42,9 +42,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LayoutLMv3Config"
 
 
-from ..deprecated._archive_maps import LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 LAYOUTLMV3_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and

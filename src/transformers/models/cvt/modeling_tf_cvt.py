@@ -50,9 +50,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "CvtConfig"
 
 
-from ..deprecated._archive_maps import TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class TFBaseModelOutputWithCLSToken(ModelOutput):
     """

@@ -662,7 +662,13 @@ class BaseImageProcessor(ImageProcessingMixin):
         )
 
 
-VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
+VALID_SIZE_DICT_KEYS = (
+    {"height", "width"},
+    {"shortest_edge"},
+    {"shortest_edge", "longest_edge"},
+    {"longest_edge"},
+    {"max_height", "max_width"},
+)
 
 
 def is_valid_size_dict(size_dict):

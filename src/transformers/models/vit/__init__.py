@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"]}
+_import_structure = {"configuration_vit": ["ViTConfig", "ViTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -41,7 +41,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vit"] = [
-        "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTForImageClassification",
         "ViTForMaskedImageModeling",
         "ViTModel",
@@ -73,7 +72,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTOnnxConfig
+    from .configuration_vit import ViTConfig, ViTOnnxConfig
 
     try:
         if not is_vision_available():
@@ -91,7 +90,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit import (
-            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
             ViTForMaskedImageModeling,
             ViTModel,
