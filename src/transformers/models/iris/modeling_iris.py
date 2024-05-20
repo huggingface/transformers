@@ -27,12 +27,10 @@ import numpy as np
 import requests
 import torch
 import torch.utils.checkpoint
-import torchvision
 from PIL import Image
 from torch import nn
 from torch.distributions.categorical import Categorical
 from torch.nn import functional as F
-from torchvision import models
 from tqdm import tqdm
 
 from ...modeling_utils import PreTrainedModel
@@ -42,9 +40,13 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    is_torchvision_available,
 )
 from .configuration_iris import IrisConfig
 
+if is_torchvision_available():
+    import torchvision
+    from torchvision import models
 
 Batch = Dict[str, torch.Tensor]
 
