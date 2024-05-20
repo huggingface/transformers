@@ -35,8 +35,8 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torch_gpu,
-    require_torchaudio,
     require_torch_multi_gpu,
+    require_torchaudio,
     slow,
     torch_device,
 )
@@ -2865,8 +2865,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
         for i in range(num_samples):
-            assert decoded_all[i] == EXPECTED_TEXT[i]     
-        
+            assert decoded_all[i] == EXPECTED_TEXT[i]
+
     @require_torch_gpu
     @slow
     def test_whisper_empty_longform(self):
@@ -2904,7 +2904,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
-        
+
     @require_torch_multi_gpu
     @slow
     def test_whisper_empty_longform_multi_gpu(self):
@@ -2941,6 +2941,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         model.generate(**inputs, **gen_kwargs)
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
