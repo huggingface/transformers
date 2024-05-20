@@ -1381,7 +1381,7 @@ class GenerationMixin:
         bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
         eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
         pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
-        
+
         # for BC we also check `decoder_start_token_id` from model's generation config
         decoder_start_token_id = (
             generation_config.decoder_start_token_id
