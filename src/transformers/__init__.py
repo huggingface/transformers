@@ -2032,6 +2032,7 @@ else:
         [
             "GemmaForCausalLM",
             "GemmaForSequenceClassification",
+            "GemmaForTokenClassification",
             "GemmaModel",
             "GemmaPreTrainedModel",
         ]
@@ -2295,6 +2296,7 @@ else:
             "LlamaForCausalLM",
             "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
+            "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
         ]
@@ -2442,12 +2444,19 @@ else:
         [
             "MistralForCausalLM",
             "MistralForSequenceClassification",
+            "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
-        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+        [
+            "MixtralForCausalLM",
+            "MixtralForSequenceClassification",
+            "MixtralForTokenClassification",
+            "MixtralModel",
+            "MixtralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -2721,6 +2730,7 @@ else:
         [
             "PersimmonForCausalLM",
             "PersimmonForSequenceClassification",
+            "PersimmonForTokenClassification",
             "PersimmonModel",
             "PersimmonPreTrainedModel",
         ]
@@ -2817,6 +2827,7 @@ else:
         [
             "Qwen2ForCausalLM",
             "Qwen2ForSequenceClassification",
+            "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
         ]
@@ -2825,6 +2836,7 @@ else:
         [
             "Qwen2MoeForCausalLM",
             "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
         ]
@@ -3073,6 +3085,7 @@ else:
         [
             "StableLmForCausalLM",
             "StableLmForSequenceClassification",
+            "StableLmForTokenClassification",
             "StableLmModel",
             "StableLmPreTrainedModel",
         ]
@@ -3081,6 +3094,7 @@ else:
         [
             "Starcoder2ForCausalLM",
             "Starcoder2ForSequenceClassification",
+            "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
         ]
@@ -6499,6 +6513,7 @@ if TYPE_CHECKING:
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
+            GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
         )
@@ -6700,6 +6715,7 @@ if TYPE_CHECKING:
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
+            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )
@@ -6815,12 +6831,14 @@ if TYPE_CHECKING:
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
+            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )
@@ -7039,6 +7057,7 @@ if TYPE_CHECKING:
         from .models.persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )
@@ -7113,12 +7132,14 @@ if TYPE_CHECKING:
         from .models.qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
         )
@@ -7320,12 +7341,14 @@ if TYPE_CHECKING:
         from .models.stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )
         from .models.starcoder2 import (
             Starcoder2ForCausalLM,
             Starcoder2ForSequenceClassification,
+            Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )
