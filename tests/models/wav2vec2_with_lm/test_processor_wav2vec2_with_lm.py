@@ -178,6 +178,14 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             msg="`processor` and `feature_extractor` model input names do not match",
         )
 
+    def test_wrong_feature_extractor_raises_error(self):
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large-v3")
+        tokenizer = self.get_tokenizer()
+        decoder = self.get_decoder()
+
+        with self.assertRaises(ValueError):
+            processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
