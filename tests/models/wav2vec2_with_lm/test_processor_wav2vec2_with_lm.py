@@ -184,7 +184,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         decoder = self.get_decoder()
 
         with self.assertRaises(ValueError):
-            processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+            Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
 
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
