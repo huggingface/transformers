@@ -117,7 +117,10 @@ def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]
 
 
 def augment_and_transform_batch(
-    examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
+    examples: Mapping[str, Any],
+    transform: A.Compose,
+    image_processor: AutoImageProcessor,
+    return_pixel_mask: bool = False,
 ) -> BatchFeature:
     """Apply augmentations and format annotations in COCO format for object detection task"""
 
@@ -138,6 +141,9 @@ def augment_and_transform_batch(
 
     # Apply the image processor transformations: resizing, rescaling, normalization
     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
+    if not return_pixel_mask:
+        result.pop("pixel_mask", None)
 
     return result
 

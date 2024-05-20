@@ -286,7 +286,7 @@ The `image_processor` expects the annotations to be in the following format: `{'
 Now you can combine the image and annotation transformations to use on a batch of examples:
 
 ```py
->>> def augment_and_transform_batch(examples, transform, image_processor):
+>>> def augment_and_transform_batch(examples, transform, image_processor, return_pixel_mask=False):
 ...     """Apply augmentations and format annotations in COCO format for object detection task"""
 
 ...     images = []
@@ -306,6 +306,9 @@ Now you can combine the image and annotation transformations to use on a batch o
 
 ...     # Apply the image processor transformations: resizing, rescaling, normalization
 ...     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
+...     if not return_pixel_mask:
+...         result.pop("pixel_mask", None)
 
 ...     return result
 ```
