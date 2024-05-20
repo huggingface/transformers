@@ -406,13 +406,13 @@ class DetrConvModel(nn.Module):
         self.conv_encoder = conv_encoder
         self.position_embedding = position_embedding
 
-    def forward(self, pixel_values, pixel_mask):
+    def forward(self, pixel_values, pixel_mask, interpolate_pos_encoding=False):
         # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
         out = self.conv_encoder(pixel_values, pixel_mask)
         pos = []
         for feature_map, mask in out:
             # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
+            pos.append(self.position_embedding(feature_map, mask, interpolate_pos_encoding).to(feature_map.dtype))
 
         return out, pos
 
@@ -434,7 +434,7 @@ class DetrSinePositionEmbedding(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, pixel_values, pixel_mask):
+    def forward(self, pixel_values, pixel_mask, interpolate_pos_encoding=False):
         if pixel_mask is None:
             raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
@@ -464,16 +464,41 @@ class DetrLearnedPositionEmbedding(nn.Module):
         self.row_embeddings = nn.Embedding(50, embedding_dim)
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
-    def forward(self, pixel_values, pixel_mask=None):
+    def interpolate_pos_encoding(self, embeddings: torch.tensor, height: int, width: int) -> torch.Tensor:
+        num_row_positions, num_column_positions = (
+            self.row_embeddings.weight.shape[0],
+            self.column_embeddings.weight.shape[0],
+        )
+        pos = embeddings.permute(0, 3, 1, 2)
+        pos = nn.functional.interpolate(
+            pos,
+            scale_factor=(height / num_row_positions, width / num_column_positions),
+            mode="bicubic",
+            align_corners=False,
+        )
+        return pos
+
+    def forward(self, pixel_values, pixel_mask=None, interpolate_pos_encoding=False):
         height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
-        x_emb = self.column_embeddings(width_values)
-        y_emb = self.row_embeddings(height_values)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
-        pos = pos.permute(2, 0, 1)
-        pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
+        if not interpolate_pos_encoding:
+            width_values = torch.arange(width, device=pixel_values.device)
+            height_values = torch.arange(height, device=pixel_values.device)
+            x_emb = self.column_embeddings(width_values)
+            y_emb = self.row_embeddings(height_values)
+            pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
+            pos = pos.permute(2, 0, 1)
+            pos = pos.unsqueeze(0)
+            pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
+        else:
+            rows, columns = self.row_embeddings.weight.shape[0], self.column_embeddings.weight.shape[0]
+            pos = torch.cat(
+                [
+                    self.column_embeddings.weight.unsqueeze(0).repeat(rows, 1, 1),
+                    self.row_embeddings.weight.unsqueeze(1).repeat(1, columns, 1),
+                ],
+                dim=-1,
+            )
+            pos = self.interpolate_pos_encoding(pos.unsqueeze(0), height, width)
         return pos
 
 
@@ -874,6 +899,8 @@ DETR_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1223,6 +1250,7 @@ class DetrModel(DetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple[torch.FloatTensor], DetrModelOutput]:
         r"""
         Returns:
@@ -1267,7 +1295,7 @@ class DetrModel(DetrPreTrainedModel):
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # pixel_values should be of shape (batch_size, num_channels, height, width)
         # pixel_mask should be of shape (batch_size, height, width)
-        features, object_queries_list = self.backbone(pixel_values, pixel_mask)
+        features, object_queries_list = self.backbone(pixel_values, pixel_mask, interpolate_pos_encoding)
 
         # get final feature map and downsampled mask
         feature_map, mask = features[-1]

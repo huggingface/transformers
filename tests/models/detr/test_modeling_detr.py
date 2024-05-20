@@ -680,3 +680,26 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_interpolate_pos_encoding(self):
+        print("\n")
+        from transformers.models.detr.modeling_detr import DetrLearnedPositionEmbedding
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # default model uses sine position embedding
+        model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
+        with torch.no_grad():
+            outputs_sine = model(**encoding, interpolate_pos_encoding=True)
+
+        # reassign to learned position embedding
+        model.backbone.position_embedding = DetrLearnedPositionEmbedding(model.encoder.layers[0].embed_dim // 2).to(
+            torch_device
+        )
+        with torch.no_grad():
+            outputs_learned = model(**encoding, interpolate_pos_encoding=True)
+
+        # [1, 100, 256]
+        self.assertEqual(outputs_sine.last_hidden_state.shape, outputs_learned.last_hidden_state.shape)
