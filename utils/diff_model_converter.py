@@ -116,7 +116,7 @@ class DiffConverterTransformer(CSTTransformer):
         if m.matches(node.module, m.Attribute()):
             full_statement = self.python_module.code_for_node(node.module)
             for imported_ in node.names:
-                if "modeling_" in full_statement:
+                if re.search(r'transformers\.models\..*\.modeling_.*' , full_statement):
                     if full_statement not in self.transformers_imports:
                         source_code = get_module_source_from_name(full_statement)
                         tree = cst.parse_module(source_code)

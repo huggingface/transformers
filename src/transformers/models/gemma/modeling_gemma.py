@@ -25,6 +25,13 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -206,9 +213,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-""" PyTorch Gemma model."""
+"""PyTorch Gemma model."""
 
 
 import torch
@@ -678,7 +683,6 @@ class GemmaSdpaAttention(GemmaAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
-
 
 GEMMA_ATTENTION_CLASSES = {
     "eager": GemmaAttention,
