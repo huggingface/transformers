@@ -1781,15 +1781,6 @@ class GenerationMixin:
             if generation_config.cache_implementation == "static":
                 raise ValueError("assisted generate is not supported with `static_cache`")
 
-            # Remove potential default DynamicCache if assistant does not support it
-            assistant_kwargs = copy.copy(model_kwargs)
-            if assistant_model is not None:
-                if use_dynamic_cache_by_default and not assistant_model._supports_dynamic_cache_class:
-                    if len(assistant_kwargs["past_key_values"]) == 0:
-                        del assistant_kwargs["past_key_values"]
-                    else:
-                        assistant_kwargs["past_key_values"] = assistant_kwargs["past_key_values"].to_legacy_cache()
-
             # 11. Get the candidate generator, given the parameterization
             candidate_generator = self._get_candidate_generator(
                 generation_config=generation_config,
@@ -1797,7 +1788,7 @@ class GenerationMixin:
                 inputs_tensor=inputs_tensor,
                 assistant_model=assistant_model,
                 logits_processor=logits_processor,
-                model_kwargs=assistant_kwargs,
+                model_kwargs=model_kwargs,
             )
 
             # 12. prepare logits warper (if `do_sample` is `True`)
