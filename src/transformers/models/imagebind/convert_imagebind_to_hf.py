@@ -132,8 +132,8 @@ def rename_key(dct, old, new):
 
 def reshape_text_position_embeddings(state_dict):
     # Need to convert from (1, contexc_length, hidden_size) -> (context_length, hidden_size)
-    position_embeddings = state_dict["text_model.embeddings.position_embeddings.weight"]
-    state_dict["text_model.embeddings.position_embeddings.weight"] = position_embeddings.squeeze(0)
+    position_embeddings = state_dict["text_model.embeddings.position_embedding.weight"]
+    state_dict["text_model.embeddings.position_embedding.weight"] = position_embeddings.squeeze(0)
 
     return state_dict
 
@@ -187,7 +187,8 @@ def convert_imagebind_checkpoint(args):
         texts, images, audios = prepare_input()
         expected_pixel_values = torch.tensor(
             [
-                [-0.1134, 0.7392, 1.3354][-0.6390, 0.1239, 0.2546],
+                [-0.1134, 0.7392, 1.3354],
+                [-0.6390, 0.1239, 0.2546],
                 [-0.8580, 0.1089, 0.9088],
             ]
         )

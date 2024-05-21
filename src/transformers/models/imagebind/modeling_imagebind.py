@@ -770,7 +770,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
         if isinstance(module, ImageBindTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, (ImageBindVisionEmbeddings, ImageBindAudioEmbeddings)):
             factor = self.config.initializer_factor
             nn.init.normal_(module.cls_token, std=module.config.hidden_size**-0.5 * factor)

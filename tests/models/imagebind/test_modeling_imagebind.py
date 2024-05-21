@@ -22,7 +22,6 @@ import unittest
 import numpy as np
 import requests
 
-import transformers
 from transformers import (
     ImageBindAudioConfig,
     ImageBindConfig,
@@ -30,8 +29,6 @@ from transformers import (
     ImageBindVisionConfig,
 )
 from transformers.testing_utils import (
-    is_flax_available,
-    is_pt_flax_cross_test,
     require_torch,
     require_vision,
     slow,
@@ -70,15 +67,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ImageBindProcessor
-
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
 
 
 class ImageBindTextModelTester:
@@ -228,18 +216,26 @@ class ImageBindTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
+    @unittest.skip(reason="ImageBindTextModel has no loss in its output")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="ImageBindTextModel has no loss in its output")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "text_projection"))
 
 
 class ImageBindVisionModelTester:
@@ -247,21 +243,15 @@ class ImageBindVisionModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
-        patch_size=(2, 2, 2),
-        stride=(2, 2, 2),
+        image_size=32,
+        patch_size=8,
         num_channels=3,
-        num_frames=2,
-        is_training=True,
         hidden_size=32,
+        mlp_ratio=1.0,
         projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.0,
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        initializer_range=0.02,
+        is_training=False,
         logit_scale_init_value=None,
         learnable_logit_scale=False,
         scope=None,
@@ -270,35 +260,24 @@ class ImageBindVisionModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
-        self.stride = stride
         self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.is_training = is_training
         self.hidden_size = hidden_size
+        self.mlp_ratio = mlp_ratio
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+        self.is_training = is_training
         self.logit_scale_init_value = logit_scale_init_value
         self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
-        # Resolve spatiotemporal patch size
-        patches_along_time_dim = num_frames // patch_size[0]
-        patches_along_height_dim = ((image_size - patch_size[1]) // stride[1]) + 1
-        patches_along_width_dim = ((image_size - patch_size[2]) // stride[2]) + 1
-        num_patches = patches_along_time_dim * patches_along_height_dim * patches_along_width_dim
+        # Though in Vision we have a 3D conv the time dimension is always 1, thus we can use only spatial dimensions
+        num_patches = (image_size // patch_size) ** 2
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.num_frames, self.image_size, self.image_size]
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
 
         return config, pixel_values
@@ -307,18 +286,12 @@ class ImageBindVisionModelTester:
         return ImageBindVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
-            stride=self.stride,
             num_channels=self.num_channels,
-            num_frames=self.num_frames,
             hidden_size=self.hidden_size,
+            mlp_ratio=self.mlp_ratio,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
-            layer_norm_eps=self.layer_norm_eps,
-            initializer_range=self.initializer_range,
             logit_scale_init_value=self.logit_scale_init_value,
             learnable_logit_scale=self.learnable_logit_scale,
         )
@@ -446,23 +419,17 @@ class ImageBindAudioModelTester:
         self,
         parent,
         batch_size=12,
-        patch_size=16,
-        stride=10,
+        patch_size=8,
+        stride=8,
         num_channels=1,
         is_training=True,
-        num_mel_bins=128,
-        target_len=204,
+        num_mel_bins=32,
+        target_len=48,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.0,
-        layer_norm_eps=1e-6,
-        add_kv_bias=True,
-        attention_dropout=0.0,
-        drop_path_rate=0.1,
-        initializer_range=0.02,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        mlp_ratio=1.0,
         logit_scale_init_value=20.0,
         learnable_logit_scale=False,
         scope=None,
@@ -479,32 +446,25 @@ class ImageBindAudioModelTester:
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.drop_path_rate = drop_path_rate
-        self.layer_norm_eps = layer_norm_eps
-        self.add_kv_bias = add_kv_bias
-        self.initializer_range = initializer_range
+        self.mlp_ratio = mlp_ratio
         self.logit_scale_init_value = logit_scale_init_value
         self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # In audio model the mel-spectogram image size is based on the number of mel bins and the target length
         patches_along_height_dim = ((num_mel_bins - patch_size) // stride) + 1
         patches_along_width_dim = ((target_len - patch_size) // stride) + 1
         num_patches = patches_along_height_dim * patches_along_width_dim
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        input_features = floats_tensor([self.batch_size, self.num_channels, self.num_mel_bins, self.target_len])
         config = self.get_config()
 
-        return config, pixel_values
+        return config, input_features
 
     def get_config(self):
         return ImageBindAudioConfig(
-            image_size=self.image_size,
             patch_size=self.patch_size,
             stride=self.stride,
             num_channels=self.num_channels,
@@ -514,46 +474,33 @@ class ImageBindAudioModelTester:
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
-            layer_norm_eps=self.layer_norm_eps,
-            add_kv_bias=self.add_kv_bias,
-            initializer_range=self.initializer_range,
+            mlp_ratio=self.mlp_ratio,
             logit_scale_init_value=self.logit_scale_init_value,
             learnable_logit_scale=self.learnable_logit_scale,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, input_features):
         model = ImageBindAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+            result = model(input_features)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, pixel_values):
+    def create_and_check_model_with_projection(self, config, input_features):
         model = ImageBindAudioModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+            result = model(input_features)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.audio_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, input_features = config_and_inputs
+        inputs_dict = {"input_features": input_features}
         return config, inputs_dict
 
 
@@ -601,7 +548,7 @@ class ImageBindAudioModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["input_features"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -809,124 +756,6 @@ class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             config.save_pretrained(tmp_dir_name)
             text_config = ImageBindTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-    # overwrite from common since FlaxImageBindModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
-                self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
-
-    # overwrite from common since FlaxImageBindModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load corresponding PyTorch class
-                pt_model = model_class(config).eval()
-
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
     @slow
     def test_model_from_pretrained(self):
