@@ -26,7 +26,7 @@ import requests
 
 from transformers import AutoModelForVision2Seq, AutoProcessor, Kosmos2Config
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import IS_ROCM_SYSTEM, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -562,6 +562,8 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         processed_text = processed_text[0]
         final_text, entities = final_text_with_entities[0]
 
+        atol = 1e-4 if IS_ROCM_SYSTEM else 1e-5
+
         np.testing.assert_allclose(
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
@@ -571,7 +573,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.9352350831031799, -4.688288688659668, 6.240612983703613],
                 ]
             ),
-            atol=1e-5,
+            atol=atol,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
@@ -629,7 +631,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                     [-0.7624598741531372, -4.771658897399902, 6.576295852661133],
                 ]
             ),
-            atol=1e-5,
+            atol=atol,
         )
         np.testing.assert_allclose(
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),

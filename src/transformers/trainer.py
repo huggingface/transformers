@@ -153,6 +153,7 @@ from .utils import (
     is_galore_torch_available,
     is_in_notebook,
     is_ipex_available,
+    is_lomo_available,
     is_peft_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -436,7 +437,7 @@ class Trainer:
                 "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
-        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
+        if getattr(model, "is_parallelizable", False) and getattr(model, "model_parallel", False):
             self.is_model_parallel = True
         else:
             self.is_model_parallel = False
@@ -1059,12 +1060,18 @@ class Trainer:
             if "params" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("params")
 
+            # Overwrite `model` in case it's created by `get_optimizer_cls_and_kwargs`
+            # e.g. for LOMO optimizer.
+            if "model" in optimizer_kwargs:
+                optimizer_grouped_parameters = optimizer_kwargs.pop("model")
+
             # For layer-wise dummy optimizers we overwrite optimizer_grouped_parameters with `optimizer_dict`
             # to avoid arguments conflicts.
             if "optimizer_dict" in optimizer_kwargs:
                 optimizer_grouped_parameters = optimizer_kwargs.pop("optimizer_dict")
 
             self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+
             if optimizer_cls.__name__ == "Adam8bit":
                 import bitsandbytes
 
@@ -1382,6 +1389,26 @@ class Trainer:
 
             if args.optim == OptimizerNames.GALORE_ADAFACTOR:
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
+        elif args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            if not is_lomo_available():
+                raise ImportError(
+                    "You need to install `lomo_optim` in order to use LOMO optimizers"
+                    " install it with `pip install lomo-optim`"
+                )
+            if not is_accelerate_available("0.30.0"):
+                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use LOMO optimizers")
+
+            if model is None:
+                raise ValueError("You need to pass a `model` in order to correctly initialize a LOMO optimizer.")
+
+            from lomo_optim import AdaLomo, Lomo
+
+            if "ada" in args.optim:
+                optimizer_cls = AdaLomo
+            else:
+                optimizer_cls = Lomo
+
+            optimizer_kwargs.update({"model": model})
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs
@@ -2045,6 +2072,9 @@ class Trainer:
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
                     self.model, self.optimizer, self.lr_scheduler
                 )
+        elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            # In this case we are in DDP + LOMO, which should be supported
+            self.optimizer = self.accelerator.prepare(self.optimizer)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -2143,7 +2173,6 @@ class Trainer:
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
         grad_norm: Optional[float] = None
-
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         total_batched_samples = 0
@@ -2275,8 +2304,8 @@ class Trainer:
                         else:
                             grad_norm = _grad_norm
 
-                    # Optimizer step
                     self.optimizer.step()
+
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
@@ -2533,7 +2562,7 @@ class Trainer:
                 if os.path.exists(resume_from_checkpoint):
                     # For BC for older PEFT versions
                     if hasattr(model, "active_adapters"):
-                        active_adapters = model.active_adapters()
+                        active_adapters = model.active_adapters
                         if len(active_adapters) > 1:
                             logger.warning("Multiple active adapters detected will only consider the first adapter")
                         active_adapter = active_adapters[0]
@@ -2626,8 +2655,8 @@ class Trainer:
                     ):
                         # For BC for older PEFT versions
                         if hasattr(model, "active_adapters"):
-                            active_adapter = model.active_adapters()[0]
-                            if len(model.active_adapters()) > 1:
+                            active_adapter = model.active_adapters[0]
+                            if len(model.active_adapters) > 1:
                                 logger.warning("Detected multiple active adapters, will only consider the first one")
                         else:
                             active_adapter = model.active_adapter
@@ -3229,7 +3258,6 @@ class Trainer:
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
-
         if is_sagemaker_mp_enabled():
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
@@ -3240,6 +3268,12 @@ class Trainer:
         del inputs
         torch.cuda.empty_cache()
 
+        kwargs = {}
+
+        # For LOMO optimizers you need to explicitly use the learnign rate
+        if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
+            kwargs["learning_rate"] = self._get_learning_rate()
+
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
@@ -3247,7 +3281,7 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            self.accelerator.backward(loss)
+            self.accelerator.backward(loss, **kwargs)
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
