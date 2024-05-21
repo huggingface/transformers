@@ -72,6 +72,10 @@ class CircleCIJob:
         if self.docker_image is None:
             # Let's avoid changing the default list and make a copy.
             self.docker_image = copy.deepcopy(DEFAULT_DOCKER_IMAGE)
+        else:
+            # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
+            if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", ""):
+                self.docker_image += ":dev"
         if self.install_steps is None:
             self.install_steps = []
         if self.pytest_options is None:

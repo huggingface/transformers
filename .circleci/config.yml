@@ -13,7 +13,6 @@ on:
         workflows: [" Build pr ci-docker"]
         types:
         - completed
-        - skipped
 
 jobs:
     # Ensure running with CircleCI/huggingface
@@ -33,11 +32,11 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: |
-                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
-                    huggingface/transformers-quality:dev
-                else
-                    huggingface/transformers-quality
+            - image: huggingface/transformers-quality
+
+        environment:
+            GIT_COMMIT_MESSAGE: << pipeline.trigger_parameters.gitlab.repo_name >>
+        
         parallelism: 1
         steps:
             - checkout
