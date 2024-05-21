@@ -592,3 +592,138 @@ accelerate launch --num_processes=2 \
 ```
 
 Check out the [Launching your Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch) tutorial to learn more about `accelerate_launch` and custom configurations.
+
+## Hyperparameter search
+
+> [!TIP]
+> Hyperparameter search for Distributed Data Parallel (DDP) is enabled for optuna and sigopt. Only the rank-zero process generates the search trial and passes the argument to other ranks.
+
+[`Trainer`] supports four hyperparameter search backends: [optuna](https://optuna.org/), [sigopt](https://sigopt.com/), [raytune](https://docs.ray.io/en/latest/tune/index.html) and [wandb](https://wandb.ai/site/sweeps).
+
+Install the backend you want to use.
+
+```bash
+pip install optuna/sigopt/wandb/ray[tune] 
+```
+
+Each backend requires a different format for defining the hyperparameter search space.
+
+<hfoptions id="backend">
+<hfoption id="sigopt">
+
+The hyperparameter search space for sigopt is defined in [parameter object](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter).
+
+```py
+>>> def sigopt_hp_space(trial):
+...     return [
+...         {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double"},
+...         {
+...             "categorical_values": ["16", "32", "64", "128"],
+...             "name": "per_device_train_batch_size",
+...             "type": "categorical",
+...         },
+...     ]
+```
+
+</hfoption>
+<hfoption id="optuna">
+
+The hyperparameter search space for optuna is defined in the [optuna.trial.Trial](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py) class.
+
+```py
+>>> def optuna_hp_space(trial):
+...     return {
+...         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
+...         "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [16, 32, 64, 128]),
+...     }
+```
+
+Optuna supports multi-objective HPO to optimize for multiple objectives. Pass the optimization `direction` in `hyperparameter_search` to specify whether you want to minimize or maximize an objective. Then define your own `compute_objective` to return multiple objective values.
+
+```py
+>>> best_trials = trainer.hyperparameter_search(
+...     direction=["minimize", "maximize"],
+...     backend="optuna",
+...     hp_space=optuna_hp_space,
+...     n_trials=20,
+...     compute_objective=compute_objective,
+... )
+```
+
+A Pareto Front (`List[BestRun]`) is returned in the hyperparameter search. Refer to the test case [`TrainerHyperParameterMultiObjectOptunaIntegrationTest`](https://github.com/huggingface/transformers/blob/d24097e0229485287ff4959258c552168bd898c6/tests/trainer/test_trainer.py#L3670) for more details.
+
+</hfoption>
+<hfoption id="Raytune">
+
+The hyperparameter search space for Raytune is defined in [Tune Search Space API](https://docs.ray.io/en/latest/tune/api/search_space.html).
+
+```py
+>>> def ray_hp_space(trial):
+...     return {
+...         "learning_rate": tune.loguniform(1e-6, 1e-4),
+...         "per_device_train_batch_size": tune.choice([16, 32, 64, 128]),
+...     }
+```
+
+</hfoption>
+<hfoption id="WandB">
+
+The hyperparameter search space for WandB is defined in a [sweep](https://docs.wandb.ai/guides/sweeps/configuration).
+
+```py
+>>> def wandb_hp_space(trial):
+...     return {
+...         "method": "random",
+...         "metric": {"name": "objective", "goal": "minimize"},
+...         "parameters": {
+...             "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+...             "per_device_train_batch_size": {"values": [16, 32, 64, 128]},
+...         },
+...     }
+```
+
+</hfoption>
+</hfoptions>
+
+After configuring the hyperparameter search space, define a `model_init` function and pass it to the [`Trainer`].
+
+```py
+>>> def model_init(trial):
+...     return AutoModelForSequenceClassification.from_pretrained(
+...         model_args.model_name_or_path,
+...         from_tf=bool(".ckpt" in model_args.model_name_or_path),
+...         config=config,
+...         cache_dir=model_args.cache_dir,
+...         revision=model_args.model_revision,
+...         token=True if model_args.use_auth_token else None,
+...     )
+```
+
+Create a [`Trainer`] with your `model_init` function, training arguments, training and test datasets, and evaluation function.
+
+```py
+>>> trainer = Trainer(
+...     model=None,
+...     args=training_args,
+...     train_dataset=small_train_dataset,
+...     eval_dataset=small_eval_dataset,
+...     compute_metrics=compute_metrics,
+...     tokenizer=tokenizer,
+...     model_init=model_init,
+...     data_collator=data_collator,
+... )
+```
+
+Call `hyperparameter_search` on [`Trainer`], and set your backend and optimization direction accordingly to minimize or maximize an objective.
+
+You could define your own `compute_objective` function, otherwise, the default `compute_objective` is called and the sum of an evaluation metric like F1 is returned as the objective value.
+
+```py
+>>> best_trial = trainer.hyperparameter_search(
+...     direction="maximize",
+...     backend="optuna",
+...     hp_space=optuna_hp_space,
+...     n_trials=20,
+...     compute_objective=compute_objective,
+... )
+```
