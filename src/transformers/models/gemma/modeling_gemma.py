@@ -206,6 +206,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 """ PyTorch Gemma model."""
 
 
@@ -676,6 +678,7 @@ class GemmaSdpaAttention(GemmaAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
+
 
 GEMMA_ATTENTION_CLASSES = {
     "eager": GemmaAttention,

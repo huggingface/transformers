@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Gemma model."""
+"""PyTorch Gemma model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -22,6 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
 from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaFlashAttention2,
@@ -366,5 +367,6 @@ class GemmaForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 GemmaForSequenceClassification = LlamaForSequenceClassification
