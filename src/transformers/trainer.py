@@ -151,6 +151,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_datasets_available,
     is_galore_torch_available,
+    is_gradio_client_available,
     is_in_notebook,
     is_ipex_available,
     is_peft_available,
@@ -4195,6 +4196,11 @@ class Trainer:
             progress of the commit if `blocking=True`.
         """
         model_name = kwargs.pop("model_name", None)
+        
+        # If one passes `gguf_config`, will create a GGUF converted model using
+        # `https://huggingface.co/spaces/ggml-org/gguf-my-repo` Space.
+        gguf_config = kwargs.pop("gguf_config", None)
+
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
@@ -4233,7 +4239,8 @@ class Trainer:
 
         # Wait for the current upload to be finished.
         self._finish_current_push()
-        return upload_folder(
+
+        upload_results = upload_folder(
             repo_id=self.hub_model_id,
             folder_path=self.args.output_dir,
             commit_message=commit_message,
@@ -4241,6 +4248,26 @@ class Trainer:
             run_as_future=not blocking,
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
         )
+
+        if gguf_config is not None:
+            if not is_gradio_client_available():
+                raise ValueError("You need `gradio_client` installed in order to convert the trained model into GGUF format")
+            
+            from gradio_client import Client
+
+            client = Client("ybelkada/gguf-my-repo")
+
+            result = client.predict(
+                model_id=self.hub_model_id,
+                q_method=gguf_config["q_method"],
+                private_repo=False,
+                api_name="/predict",
+            )
+
+            import pdb; pdb.set_trace()
+
+        return upload_results
+
 
     #
     # Deprecated code

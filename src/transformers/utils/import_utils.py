@@ -107,6 +107,7 @@ _cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
+_gradio_client_available = _is_package_available("gradio_client")
 # We need to check both `faiss` and `faiss-cpu`.
 _faiss_available = importlib.util.find_spec("faiss") is not None
 try:
@@ -305,6 +306,10 @@ def is_pygments_available():
 
 def get_torch_version():
     return _torch_version
+
+
+def is_gradio_client_available():
+    return _gradio_client_available
 
 
 def is_torch_sdpa_available():
