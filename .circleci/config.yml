@@ -28,8 +28,8 @@ jobs:
         needs: Build pr ci-docker
         docker:
             - image: |
-              if contains(github.event.head_commit.message, '[push-ci-image]')
-                huggingface/transformers-quality-dev
+              if contains(github.event.head_commit.message, '[build-ci-image]')
+                huggingface/transformers-quality:dev
               else
                 huggingface/transformers-quality
         parallelism: 1
@@ -128,7 +128,7 @@ jobs:
         docker:
             - image: |
               if contains(github.event.head_commit.message, '[push-ci-image]')
-                huggingface/transformers-quality-dev
+                huggingface/transformers-quality:dev
               else
                 huggingface/transformers-quality
         resource_class: large
