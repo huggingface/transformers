@@ -181,10 +181,11 @@ cache can occupy a large portion of memory, becoming a bottleneck for long-conte
 Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed. 
 
 KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
-(https://arxiv.org/abs/2402.02750) and currently works on `quanto` backend. For more information on the inner workings see the paper.
+(https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
 
 To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
 Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`QuantizedCacheConfig`] class.
+One has to indicate which quantization backend to use in the [`QuantizedCacheConfig`], the default is `quanto`.
 
 <Tip warning={true}>
 
@@ -201,7 +202,7 @@ Cache quantization can be detrimental if the context length is short and there i
 >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
 >>> inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4})
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
 >>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
 

@@ -373,9 +373,13 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - to_legacy_cache
     - from_legacy_cache
 
-[[autodoc]] QuantoQuantizedCache
+[[autodoc]] QuantizedCache
     - update
     - get_seq_length
+
+[[autodoc]] QuantoQuantizedCache
+
+[[autodoc]] HQQQuantizedCache
 
 [[autodoc]] SinkCache
     - update

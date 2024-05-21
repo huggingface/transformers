@@ -110,7 +110,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "quantized": QuantoQuantizedCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache}
 QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
 
 
@@ -1622,12 +1622,7 @@ class GenerationMixin:
                 "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
                 "Cache object) is unsupported. Please use only one of the two."
             )
-        elif generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
-            if not self._supports_cache_class:
-                raise ValueError(
-                    "This model does not support the `cache_implementation` argument. Please check the following "
-                    "issue: https://github.com/huggingface/transformers/issues/28981."
-                )
+        elif generation_config.cache_implementation is not None:
             if generation_config.cache_implementation == "static":
                 if not self._supports_static_cache:
                     raise ValueError(

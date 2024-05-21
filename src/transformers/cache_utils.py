@@ -193,7 +193,7 @@ class QuantizedCacheConfig(CacheConfig):
     Configuration class for quantized cache settings.
 
     Attributes:
-        backend (`str`, *optional*, defaults to `"HQQ"`):
+        backend (`str`, *optional*, defaults to `"quanto"`):
             Backend to use when performing quantization, Can be one of [`quanto`, `HQQ`]
         nbits (`Optional[int]`, *optional*, defaults to 4):
             Number of bits, can be 2 or 4 for the `quanto` backend and one of [1, 2, 3, 4, 8] for the `HQQ` backend. Defaults to 2.
@@ -208,14 +208,14 @@ class QuantizedCacheConfig(CacheConfig):
             Length of the residual cache which will always be stored in original presicion.
             Defaults to 128.
         compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
-            The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization. 
+            The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
         device (`str`, *optional*, defaults to `"cpu"`):
             Device on which to peform computations, should be same as the model's device.
     """
 
     def __init__(
         self,
-        backend: str = "HQQ",
+        backend: str = "quanto",
         nbits: Optional[int] = 4,
         axis_key: Optional[int] = 0,
         axis_value: Optional[int] = 0,
@@ -542,12 +542,13 @@ class HQQQuantizedCache(QuantizedCache):
             nbits=self.nbits,
             group_size=self.q_group_size,
         )
+        meta["compute_dtype"] = self.compute_dtype
+        self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
         return qtensor, meta
 
     def _dequantize(self, qtensor):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
-        tensor = tensor.to(self.compute_dtype)  # HQQ doesn't cast back the tensors to the compute dtype
         return tensor
 
 
