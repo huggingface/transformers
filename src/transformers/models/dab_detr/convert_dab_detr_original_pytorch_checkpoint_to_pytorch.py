@@ -30,6 +30,8 @@ from transformers import (
     DABDETRForObjectDetection,
     DABDETRForSegmentation,
     ConditionalDetrImageProcessor,
+    # TOODO remove
+    DABDETRModel,
 )
 from transformers.utils import logging
 
@@ -37,27 +39,44 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
+# here we list all keys to be renamed (original name on the left, HF name on the right)
 rename_keys = []
 for i in range(6):
-    # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+    # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms + activation function
+    # input projection
+    rename_keys.append(
+        (f"transformer.encoder.layers.{i}.self_attn.in_proj_weight", f"encoder.layers.{i}.self_attn.in_proj_weight")
+    )
+    rename_keys.append(
+        (f"transformer.encoder.layers.{i}.self_attn.in_proj_bias", f"encoder.layers.{i}.self_attn.in_proj_bias")
+    )
+    # output projection
     rename_keys.append(
         (f"transformer.encoder.layers.{i}.self_attn.out_proj.weight", f"encoder.layers.{i}.self_attn.out_proj.weight")
     )
     rename_keys.append(
         (f"transformer.encoder.layers.{i}.self_attn.out_proj.bias", f"encoder.layers.{i}.self_attn.out_proj.bias")
     )
+    # FFN layer
+    # FFN 1
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"encoder.layers.{i}.fc1.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"encoder.layers.{i}.fc1.bias"))
+    # FFN 2
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"encoder.layers.{i}.fc2.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"encoder.layers.{i}.fc2.bias"))
+    # normalization layers
+    # nm1
     rename_keys.append(
         (f"transformer.encoder.layers.{i}.norm1.weight", f"encoder.layers.{i}.self_attn_layer_norm.weight")
     )
     rename_keys.append((f"transformer.encoder.layers.{i}.norm1.bias", f"encoder.layers.{i}.self_attn_layer_norm.bias"))
+    # nm2
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
-    # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
+    # activation function weight
+    rename_keys.append((f"transformer.encoder.layers.{i}.activation.weight", f"encoder.layers.{i}.activation_fn.weight"))
+    #########################################################################################################################################
+    # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms + activiation function weight
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.self_attn.out_proj.weight", f"decoder.layers.{i}.self_attn.out_proj.weight")
     )
@@ -70,6 +89,8 @@ for i in range(6):
             f"decoder.layers.{i}.encoder_attn.out_proj.weight",
         )
     )
+    # activation function weight
+    rename_keys.append((f"transformer.decoder.layers.{i}.activation.weight", f"decoder.layers.{i}.activation_fn.weight"))
     rename_keys.append(
         (
             f"transformer.decoder.layers.{i}.cross_attn.out_proj.bias",
@@ -110,7 +131,6 @@ for i in range(6):
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.ca_qcontent_proj.weight", f"decoder.layers.{i}.ca_qcontent_proj.weight")
     )
-    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.weight", f"decoder.layers.{i}.ca_qpos_proj.weight"))
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.ca_kcontent_proj.weight", f"decoder.layers.{i}.ca_kcontent_proj.weight")
     )
@@ -134,7 +154,6 @@ for i in range(6):
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.ca_qcontent_proj.bias", f"decoder.layers.{i}.ca_qcontent_proj.bias")
     )
-    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.bias", f"decoder.layers.{i}.ca_qpos_proj.bias"))
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.ca_kcontent_proj.bias", f"decoder.layers.{i}.ca_kcontent_proj.bias")
     )
@@ -150,30 +169,46 @@ rename_keys.extend(
     [
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
-        ("query_embed.weight", "query_position_embeddings.weight"),
+
+        ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
+
+        ("class_embed.weight", "class_embed.weight"),
+        ("class_embed.bias", "class_embed.bias"),
+
+        ("transformer.encoder.query_scale.layers.0.weight", "encoder.query_scale.layers.0.weight"),
+        ("transformer.encoder.query_scale.layers.0.bias", "encoder.query_scale.layers.0.bias"),
+        ("transformer.encoder.query_scale.layers.1.weight", "encoder.query_scale.layers.1.weight"),
+        ("transformer.encoder.query_scale.layers.1.bias", "encoder.query_scale.layers.1.bias"),
+        
+        ("transformer.decoder.bbox_embed.layers.0.weight", "decoder.bbox_embed.layers.0.weight"),
+        ("transformer.decoder.bbox_embed.layers.0.bias", "decoder.bbox_embed.layers.0.bias"),
+        ("transformer.decoder.bbox_embed.layers.1.weight", "decoder.bbox_embed.layers.1.weight"),
+        ("transformer.decoder.bbox_embed.layers.1.bias", "decoder.bbox_embed.layers.1.bias"),
+        ("transformer.decoder.bbox_embed.layers.2.weight", "decoder.bbox_embed.layers.2.weight"),
+        ("transformer.decoder.bbox_embed.layers.2.bias", "decoder.bbox_embed.layers.2.bias"),
+
         ("transformer.decoder.norm.weight", "decoder.layernorm.weight"),
         ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
-        ("class_embed.weight", "class_labels_classifier.weight"),
-        ("class_embed.bias", "class_labels_classifier.bias"),
-        ("bbox_embed.layers.0.weight", "bbox_predictor.layers.0.weight"),
-        ("bbox_embed.layers.0.bias", "bbox_predictor.layers.0.bias"),
-        ("bbox_embed.layers.1.weight", "bbox_predictor.layers.1.weight"),
-        ("bbox_embed.layers.1.bias", "bbox_predictor.layers.1.bias"),
-        ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
-        ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
+
         ("transformer.decoder.ref_point_head.layers.0.weight", "decoder.ref_point_head.layers.0.weight"),
         ("transformer.decoder.ref_point_head.layers.0.bias", "decoder.ref_point_head.layers.0.bias"),
         ("transformer.decoder.ref_point_head.layers.1.weight", "decoder.ref_point_head.layers.1.weight"),
         ("transformer.decoder.ref_point_head.layers.1.bias", "decoder.ref_point_head.layers.1.bias"),
+
+        ("transformer.decoder.ref_anchor_head.layers.0.weight", "decoder.ref_anchor_head.layers.0.weight"),
+        ("transformer.decoder.ref_anchor_head.layers.0.bias", "decoder.ref_anchor_head.layers.0.bias"),
+        ("transformer.decoder.ref_anchor_head.layers.1.weight", "decoder.ref_anchor_head.layers.1.weight"),
+        ("transformer.decoder.ref_anchor_head.layers.1.bias", "decoder.ref_anchor_head.layers.1.bias"),
+
         ("transformer.decoder.query_scale.layers.0.weight", "decoder.query_scale.layers.0.weight"),
         ("transformer.decoder.query_scale.layers.0.bias", "decoder.query_scale.layers.0.bias"),
         ("transformer.decoder.query_scale.layers.1.weight", "decoder.query_scale.layers.1.weight"),
         ("transformer.decoder.query_scale.layers.1.bias", "decoder.query_scale.layers.1.bias"),
+
         ("transformer.decoder.layers.0.ca_qpos_proj.weight", "decoder.layers.0.ca_qpos_proj.weight"),
         ("transformer.decoder.layers.0.ca_qpos_proj.bias", "decoder.layers.0.ca_qpos_proj.bias"),
     ]
 )
-
 
 def rename_key(state_dict, old, new):
     val = state_dict.pop(old)
@@ -256,8 +291,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     logger.info(f"Converting model {model_name}...")
 
     # load original model from torch hub
-    dab_detr = torch.hub.load("DeppMeng/ConditionalDETR", model_name, pretrained=True).eval()
-    state_dict = dab_detr.state_dict()
+    state_dict = torch.load("/Users/davidhajdu/Desktop/checkpoint.pth", map_location=torch.device('cpu'))['model']
     # rename keys
     for src, dest in rename_keys:
         if is_panoptic:
@@ -265,9 +299,9 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
         rename_key(state_dict, src, dest)
     state_dict = rename_backbone_keys(state_dict)
     # query, key and value matrices need special treatment
-    read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
+    # read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = "dab_detr.model." if is_panoptic else "model."
+    prefix = "dab_detr.model." if is_panoptic else "" # TODO: model.
     for key in state_dict.copy().keys():
         if is_panoptic:
             if (
@@ -290,23 +324,31 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
+    model = DABDETRModel(config)  # DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
+    # model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
     # verify our conversion
-    original_outputs = dab_detr(pixel_values)
+    # original_outputs = dab_detr(pixel_values)
     outputs = model(pixel_values)
-    assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
-    if is_panoptic:
-        assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
+    print(outputs)
+    # assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
+    # assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
+    # if is_panoptic:
+    #     assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
 
-    # Save model and image processor
-    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    model.save_pretrained(pytorch_dump_folder_path)
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    # # Save model and image processor
+    # logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
+    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    # model.save_pretrained(pytorch_dump_folder_path)
+    # image_processor.save_pretrained(pytorch_dump_folder_path)
+
+def run():
+    config = DABDETRConfig()
+    model = DABDETRModel(config)
+    # print(model)
+    for n, p in model.named_parameters():
+        print(n, p.shape)
 
 
 if __name__ == "__main__":
@@ -316,10 +358,11 @@ if __name__ == "__main__":
         "--model_name",
         default="dab_detr_resnet50",
         type=str,
-        help="Name of the CONDITIONAL_DETR model you'd like to convert.",
+        help="Name of the DAB_DETR model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    #run()

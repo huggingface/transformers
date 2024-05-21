@@ -5658,10 +5658,10 @@ if TYPE_CHECKING:
             ConditionalDetrFeatureExtractor,
             ConditionalDetrImageProcessor,
         )
-        from .models.dab_detr import (
+        # from .models.dab_detr import (
+        #    DABDETRFeatureExtractor, DeiTImageProcessor
            
-           
-        )
+        # )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import (
             DeformableDetrFeatureExtractor,

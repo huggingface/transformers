@@ -144,6 +144,7 @@ class DABDETRConfig(PretrainedConfig):
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
+        num_target_classes=91,
         num_queries=300,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -154,7 +155,7 @@ class DABDETRConfig(PretrainedConfig):
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         is_encoder_decoder=True,
-        activation_function="relu",
+        activation_function="prelu",
         d_model=256,
         dropout=0.1,
         attention_dropout=0.0,
@@ -180,14 +181,19 @@ class DABDETRConfig(PretrainedConfig):
         query_dim=4,
         bbox_embed_diff_each_layer=False,
         random_refpoints_xy=False,
-        decoder_query_dim=2,
+        # todo simple querty dim
+        decoder_query_dim=4,
         decoder_keep_query_pos=False,
         query_scale_type='cond_elewise',
-        decoder_modulate_hw_attn=False,
+        decoder_modulate_hw_attn=True,
         decoder_bbox_embed_diff_each_layer=False,
         decoder_num_patterns=0,
         decoder_normalize_before=False,
         decoder_nhead=8,
+        hidden_dim=256,
+        normalize_before=False,
+        return_intermediate=False,
+        iter_update=True,
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
@@ -255,19 +261,24 @@ class DABDETRConfig(PretrainedConfig):
         self.cls_loss_coefficient = cls_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
-        self.focal_alpha = focal_alpha,
-        self.rm_self_attn_decoder = rm_self_attn_decoder,
-        self.query_dim = query_dim,
-        self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer,
-        self.random_refpoints_xy = random_refpoints_xy,
+        self.focal_alpha = focal_alpha
+        self.rm_self_attn_decoder = rm_self_attn_decoder
+        self.query_dim = query_dim
+        self.bbox_embed_diff_each_layer = bbox_embed_diff_each_layer
+        self.random_refpoints_xy = random_refpoints_xy
         self.query_scale_type = query_scale_type
-        self.decoder_query_dim = decoder_query_dim,
-        self.decoder_keep_query_pos = decoder_keep_query_pos,
-        self.decoder_modulate_hw_attn = decoder_modulate_hw_attn,
-        self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer,
-        self.decoder_num_patterns = decoder_num_patterns,
-        self.decoderr_normalize_before = decoder_normalize_before,
-        self.decoder_nhead = decoder_nhead,
+        self.decoder_query_dim = decoder_query_dim
+        self.decoder_keep_query_pos = decoder_keep_query_pos
+        self.decoder_modulate_hw_attn = decoder_modulate_hw_attn
+        self.decoder_bbox_embed_diff_each_layer = decoder_bbox_embed_diff_each_layer
+        self.decoder_num_patterns = decoder_num_patterns
+        self.decoder_normalize_before = decoder_normalize_before
+        self.decoder_nhead = decoder_nhead
+        self.hidden_dim = hidden_dim
+        self.normalize_before = normalize_before
+        self.return_intermediate = return_intermediate
+        self.num_target_classes = num_target_classes
+        self.iter_update = iter_update
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
