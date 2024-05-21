@@ -797,7 +797,7 @@ class WandbCallback(TrainerCallback):
             except AttributeError:
                 logger.info("Could not log the number of model parameters in Weights & Biases.")
 
-            # log the initial model and architecture to an artifact
+            # log the initial model architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
                 model_name = (
                     f"model-{self._wandb.run.id}"
