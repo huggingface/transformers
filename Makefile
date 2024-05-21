@@ -1,4 +1,4 @@
-.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples
+.PHONY: deps_table_update modified_only_fixup extra_style_checks quality style fixup fix-copies test test-examples benchmark
 
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
@@ -95,6 +95,11 @@ test:
 
 test-examples:
 	python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/
+
+# Run benchmark
+
+benchmark:
+	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 # Run tests for SageMaker DLC release
 
