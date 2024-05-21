@@ -60,7 +60,6 @@ if is_torch_available():
         ImageBindVisionModel,
         ImageBindVisionModelWithProjection,
     )
-    from transformers.models.imagebind.modeling_imagebind import IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -75,7 +74,7 @@ class ImageBindTextModelTester:
         parent,
         batch_size=12,
         seq_length=7,
-        is_training=True,
+        is_training=False,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
@@ -216,13 +215,29 @@ class ImageBindTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="ImageBindTextModel has no loss in its output")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
+    # override as the `logit_scale` parameter initilization is different for IMAGEBIND
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip(reason="ImageBindTextModel has no loss in its output")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "text_postprocessor.log_logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(config.logit_scale_init_value),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -402,16 +417,16 @@ class ImageBindVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindVisionModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "vision_projection"))
 
 
 class ImageBindAudioModelTester:
@@ -422,7 +437,7 @@ class ImageBindAudioModelTester:
         patch_size=8,
         stride=8,
         num_channels=1,
-        is_training=True,
+        is_training=False,
         num_mel_bins=32,
         target_len=48,
         hidden_size=32,
@@ -430,6 +445,7 @@ class ImageBindAudioModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         mlp_ratio=1.0,
+        add_kv_bias=True,
         logit_scale_init_value=20.0,
         learnable_logit_scale=False,
         scope=None,
@@ -447,15 +463,18 @@ class ImageBindAudioModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
+        self.add_kv_bias = add_kv_bias
         self.logit_scale_init_value = logit_scale_init_value
         self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
         # In audio model the mel-spectogram image size is based on the number of mel bins and the target length
-        patches_along_height_dim = ((num_mel_bins - patch_size) // stride) + 1
-        patches_along_width_dim = ((target_len - patch_size) // stride) + 1
+        patches_along_height_dim = int((num_mel_bins - patch_size) / stride + 1)
+        patches_along_width_dim = int((target_len - patch_size) / stride + 1)
         num_patches = patches_along_height_dim * patches_along_width_dim
-        self.seq_length = num_patches + 1
+
+        self.encoder_seq_length = num_patches + 1
+        self.key_length = num_patches + 1 if not add_kv_bias else num_patches + 2
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_channels, self.num_mel_bins, self.target_len])
@@ -475,6 +494,7 @@ class ImageBindAudioModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             mlp_ratio=self.mlp_ratio,
+            add_kv_bias=self.add_kv_bias,
             logit_scale_init_value=self.logit_scale_init_value,
             learnable_logit_scale=self.learnable_logit_scale,
         )
@@ -485,7 +505,9 @@ class ImageBindAudioModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_features)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size)
+        )
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_features):
@@ -494,7 +516,9 @@ class ImageBindAudioModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_features)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size)
+        )
         self.parent.assertEqual(result.audio_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
@@ -575,47 +599,55 @@ class ImageBindAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindAudioModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindAudioModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "audio_projection"))
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindTextModelWithProjection.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+        self.assertTrue(hasattr(model, "audio_projection"))
 
 
 class ImageBindModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, audio_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
+        if audio_kwargs is None:
+            audio_kwargs = {}
 
         self.parent = parent
         self.text_model_tester = ImageBindTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = ImageBindVisionModelTester(parent, **vision_kwargs)
+        self.audio_model_tester = ImageBindAudioModelTester(parent, **audio_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        audio_config, input_features = self.audio_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, pixel_values, input_features
 
     def get_config(self):
-        return ImageBindConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return ImageBindConfig(
+            self.text_model_tester.get_config().to_dict(),
+            self.vision_model_tester.get_config().to_dict(),
+            self.audio_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_text_vision_pair(self, config, input_ids, attention_mask, pixel_values):
         model = ImageBindModel(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -623,13 +655,25 @@ class ImageBindModelTester:
             result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
         )
 
+    def create_and_check_audio_vision_pair(self, config, input_features, pixel_values):
+        model = ImageBindModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(pixel_values=pixel_values, input_features=input_features)
+        self.parent.assertEqual(
+            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.audio_model_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.vision_model_tester.batch_size)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, pixel_values, input_features = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
+            "input_features": input_features,
             "return_loss": True,
         }
         return config, inputs_dict
@@ -638,6 +682,7 @@ class ImageBindModelTester:
 @require_torch
 class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ImageBindModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": ImageBindModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -677,7 +722,7 @@ class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
+                    if name == "text_postprocessor.log_logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
                             np.log(1 / 0.07),
@@ -759,9 +804,9 @@ class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

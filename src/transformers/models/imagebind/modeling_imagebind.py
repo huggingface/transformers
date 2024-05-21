@@ -253,11 +253,11 @@ class ImageBindOutput(ModelOutput):
     logits_per_image: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     logits_per_audio: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
     audio_embeds: torch.FloatTensor = None
-    text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+    text_model_output: BaseModelOutputWithPooling = None
     audio_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
@@ -811,6 +811,11 @@ class ImageBindPreTrainedModel(PreTrainedModel):
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+        elif isinstance(module, ImageBindAudioModelWithProjection):
+            nn.init.normal_(
+                module.audio_projection.weight,
+                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -885,30 +890,29 @@ IMAGEBIND_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-# TODO: add inputs doctrings for remaining modalities (audio, depth, thermal, IMU)
 IMAGEBIND_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
-        TODO
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, target_len)`):
+            Input features. Padding will be ignored by default should you provide it. Input features can be obtained
+            using [`AutoFeatureExtractor`]. See [`ImageBindFeatureExtractor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-IMAGEBIND_DEPTH_INPUTS_DOCSTRING = r"""
-    Args:
-        TODO
-"""
-
-IMAGEBIND_THERMAL_INPUTS_DOCSTRING = r"""
-    Args:
-        TODO
-"""
-
-IMAGEBIND_IMU_INPUTS_DOCSTRING = r"""
-    Args:
-        TODO
-"""
-
-# TODO: update inputs docstring with remaining modalities
 IMAGEBIND_INPUTS_DOCSTRING = r"""
     Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`ImageBindImageProcessor.__call__`] for details.
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, target_len)`):
+            Input features. Padding will be ignored by default should you provide it. Input features can be obtained
+            using [`AutoFeatureExtractor`]. See [`ImageBindFeatureExtractor.__call__`] for details.
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -929,9 +933,6 @@ IMAGEBIND_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`ImageBindImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1053,7 +1054,6 @@ class ImageBindEncoder(nn.Module):
         )
 
 
-# TODO: copied from CLIP?
 class ImageBindTextTransformer(nn.Module):
     def __init__(self, config: ImageBindTextConfig):
         super().__init__()
@@ -1144,7 +1144,6 @@ class ImageBindTextTransformer(nn.Module):
         return mask
 
 
-# TODO: copied from CLIP?
 @add_start_docstrings(
     """The text model from ImageBind without any head or projection on top.""",
     IMAGEBIND_START_DOCSTRING,
@@ -1206,7 +1205,6 @@ class ImageBindTextModel(ImageBindPreTrainedModel):
         )
 
 
-# TODO: copied from CLIP?
 class ImageBindVisionTransformer(nn.Module):
     def __init__(self, config: ImageBindVisionConfig):
         super().__init__()
@@ -1272,7 +1270,6 @@ class ImageBindVisionTransformer(nn.Module):
         )
 
 
-# TODO: copied from CLIP?
 @add_start_docstrings(
     """The vision model from ImageBind without any head or projection on top.""",
     IMAGEBIND_START_DOCSTRING,
@@ -1333,7 +1330,6 @@ class ImageBindVisionModel(ImageBindPreTrainedModel):
         )
 
 
-# TODO: copied from CLIP?
 class ImageBindAudioTransformer(nn.Module):
     def __init__(self, config: ImageBindAudioConfig):
         super().__init__()
@@ -1610,7 +1606,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         return image_features
 
-    # TODO: make sure inputs match with ImageBindAudioModel
     @add_start_docstrings_to_model_forward(IMAGEBIND_AUDIO_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
@@ -1672,9 +1667,9 @@ class ImageBindModel(ImageBindPreTrainedModel):
     @replace_return_docstrings(output_type=ImageBindOutput, config_class=ImageBindConfig)
     def forward(
         self,
+        pixel_values: torch.FloatTensor,
         input_features: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        modality: Optional[str] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
@@ -1706,17 +1701,22 @@ class ImageBindModel(ImageBindPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use ImageBind model's config for some fields (if specified) instead of those of vision & text components.
+        # We expect a combination of pixel_values and one of the other inputs i.e. input_features or input_ids should be provided
+        if input_ids is None and input_features is None:
+            raise ValueError("At least one of `input_ids` or `input_features` should be provided.")
+
+        # We expect only one of input_features or input_ids to be provided
+        if input_ids is not None and input_features is not None:
+            raise ValueError("Only one of `input_ids` or `input_features` should be provided.")
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # running the vision model
         image_batch_size = pixel_values.shape[0]
-        other_batch_size = input_features.shape[0]
-
-        other_model, other_projection, other_postprocessor = self._resolve_modality_models(modality)
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1725,8 +1725,22 @@ class ImageBindModel(ImageBindPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if modality == "text":
-            other_outputs = other_model(
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
+        image_embeds = self.vision_postprocessor(image_embeds)
+
+        # If modality input was batched and clipped, reduce embedding over clips dimension
+        if pixel_values.ndim >= 5:
+            image_num_clips = vision_outputs[-1]
+            image_embeds = image_embeds.reshape(image_batch_size, image_num_clips, -1)
+            image_embeds = image_embeds.mean(dim=1)
+
+        # running the text model if input_ids is provided
+        text_embeds = None
+        logits_per_text = None
+        text_outputs = None
+        if input_ids is not None:
+            text_outputs = self.text_model(
                 input_ids=input_features,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -1734,86 +1748,67 @@ class ImageBindModel(ImageBindPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        else:
-            other_outputs = other_model(
+            text_embeds = text_outputs[1]
+            text_embeds = self.text_projection(text_embeds)
+            text_embeds = self.text_postprocessor(text_embeds)
+
+            logits_per_text = torch.matmul(text_embeds, image_embeds.t())
+            logits_per_image = logits_per_text.t()
+
+        # running the audio model if input_features is provided
+        audio_embeds = None
+        logits_per_audio = None
+        audio_outputs = None
+        if input_features is not None:
+            audio_batch_size = input_features.shape[0]
+            audio_outputs = self.audio_model(
                 input_features,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            audio_embeds = audio_outputs[1]
+            audio_embeds = self.audio_projection(audio_embeds)
+            audio_embeds = self.audio_postprocessor(audio_embeds)
 
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
+            if input_features.ndim >= 5:
+                num_clips = audio_outputs[-1]
+                audio_embeds = audio_embeds.reshape(audio_batch_size, num_clips, -1)
+                audio_embeds = audio_embeds.mean(dim=1)
 
-        other_embeds = other_outputs[1]
-        other_embeds = other_projection(other_embeds)
-
-        # normalized features: postprocessor performs normalization and logit scaling
-        image_embeds = self.vision_postprocessor(image_embeds)
-        other_embeds = other_postprocessor(other_embeds)
-
-        # If modality input was batched and clipped, reduce embedding over clips dimension
-        if pixel_values.ndim >= 5:
-            image_num_clips = vision_outputs[-1]
-            image_embeds = image_embeds.reshape(image_batch_size, image_num_clips, -1)
-            # Take mean over all clips
-            image_embeds = image_embeds.mean(dim=1)
-        if input_features.ndim >= 5:
-            other_num_clips = other_outputs[-1]
-            other_embeds = other_embeds.reshape(other_batch_size, other_num_clips, -1)
-            other_embeds = other_embeds.mean(dim=1)
-
-        # cosine similarity as logits
-        logits_per_other = torch.matmul(other_embeds, image_embeds.t())
-        logits_per_image = logits_per_other.t()
+            logits_per_audio = torch.matmul(audio_embeds, image_embeds.t())
+            logits_per_image = logits_per_audio.t()
 
         loss = None
         if return_loss:
-            loss = imagebind_loss(logits_per_other)
+            loss = imagebind_loss(logits_per_text) if logits_per_text is not None else imagebind_loss(logits_per_audio)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_other, other_embeds, image_embeds, other_outputs, vision_outputs)
+            output = (
+                logits_per_image,
+                logits_per_text,
+                logits_per_audio,
+                image_embeds,
+                text_embeds,
+                audio_embeds,
+                vision_outputs,
+                text_outputs,
+                audio_outputs,
+            )
             return ((loss,) + output) if loss is not None else output
-
-        output_kwargs = self._resolve_output_keys(modality, logits_per_other, other_embeds, other_outputs)
 
         return ImageBindOutput(
             loss=loss,
             logits_per_image=logits_per_image,
+            logits_per_text=logits_per_text,
+            logits_per_audio=logits_per_audio,
             image_embeds=image_embeds,
+            text_embeds=text_embeds,
+            audio_embeds=audio_embeds,
             vision_model_output=vision_outputs,
-            **output_kwargs,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
         )
-
-    def _resolve_modality_models(self, modality: str):
-        if modality == "text":
-            model = self.text_model
-            projection = self.text_projection
-            postprocessor = self.text_postprocessor
-        elif modality == "vision":
-            model = self.vision_model
-            projection = self.visual_projection
-            postprocessor = self.vision_postprocessor
-        elif modality == "audio":
-            model = self.audio_model
-            projection = self.audio_projection
-            postprocessor = self.audio_postprocessor
-        else:
-            raise ValueError(f"`modality` is expected to be in `['text', 'vision', 'audio']` but got" f" {modality}")
-        return model, projection, postprocessor
-
-    def _resolve_output_keys(self, modality: str, logits, embeds, model_outputs):
-        output_kwargs = {}
-        if modality == "vision":
-            # Different naming pattern
-            output_kwargs["logits_per_image"] = logits
-            output_kwargs["image_embeds"] = embeds
-            output_kwargs["vision_model_output"] = model_outputs
-        else:
-            output_kwargs[f"logits_per_{modality}"] = logits
-            output_kwargs[f"{modality}_embeds"] = embeds
-            output_kwargs[f"{modality}_model_output"] = model_outputs
-        return output_kwargs
 
 
 @add_start_docstrings(
