@@ -37,7 +37,7 @@ jobs:
         steps:
             - checkout
             - run: uv pip install -U -e .
-            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo &GIT_COMMIT_MESSAGE
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
