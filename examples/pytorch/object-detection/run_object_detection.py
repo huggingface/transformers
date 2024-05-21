@@ -48,7 +48,8 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.42.0.dev0")
+
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
 
@@ -244,9 +245,7 @@ class DataTrainingArguments:
     )
     image_square_size: Optional[int] = field(
         default=600,
-        metadata={
-            "help": "Image longest size will be resized to this value, then image will be padded to square."
-        },
+        metadata={"help": "Image longest size will be resized to this value, then image will be padded to square."},
     )
     max_train_samples: Optional[int] = field(
         default=None,

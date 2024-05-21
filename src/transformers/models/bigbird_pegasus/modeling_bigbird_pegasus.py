@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch BigBirdPegasus model."""
 
-
 import copy
 import math
 from typing import List, Optional, Tuple, Union

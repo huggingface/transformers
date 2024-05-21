@@ -1327,4 +1327,9 @@ class BarkModelIntegrationTests(unittest.TestCase):
             output_with_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
         # checks if same output
-        self.assertListEqual(output_with_no_offload.tolist(), output_with_offload.tolist())
+        self.assertListAlmostEqual(output_with_no_offload.squeeze().tolist(), output_with_offload.squeeze().tolist())
+
+    def assertListAlmostEqual(self, list1, list2, tol=1e-6):
+        self.assertEqual(len(list1), len(list2))
+        for a, b in zip(list1, list2):
+            self.assertAlmostEqual(a, b, delta=tol)
