@@ -50,5 +50,5 @@ jobs:
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, '[push-ci-image]') }}
+          push: ${{ contains(github.event.head_commit.message, '[push-ci-image]') ||  github.event_name == 'schedule' }}
           tags: huggingface/transformers-${{ matrix.file }}
