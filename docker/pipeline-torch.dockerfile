@@ -1,5 +1,6 @@
 FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
+ARG REF=main
 USER root
 RUN apt-get update &&  apt-get install -y --no-install-recommends libsndfile1-dev espeak-ng time git pkg-config openssh-client git
 ENV VIRTUAL_ENV=/usr/local
