@@ -25,8 +25,13 @@ jobs:
     # Fetch the tests to run
     fetch_tests:
         working_directory: ~/transformers
+        needs: Build pr ci-docker
         docker:
-            - image: huggingface/transformers-quality
+            - image: |
+              if contains(github.event.head_commit.message, '[push-ci-image]')
+                huggingface/transformers-quality-dev
+              else
+                huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
@@ -121,7 +126,11 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: |
+              if contains(github.event.head_commit.message, '[push-ci-image]')
+                huggingface/transformers-quality-dev
+              else
+                huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
