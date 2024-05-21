@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 from ..deprecated._archive_maps import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
-class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
+class ResNet1dConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
