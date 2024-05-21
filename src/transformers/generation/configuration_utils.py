@@ -402,7 +402,7 @@ class GenerationConfig(PushToHubMixin):
                 self.cache_config = cache_config_class()
             elif isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
-        self.return_legacy_cache = kwargs.pop("cache_implementation", True)
+        self.return_legacy_cache = kwargs.pop("return_legacy_cache", True)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
