@@ -34,6 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
+from ..models.jamba import JambaPreTrainedModel
 from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
@@ -1367,6 +1368,16 @@ class GenerationMixin:
             self._cache.reset()
         return self._cache
 
+    def _supports_default_dynamic_cache(self) -> bool:
+        """
+        Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
+        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
+        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
+        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
+        for `HybridMambaAttentionDynamicCache`).
+        """
+        return self._supports_cache_class and not isinstance(self, JambaPreTrainedModel)
+
     def _prepare_special_tokens(
         self,
         generation_config: GenerationConfig,
@@ -1639,7 +1650,7 @@ class GenerationMixin:
             )
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
-        elif generation_config.cache_implementation is None and self._supports_cache_class:
+        elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
             past = model_kwargs.get("past_key_values", None)
             if past is None:
                 model_kwargs["past_key_values"] = DynamicCache()
