@@ -151,7 +151,7 @@ class BackboneMixin:
         self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
 
         # In some timm versions, out_indices reflects the input type of out_indices on the `create_model` call,
-        # in later versions >= 1, it is always a
+        # in later versions >= 1, it is always a tuple
         out_indices = list(self._backbone.feature_info.out_indices)
         out_features = self._backbone.feature_info.module_name()
 
