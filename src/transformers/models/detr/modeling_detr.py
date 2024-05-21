@@ -524,23 +524,7 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
@@ -551,38 +535,8 @@ class DetrAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        position_embeddings = kwargs.pop("position_ebmeddings", None)
-        key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if key_value_position_embeddings is not None and spatial_position_embeddings is not None:
-            raise ValueError(
-                "Cannot specify both key_value_position_embeddings and spatial_position_embeddings. Please use just spatial_position_embeddings"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
-        if key_value_position_embeddings is not None:
-            logger.warning_once(
-                "key_value_position_embeddings has been deprecated and will be removed in v4.34. Please use spatial_position_embeddings instead"
-            )
-            spatial_position_embeddings = key_value_position_embeddings
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -688,7 +642,6 @@ class DetrEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         object_queries: torch.Tensor = None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         """
         Args:
@@ -702,22 +655,6 @@ class DetrEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -787,7 +724,6 @@ class DetrDecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        **kwargs,
     ):
         """
         Args:
@@ -810,22 +746,6 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         residual = hidden_states
 
         # Self Attention
@@ -995,7 +915,6 @@ class DetrEncoder(DetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1022,22 +941,6 @@ class DetrEncoder(DetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1129,7 +1032,6 @@ class DetrDecoder(DetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1167,22 +1069,6 @@ class DetrDecoder(DetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

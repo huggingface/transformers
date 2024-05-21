@@ -68,16 +68,14 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         super().__init__()
         self.dim = dim
         self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
     # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.inv_freq is None:
-            self.inv_freq = 1.0 / (
-                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
-            )
+        self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -541,7 +539,6 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn_2 = False
     _supports_sdpa = False  # we can't compare with eager for now
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)

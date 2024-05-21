@@ -99,6 +99,7 @@ _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
 _galore_torch_available = _is_package_available("galore_torch")
+_lomo_available = _is_package_available("lomo_optim")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -326,6 +327,10 @@ def is_torchvision_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_lomo_available():
+    return _lomo_available
 
 
 def is_pyctcdecode_available():
