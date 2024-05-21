@@ -131,11 +131,7 @@ jobs:
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: |
-                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
-                    huggingface/transformers-quality:dev
-                else
-                    huggingface/transformers-quality
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
