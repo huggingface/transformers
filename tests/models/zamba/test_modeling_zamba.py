@@ -64,7 +64,7 @@ class ZambaModelTester:
         attn_layer_offset=1,
         attn_layer_period=8,
         num_attention_heads=4,
-        num_key_value_heads=2,
+        num_key_value_heads=4,
         n_mamba_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
