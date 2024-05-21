@@ -168,7 +168,7 @@ class DiffConverterTransformer(CSTTransformer):
                     return self.class_mapping[assign]
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-            if "modeling_" in full_statement:
+            if re.search(r'transformers\.models\..*\.modeling_.*' , full_statement):
                 return updated_node.with_changes(body=[])
 
         return updated_node
