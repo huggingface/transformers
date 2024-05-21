@@ -1,4 +1,4 @@
-# Zamba
+# Zamba [add link to img. Change Zamba-7B-v1 to Zamba-v1?]
 
 Zamba is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
