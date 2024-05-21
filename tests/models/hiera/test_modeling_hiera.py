@@ -52,8 +52,6 @@ if is_torch_available():
     from torch.nn import functional as F
 
     from transformers import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
-    from transformers.models.hiera.modeling_hiera import HIERA_PRETRAINED_MODEL_ARCHIVE_LIST
-
 
 if is_vision_available():
     from PIL import Image
@@ -681,7 +679,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in HIERA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in ["EduardoPacheco/hiera-tiny-224"]: 
             model = HieraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

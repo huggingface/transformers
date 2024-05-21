@@ -285,18 +285,14 @@ def convert_hiera_checkpoint(args):
 
     expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
 
-    if verify_pixel_values:
-        input_image = prepare_img()
+    input_image = prepare_img()
 
-        inputs = image_processor(images=input_image, return_tensors="pt")
-        expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
-        assert torch.allclose(inputs.pixel_values, expected_pixel_values, atol=1e-4)
-        print("Pixel values look good!")
-        print(f"{inputs.pixel_values[0, :3, :3, :3]=}")
-    else:
-        print("Converted without verifying pixel values")
-        inputs = {"pixel_values": torch.rand((1, 3, 224, 224))}
-        expected_pixel_values = inputs["pixel_values"]
+    inputs = image_processor(images=input_image, return_tensors="pt")
+    expected_pixel_values = original_image_preprocessor(input_image).unsqueeze(0)
+    assert torch.allclose(inputs.pixel_values, expected_pixel_values, atol=1e-4)
+    print("Pixel values look good!")
+    print(f"{inputs.pixel_values[0, :3, :3, :3]=}")
+
 
     # If is MAE we pass a noise to generate a random mask
     mask_spatial_shape = [
@@ -309,28 +305,26 @@ def convert_hiera_checkpoint(args):
     outputs = model(**inputs) if not mae_model else model(noise=noise, **inputs)
     # original implementation returns logits.softmax(dim=-1)
 
-    if verify_logits:
-        if base_model:
-            expected_prob, expected_intermediates = original_model(expected_pixel_values, return_intermediates=True)
-            expected_last_hidden = expected_intermediates[-1]
-            batch_size, _, _, hidden_dim = expected_last_hidden.shape
-            expected_last_hidden = expected_last_hidden.reshape(batch_size, -1, hidden_dim)
-            assert torch.allclose(outputs.last_hidden_state, expected_last_hidden, atol=1e-3)
-            print("Base Model looks good as hidden states match original implementation!")
-            print(f"{outputs.last_hidden_state[0, :3, :3]=}")
-        elif mae_model:
-            # get mask from noise to be able to compare outputs
-            mask, _ = model.hiera.embeddings.patch_embeddings.random_masking(expected_pixel_values, noise)
-            expected_loss, _, _, _ = original_model(expected_pixel_values, mask=mask.bool())
-            assert torch.allclose(outputs.loss, expected_loss, atol=1e-3)
-            print("MAE Model looks good as loss matches original implementation!")
-        else:
-            expected_prob = original_model(expected_pixel_values)
-            assert torch.allclose(outputs.logits.softmax(dim=-1), expected_prob, atol=1e-3)
-            print("Classifier looks good as probs match original implementation")
-            print(f"{outputs.logits[:, :5]=}")
+    if base_model:
+        expected_prob, expected_intermediates = original_model(expected_pixel_values, return_intermediates=True)
+        expected_last_hidden = expected_intermediates[-1]
+        batch_size, _, _, hidden_dim = expected_last_hidden.shape
+        expected_last_hidden = expected_last_hidden.reshape(batch_size, -1, hidden_dim)
+        assert torch.allclose(outputs.last_hidden_state, expected_last_hidden, atol=1e-3)
+        print("Base Model looks good as hidden states match original implementation!")
+        print(f"{outputs.last_hidden_state[0, :3, :3]=}")
+    elif mae_model:
+        # get mask from noise to be able to compare outputs
+        mask, _ = model.hiera.embeddings.patch_embeddings.random_masking(expected_pixel_values, noise)
+        expected_loss, _, _, _ = original_model(expected_pixel_values, mask=mask.bool())
+        assert torch.allclose(outputs.loss, expected_loss, atol=1e-3)
+        print("MAE Model looks good as loss matches original implementation!")
     else:
-        print("Converted without verifying logits")
+        expected_prob = original_model(expected_pixel_values)
+        assert torch.allclose(outputs.logits.softmax(dim=-1), expected_prob, atol=1e-3)
+        print("Classifier looks good as probs match original implementation")
+        print(f"{outputs.logits[:, :5]=}")
+
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
@@ -386,11 +380,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mae-model", action="store_true", help="Whether to convert to MAE checkpoint to HieraForPreTraining."
-    )
-    parser.add_argument(
-        "--verify-pixel-values",
-        action="store_true",
-        help="Whether to verify the pixel values of the input image.",
     )
 
     args = parser.parse_args()

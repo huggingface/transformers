@@ -29,7 +29,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_hiera"] = [
-        "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "HieraForImageClassification",
         "HieraForPreTraining",
         "HieraBackbone",
@@ -47,7 +46,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_hiera import (
-            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
             HieraBackbone,
             HieraForImageClassification,
             HieraForPreTraining,

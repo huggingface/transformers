@@ -22,10 +22,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 logger = logging.get_logger(__name__)
 
-HIERA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EduardoPacheco/hiera-tiny-224": "https://huggingface.co/EduardoPacheco/hiera-tiny-224/resolve/main/config.json",
-}
-
 
 class HieraConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
@@ -88,7 +84,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             Depth of the decoder for MAE pretraining.
         decoder_num_heads (`int`, *optional*):
             Number of attention heads in each layer of the decoder for MAE pretraining.
-        norm_pix_loss (`bool`, *optional*, defaults to `True`):
+        normalize_pixel_loss (`bool`, *optional*, defaults to `True`):
             Whether to normalize the pixel loss by the number of pixels.
         mask_ratio (`float`, *optional*, defaults to 0.6):
             The ratio of masked tokens in the input.
@@ -148,7 +144,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         decoder_hidden_size=None,
         decoder_depth=None,
         decoder_num_heads=None,
-        norm_pix_loss=True,
+        normalize_pixel_loss=True,
         mask_ratio=0.6,
         out_features=None,
         out_indices=None,
@@ -190,7 +186,7 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.decoder_depth = decoder_depth
         self.decoder_num_heads = decoder_num_heads
-        self.norm_pix_loss = norm_pix_loss
+        self.normalize_pixel_loss = normalize_pixel_loss
         self.mask_ratio = mask_ratio
         # we set the hidden_size attribute in order to make Hiera work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model

@@ -2131,7 +2131,6 @@ else:
     )
     _import_structure["models.hiera"].extend(
         [
-            "HIERA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "HieraBackbone",
             "HieraForImageClassification",
             "HieraForPreTraining",
@@ -6535,7 +6534,6 @@ if TYPE_CHECKING:
             GroupViTVisionModel,
         )
         from .models.hiera import (
-            HIERA_PRETRAINED_MODEL_ARCHIVE_LIST,
             HieraBackbone,
             HieraForImageClassification,
             HieraForPreTraining,

@@ -58,12 +58,6 @@ _IMAGE_CLASS_CHECKPOINT = "EduardoPacheco/hiera-tiny-224-in1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EduardoPacheco/hiera-tiny-224",
-    # See all Hiera models at https://huggingface.co/models?filter=hiera
-]
-
-
 @dataclass
 class HieraEncoderOutput(ModelOutput):
     """
@@ -221,11 +215,6 @@ def conv_nd(n: int) -> nn.Module:
     return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
 
 
-# Taken from https://github.com/facebookresearch/hiera/blob/main/hiera/hiera_utils.py#L81
-def do_pool(x: torch.Tensor, stride: int) -> torch.Tensor:
-    # Refer to `Unroll` to see how this performs a maxpool-Nd
-    return x.view(x.shape[0], stride, -1, x.shape[-1]).max(dim=1).values
-
 
 class HieraPatchEmbeddings(nn.Module):
     """
@@ -317,8 +306,7 @@ class HieraPatchEmbeddings(nn.Module):
         noise: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        height, width = pixel_values.shape[-2:]
+        _, num_channels, height, width = pixel_values.shape
 
         if num_channels != self.num_channels:
             raise ValueError(
@@ -439,11 +427,7 @@ class HieraEmbeddings(nn.Module):
         noise: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
-        if len(self.tokens_spatial_shape) == 2:
-            batch_size, num_channels, height, width = pixel_values.shape
-        else:
-            batch_size, num_channels, depth, height, width = pixel_values.shape
-
+        height, width = pixel_values.shape[-2:]
         embeddings, mask, ids_restore = self.patch_embeddings(
             pixel_values, noise=noise, interpolate_pos_encoding=interpolate_pos_encoding
         )
@@ -505,7 +489,7 @@ class HieraMaskUnitAttention(nn.Module):
         query, key, value = qkv.unbind(0)
 
         if self.query_stride > 1:
-            # Refer to Unroll to see how this performs a maxpool-Nd
+            # Refer to unroll to see how this performs a maxpool-Nd
             query = query.view(batch_size, self.num_heads, num_windows, self.query_stride, -1, self.head_dim)
             query = query.max(dim=3).values
 
@@ -613,7 +597,7 @@ class HieraLayer(nn.Module):
         hidden_states_norm = self.layernorm_before(hidden_states)
         if self.dim != self.dim_out:
             hidden_states = self.proj(hidden_states_norm)
-            # Refer to `HieraUnroll` to see how this performs a maxpool-Nd
+            # Refer to unroll to see how this performs a maxpool-Nd
             hidden_states = hidden_states.view(batch_size, self.query_stride, -1, self.dim_out).max(dim=1).values
 
         (hidden_states_norm, attn_weights) = self.attn(
@@ -682,10 +666,18 @@ class HieraStage(nn.Module):
 def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shape: List[int]) -> torch.Tensor:
     """
     Restore spatial organization by undoing windowed organization of mask units.
+
+    Args:
+        hidden_states (torch.Tensor): The hidden states tensor of shape [batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size].
+        shape (List[int]): The original shape of the hidden states tensor before windowing.
+        mask_unit_shape (List[int]): The shape of the mask units used for windowing.
+
+    Returns:
+        torch.Tensor: The restored hidden states tensor of shape [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size].
     """
     num_dims = len(shape)
     batch_size, hidden_size = hidden_states.shape[0], hidden_states.shape[-1]
-    # From: [batch_size, num_mask_unit_height*num_#mask_unit_wdith, mask_unit_height, mask_unit_width, hidden_size]
+    # From: [batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     num_mask_units = [s // mu for s, mu in zip(shape, mask_unit_shape)]
     hidden_states = hidden_states.view(batch_size, *num_mask_units, *mask_unit_shape, hidden_size)
@@ -693,12 +685,9 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     # From: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size]
     permute = (
-        [0]
-        + sum(
-            [list(p) for p in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims))],
-            [],
-        )
-        + [len(hidden_states.shape) - 1]
+        [0] +
+        [item for pair in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims)) for item in pair] +
+        [len(hidden_states.shape) - 1]
     )
     hidden_states = hidden_states.permute(permute).reshape(batch_size, *shape, hidden_size)
 
@@ -785,14 +774,11 @@ class HieraEncoder(nn.Module):
             # Example in 2d:
             # Input: [batch_size, stride, stride, seq_len//(stride*stride), mask_unit_height, mask_unit_width, hidden_size]
             # Output: [batch_size, seq_len//(stride*stride), stride, mask_unit_height, stride, mask_unit_width, hidden_size]
-            L = len(hidden_states.shape)
+            hidden_state_dims = len(hidden_states.shape)
             permute = (
-                [0, 1 + num_dim]
-                + sum(
-                    [list(p) for p in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, L - 1))],
-                    [],
-                )
-                + [L - 1]
+                [0, 1 + num_dim] +
+                [item for pair in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, hidden_state_dims - 1)) for item in pair] +
+                [hidden_state_dims - 1]
             )
             hidden_states = hidden_states.permute(permute)
 
@@ -1313,7 +1299,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         label = pixel_values.unfold(1, size, size).unfold(2, size, size)
         label = label.flatten(1, 2).flatten(2)
         label = label[mask.bool()]
-        if self.config.norm_pix_loss:
+        if self.config.normalize_pixel_loss:
             mean = label.mean(dim=-1, keepdim=True)
             var = label.var(dim=-1, keepdim=True)
             label = (label - mean) / (var + 1.0e-6) ** 0.5
@@ -1330,7 +1316,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         label = label.permute(0, 2, 3, 4, 5, 6, 1)
         label = label.flatten(1, 3).flatten(2)
         label = label[mask.bool()]
-        if self.config.norm_pix_loss:
+        if self.config.normalize_pixel_loss:
             mean = label.mean(dim=-1, keepdim=True)
             var = label.var(dim=-1, keepdim=True)
             label = (label - mean) / (var + 1.0e-6) ** 0.5
