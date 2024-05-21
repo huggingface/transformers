@@ -175,7 +175,7 @@ _deps = [
     "tensorflow-probability<2.16",
     "tf2onnx",
     "timeout-decorator",
-    "timm",
+    "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",
     "torchaudio",

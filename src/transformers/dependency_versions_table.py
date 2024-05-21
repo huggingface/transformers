@@ -80,7 +80,7 @@ deps = {
     "tensorflow-probability": "tensorflow-probability<2.16",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
-    "timm": "timm",
+    "timm": "timm<=0.9.16",
     "tokenizers": "tokenizers>=0.19,<0.20",
     "torch": "torch",
     "torchaudio": "torchaudio",
