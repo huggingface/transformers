@@ -33,14 +33,11 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: huggingface/transformers-quality
-
-        environment:
-            GIT_COMMIT_MESSAGE: << pipeline.trigger_parameters.github_app.commit_title >>
-        
         parallelism: 1
         steps:
             - checkout
             - run: uv pip install -U -e .
+            - run: echo $(git show -s --format=%s)
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
