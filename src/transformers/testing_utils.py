@@ -923,6 +923,8 @@ def require_deterministic_for_xpu(test_case):
         return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
             test_case
         )
+    else:
+        return test_case
 
 
 def require_torch_tf32(test_case):
