@@ -113,7 +113,7 @@ For multiple turns conversation change the prompt format to:
 
 ### Mixed Media Mode
 
-The model can also generate from an interleaved image-video inputs. However note, that it was not trained in interlaved image-video stting whihc might affect the performance. Below is an example usage for mixed media input, add the folling lines to the above code snippet: 
+The model can also generate from an interleaved image-video inputs. However note, that it was not trained in interleaved image-video setting which might affect the performance. Below is an example usage for mixed media input, add the following lines to the above code snippet: 
 
 ```python
 from PIL import Image
