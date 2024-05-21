@@ -102,4 +102,6 @@
     title: Perplejidad de los modelos de longitud fija
   - local: pipeline_webserver
     title: Flujo de trabajo para la inferencia de los servidores web
+  - local: model_memory_anatomy
+    title: Anatomía del entrenamiento de los modelos
   title: Guías conceptuales

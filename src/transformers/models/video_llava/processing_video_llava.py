@@ -42,7 +42,7 @@ class VideoLlavaProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "VideoLlavaImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)

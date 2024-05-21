@@ -41,7 +41,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GemmaForCausalLM, GemmaForSequenceClassification, GemmaModel, GemmaTokenizer
+    from transformers import (
+        GemmaForCausalLM,
+        GemmaForSequenceClassification,
+        GemmaForTokenClassification,
+        GemmaModel,
+        GemmaTokenizer,
+    )
 
 
 class GemmaModelTester:
@@ -284,12 +290,17 @@ class GemmaModelTester:
 
 @require_torch
 class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (GemmaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GemmaModel,
             "text-classification": GemmaForSequenceClassification,
+            "token-classification": GemmaForTokenClassification,
             "text-generation": GemmaForCausalLM,
             "zero-shot": GemmaForSequenceClassification,
         }
@@ -369,6 +380,22 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Gemma,llama->Gemma
+    def test_Gemma_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = GemmaForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Gemma buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
