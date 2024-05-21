@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.41.0.dev0"
+__version__ = "4.42.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -1160,6 +1160,7 @@ else:
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
+    _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2030,6 +2031,7 @@ else:
         [
             "GemmaForCausalLM",
             "GemmaForSequenceClassification",
+            "GemmaForTokenClassification",
             "GemmaModel",
             "GemmaPreTrainedModel",
         ]
@@ -2287,6 +2289,7 @@ else:
             "LlamaForCausalLM",
             "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
+            "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
         ]
@@ -2434,12 +2437,19 @@ else:
         [
             "MistralForCausalLM",
             "MistralForSequenceClassification",
+            "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
-        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+        [
+            "MixtralForCausalLM",
+            "MixtralForSequenceClassification",
+            "MixtralForTokenClassification",
+            "MixtralModel",
+            "MixtralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -2713,6 +2723,7 @@ else:
         [
             "PersimmonForCausalLM",
             "PersimmonForSequenceClassification",
+            "PersimmonForTokenClassification",
             "PersimmonModel",
             "PersimmonPreTrainedModel",
         ]
@@ -2809,6 +2820,7 @@ else:
         [
             "Qwen2ForCausalLM",
             "Qwen2ForSequenceClassification",
+            "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
         ]
@@ -2817,6 +2829,7 @@ else:
         [
             "Qwen2MoeForCausalLM",
             "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
         ]
@@ -3065,6 +3078,7 @@ else:
         [
             "StableLmForCausalLM",
             "StableLmForSequenceClassification",
+            "StableLmForTokenClassification",
             "StableLmModel",
             "StableLmPreTrainedModel",
         ]
@@ -3073,6 +3087,7 @@ else:
         [
             "Starcoder2ForCausalLM",
             "Starcoder2ForSequenceClassification",
+            "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
         ]
@@ -3243,7 +3258,6 @@ else:
     _import_structure["models.video_llava"].extend(
         [
             "VideoLlavaForConditionalGeneration",
-            "VideoLlavaImageProcessor",
             "VideoLlavaPreTrainedModel",
             "VideoLlavaProcessor",
         ]
@@ -5759,6 +5773,7 @@ if TYPE_CHECKING:
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
+        from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -6488,6 +6503,7 @@ if TYPE_CHECKING:
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
+            GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
         )
@@ -6685,6 +6701,7 @@ if TYPE_CHECKING:
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
+            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )
@@ -6800,12 +6817,14 @@ if TYPE_CHECKING:
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
+            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )
@@ -7024,6 +7043,7 @@ if TYPE_CHECKING:
         from .models.persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )
@@ -7098,12 +7118,14 @@ if TYPE_CHECKING:
         from .models.qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
         )
@@ -7305,12 +7327,14 @@ if TYPE_CHECKING:
         from .models.stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )
         from .models.starcoder2 import (
             Starcoder2ForCausalLM,
             Starcoder2ForSequenceClassification,
+            Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )
@@ -7437,7 +7461,6 @@ if TYPE_CHECKING:
         )
         from .models.video_llava import (
             VideoLlavaForConditionalGeneration,
-            VideoLlavaImageProcessor,
             VideoLlavaPreTrainedModel,
             VideoLlavaProcessor,
         )

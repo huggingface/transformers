@@ -443,11 +443,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     return_tensors="pt",
                 )
             else:
-                processed = self.feature_extractor(
-                    inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                )
-                if stride is None:
-                    extra["segment_size"] = len(inputs)
+                if self.type == "seq2seq_whisper" and stride is None:
+                    processed = self.feature_extractor(
+                        inputs,
+                        sampling_rate=self.feature_extractor.sampling_rate,
+                        return_tensors="pt",
+                        return_token_timestamps=True,
+                    )
+                    extra["num_frames"] = processed.pop("num_frames")
+                else:
+                    processed = self.feature_extractor(
+                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                    )
 
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
@@ -461,11 +468,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
-        segment_size = model_inputs.pop("segment_size", None)
+        num_frames = model_inputs.pop("num_frames", None)
         is_last = model_inputs.pop("is_last")
 
-        if stride is not None and segment_size is not None:
-            raise ValueError("segment_size must be used only when stride is None")
+        if stride is not None and num_frames is not None:
+            raise ValueError("num_frames must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
             encoder = self.model.get_encoder()
@@ -495,10 +502,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
 
                     else:
-                        if isinstance(segment_size, int):
-                            generate_kwargs["num_frames"] = segment_size // self.feature_extractor.hop_length
-                        else:
-                            generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
+                        generate_kwargs["num_frames"] = num_frames
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs
