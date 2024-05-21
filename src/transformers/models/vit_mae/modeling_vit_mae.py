@@ -652,7 +652,7 @@ VIT_MAE_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interpolate_pos_encoding (`bool`, default `False`):
+        interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
 """
@@ -943,7 +943,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values.
-            interpolate_pos_encoding (`bool`, default `False`):
+            interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:
@@ -979,7 +979,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, default `None`):
+            original_image_size (`Tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
@@ -1029,7 +1029,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
                 Predicted pixel values.
             mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
-            interpolate_pos_encoding (`bool`, default `False`):
+            interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:

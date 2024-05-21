@@ -1225,7 +1225,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         Args:
             patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, default `None`):
+            original_image_size (`Tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
@@ -1270,7 +1270,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
                 Predicted pixel values.
             mask (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor indicating which patches are masked (1) and which are not (0).
-            interpolate_pos_encoding (`bool`, default `False`):
+            interpolate_pos_encoding (`bool`, *optional*, default `False`):
                 interpolation flag passed during the forward pass.
 
         Returns:
