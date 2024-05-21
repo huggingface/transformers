@@ -384,7 +384,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Cache implementation
         self.cache_implementation = kwargs.pop("cache_implementation", None)
-        self.return_legacy_cache = kwargs.pop("cache_implementation", True)
+        self.return_legacy_cache = kwargs.pop("return_legacy_cache", True)
 
         # Prompt lookup decoding
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
