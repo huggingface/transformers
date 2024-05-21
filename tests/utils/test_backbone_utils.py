@@ -77,17 +77,17 @@ class BackboneUtilsTester(unittest.TestCase):
             verify_out_features_out_indices(["a", "a"], None, ["a"])
 
         # Out indices must be a list or tuple
-        with pytest.raises(ValueError, match="out_indices must be a list or tuple, got <class 'int'>"):
+        with pytest.raises(ValueError, match="out_indices must be a list, got <class 'int'>"):
             verify_out_features_out_indices(None, 0, ["a", "b"])
 
         # Out indices must be a subset of stage names
         with pytest.raises(
-            ValueError, match=r"out_indices must be valid indices for stage_names \['a'\], got \(0, 1\)"
+            ValueError, match=r"out_indices must be valid indices for stage_names \['a'\], got \[0, 1\]"
         ):
             verify_out_features_out_indices(None, (0, 1), ["a"])
 
         # Out indices must contain no duplicates
-        with pytest.raises(ValueError, match=r"out_indices must not contain any duplicates, got \(0, 0\)"):
+        with pytest.raises(ValueError, match=r"out_indices must not contain any duplicates, got \[0, 0\]"):
             verify_out_features_out_indices(None, (0, 0), ["a"])
 
         # Out features and out indices must be the same length
@@ -110,7 +110,7 @@ class BackboneUtilsTester(unittest.TestCase):
             verify_out_features_out_indices(["b", "a"], (0, 1), ["a", "b"])
 
         with pytest.raises(
-            ValueError, match=r"out_indices must be in the same order as stage_names, expected \(-2, 1\) got \(1, -2\)"
+            ValueError, match=r"out_indices must be in the same order as stage_names, expected \[-2, 1\] got \[1, -2\]"
         ):
             verify_out_features_out_indices(["a", "b"], (1, -2), ["a", "b"])
 
