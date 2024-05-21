@@ -768,7 +768,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
-    _supports_dynamic_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

@@ -910,7 +910,6 @@ class Phi3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = False
     _supports_cache_class = True
-    _supports_dynamic_cache_class = True
 
     _version = "0.0.5"
 
