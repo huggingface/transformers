@@ -28,10 +28,10 @@ jobs:
         needs: Build pr ci-docker
         docker:
             - image: |
-              if contains(github.event.head_commit.message, '[build-ci-image]')
-                huggingface/transformers-quality:dev
-              else
-                huggingface/transformers-quality
+                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
+                    huggingface/transformers-quality:dev
+                else
+                    huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
@@ -127,10 +127,10 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: |
-              if contains(github.event.head_commit.message, '[push-ci-image]')
-                huggingface/transformers-quality:dev
-              else
-                huggingface/transformers-quality
+                if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
+                    huggingface/transformers-quality:dev
+                else
+                    huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
