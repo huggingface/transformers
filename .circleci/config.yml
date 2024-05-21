@@ -9,6 +9,8 @@ parameters:
         default: false
 
 jobs:
+    needs: Build pr ci-docker
+
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
         docker:
@@ -25,7 +27,6 @@ jobs:
     # Fetch the tests to run
     fetch_tests:
         working_directory: ~/transformers
-        needs: Build pr ci-docker
         docker:
             - image: |
                 if [contains(github.event.head_commit.message, '[build-ci-image]')]; then
