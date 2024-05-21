@@ -125,7 +125,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
-    has_attentions = False
+    has_attentions = True
     from_pretrained_ids = ["stevenbucaille/superglue_indoor", "stevenbucaille/superglue_outdoor"]
 
     def setUp(self):
@@ -144,31 +144,31 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection does not use inputs_embeds")
+    @unittest.skip(reason="SuperGlueForImageMatching does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection does not support input and output embeddings")
+    @unittest.skip(reason="SuperGlueForImageMatching does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection does not use feedforward chunking")
+    @unittest.skip(reason="SuperGlueForImageMatching does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointDetection is not trainable")
+    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -192,9 +192,71 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @unittest.skip("SuperGlue does not return hidden states")
     def test_hidden_states_output(self):
-        pass
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            maximum_num_matches = outputs.mask.shape[-1]
+
+            hidden_states_sizes = self.model_tester.keypoint_encoder_sizes + [self.model_tester.descriptor_dim] + [
+                self.model_tester.descriptor_dim, self.model_tester.descriptor_dim * 2] * len(
+                self.model_tester.gnn_layers_types) + [self.model_tester.descriptor_dim] * 2
+
+            for i, hidden_states_size in enumerate(hidden_states_sizes):
+                self.assertListEqual(
+                    list(hidden_states[i].shape[-2:]),
+                    [hidden_states_size, maximum_num_matches],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_attention_outputs(self):
+        def check_attention_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            maximum_num_matches = outputs.mask.shape[-1]
+
+            expected_attention_shape = [self.model_tester.num_heads, maximum_num_matches, maximum_num_matches]
+
+            for i, attention in enumerate(attentions):
+                self.assertListEqual(
+                    list(attention.shape[-3:]),
+                    expected_attention_shape,
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            check_attention_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+
+            check_attention_output(inputs_dict, config, model_class)
 
     @slow
     def test_model_from_pretrained(self):
@@ -222,7 +284,8 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 def prepare_imgs():
     image1 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg")
     image2 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg")
-    return [image1, image2]
+    image3 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg")
+    return [image1, image2, image1, image3]
 
 
 @require_torch
@@ -243,13 +306,14 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         images = prepare_imgs()
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
 
         expected_number_keypoints_image0 = 559
         expected_number_keypoints_image1 = 592
-        expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
-        expected_matches_shape = torch.Size((1, len(images), expected_max_number_keypoints))
-        expected_matching_scores_shape = torch.Size((1, len(images), expected_max_number_keypoints))
+        expected_number_keypoints_image2 = 865
+        expected_max_number_keypoints = max([expected_number_keypoints_image0, expected_number_keypoints_image1, expected_number_keypoints_image2])
+        expected_matches_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
+        expected_matching_scores_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
 
         # Check output shapes
         self.assertEqual(outputs.matches.shape, expected_matches_shape)
