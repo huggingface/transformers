@@ -1284,12 +1284,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _supports_cache_class = False
     _supports_static_cache = False
 
-<<<<<<< HEAD
     # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
     _supports_quantized_cache = False
 
-=======
->>>>>>> 6608872ab (Remove `_supports_dynamic_cache_class` attribute after rebase)
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
