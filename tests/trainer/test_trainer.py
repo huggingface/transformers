@@ -109,6 +109,7 @@ if is_torch_available():
 
     import transformers.optimization
     from transformers import (
+        AutoModel,
         AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
@@ -994,9 +995,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_bitsandbytes
     def test_peft_submodule(self):
         from peft import LoraConfig, get_peft_model
-        from transformers import AutoModel
 
-        # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _is_peft_model check. 
+        # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _is_peft_model check.
         # Throws error when quantised but not recognised as a peft model.
         tiny_model = AutoModel.from_pretrained(
             "hf-internal-testing/tiny-random-IdeficsModel", load_in_4bit=True
