@@ -139,7 +139,7 @@
     title: Interoperability with GGUF files
   title: Developer guides
 - sections:
-  - local: quantization/index
+  - local: quantization/overview
     title: Getting started
   - local: quantization/bitsandbytes
     title: bitsandbytes (LLM.int8() & QLoRA)
