@@ -1480,10 +1480,8 @@ Now that you have finetuned a model, evaluated it, and uploaded it to the Huggin
 ```py
 >>> import torch
 >>> import requests
->>> import numpy as np
->>> import albumentations as A
 
->>> from PIL import Image
+>>> from PIL import Image, ImageDraw
 >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 >>> url = "https://images.pexels.com/photos/8413299/pexels-photo-8413299.jpeg?auto=compress&cs=tinysrgb&w=630&h=375&dpr=2"
@@ -1506,8 +1504,8 @@ And detect bounding boxes:
 
 >>> with torch.no_grad():
 ...     inputs = image_processor(images=[image], return_tensors="pt")
-...     outputs = model(inputs["pixel_values"].to(device))
-...     target_sizes = torch.tensor([image.size[1], image.size[0]])
+...     outputs = model(**inputs.to(device))
+...     target_sizes = torch.tensor([[image.size[1], image.size[0]]])
 ...     results = image_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
@@ -1526,9 +1524,7 @@ Detected Coverall with confidence 0.391 at location [68.61, 126.66, 309.03, 318.
 Let's plot the result:
 
 ```py
->>> resized_image = resize_only(image=np.array(image))["image"]
->>> resized_image = Image.fromarray(resized_image)
->>> draw = ImageDraw.Draw(resized_image)
+>>> draw = ImageDraw.Draw(image)
 
 >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
 ...     box = [round(i, 2) for i in box.tolist()]
@@ -1536,7 +1532,7 @@ Let's plot the result:
 ...     draw.rectangle((x, y, x2, y2), outline="red", width=1)
 ...     draw.text((x, y), model.config.id2label[label.item()], fill="white")
 
->>> resized_image
+>>> image
 ```
 
 <div class="flex justify-center">
