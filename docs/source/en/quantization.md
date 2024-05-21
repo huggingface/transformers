@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -80,8 +80,6 @@ Quanto library uses linear quantization algorithm for quantization. Even though 
 The library is versatible enough to be compatible with most PTQ optimization algorithms. The plan in the future is to integrate the most popular algorithms in the most seamless possible way (AWQ, Smoothquant).
 
 ## AQLM
-
-
 
 Try AQLM on [Google Colab](https://colab.research.google.com/drive/1-xZmBRXT5Fm3Ghn4Mwa2KRypORXb855X?usp=sharing)!
 
@@ -726,46 +724,7 @@ To compare the speed, throughput, and latency of each quantization scheme, check
 
 The benchmarks indicate AWQ quantization is the fastest for inference, text generation, and has the lowest peak memory for text generation. However, AWQ has the largest forward latency per batch size. For a more detailed discussion about the pros and cons of each quantization method, read the [Overview of natively supported quantization schemes in 🤗 Transformers](https://huggingface.co/blog/overview-quantization-transformers) blog post.
 
-### Fused AWQ modules
 
-The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-AWQ) model was benchmarked with `batch_size=1` with and without fused modules.
-
-<figcaption class="text-center text-gray-500 text-lg">Unfused module</figcaption>
-
-|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
-|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
-|            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
-|            1 |               64 |              64 |          1333.67   |           31.6604 | 4.50 GB (5.68%) |
-|            1 |              128 |             128 |          2434.06   |           31.6272 | 4.50 GB (5.68%) |
-|            1 |              256 |             256 |          3072.26   |           38.1731 | 4.50 GB (5.68%) |
-|            1 |              512 |             512 |          3184.74   |           31.6819 | 4.59 GB (5.80%) |
-|            1 |             1024 |            1024 |          3148.18   |           36.8031 | 4.81 GB (6.07%) |
-|            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
-
-<figcaption class="text-center text-gray-500 text-lg">Fused module</figcaption>
-
-|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
-|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
-|            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |
-|            1 |               64 |              64 |          1756.1    |          106.26   | 4.00 GB (5.05%) |
-|            1 |              128 |             128 |          2479.32   |          105.631  | 4.00 GB (5.06%) |
-|            1 |              256 |             256 |          1813.6    |           85.7485 | 4.01 GB (5.06%) |
-|            1 |              512 |             512 |          2848.9    |           97.701  | 4.11 GB (5.19%) |
-|            1 |             1024 |            1024 |          3044.35   |           87.7323 | 4.41 GB (5.57%) |
-|            1 |             2048 |            2048 |          2715.11   |           89.4709 | 5.57 GB (7.04%) |
-
-The speed and throughput of fused and unfused modules were also tested with the [optimum-benchmark](https://github.com/huggingface/optimum-benchmark) library.
-
-<div class="flex gap-4">
-  <div>
-    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_forward_memory_plot.png" alt="generate throughput per batch size" />
-    <figcaption class="mt-2 text-center text-sm text-gray-500">forward peak memory/batch size</figcaption>
-  </div>
-  <div>
-    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput_plot.png" alt="forward latency per batch size" />
-    <figcaption class="mt-2 text-center text-sm text-gray-500">generate throughput/batch size</figcaption>
-  </div>
-</div>
 
 ## HQQ 
 Half-Quadratic Quantization (HQQ) implements on-the-fly quantization via fast robust optimization. It doesn't require calibration data and can be used to quantize any model.  
