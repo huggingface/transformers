@@ -47,7 +47,7 @@ def verify_out_features_out_indices(
             )
 
     if out_indices is not None:
-        if isinstance(out_indices, (tuple,)):
+        if isinstance(out_indices, tuple):
             out_indices = list(out_indices)
         if not isinstance(out_indices, list):
             raise ValueError(f"out_indices must be a list, got {type(out_indices)}")
