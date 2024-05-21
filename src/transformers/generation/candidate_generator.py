@@ -115,10 +115,13 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 assistant_kwargs[key] = (
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
-        
+
         # Remove potential default DynamicCache if assistant does not support it
         if "past_key_values" in assistant_kwargs.keys():
-            if isinstance(assistant_kwargs["past_key_values"], DynamicCache) and not self.assistant_model._supports_dynamic_cache_class:
+            if (
+                isinstance(assistant_kwargs["past_key_values"], DynamicCache)
+                and not self.assistant_model._supports_dynamic_cache_class
+            ):
                 # Cache is empty -> remove it from kwargs
                 if len(assistant_kwargs["past_key_values"]) == 0:
                     del assistant_kwargs["past_key_values"]

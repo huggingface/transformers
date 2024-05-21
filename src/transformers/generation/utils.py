@@ -3886,9 +3886,9 @@ def _split(data, full_batch_size: int, split_size: int = None):
         return [None] * (full_batch_size // split_size)
     if isinstance(data, torch.Tensor):
         return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
-    # New efficient cache
+    # New cache format
     elif isinstance(data, DynamicCache):
-        return data.split(full_batch_size, split_size)
+        return data.batch_split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -3992,9 +3992,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
             return None
         if isinstance(data[0], torch.Tensor):
             return torch.cat(data, dim=0)
-        # New efficient cache
+        # New cache format
         elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_splits(data)
+            return DynamicCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):
