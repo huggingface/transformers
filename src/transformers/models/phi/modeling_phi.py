@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Phi model."""
-
+"""PyTorch Phi model."""
 
 import math
 from typing import List, Optional, Tuple, Union

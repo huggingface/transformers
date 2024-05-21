@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Whisper."""
+
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
+
 from tokenizers import AddedToken, pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding

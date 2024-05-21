@@ -15,7 +15,6 @@
 """Convert DINOv2 + DPT checkpoints from the original repository. URL:
 https://github.com/facebookresearch/dinov2/tree/main"""
 
-
 import argparse
 import itertools
 import math

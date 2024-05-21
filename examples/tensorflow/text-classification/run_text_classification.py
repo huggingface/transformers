@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for sequence classification."""
+"""Fine-tuning the library models for sequence classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import json

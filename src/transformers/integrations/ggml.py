@@ -17,9 +17,11 @@
 Integration with GGML / The file is copied and adapted from https://github.com/99991/pygguf
 with extra methods beings exposed
 """
+
 from array import array
 
 import numpy as np
+
 from tokenizers import Tokenizer, decoders
 from tokenizers.models import BPE
 

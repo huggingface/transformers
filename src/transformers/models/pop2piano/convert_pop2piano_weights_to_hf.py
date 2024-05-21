@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" File for loading the Pop2Piano model weights from the official repository and to show how tokenizer vocab was
- constructed"""
+"""File for loading the Pop2Piano model weights from the official repository and to show how tokenizer vocab was
+constructed"""
 
 import json
 

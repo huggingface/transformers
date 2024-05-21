@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BART model configuration"""
+"""BART model configuration"""
+
 import warnings
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
