@@ -1242,6 +1242,7 @@ class MistralForCausalLM(MistralPreTrainedModel):
         use_cache=True,
         **kwargs,
     ):
+        past_length = 0
         # We may have an initialized but empty DynamicCache during first iteration
         past_exist = past_key_values is not None and not (
             isinstance(past_key_values, DynamicCache) and len(past_key_values) == 0
