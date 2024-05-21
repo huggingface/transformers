@@ -106,16 +106,12 @@ class ImageBindTransformerOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        num_clips: (`int`, *optional*):
-            The number of clips for modalities which have both a batch dimension (dim 0) and clip dimension (dim 1).
-            In the original ImageBind model, these modalities are vision (image/video) and audio.
     """
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    num_clips: Optional[int] = None
 
 
 @dataclass
@@ -801,21 +797,53 @@ class ImageBindPreTrainedModel(PreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
+            nn.init.normal_(
+                module.audio_projection.weight,
+                std=module.audio_embed_dim**-0.5 * self.config.initializer_factor,
+            )
+
+            configs = [self.config.text_config, self.config.vision_config, self.config.audio_config]
+            modalities = ["text", "vision", "audio"]
+            for config, modality in zip(configs, modalities):
+                logit_scale_init_value, learnable_logit_scale = (
+                    config.logit_scale_init_value,
+                    config.learnable_logit_scale,
+                )
+                if logit_scale_init_value is not None and learnable_logit_scale:
+                    logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * factor
+                    postprocessor = getattr(module, f"{modality}_postprocessor")
+                    postprocessor.log_logit_scale = nn.Parameter(logit_scale)
+
         elif isinstance(module, ImageBindVisionModelWithProjection):
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+            logit_scale_init_value = self.config.logit_scale_init_value
+            learnable_logit_scale = self.config.learnable_logit_scale
+            if logit_scale_init_value is not None and learnable_logit_scale:
+                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
+                module.vision_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
         elif isinstance(module, ImageBindTextModelWithProjection):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+            logit_scale_init_value = self.config.logit_scale_init_value
+            learnable_logit_scale = self.config.learnable_logit_scale
+            if logit_scale_init_value is not None and learnable_logit_scale:
+                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
+                module.text_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
         elif isinstance(module, ImageBindAudioModelWithProjection):
             nn.init.normal_(
                 module.audio_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+            logit_scale_init_value = self.config.logit_scale_init_value
+            learnable_logit_scale = self.config.learnable_logit_scale
+            if logit_scale_init_value is not None and learnable_logit_scale:
+                logit_scale = torch.ones([]) * np.log(logit_scale_init_value) * self.config.initializer_factor
+                module.audio_postprocessor.log_logit_scale = nn.Parameter(logit_scale)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -1124,14 +1152,13 @@ class ImageBindTextTransformer(nn.Module):
         ]
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:] + (None,)
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return ImageBindTransformerOutput(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            num_clips=None,
         )
 
     def _build_causal_attention_mask(self, bsz, seq_len, dtype, device=None):
@@ -1238,7 +1265,6 @@ class ImageBindVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        num_clips = None
         reduce_clips = pixel_values.ndim >= 5
         if reduce_clips:
             batch_size, num_clips = pixel_values.shape[:2]
@@ -1259,14 +1285,13 @@ class ImageBindVisionTransformer(nn.Module):
         pooled_output = self.layernorm(pooled_output)
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:] + (num_clips,)
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return ImageBindTransformerOutput(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            num_clips=num_clips,
         )
 
 
@@ -1362,7 +1387,6 @@ class ImageBindAudioTransformer(nn.Module):
         if input_features is None:
             raise ValueError("You have to specify input_features")
 
-        num_clips = None
         reduce_clips = input_features.ndim >= 5
         if reduce_clips:
             batch_size, num_clips = input_features.shape[:2]
@@ -1382,14 +1406,13 @@ class ImageBindAudioTransformer(nn.Module):
         pooled_output = self.layernorm(pooled_output)
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:] + (num_clips,)
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return ImageBindTransformerOutput(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            num_clips=num_clips,
         )
 
 
@@ -1456,6 +1479,7 @@ class ImageBindAudioModel(ImageBindPreTrainedModel):
 @add_start_docstrings(IMAGEBIND_START_DOCSTRING)
 class ImageBindModel(ImageBindPreTrainedModel):
     config_class = ImageBindConfig
+    main_input_name = "pixel_values"
 
     def __init__(self, config: ImageBindConfig):
         super().__init__(config)
@@ -1599,7 +1623,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         image_features = self.visual_projection(pooled_output)
 
         if pixel_values.ndim >= 5:
-            num_clips = vision_outputs[-1]
+            num_clips = pixel_values.shape[1]
             image_features = image_features.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             image_features = image_features.mean(dim=1)
@@ -1656,7 +1680,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         audio_features = self.audio_projection(pooled_output)
 
         if input_features.ndim >= 5:
-            num_clips = audio_outputs[-1]
+            num_clips = input_features.shape[1]
             audio_features = audio_features.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             audio_features = audio_features.mean(dim=1)
@@ -1731,7 +1755,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         # If modality input was batched and clipped, reduce embedding over clips dimension
         if pixel_values.ndim >= 5:
-            image_num_clips = vision_outputs[-1]
+            image_num_clips = pixel_values.shape[1]
             image_embeds = image_embeds.reshape(image_batch_size, image_num_clips, -1)
             image_embeds = image_embeds.mean(dim=1)
 
@@ -1741,7 +1765,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         text_outputs = None
         if input_ids is not None:
             text_outputs = self.text_model(
-                input_ids=input_features,
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 output_attentions=output_attentions,
@@ -1772,7 +1796,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
             audio_embeds = self.audio_postprocessor(audio_embeds)
 
             if input_features.ndim >= 5:
-                num_clips = audio_outputs[-1]
+                num_clips = input_features.shape[1]
                 audio_embeds = audio_embeds.reshape(audio_batch_size, num_clips, -1)
                 audio_embeds = audio_embeds.mean(dim=1)
 
@@ -1884,8 +1908,7 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
         normalized_text_embeds = self.text_postprocessor(text_embeds)
 
         if not return_dict:
-            # Exclude num_clips output
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:-1] + (normalized_text_embeds,)
+            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:] + (normalized_text_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindTextModelOutput(
@@ -1969,7 +1992,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         normalized_image_embeds = self.vision_postprocessor(image_embeds)
 
         if pixel_values.ndim >= 5:
-            num_clips = vision_outputs[-1]
+            num_clips = pixel_values.shape[1]
             image_embeds = image_embeds.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             image_embeds = image_embeds.mean(dim=1)
@@ -1978,8 +2001,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
             normalized_image_embeds = normalized_image_embeds.mean(dim=1)
 
         if not return_dict:
-            # Exclude num_clips output
-            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:-1] + (normalized_image_embeds,)
+            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:] + (normalized_image_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindVisionModelOutput(
@@ -2063,7 +2085,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         normalized_audio_embeds = self.audio_postprocessor(audio_embeds)
 
         if input_features.ndim >= 5:
-            num_clips = audio_outputs[-1]
+            num_clips = input_features.shape[1]
             audio_embeds = audio_embeds.reshape(batch_size, num_clips, -1)
             # Take mean over all clips
             audio_embeds = audio_embeds.mean(dim=1)
@@ -2072,8 +2094,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
             normalized_audio_embeds = normalized_audio_embeds.mean(dim=1)
 
         if not return_dict:
-            # Exclude num_clips output
-            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:-1] + (normalized_audio_embeds,)
+            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:] + (normalized_audio_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindAudioModelOutput(
