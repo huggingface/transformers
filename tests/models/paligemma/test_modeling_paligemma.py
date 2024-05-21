@@ -260,6 +260,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
 
 @slow
 @require_torch
+@require_read_token
 class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
