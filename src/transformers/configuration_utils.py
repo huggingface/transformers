@@ -278,6 +278,7 @@ class PretrainedConfig(PushToHubMixin):
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
+        # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
         self.cross_attention_hidden_size = kwargs.pop("cross_attention_hidden_size", None)
