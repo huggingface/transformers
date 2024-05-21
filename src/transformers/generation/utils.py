@@ -42,7 +42,6 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-<<<<<<< HEAD
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
@@ -51,10 +50,6 @@ from ..utils import (
     is_torchdynamo_compiling,
     logging,
 )
-=======
-from ..models.jamba import JambaPreTrainedModel
-from ..utils import ModelOutput, is_accelerate_available, is_torchdynamo_compiling, logging
->>>>>>> df189b2be (Add special case for Jamba)
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
@@ -1432,7 +1427,7 @@ class GenerationMixin:
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
-        return self._supports_cache_class and not isinstance(self, JambaPreTrainedModel)
+        return self._supports_cache_class and not "jamba" in self.__class__.__name__.lower()
 
     def _prepare_special_tokens(
         self,
