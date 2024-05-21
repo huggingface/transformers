@@ -990,6 +990,37 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
 
     @require_peft
+    @require_bitsandbytes
+    def test_peft_submodule(self):
+        from peft import LoraConfig, get_peft_model
+    
+        # Simply tests if initializing a Trainer with a PEFT on a submodule will pass _is_peft_model check. Throws error when quantised for this reason.
+        tiny_model = AutoModel.from_pretrained(
+            "hf-internal-testing/tiny-random-IdeficsModel", load_in_4bit=True
+        )
+    
+        peft_config = LoraConfig(
+            r=8,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj"],
+            lora_dropout=0.05,
+            bias="none",
+        )
+        tiny_model.vision_model = get_peft_model(tiny_model.vision_model, peft_config)
+    
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+    
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                tmp_dir,
+                learning_rate=1e-9,
+                logging_steps=5,
+            )
+            with self.assertRaises(ValueError):
+                _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+    
+    @require_peft
     def test_multiple_peft_adapters(self):
         from peft import LoraConfig, get_peft_model
 
