@@ -141,8 +141,8 @@ The original code can be found [here](https://github.com/magicleap/SuperGluePret
 
 - preprocess
 
-## SuperGlueForImageMatching
+## SuperGlueForKeypointMatching
 
-[[autodoc]] SuperGlueForImageMatching
+[[autodoc]] SuperGlueForKeypointMatching
 
 - forward

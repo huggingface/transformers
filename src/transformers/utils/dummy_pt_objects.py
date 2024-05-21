@@ -908,13 +908,6 @@ class AutoModelForImageClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class AutoModelForImageMatching(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class AutoModelForImageSegmentation(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -944,6 +937,13 @@ class AutoModelForInstanceSegmentation(metaclass=DummyObject):
 
 
 class AutoModelForKeypointDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForKeypointMatching(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -8632,7 +8632,7 @@ class Starcoder2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SuperGlueForImageMatching(metaclass=DummyObject):
+class SuperGlueForKeypointMatching(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
