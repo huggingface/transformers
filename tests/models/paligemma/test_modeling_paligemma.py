@@ -28,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    require_read_token,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -268,6 +269,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.cuda.empty_cache()
 
     @slow
+    @require_read_token
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -290,6 +292,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_read_token
     def test_small_model_integration_test_paligemma_VQA(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -310,6 +313,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_read_token
     def test_small_model_integration_test_paligemma_empty_prompt(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -331,6 +335,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_read_token
     def test_small_model_integration_test_paligemma_batched(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -359,6 +364,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch
+    @require_read_token
     def test_small_model_integration_test_paligemma_batched_bf16(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -390,6 +396,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch
+    @require_read_token
     def test_small_model_integration_test_paligemma_batched_f16(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
@@ -421,6 +428,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
+    @require_read_token
     def test_paligemma_index_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
