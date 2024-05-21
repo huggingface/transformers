@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
-    if: ${{ contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' }}
+    if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
 
     strategy:
       matrix:
@@ -50,5 +50,5 @@ jobs:
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: true
+          push: ${{ contains(github.event.head_commit.message, '[push-ci-image]') }}
           tags: huggingface/transformers-${{ matrix.file }}
