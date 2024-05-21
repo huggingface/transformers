@@ -11,7 +11,7 @@ from transformers import (
     AutoConfig,
     AutoModelForKeypointDetection,
     SuperGlueConfig,
-    SuperGlueForImageMatching,
+    SuperGlueForKeypointMatching,
     SuperGlueImageProcessor,
 )
 from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
@@ -266,7 +266,7 @@ def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_
         rename_key(new_superglue_state_dict, src, dest)
     new_superglue_state_dict = add_keypoint_detector_state_dict(new_superglue_state_dict, keypoint_detector_state_dict)
 
-    model = SuperGlueForImageMatching(superglue_config)
+    model = SuperGlueForKeypointMatching(superglue_config)
     model.load_state_dict(new_superglue_state_dict, strict=True, assign=True)
     model.to("cuda")
     model.eval()

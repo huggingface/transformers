@@ -27,7 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SuperGlueForImageMatching,
+        SuperGlueForKeypointMatching,
     )
 
 if is_vision_available():
@@ -91,7 +91,7 @@ class SuperGlueModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = SuperGlueForImageMatching(config=config)
+        model = SuperGlueForKeypointMatching(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -118,7 +118,7 @@ class SuperGlueModelTester:
 
 @require_torch
 class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SuperGlueForImageMatching,) if is_torch_available() else ()
+    all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
     all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
@@ -144,31 +144,31 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="SuperGlueForImageMatching does not use inputs_embeds")
+    @unittest.skip(reason="SuperGlueForKeypointMatching does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching does not support input and output embeddings")
+    @unittest.skip(reason="SuperGlueForKeypointMatching does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching does not use feedforward chunking")
+    @unittest.skip(reason="SuperGlueForKeypointMatching does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
+    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
+    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
+    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForImageMatching is not trainable")
+    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
@@ -204,9 +204,13 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
             maximum_num_matches = outputs.mask.shape[-1]
 
-            hidden_states_sizes = self.model_tester.keypoint_encoder_sizes + [self.model_tester.descriptor_dim] + [
-                self.model_tester.descriptor_dim, self.model_tester.descriptor_dim * 2] * len(
-                self.model_tester.gnn_layers_types) + [self.model_tester.descriptor_dim] * 2
+            hidden_states_sizes = (
+                self.model_tester.keypoint_encoder_sizes
+                + [self.model_tester.descriptor_dim]
+                + [self.model_tester.descriptor_dim, self.model_tester.descriptor_dim * 2]
+                * len(self.model_tester.gnn_layers_types)
+                + [self.model_tester.descriptor_dim] * 2
+            )
 
             for i, hidden_states_size in enumerate(hidden_states_sizes):
                 self.assertListEqual(
@@ -261,7 +265,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in self.from_pretrained_ids:
-            model = SuperGlueForImageMatching.from_pretrained(model_name)
+            model = SuperGlueForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_forward_labels_should_be_none(self):
@@ -299,7 +303,7 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference(self):
-        model = SuperGlueForImageMatching.from_pretrained(
+        model = SuperGlueForKeypointMatching.from_pretrained(
             "stevenbucaille/superglue_outdoor", matching_threshold=0.2
         ).to(torch_device)
         preprocessor = self.default_image_processor
@@ -311,7 +315,9 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         expected_number_keypoints_image0 = 559
         expected_number_keypoints_image1 = 592
         expected_number_keypoints_image2 = 865
-        expected_max_number_keypoints = max([expected_number_keypoints_image0, expected_number_keypoints_image1, expected_number_keypoints_image2])
+        expected_max_number_keypoints = max(
+            [expected_number_keypoints_image0, expected_number_keypoints_image1, expected_number_keypoints_image2]
+        )
         expected_matches_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
         expected_matching_scores_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
 

@@ -36,7 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_superglue"] = [
-        "SuperGlueForImageMatching",
+        "SuperGlueForKeypointMatching",
         "SuperGluePreTrainedModel",
     ]
 
@@ -60,7 +60,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_superglue import (
-            SuperGlueForImageMatching,
+            SuperGlueForKeypointMatching,
             SuperGluePreTrainedModel,
         )
 
