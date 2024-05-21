@@ -178,8 +178,6 @@
       title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: PyTorch training on Apple silicon
-    - local: hpo_train
-      title: Hyperparameter Search using Trainer API
     title: Training
   title: Performance and scalability
 - sections:
