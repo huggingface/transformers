@@ -76,6 +76,7 @@ class CircleCIJob:
             # BIG HACK WILL REMOVE ONCE FETCHER IS UPDATED
             if "[build-ci-image]" in os.environ.get("GIT_COMMIT_MESSAGE", "") or "dev" in  os.environ.get("GIT_COMMIT_MESSAGE", ""):
                 self.docker_image += ":dev"
+            print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = []
         if self.pytest_options is None:
