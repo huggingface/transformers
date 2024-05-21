@@ -4,5 +4,5 @@ USER root
 RUN apt-get update && apt-get install -y time git 
 ENV VIRTUAL_ENV=/usr/local
 RUN pip install uv &&  uv venv
-RUN uv pip install --no-cache-dir -U pip setuptools GitPython "ruff==0.4.4" transformers urllib3
+RUN uv pip install --no-cache-dir -U pip setuptools GitPythond "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ruff]" urllib3
 RUN apt-get install -y jq curl && apt-get clean && rm -rf /var/lib/apt/lists/*
