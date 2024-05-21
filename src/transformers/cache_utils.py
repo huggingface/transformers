@@ -201,7 +201,7 @@ class DynamicCache(Cache):
             self.key_cache[idx] = self.key_cache[idx][..., :maximum_length, :]
             self.value_cache[idx] = self.value_cache[idx][..., :maximum_length, :]
 
-    def split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
@@ -214,8 +214,8 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    def from_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
-        """This is the opposite of the above `split()` method. This will be used by `stack_model_outputs` in
+    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
+        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls()
         for idx in range(len(splits[0])):
