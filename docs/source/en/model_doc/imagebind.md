@@ -1,4 +1,4 @@
-<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -26,7 +26,7 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [dg845](https://huggingface.co/dg845) and [shehan97](https://huggingface.co/shehan97).
+This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [dg845](https://huggingface.co/dg845) and [shehan97](https://huggingface.co/shehan97).
 The original code can be found [here](https://github.com/facebookresearch/ImageBind).
 
 
@@ -43,17 +43,9 @@ The original code can be found [here](https://github.com/facebookresearch/ImageB
 
 [[autodoc]] ImageBindVisionConfig
 
-## ImageBindTokenizer
+## ImageBindAudioConfig
 
-[[autodoc]] ImageBindTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## ImageBindTokenizerFast
-
-[[autodoc]] ImageBindTokenizerFast
+[[autodoc]] ImageBindAudioConfig
 
 ## ImageBindImageProcessor
 
@@ -74,6 +66,7 @@ The original code can be found [here](https://github.com/facebookresearch/ImageB
     - forward
     - get_text_features
     - get_image_features
+    - get_audio_features
 
 ## ImageBindTextModel
 
@@ -85,13 +78,23 @@ The original code can be found [here](https://github.com/facebookresearch/ImageB
 [[autodoc]] ImageBindTextModelWithProjection
     - forward
 
+## ImageBindVisionModel
+
+[[autodoc]] ImageBindVisionModel
+    - forward
+
+
 ## ImageBindVisionModelWithProjection
 
 [[autodoc]] ImageBindVisionModelWithProjection
     - forward
 
+## ImageBindAudioModel
 
-## ImageBindVisionModel
+[[autodoc]] ImageBindAudioModel
+    - forward
 
-[[autodoc]] ImageBindVisionModel
+## ImageBindAudioModelWithProjection
+
+[[autodoc]] ImageBindAudioModelWithProjection
     - forward

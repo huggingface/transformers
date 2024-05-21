@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,6 +64,21 @@ def valid_batched_clipped_audio(raw_speech):
     return valid_audio
 
 
+def convert_to_numpy_array(raw_speech):
+    """If not already in numpy array format, convert raw_speech to a numpy array."""
+    if isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], float):
+        raw_speech = [[np.asarray(raw_speech, dtype=np.float32)]]
+    elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], (list, tuple)):
+        if isinstance(raw_speech[0][0], float):
+            # List[List[float]]
+            raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in raw_speech]]
+        elif isinstance(raw_speech[0][0], (list, tuple)):
+            # List[List[List[float]]]
+            raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in clip] for clip in raw_speech]
+
+    return raw_speech
+
+
 def batch_and_clip_ndarray(array, data_dim=1, dtype=np.float32):
     """
     Turns a possibly nested list of np.ndarrays into a batched and clipped output of type `List[List[np.ndarray]]`.
@@ -107,54 +122,34 @@ def batch_and_clip_ndarray(array, data_dim=1, dtype=np.float32):
         raise ValueError(f"Could not make batched and clipped audio from {array}")
 
 
-# Taken from https://github.com/facebookresearch/pytorchvideo/blob/main/pytorchvideo/data/clip_sampling.py#L346
-class ConstantClipsSampler:
-    def __init__(self, clip_duration: float, num_clips: int) -> None:
-        self._clip_duration = Fraction(clip_duration)
-        self._current_clip_index = 0
-        self._current_aug_index = 0
-        self._num_clips = num_clips
-        self._augs_per_clip = 1
+# Adapted from https://github.com/facebookresearch/pytorchvideo/blob/main/pytorchvideo/data/clip_sampling.py#L346
+def uniform_chunk_sampling(
+    total_duration: float, chunk_duration: float, num_chunks: int
+) -> List[Tuple[Fraction, Fraction]]:
+    """
+    Uniformly sample `num_chunks` chunks of duration `chunk_duration` from an audio/video of total duration `total_duration`.
 
-    def __call__(self, video_duration: float) -> Tuple[float, float, int, int, bool]:
-        max_possible_clip_start = Fraction(max(video_duration - self._clip_duration, 0))
-        uniform_clip = Fraction(max_possible_clip_start, max(self._num_clips - 1, 1))
-        clip_start_sec = uniform_clip * self._current_clip_index
-        clip_index = self._current_clip_index
-        aug_index = self._current_aug_index
+    Args:
+        total_duration (float): Total duration of the audio/video.
+        chunk_duration (float): Duration of each chunk.
+        num_chunks (int): Number of chunks to sample.
 
-        self._current_aug_index += 1
-        if self._current_aug_index >= self._augs_per_clip:
-            self._current_clip_index += 1
-            self._current_aug_index = 0
+    Returns:
+        List[Tuple[float, float]]: List of tuples where each tuple contains the start and end time of a chunk.
+    """
+    chunk_duration_fraction = Fraction(chunk_duration)
+    max_possible_clip_start = Fraction(max(total_duration - chunk_duration, 0))
+    uniform_clip = Fraction(max_possible_clip_start / max(num_chunks - 1, 1))
 
-        # Last clip is True if sampled self._num_clips or if end of video is reached.
-        is_last_clip = False
-        if (
-            self._current_clip_index >= self._num_clips
-            or uniform_clip * self._current_clip_index > max_possible_clip_start
-        ):
-            self._current_clip_index = 0
-            is_last_clip = True
+    result = []
+    for clip_index in range(num_chunks):
+        clip_start_sec = uniform_clip * clip_index
+        clip_end_sec = clip_start_sec + chunk_duration_fraction
+        result.append((clip_start_sec, clip_end_sec))
 
-        if is_last_clip:
-            self.reset()
-
-        return (
-            clip_start_sec,
-            clip_start_sec + self._clip_duration,
-            clip_index,
-            aug_index,
-            is_last_clip,
-        )
-
-    def reset(self):
-        self._current_clip_index = 0
-        self._current_aug_index = 0
+    return result
 
 
-# NOTE: ImageBind follow Audio Spectrogram Transformer for audio processing
-# Based on ASTFeatureExtractor
 class ImageBindFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Audio Spectrogram Transformer (AST) feature extractor.
@@ -184,9 +179,12 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         std (`float`, *optional*, defaults to 9.138):
             The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
             by default.
-        do_sample (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        clip_duration (`<fill_type>`, *optional*, defaults to 2.0): <fill_docstring>
-        num_clips (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        do_chunk (`bool`, *optional*, defaults to `True`):
+            Whether or not to sample multiple chunks from the input audio. If `False`, the entire audio will be used.
+        chunk_duration (`float`, *optional*, defaults to 2.0):
+            The duration of each chunk in seconds.
+        num_chunks (`int`, *optional*, defaults to 3):
+            The number of chunks to sample from the input audio.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~ImageBindAudioFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -203,9 +201,9 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         do_normalize=True,
         mean=-4.268,
         std=9.138,
-        do_sample=True,
-        clip_duration=2.0,
-        num_clips=3,
+        do_chunk=True,
+        chunk_duration=2.0,
+        num_chunks=3,
         return_attention_mask=False,
         **kwargs,
     ):
@@ -215,10 +213,9 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
         self.mean = mean
         self.std = std
-        self.clip_sampler = ConstantClipsSampler(clip_duration=clip_duration, num_clips=num_clips)
-        self.do_sample = do_sample
-        self.clip_duration = clip_duration
-        self.num_clips = num_clips
+        self.do_chunk = do_chunk
+        self.chunk_duration = chunk_duration
+        self.num_chunks = num_chunks
         self.return_attention_mask = return_attention_mask
 
     def _extract_fbank_features(
@@ -266,17 +263,17 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
 
         return fbank
 
-    def normalize(self, input_values: np.ndarray) -> np.ndarray:
-        return (input_values - (self.mean)) / (self.std)
+    def normalize(self, input_values: np.ndarray, mean: float, std: float) -> np.ndarray:
+        return (input_values - (mean)) / (std)
 
-    def sample(self, raw_speech: np.ndarray) -> List[np.ndarray]:
-        duration = raw_speech.shape[0] / self.sampling_rate
-        all_clips_timepoints = []
-        is_last_clip = False
-        end = 0.0
-        while not is_last_clip:
-            start, end, _, _, is_last_clip = self.clip_sampler(duration)
-            all_clips_timepoints.append((start, end))
+    def chunk(self, raw_speech: np.ndarray, chunk_duration: float, num_chunks: int) -> List[np.ndarray]:
+        audio_duration = raw_speech.shape[0] / self.sampling_rate
+        if chunk_duration > audio_duration:
+            logger.warning_once(
+                "Chunk duration is greater than audio duration. Chunks will be repeated, consider adjusting either `chunk_duration` or `num_chunks`"
+                "to avoid unnecessary memory/compute usage."
+            )
+        all_clips_timepoints = uniform_chunk_sampling(audio_duration, chunk_duration, num_chunks)
 
         all_clips = []
         for clip_timepoints in all_clips_timepoints:
@@ -291,7 +288,12 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]], List[List[List[float]]]],
         sampling_rate: Optional[int] = None,
-        do_sample: Optional[bool] = None,
+        do_normalize: Optional[bool] = None,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        do_chunk: Optional[bool] = None,
+        chunk_duration: Optional[float] = None,
+        num_chunks: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -311,6 +313,20 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
+            do_normalize (`bool`, *optional*, defaults `self.do_normalize`):
+                Whether or not to normalize the log-Mel features.
+            mean (`float`, *optional*, defaults `self.mean`):
+                The mean value used to normalize the log-Mel features.
+            std (`float`, *optional*, defaults `self.std`):
+                The standard deviation value used to normalize the log-Mel features.
+            do_chunk (`bool`, *optional*, defaults `self.do_chunk`):
+                Whether or not to sample multiple chunks from the input audio. If `False`, the entire audio will be used.
+            chunk_duration (`float`, *optional*, defaults `self.chunk_duration`):
+                The duration of each chunk in seconds.
+            num_chunks (`int`, *optional*, defaults `self.num_chunks`):
+                The number of chunks to sample from the input audio. If audio duration is less than `chunk_duration` * `num_chunks`,
+                chunks will overlap to cover the entire audio. If `chunk_duration` is greater than audio duration, the
+                chunks will be repeated until `num_chunks` is reached.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -337,45 +353,35 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
                 f"Only unbatched, batched, and batched and clipped mono-channel audio is supported for input to {self}"
             )
 
-        do_sample = do_sample if do_sample is not None else self.do_sample
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        mean = mean if mean is not None else self.mean
+        std = std if std is not None else self.std
+        do_chunk = do_chunk if do_chunk is not None else self.do_chunk
+        chunk_duration = chunk_duration if chunk_duration is not None else self.chunk_duration
+        num_chunks = num_chunks if num_chunks is not None else self.num_chunks
 
-        # Handle the cases where there are no np.ndarrays in raw_speech
-        if isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], float):
-            raw_speech = [[np.asarray(raw_speech, dtype=np.float32)]]
-        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], (list, tuple)):
-            if isinstance(raw_speech[0][0], float):
-                # List[List[float]]
-                raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in raw_speech]]
-            elif isinstance(raw_speech[0][0], (list, tuple)):
-                # List[List[List[float]]]
-                raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in clip] for clip in raw_speech]
-
-        # always return batched and clipped audio of type List[List[np.ndarray]]
+        raw_speech = convert_to_numpy_array(raw_speech)
         raw_speech = batch_and_clip_ndarray(raw_speech, data_dim=1, dtype=np.float32)
 
-        if len(raw_speech[0]) == 1 and do_sample:
-            raw_speech = [self.sample(audio[0]) for audio in raw_speech]
+        if do_chunk and len(raw_speech[0]) == 1:
+            raw_speech = [self.chunk(audio[0], chunk_duration, num_chunks) for audio in raw_speech]
 
-        # extract fbank features and pad/truncate to max_length
         features = [
             [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in clip]
             for clip in raw_speech
         ]
 
-        # convert into BatchFeature
         padded_inputs = BatchFeature({"input_features": features})
 
-        # make sure spectrograms are in array format
         input_values = padded_inputs.get("input_features")
         if isinstance(input_values[0][0], list):
             padded_inputs["input_features"] = [
                 [np.asarray(feature, dtype=np.float32) for feature in clip] for clip in input_values
             ]
 
-        # normalization
-        if self.do_normalize:
+        if do_normalize:
             padded_inputs["input_features"] = [
-                [self.normalize(feature) for feature in clip] for clip in padded_inputs["input_features"]
+                [self.normalize(feature, mean, std) for feature in clip] for clip in padded_inputs["input_features"]
             ]
 
         if return_tensors is not None:

@@ -16,16 +16,13 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Union
 
 
 if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+    pass
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -130,9 +127,12 @@ class ImageBindTextConfig(PretrainedConfig):
             be scaled.
         learnable_logit_scale (`bool`, *optional*, defaults to `True`):
             Whether the `logit_scale` is learnable or fixed.
-        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 49406): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 49407): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 49406):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 49407):
+            End of stream token id.
 
     Example:
 
@@ -471,7 +471,6 @@ class ImageBindAudioConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-# TODO: add configs for other modalities (audio, depth, thermal, IMU)
 class ImageBindConfig(PretrainedConfig):
     r"""
     [`ImageBindConfig`] is the configuration class to store the configuration of a [`ImageBindModel`]. It is used to instantiate
@@ -487,7 +486,8 @@ class ImageBindConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ImageBindTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`ImageBindVisionConfig`].
-        audio_config (`<fill_type>`, *optional*): <fill_docstring>
+        audio_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`ImageBindAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 1024):
             Dimentionality of text and vision projection layers.
         kwargs (*optional*):
@@ -590,50 +590,3 @@ class ImageBindConfig(PretrainedConfig):
         output["audio_config"] = self.audio_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
-# TODO: add other modalities
-class ImageBindOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
