@@ -759,7 +759,6 @@ class ImageBindPreTrainedModel(PreTrainedModel):
     config_class = ImageBindConfig
     base_model_prefix = "imagebind"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -794,7 +793,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
             )
             nn.init.normal_(
-                module.visual_projection.weight,
+                module.vision_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
             nn.init.normal_(
@@ -816,7 +815,7 @@ class ImageBindPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, ImageBindVisionModelWithProjection):
             nn.init.normal_(
-                module.visual_projection.weight,
+                module.vision_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
             logit_scale_init_value = self.config.logit_scale_init_value
@@ -1421,7 +1420,7 @@ class ImageBindAudioTransformer(nn.Module):
     IMAGEBIND_START_DOCSTRING,
 )
 class ImageBindAudioModel(ImageBindPreTrainedModel):
-    config = ImageBindAudioConfig
+    config_class = ImageBindAudioConfig
     _no_split_modules = ["ImageBindEncoderLayer"]
 
     main_input_name = "input_features"
@@ -1516,7 +1515,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         self.audio_model = ImageBindAudioTransformer(audio_config)
 
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.vision_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.audio_projection = nn.Linear(self.audio_embed_dim, self.projection_dim, bias=False)
 
         self.text_postprocessor = ImageBindPostProcessor(text_config)
@@ -1620,7 +1619,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.vision_projection(pooled_output)
 
         if pixel_values.ndim >= 5:
             num_clips = pixel_values.shape[1]
@@ -1750,7 +1749,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         )
 
         image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
+        image_embeds = self.vision_projection(image_embeds)
         image_embeds = self.vision_postprocessor(image_embeds)
 
         # If modality input was batched and clipped, reduce embedding over clips dimension
@@ -1819,6 +1818,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
                 text_outputs,
                 audio_outputs,
             )
+            output = tuple([out for out in output if out is not None])
             return ((loss,) + output) if loss is not None else output
 
         return ImageBindOutput(
@@ -1935,7 +1935,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
 
         self.vision_model = ImageBindVisionTransformer(config)
 
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.vision_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         self.vision_postprocessor = ImageBindPostProcessor(config)
 
@@ -1988,7 +1988,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
 
         pooled_output = vision_outputs[1]  # pooled_output
 
-        image_embeds = self.visual_projection(pooled_output)
+        image_embeds = self.vision_projection(pooled_output)
         normalized_image_embeds = self.vision_postprocessor(image_embeds)
 
         if pixel_values.ndim >= 5:

@@ -82,7 +82,7 @@ def create_rename_keys(config):
         ("modality_preprocessors.vision.pos_embedding_helper.pos_embed", "vision_model.embeddings.position_embeddings"),
         ("modality_heads.vision.0.weight", "vision_model.layernorm.weight"),
         ("modality_heads.vision.0.bias", "vision_model.layernorm.bias"),
-        ("modality_heads.vision.2.weight", "visual_projection.weight"),
+        ("modality_heads.vision.2.weight", "vision_projection.weight"),
         ("modality_trunks.vision.pre_transformer_layer.0.weight", "vision_model.pre_layernorm.weight"),
         ("modality_trunks.vision.pre_transformer_layer.0.bias", "vision_model.pre_layernorm.bias"),
     ])
@@ -205,10 +205,11 @@ def convert_imagebind_checkpoint(args):
         feature_extractor = ImageBindFeatureExtractor()
         processor = ImageBindProcessor(tokenizer, image_processor, feature_extractor)
 
-        inputs = processor(texts=texts, images=images, audios=audios, return_tensors="pt")
+        inputs_audio_vision = processor(images=images, audios=audios, return_tensors="pt")
+        inputs_text_vision = processor(texts=texts, images=images, return_tensors="pt")
 
-        assert torch.equal(inputs["pixel_values"], expected_pixel_values)
-        assert torch.equal(inputs["input_features"], expected_input_features)
+        assert torch.equal(inputs_audio_vision["pixel_values"], expected_pixel_values)
+        assert torch.equal(inputs_audio_vision["input_features"], expected_input_features)
 
         expected_output_vision = torch.tensor(
             [
@@ -234,8 +235,19 @@ def convert_imagebind_checkpoint(args):
     else:
         torch.manual_seed(0)
         input_ids = (torch.rand(3, 77) * 10).to(torch.long)
+        attention_mask = None
         pixel_values = torch.rand(3, 3, 224, 224)
         input_features = torch.rand(3, 3, 1, 128, 204)
+
+        inputs_audio_vision = {
+            "pixel_values": pixel_values,
+            "input_features": input_features,
+        }
+        inputs_text_vision = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+        }
 
         expected_output_text = torch.tensor(
             [
@@ -259,8 +271,8 @@ def convert_imagebind_checkpoint(args):
             ]
         )
 
-    outputs_text_vision = model(input_features=input_ids, pixel_values=pixel_values, modality="text")
-    outputs_audio_vision = model(input_features=input_features, pixel_values=pixel_values, modality="audio")
+    outputs_text_vision = model(**inputs_text_vision)
+    outputs_audio_vision = model(**inputs_audio_vision)
 
     if verify_logits:
         assert torch.allclose(outputs_text_vision.image_embeds[:, :5], expected_output_vision, atol=1e-4)
