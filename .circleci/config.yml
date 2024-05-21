@@ -35,7 +35,7 @@ jobs:
             - image: huggingface/transformers-quality
 
         environment:
-            GIT_COMMIT_MESSAGE: << pipeline.trigger_parameters.gitlab.repo_name >>
+            GIT_COMMIT_MESSAGE: << pipeline.trigger_parameters.github_app.commit_message >>
         
         parallelism: 1
         steps:
