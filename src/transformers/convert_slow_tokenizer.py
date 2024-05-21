@@ -629,7 +629,7 @@ class SpmConverter(Converter):
         ]
         tokenizer.add_tokens(user_defined_symbols + control_symbols)
 
-        # Tokenizer assemble
+     # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
             tokenizer.normalizer = normalizer
