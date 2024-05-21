@@ -37,7 +37,7 @@ class SuperGlueImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
-        batch_size=7,
+        batch_size=6,
         num_channels=3,
         image_size=18,
         min_resolution=30,
@@ -136,9 +136,8 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        with self.assertRaises(ValueError):
+            image_processing(image_inputs[0], return_tensors="pt").pixel_values
 
         # Test batched
         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
@@ -158,9 +157,8 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        with self.assertRaises(ValueError):
+            image_processing(image_inputs[0], return_tensors="pt").pixel_values
 
         # Test batched
         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
@@ -181,9 +179,8 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         expected_batch_size = int(math.ceil(self.image_processor_tester.batch_size / 2))
 
         # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
-        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        with self.assertRaises(ValueError):
+            image_processing(image_inputs[0], return_tensors="pt").pixel_values
 
         # Test batched
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
