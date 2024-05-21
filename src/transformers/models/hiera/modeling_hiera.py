@@ -206,13 +206,22 @@ class HieraForPreTrainingOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Taken from https://github.com/facebookresearch/hiera/blob/main/hiera/hiera_utils.py#L73
-def conv_nd(n: int) -> nn.Module:
-    """
-    Returns a conv with nd (e.g., Conv2d for n=2). Work up to n=3.
-    If you wanted a 4d Hiera, you could probably just implement this for n=4. (no promises)
-    """
-    return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
+class HieraConvND(nn.Module):
+    def __init__(self, n: int, in_channels: int, out_channels: int, kernel_size, stride=1, padding=0):
+        super().__init__()
+        if n == 0:
+            self.conv = nn.Identity()
+        elif n == 1:
+            self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        elif n == 2:
+            self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        elif n == 3:
+            self.conv = nn.Conv3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+        else:
+            raise ValueError(f"Unsupported number of dimensions: {n}. Only 1, 2, and 3 are supported.")
+
+    def forward(self, x):
+        return self.conv(x)
 
 
 class HieraPatchEmbeddings(nn.Module):
@@ -238,7 +247,8 @@ class HieraPatchEmbeddings(nn.Module):
         self.mask_ratio = config.mask_ratio
         self.is_mae = is_mae
 
-        self.projection = conv_nd(self.spatial_dims)(
+        self.projection = HieraConvND(
+            self.spatial_dims,
             self.num_channels,
             config.embed_dim,
             kernel_size=config.patch_size,
@@ -1068,11 +1078,6 @@ class HieraModel(HieraPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
-
         embedding_output, mask, ids_restore = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, noise=noise
         )
@@ -1229,7 +1234,8 @@ class HieraMultiScaleHead(nn.Module):
             kernel = [i // s for i, s in zip(current_masked_unit_size, self.mask_unit_spatial_shape_final)]
             current_masked_unit_size = [i // s for i, s in zip(current_masked_unit_size, config.query_stride)]
             self.multi_scale_fusion_heads.append(
-                conv_nd(len(config.query_stride))(
+                HieraConvND(
+                    len(config.query_stride),
                     self.stage_dimensions[idx],
                     self.stage_dimensions[-1],
                     kernel_size=kernel,
