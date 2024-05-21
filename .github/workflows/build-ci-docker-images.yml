@@ -37,7 +37,7 @@ jobs:
                   echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV" 
               else
                   echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
-
+              fi
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
