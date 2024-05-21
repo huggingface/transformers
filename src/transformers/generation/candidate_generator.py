@@ -120,7 +120,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if "past_key_values" in assistant_kwargs.keys():
             if (
                 isinstance(assistant_kwargs["past_key_values"], DynamicCache)
-                and not self.assistant_model._supports_dynamic_cache_class
+                and not self.assistant_model._supports_cache_class
             ):
                 # Cache is empty -> remove it from kwargs
                 if len(assistant_kwargs["past_key_values"]) == 0:

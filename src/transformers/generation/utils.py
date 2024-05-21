@@ -1136,7 +1136,7 @@ class GenerationMixin:
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
         past = model_kwargs.get("past_key_values", None)
-        if isinstance(past, DynamicCache) and not self._supports_dynamic_cache_class:
+        if isinstance(past, DynamicCache) and not self._supports_cache_class:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an instance of `DynamicCache` as `past_key_values`. Please "
                 "check the model documentation for supported cache formats."
@@ -1719,7 +1719,7 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = cache_class(cache_config)
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
-        elif generation_config.cache_implementation is None and self._supports_dynamic_cache_class:
+        elif generation_config.cache_implementation is None and self._supports_cache_class:
             past = model_kwargs.get("past_key_values", None)
             if past is None:
                 model_kwargs["past_key_values"] = DynamicCache()
