@@ -679,7 +679,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ["EduardoPacheco/hiera-tiny-224"]: 
+        for model_name in ["EduardoPacheco/hiera-tiny-224"]:
             model = HieraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

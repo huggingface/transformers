@@ -220,8 +220,6 @@ def convert_hiera_checkpoint(args):
     model_name = args.model_name
     base_model = args.base_model
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
-    verify_logits = args.verify_logits
-    verify_pixel_values = args.verify_pixel_values
     push_to_hub = args.push_to_hub
     mae_model = args.mae_model
 
@@ -293,7 +291,6 @@ def convert_hiera_checkpoint(args):
     print("Pixel values look good!")
     print(f"{inputs.pixel_values[0, :3, :3, :3]=}")
 
-
     # If is MAE we pass a noise to generate a random mask
     mask_spatial_shape = [
         i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
@@ -324,7 +321,6 @@ def convert_hiera_checkpoint(args):
         assert torch.allclose(outputs.logits.softmax(dim=-1), expected_prob, atol=1e-3)
         print("Classifier looks good as probs match original implementation")
         print(f"{outputs.logits[:, :5]=}")
-
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")

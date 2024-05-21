@@ -215,7 +215,6 @@ def conv_nd(n: int) -> nn.Module:
     return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
 
 
-
 class HieraPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -685,9 +684,9 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     # From: [batch_size, num_mask_unit_height, num_mask_unit_width, mask_unit_height, mask_unit_width, hidden_size]
     # To: [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size]
     permute = (
-        [0] +
-        [item for pair in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims)) for item in pair] +
-        [len(hidden_states.shape) - 1]
+        [0]
+        + [item for pair in zip(range(1, 1 + num_dims), range(1 + num_dims, 1 + 2 * num_dims)) for item in pair]
+        + [len(hidden_states.shape) - 1]
     )
     hidden_states = hidden_states.permute(permute).reshape(batch_size, *shape, hidden_size)
 
@@ -776,9 +775,13 @@ class HieraEncoder(nn.Module):
             # Output: [batch_size, seq_len//(stride*stride), stride, mask_unit_height, stride, mask_unit_width, hidden_size]
             hidden_state_dims = len(hidden_states.shape)
             permute = (
-                [0, 1 + num_dim] +
-                [item for pair in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, hidden_state_dims - 1)) for item in pair] +
-                [hidden_state_dims - 1]
+                [0, 1 + num_dim]
+                + [
+                    item
+                    for pair in zip(range(1, 1 + num_dim), range(1 + num_dim + 1, hidden_state_dims - 1))
+                    for item in pair
+                ]
+                + [hidden_state_dims - 1]
             )
             hidden_states = hidden_states.permute(permute)
 

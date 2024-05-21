@@ -4078,9 +4078,6 @@ class GroupViTVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-HIERA_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class HieraBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
