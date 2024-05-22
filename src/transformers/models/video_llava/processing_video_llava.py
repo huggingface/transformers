@@ -46,6 +46,11 @@ class VideoLlavaProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+        self.image_size = self.image_processor.size["shortest_edge"]
+        self.patch_size = 14  # self.image_processor.path_size
+        self.image_token = "<image>"
+        self.video_token = "<video>"
+        self.vision_feature_select_strategy = "default"  # self.image_processor.vision_feature_select_strategy
 
     def __call__(
         self,
@@ -112,8 +117,29 @@ class VideoLlavaProcessor(ProcessorMixin):
             encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
             data.update(encoded_images)
 
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        # Replace the image token with the expanded image token sequence
+        num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
+        num_video_tokens = num_image_tokens * 8  # Always 8 frames, no `vision_feature_select_strategy`
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+
+        prompt_strings = []
+        for sample in text:
+            sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+            sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+            prompt_strings.append(sample)
+
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
         data.update(text_inputs)
 

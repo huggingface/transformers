@@ -46,7 +46,10 @@ class LlavaProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
-
+        self.image_size = self.image_processor.size["shortest_edge"]
+        self.patch_size = 14  # self.image_processor.path_size
+        self.image_token = "<image>"
+        self.vision_feature_select_strategy = "default"  # self.image_processor.vision_feature_select_strategy
 
     def __call__(
         self,
@@ -106,28 +109,30 @@ class LlavaProcessor(ProcessorMixin):
             pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         else:
             pixel_values = None
-        
+
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
         # Replace the image token with the expanded image token sequence
-        image_str = self.image_token.content
-        num_image_tokens = self._get_number_of_features()
+        num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+
         prompt_strings = []
         for sample in text:
-            sample = sample.replace(image_str, image_str * num_image_tokens)
+            sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
             prompt_strings.append(sample)
-        
+
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
-
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
-
-    def _get_number_of_features(self) -> int:
-        image_size = self.config.vision_config.image_size
-        patch_size = self.config.vision_config.patch_size
-
-        num_patches = (image_size // patch_size) ** 2
-        num_features = num_patches + 1
-        return num_features
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

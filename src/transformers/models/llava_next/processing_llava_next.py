@@ -19,6 +19,7 @@ Processor class for LLaVa-NeXT.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -45,6 +46,11 @@ class LlavaNextProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+
+        self.image_size = self.image_processor.size["shortest_edge"]
+        self.patch_size = 14  # self.image_processor.path_size
+        self.image_token = "<image>"
+        self.vision_feature_select_strategy = "default"  # self.image_processor.vision_feature_select_strategy
 
     def __call__(
         self,
@@ -108,11 +114,73 @@ class LlavaNextProcessor(ProcessorMixin):
             image_inputs = self.image_processor(images, do_pad=do_pad, return_tensors=return_tensors)
         else:
             image_inputs = {}
+
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        if not image_inputs:
+            prompt_strings = text
+        else:
+            image_sizes = image_inputs["image_sizes"]
+            prompt_strings = []
+            for image_size, sample in zip(image_sizes, text):
+                # Replace the image token with the expanded image token sequence
+                height, width = image_size
+                num_image_tokens = self._get_number_of_features(height, width)
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+
+                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                prompt_strings.append(sample)
+
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            prompt_strings,
+            return_tensors=return_tensors,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
+
+    def _get_number_of_features(self, height: int, width: int) -> int:
+        image_grid_pinpoints = self.image_processor.image_grid_pinpoints
+        image_size = self.image_size
+        patch_size = self.patch_size
+
+        npatches = image_size // patch_size
+
+        height_best_resolution, width_best_resolution = select_best_resolution([height, width], image_grid_pinpoints)
+        num_patch_height, num_patch_width = height_best_resolution // image_size, width_best_resolution // image_size
+
+        unpadded_features, newline_features = self._get_unpadded_features(
+            height, width, npatches, num_patch_height, num_patch_width
+        )
+        # The base patch covers the entire image (+1 for the CLS)
+        base_features = npatches**2 + 1
+        num_image_tokens = unpadded_features + newline_features + base_features
+        return num_image_tokens
+
+    def _get_unpadded_features(self, height, width, npatches, num_patch_height, num_patch_width):
+        current_width = npatches * num_patch_height
+        current_height = npatches * num_patch_width
+
+        original_aspect_ratio = width / height
+        current_aspect_ratio = current_width / current_height
+        if original_aspect_ratio > current_aspect_ratio:
+            new_height = (height * current_width) // width
+            padding = (current_height - new_height) // 2
+            current_height -= padding * 2
+        else:
+            new_width = (width * current_height) // height
+            padding = (current_width - new_width) // 2
+            current_width -= padding * 2
+
+        unpadded_features = current_height * current_width
+        newline_features = current_height
+        return (unpadded_features, newline_features)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
