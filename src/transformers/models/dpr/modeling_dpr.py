@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DPR model for Open Domain Question Answering."""
-
+"""PyTorch DPR model for Open Domain Question Answering."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union

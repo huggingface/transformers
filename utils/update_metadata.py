@@ -28,6 +28,7 @@ that new pipelines are properly added as metadata (as used in `make repo-consist
 python utils/update_metadata.py --check-only
 ```
 """
+
 import argparse
 import collections
 import os

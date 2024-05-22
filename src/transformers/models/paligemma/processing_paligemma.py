@@ -16,7 +16,6 @@
 Processor class for PaliGemma.
 """
 
-
 import logging
 from typing import List, Optional, Union
 
@@ -177,6 +176,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             logger.warning_once(
                 "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
             )
+            text = ""
 
         if isinstance(text, List) and isinstance(images, List):
             if len(images) < len(text):
