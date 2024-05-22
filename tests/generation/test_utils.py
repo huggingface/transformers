@@ -2958,3 +2958,14 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # bos_token_id is required when no input ids nor inputs_embeds is passed
         with self.assertRaises(ValueError):
             model.generate(max_length=20, bos_token_id=None)
+
+    def test_generate_from_inputs_embeds_with_encoder_input_ids(self):
+        article = "Today a dragon flew over Paris."
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+        
+        model.generate(inputs_embeds=inputs_embeds, encoder_no_repeat_ngram_size=3, max_length=20)
+        
+        
