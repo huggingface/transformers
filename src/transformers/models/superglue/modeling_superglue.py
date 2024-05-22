@@ -37,7 +37,18 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
 
-def stack_attentions_tuples_pair(attention_probs_0, attention_probs_1):
+def concat_attentions_tuples_pair(attention_probs_0: Tuple[torch.Tensor], attention_probs_1: Tuple[torch.Tensor]):
+    """
+    Concatenate two tuple of attention probabilities into one.
+    We assume that the attention probabilities are of shape (batch_size, num_heads, num_keypoints_a, num_keypoints_b).
+    The tuples are assumed to have the same length and of the following form:
+    attention_probs_0 = (attention_probs_0_0, attention_probs_0_1, ...)
+    attention_probs_1 = (attention_probs_1_0, attention_probs_1_1, ...)
+    The output will then be of the form:
+    new_attention_probs = (torch.cat(attention_probs_0_0, attention_probs_1_0), torch.cat(attention_probs_0_1, attention_probs_1_1), ...)
+    If the attention probabilities have different shapes, the smaller one will be padded with zeros :
+    (batch_size * 2, num_heads, max(num_keypoints_a_0, num_keypoints_a_1), max(num_keypoints_b_0, num_keypoints_b_1))
+    """
     new_attention_probs = ()
     for attention_prob_0, attention_prob_1 in zip(attention_probs_0, attention_probs_1):
         if attention_prob_0.size() != attention_prob_1.size():
@@ -54,87 +65,128 @@ def stack_attentions_tuples_pair(attention_probs_0, attention_probs_1):
     return new_attention_probs
 
 
-def batch_attention_probs(attention_probs):
-    if isinstance(attention_probs[0], torch.Tensor):
-        all_attention_probs_shape_the_same = True
-        first_attention_prob_shape = attention_probs[0].shape
-        for attention_prob in attention_probs[1:]:
-            if attention_prob.shape != first_attention_prob_shape:
-                all_attention_probs_shape_the_same = False
-        if all_attention_probs_shape_the_same:
-            stacked_attention_probs = torch.stack(attention_probs, dim=0)
-        else:
-            max_dim2 = max([attention_prob.shape[2] for attention_prob in attention_probs])
-            max_dim3 = max([attention_prob.shape[3] for attention_prob in attention_probs])
-            stacked_attention_probs = torch.zeros(
-                len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3
-            ).to(attention_probs[0].device)
-            for i, attention_prob in enumerate(attention_probs):
-                stacked_attention_probs[i, :, :, : attention_prob.shape[2], : attention_prob.shape[3]] = attention_prob
-        return stacked_attention_probs
-    elif isinstance(attention_probs[0], tuple):
-        list_of_tuples = [tuple([element[i] for element in attention_probs]) for i in range(len(attention_probs[0]))]
-        return [batch_attention_probs(element) for element in list_of_tuples]
-    elif attention_probs[0] is None:
-        return None
-
-
-def batch_list_attention(list_attention):
-    list_length = len(list_attention)
-
-    if list_length > 0:
-        return batch_attention_probs(list_attention)
+def stack_attention_probs_list(attention_probs: List[torch.Tensor]):
+    all_attention_probs_shape_the_same = True
+    first_attention_prob_shape = attention_probs[0].shape
+    for attention_prob in attention_probs[1:]:
+        if attention_prob.shape != first_attention_prob_shape:
+            all_attention_probs_shape_the_same = False
+    if all_attention_probs_shape_the_same:
+        stacked_attention_probs = torch.stack(attention_probs, dim=0)
     else:
-        return list_attention
+        max_dim2 = max([attention_prob.shape[2] for attention_prob in attention_probs])
+        max_dim3 = max([attention_prob.shape[3] for attention_prob in attention_probs])
+        stacked_attention_probs = torch.zeros(
+            len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3
+        ).to(attention_probs[0].device)
+        for i, attention_prob in enumerate(attention_probs):
+            stacked_attention_probs[i, :, :, : attention_prob.shape[2], : attention_prob.shape[3]] = attention_prob
+    return stacked_attention_probs
 
 
-def batch_hidden_states(hidden_states):
-    if isinstance(hidden_states[0], torch.Tensor):
-        all_hidden_state_shape_the_same = True
-        first_attention_prob_shape = hidden_states[0].shape
-        for attention_prob in hidden_states[1:]:
-            if attention_prob.shape != first_attention_prob_shape:
-                all_hidden_state_shape_the_same = False
-        if all_hidden_state_shape_the_same:
-            stacked_hidden_state = torch.stack(hidden_states, dim=0)
-        else:
-            stacked_hidden_state = torch.zeros(
-                len(hidden_states),
-                2,
-                hidden_states[0].shape[1],
-                max([hidden_state.shape[2] for hidden_state in hidden_states]),
-            )
-            for i, hidden_state in enumerate(hidden_states):
-                stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
-        return stacked_hidden_state
-    elif isinstance(hidden_states[0], tuple):
-        list_of_tuples = [tuple([element[i] for element in hidden_states]) for i in range(len(hidden_states[0]))]
-        return [batch_hidden_states(element) for element in list_of_tuples]
-    elif hidden_states[0] is None:
-        return None
-
-
-def batch_list_hidden_states(list_hidden_states):
-    list_length = len(list_hidden_states)
-
-    if list_length > 0:
-        return batch_hidden_states(list_hidden_states)
+def batch_attention_probs_list(attention_probs: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]):
+    """
+    Given a list of attention probabilities, batch them together.
+    We assume that the attention probabilities are of shape (batch_size, num_heads, num_keypoints_a, num_keypoints_b).
+    The list can be of two forms:
+    - List of attention probabilities: [attention_probs_0, attention_probs_1, ...]
+    - List of tuples of attention probabilities: [(attention_probs_0_0, attention_probs_1_0, ...), (attention_probs_0_1, attention_probs_1_1, ...), ...]
+    If the list is of the first form, we stack the attention probabilities along the batch dimension:
+    [attention_probs_0, attention_probs_1, ...] -> torch.stack([attention_probs_0, attention_probs_1, ...], dim=0)
+    If the list is of the second form, we stack the attention probabilities along the batch dimension for each tuple:
+    [(attention_probs_0_0, attention_probs_1_0, ...), (attention_probs_0_1, attention_probs_1_1, ...), ...] ->
+    [torch.stack([attention_probs_0_0, attention_probs_1_0, ...], dim=0), torch.stack([attention_probs_0_1, attention_probs_1_1, ...], dim=0), ...]
+    """
+    if len(attention_probs) > 0:
+        if isinstance(attention_probs[0], torch.Tensor):
+            return stack_attention_probs_list(attention_probs)
+        elif isinstance(attention_probs[0], tuple):
+            list_of_tuples = [
+                tuple([element[i] for element in attention_probs]) for i in range(len(attention_probs[0]))
+            ]
+            return [stack_attention_probs_list(element) for element in list_of_tuples]
+        elif attention_probs[0] is None:
+            return None
     else:
-        return list_hidden_states
+        return []
 
 
-def stack_hidden_states_tuples_pair(hidden_states_0, hidden_states_1):
+def concat_hidden_states_tuples_pair(hidden_states_0, hidden_states_1):
+    """
+    Concatenate two tuple of hidden states into one.
+    We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
+    The tuples are assumed to have the same length and of the following form:
+    hidden_states_0 = (hidden_state_0_0, hidden_state_0_1, ...)
+    hidden_states_1 = (hidden_state_1_0, hidden_state_1_1, ...)
+    The output will then be of the form:
+    new_hidden_states = (torch.cat(hidden_state_0_0, hidden_state_1_0), torch.cat(hidden_state_0_1, hidden_state_1_1), ...)
+    If the number of keypoints are different among hidden_states, the smaller one will be padded with zeros :
+    (batch_size * 2, hidden_state_size, max(num_keypoints_0, num_keypoints_1))
+    """
     hidden_states = ()
     for hidden_state_0, hidden_state_1 in zip(hidden_states_0, hidden_states_1):
-        if hidden_state_0.size() != hidden_state_1.size():
-            max_num_keypoints = max(hidden_state_0.size(2), hidden_state_1.size(2))
+        if hidden_state_0.shape != hidden_state_1.shape:
+            max_num_keypoints = max(hidden_state_0.shape[2], hidden_state_1.shape[2])
             new_hidden_state = torch.zeros(2, hidden_state_0.shape[1], max_num_keypoints).to(hidden_state_0.device)
-            new_hidden_state[0, :, : hidden_state_0.size(2)] = hidden_state_0
-            new_hidden_state[1, :, : hidden_state_1.size(2)] = hidden_state_1
+            new_hidden_state[0, :, : hidden_state_0.shape[2]] = hidden_state_0
+            new_hidden_state[1, :, : hidden_state_1.shape[2]] = hidden_state_1
             hidden_states = hidden_states + (new_hidden_state,)
         else:
             hidden_states = hidden_states + (torch.cat([hidden_state_0, hidden_state_1]),)
     return hidden_states
+
+
+def stack_hidden_states_list(hidden_states: List[torch.Tensor]):
+    """
+    Given a list of hidden states tensors, stack them together using torch.stack.
+    We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
+    If all hidden states have the same shape, we stack them along the batch dimension:
+    [hidden_state_0, hidden_state_1, ...] -> torch.stack([hidden_state_0, hidden_state_1, ...], dim=0)
+    If the hidden states have different shapes, the smaller ones will be padded with zeros:
+    (batch_size * 2, hidden_state_size, max(num_keypoints_0, num_keypoints_1))
+    """
+    all_hidden_state_shape_the_same = True
+    first_attention_prob_shape = hidden_states[0].shape
+    for attention_prob in hidden_states[1:]:
+        if attention_prob.shape != first_attention_prob_shape:
+            all_hidden_state_shape_the_same = False
+    if all_hidden_state_shape_the_same:
+        stacked_hidden_state = torch.stack(hidden_states, dim=0)
+    else:
+        stacked_hidden_state = torch.zeros(
+            len(hidden_states),
+            2,
+            hidden_states[0].shape[1],
+            max([hidden_state.shape[2] for hidden_state in hidden_states]),
+        )
+        for i, hidden_state in enumerate(hidden_states):
+            stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
+    return stacked_hidden_state
+
+
+def batch_hidden_states(hidden_states):
+    """
+    Given a list of hidden states, batch them together using torch.stack.
+    We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
+    The list can be of two forms:
+    - List of hidden states: [hidden_state_0, hidden_state_1, ...]
+    - List of tuples of hidden states: [(hidden_state_0_0, hidden_state_1_0, ...), (hidden_state_0_1, hidden_state_1_1, ...), ...]
+    If the list is of the first form, we stack the attention probabilities along the batch dimension:
+    [hidden_state_0, hidden_state_1, ...] -> torch.stack([hidden_state_0, hidden_state_1, ...], dim=0)
+    If the list is of the second form, we stack the attention probabilities along the batch dimension for each tuple:
+    [(hidden_state_0_0, hidden_state_1_0, ...), (hidden_state_0_1, hidden_state_1_1, ...), ...] ->
+    [torch.stack([hidden_state_0_0, hidden_state_1_0, ...], dim=0), torch.stack([hidden_state_0_1, hidden_state_1_1, ...], dim=0), ...]
+    """
+    if len(hidden_states) > 0:
+        if isinstance(hidden_states[0], torch.Tensor):
+            return stack_hidden_states_list(hidden_states)
+        elif isinstance(hidden_states[0], tuple):
+            list_of_tuples = [tuple([element[i] for element in hidden_states]) for i in range(len(hidden_states[0]))]
+            return [stack_hidden_states_list(element) for element in list_of_tuples]
+        elif hidden_states[0] is None:
+            return None
+    else:
+        return []
 
 
 def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -401,11 +453,11 @@ class SuperGlueAttentionalGNN(nn.Module):
                         new_hidden_state[:, :, : hidden_state1.shape[2]] = hidden_state1
                         all_hidden_states = all_hidden_states + (new_hidden_state,)
                 else:
-                    all_hidden_states = all_hidden_states + stack_attentions_tuples_pair(
+                    all_hidden_states = all_hidden_states + concat_attentions_tuples_pair(
                         gnn_outputs0[1], gnn_outputs1[1]
                     )
             if output_attentions:
-                all_attentions = all_attentions + stack_attentions_tuples_pair(gnn_outputs0[2], gnn_outputs1[2])
+                all_attentions = all_attentions + concat_attentions_tuples_pair(gnn_outputs0[2], gnn_outputs1[2])
 
             descriptors_0 = descriptors_0 + delta0
             descriptors_1 = descriptors_1 + delta1
@@ -593,11 +645,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + stack_hidden_states_tuples_pair(
+            all_hidden_states = all_hidden_states + concat_hidden_states_tuples_pair(
                 encoded_keypoints0[1], encoded_keypoints1[1]
             )
             all_hidden_states = all_hidden_states + gnn_outputs[2]
-            all_hidden_states = all_hidden_states + stack_hidden_states_tuples_pair(
+            all_hidden_states = all_hidden_states + concat_hidden_states_tuples_pair(
                 (projected_descriptors_0,), (projected_descriptors_1,)
             )
 
@@ -746,8 +798,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
             keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
 
-        hidden_states = batch_list_hidden_states(list_hidden_states)
-        attentions = batch_list_attention(list_attentions)
+        hidden_states = batch_hidden_states(list_hidden_states)
+        attentions = batch_attention_probs_list(list_attentions)
 
         if not return_dict:
             return tuple(
