@@ -95,7 +95,7 @@ class PaliGemmaConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.vision_config = vision_config
         self.is_encoder_decoder = False
-        self.prefix_suffix_separator_index = prefix_suffix_separator_index  # always \n
+        self.prefix_suffix_separator_index = prefix_suffix_separator_index
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = (

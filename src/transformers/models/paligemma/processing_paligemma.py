@@ -262,44 +262,9 @@ class PaliGemmaProcessor(ProcessorMixin):
             attention_masks = inputs["attention_mask"]
 
         if training:
-            suffix_inputs = self.tokenizer(
-                suffix,
-                add_special_tokens=False,
-                return_tensors=None,
-                padding="do_not_pad",
-                max_length=max_length,
-                truncation=truncation,
+            input_ids, attention_masks, labels = self.tokenize_with_suffix(
+                suffix, input_ids, attention_masks, max_length, truncation, padding
             )
-            suffix_input_ids = suffix_inputs["input_ids"]
-            suffix_attention_masks = suffix_inputs["attention_mask"]
-
-            eos_token = self.tokenizer.convert_tokens_to_ids("<eos>")
-
-            suffix_input_ids = [ids + [eos_token] for ids in suffix_input_ids]
-            suffix_attention_masks = [mask + [1] for mask in suffix_attention_masks]
-
-            labels_prefix = [[self.ignore_index for _ in ids] for ids in input_ids]
-            for label in labels_prefix:
-                label[-1] = self.prefix_suffix_separator_index
-
-            labels_suffix = suffix_input_ids
-
-            input_ids = [ids + suffix_ids for ids, suffix_ids in zip(input_ids, suffix_input_ids)]
-            attention_masks = [
-                mask + suffix_mask for mask, suffix_mask in zip(attention_masks, suffix_attention_masks)
-            ]
-            labels = [label + suffix_label for label, suffix_label in zip(labels_prefix, labels_suffix)]
-            labels = self.tokenizer.pad(
-                {"input_ids": labels},
-                padding=padding,
-                max_length=max_length,
-                return_tensors=None,
-                return_attention_mask=False,
-            ).input_ids  # In the future, maybe self.tokenizer.pad can pad labels
-            for label in labels:
-                for ind, value in enumerate(label):
-                    if value == self.tokenizer.pad_token_id:
-                        label[ind] = self.ignore_index
 
         text_inputs = self.tokenizer.pad(
             {"input_ids": input_ids, "attention_mask": attention_masks},
@@ -312,6 +277,84 @@ class PaliGemmaProcessor(ProcessorMixin):
             return_data["labels"] = labels
 
         return BatchFeature(return_data, tensor_type=return_tensors)
+
+    def tokenize_with_suffix(
+        self,
+        suffix: List[str],
+        pre_input_ids: List[List[int]],
+        pre_attention_masks: List[list[int]],
+        max_length: Optional[int],
+        truncation: Optional[Union[bool, str, TruncationStrategy]],
+        padding: Optional[Union[bool, str, PaddingStrategy]],
+    ):
+        """
+        Generates correct label mask with new special index
+        for where prefix and suffix are separated by \n.
+        Adds <eos> to suffix to match PaliGemma training.
+
+        Args:
+            suffix (List[str]):
+                Suffix batch to be encode
+            pre_input_ids (List[List[int]]):
+                Batch of input_ids list for prefix batches (already encoded)
+            pre_attention_masks: List[list[int]],
+                Batch of prefix attention_masks already encoded
+                (should just be 1s since no padding has been applied)
+            max_length: (Optional[int]):
+                Max_length of output encoding prefix+suffix
+            truncation (Optional[Union[bool, str, TruncationStrategy]]):
+                Truncation strategy of output encoding prefix+suffix
+            padding (Optional[Union[bool, str, PaddingStrategy]]):
+                Padding strategy of output encoding prefix+suffix
+        """
+        suffix_inputs = self.tokenizer(
+            suffix,
+            add_special_tokens=False,
+            return_tensors=None,
+            padding="do_not_pad",
+            max_length=max_length,
+            truncation=truncation,
+        )
+        suffix_input_ids = suffix_inputs["input_ids"]
+        suffix_attention_masks = suffix_inputs["attention_mask"]
+
+        eos_token = self.tokenizer.convert_tokens_to_ids("<eos>")
+
+        suffix_input_ids = [ids + [eos_token] for ids in suffix_input_ids]
+        suffix_attention_masks = [mask + [1] for mask in suffix_attention_masks]
+
+        labels_prefix = [[self.ignore_index for _ in ids] for ids in pre_input_ids]
+        for label in labels_prefix:
+            label[-1] = self.prefix_suffix_separator_index
+
+        labels_suffix = suffix_input_ids
+
+        input_ids = [
+            ids + suffix_ids for ids, suffix_ids in zip(pre_input_ids, suffix_input_ids)
+        ]
+        attention_masks = [
+            mask + suffix_mask
+            for mask, suffix_mask in zip(pre_attention_masks, suffix_attention_masks)
+        ]
+        labels = [
+            label + suffix_label
+            for label, suffix_label in zip(labels_prefix, labels_suffix)
+        ]
+
+        labels = self.tokenizer.pad(
+            {"input_ids": labels},
+            padding=padding,
+            max_length=max_length,
+            return_tensors=None,
+            return_attention_mask=False,
+        ).input_ids  # In the future, maybe self.tokenizer.pad can pad labels
+
+        for label in labels:
+            for ind, value in enumerate(label):
+                if value == self.tokenizer.pad_token_id:
+                    label[ind] = self.ignore_index
+
+        return input_ids, attention_masks, labels
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
