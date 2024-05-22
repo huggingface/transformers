@@ -15,6 +15,7 @@
 """
 Image/Text processor class for AltCLIP
 """
+
 import warnings
 
 from ...processing_utils import ProcessorMixin

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning 🤗 Transformers model for object detection with Accelerate."""
+"""Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse
 import json
@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.42.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)

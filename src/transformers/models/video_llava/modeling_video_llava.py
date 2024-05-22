@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VideoLlava model."""
+"""PyTorch VideoLlava model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -124,6 +125,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _no_split_modules = ["VideoLlavaVisionAttention"]
 
     def _init_weights(self, module):
         # important: this ported version of VideoLlava isn't meant for training from scratch - only

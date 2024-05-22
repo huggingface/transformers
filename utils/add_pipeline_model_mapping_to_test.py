@@ -24,7 +24,6 @@ This script will be (mostly) used in the following 2 situations:
 This script is **NOT** intended to be run (manually) by community contributors.
 """
 
-
 import argparse
 import glob
 import inspect
