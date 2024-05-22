@@ -93,6 +93,7 @@ IMPORTANT_MODELS = [
     "vit",
     "whisper",
     # Pipeline-specific model (to be sure each pipeline has one model in this list)
+    "tapas",
     "vilt",
     "clap",
     "detr",
