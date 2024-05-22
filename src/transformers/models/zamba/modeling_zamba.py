@@ -673,12 +673,11 @@ class ZambaMambaMixer(nn.Module):
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
         # selective projection used to make dt, B and C input dependent
-        x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
-        self.x_proj_weight = nn.Parameter(x_proj.weight.clone().detach().reshape(-1, self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads).transpose(0, 1).contiguous())
+        self.x_proj_weight = nn.Parameter((torch.rand(self.n_mamba_heads, self.time_step_rank + self.ssm_state_size * 2, self.intermediate_size//self.n_mamba_heads) - 0.5) * 2 /  self.intermediate_size**0.5)
         # time step projection (discretization)
-        dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
-        self.dt_proj_weight = nn.Parameter(dt_proj.weight.clone().detach().reshape(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads, -1)) # (h d dt_rank)
-        self.dt_proj_bias = nn.Parameter(dt_proj.bias.clone().detach().reshape(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads)) # (h d)
+        self.dt_proj_weight = nn.Parameter((torch.rand(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads, self.time_step_rank) - 0.5) * 2 / self.time_step_rank**0.5) # (h d dt_rank)
+        ### self.dt_proj_bias = nn.Parameter(dt_proj.bias.clone().detach().reshape(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads)) 
+        self.dt_proj_bias = nn.Parameter(torch.zeros(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads)) # (h d)
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
@@ -877,7 +876,9 @@ class ZambaMambaMixer(nn.Module):
         if self.use_fast_kernels:
             if not is_fast_path_available or "cuda" not in self.x_proj_weight.device.type:
                 raise ValueError(
-                    "Fast Mamba kernels are not available. Make sure to they are installed and that the mamba module is on a CUDA device"
+                    "Fast Mamba kernels are not available. Make sure to they are installed and that "
+                    "the mamba module is on a CUDA device. lease run 'pip install causal-conv1d>=1.2.0' "
+                    "and 'pip install mamba-ssm', or set use_fast_kernels=False in the model's config."
                 )
             return self.cuda_kernels_forward(hidden_states, cache_params)
         return self.slow_forward(hidden_states, cache_params)
@@ -1287,7 +1288,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 if self.gradient_checkpointing and self.training:
                     from_tf = self._gradient_checkpointing_func(
                         next(linear_layers).__call__,
-                        hidden_states=from_tf,
+                        from_tf,
                     )
                 else:
                     from_tf = next(linear_layers)(
