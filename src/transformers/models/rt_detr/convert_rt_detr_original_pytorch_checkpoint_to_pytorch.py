@@ -750,7 +750,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
 
-    print(outputs.logits[0, :3, :3], outputs.pred_boxes[0, :3, :3])
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
 
