@@ -15,6 +15,7 @@
 # limitations under the License.
 
 """Tokenization classes for Code LLaMA."""
+
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
@@ -51,7 +52,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     there is no padding token in the original model.
 
     The default configuration match that of
-    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
+    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/meta-llama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
     which supports prompt infilling.
 
     Args:

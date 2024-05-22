@@ -74,6 +74,7 @@ from .utils import (
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
+    is_gguf_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -81,6 +82,7 @@ from .utils import (
     is_keras_nlp_available,
     is_levenshtein_available,
     is_librosa_available,
+    is_lomo_available,
     is_natten_available,
     is_nltk_available,
     is_onnx_available,
@@ -163,6 +165,15 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+if is_torch_available():
+    import torch
+
+    IS_ROCM_SYSTEM = torch.version.hip is not None
+    IS_CUDA_SYSTEM = torch.version.cuda is not None
+else:
+    IS_ROCM_SYSTEM = False
+    IS_CUDA_SYSTEM = False
 
 
 def parse_flag_from_env(key, default=False):
@@ -337,6 +348,14 @@ def require_galore_torch(test_case):
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
 
 
+def require_lomo(test_case):
+    """
+    Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
+    https://github.com/OpenLMLab/LOMO
+    """
+    return unittest.skipUnless(is_lomo_available(), "test requires LOMO")(test_case)
+
+
 def require_cv2(test_case):
     """
     Decorator marking a test that requires OpenCV.
@@ -374,6 +393,13 @@ def require_accelerate(test_case, min_version: str = ACCELERATE_MIN_VERSION):
     return unittest.skipUnless(
         is_accelerate_available(min_version), f"test requires accelerate version >= {min_version}"
     )(test_case)
+
+
+def require_gguf(test_case):
+    """
+    Decorator marking a test that requires ggguf. These tests are skipped when gguf isn't installed.
+    """
+    return unittest.skipUnless(is_gguf_available(), "test requires gguf")(test_case)
 
 
 def require_fsdp(test_case, min_version: str = "1.12.0"):

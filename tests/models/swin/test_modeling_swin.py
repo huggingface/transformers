@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Swin model. """
+"""Testing suite for the PyTorch Swin model."""
 
 import collections
 import unittest
@@ -492,6 +492,26 @@ class SwinModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # Swin models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions.
+        model = SwinModel.from_pretrained("microsoft/swin-tiny-patch4-window7-224").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = image_processor(images=image, size={"height": 481, "width": 481}, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 256, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 
 @require_torch

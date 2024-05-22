@@ -20,7 +20,6 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 `transformers` so the pipeline testing will use the latest created/updated tiny models.
 """
 
-
 import argparse
 import copy
 import json

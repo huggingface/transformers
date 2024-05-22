@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """OneFormer model configuration"""
+
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig

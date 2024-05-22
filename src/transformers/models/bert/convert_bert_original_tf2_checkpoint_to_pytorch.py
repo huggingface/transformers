@@ -24,6 +24,7 @@ You may adapt this script to include classification/MLM/NSP/etc. heads.
 Note: This script is only working with an older version of the TensorFlow models repository (<= v2.3.0).
       Models trained with never versions are not compatible with this script.
 """
+
 import argparse
 import os
 import re
