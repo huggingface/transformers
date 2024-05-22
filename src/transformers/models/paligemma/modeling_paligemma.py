@@ -283,50 +283,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def construct_causal_mask_with_block_attention(self, attention_mask, text_mask, inputs_embeds, token_type_ids):
-        # Modified from gemma
-        target_length = attention_mask.shape[-1]
-        dtype, device = inputs_embeds.dtype, inputs_embeds.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = attention_mask.shape[1]
-        causal_mask = torch.full(
-            (sequence_length, target_length),
-            fill_value=min_dtype,
-            dtype=dtype,
-            device=device,
-        )
-        if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-        # type ids of 1 will be the labels if they exist
-        mask = token_type_ids
-        indices = mask.int().argmax(dim=1, keepdim=True)
-        range_tensor = torch.arange(mask.size(1), device=device).unsqueeze(0).unsqueeze(1)  # [1, 1, l]
-        # Create the full block attention mask
-        prefix_and_image_and_pad_mask = range_tensor < indices.view(-1, 1, 1)
-        prefix_and_image_and_pad_mask = prefix_and_image_and_pad_mask.expand(-1, mask.size(1), -1)
-        causal_mask = causal_mask[None, :].expand(attention_mask.shape[0], -1, -1)
-        causal_mask = causal_mask.clone()
-        causal_mask = causal_mask.masked_scatter(prefix_and_image_and_pad_mask, torch.zeros_like(causal_mask))
-        causal_mask = causal_mask[:, None, :, :].expand(-1, 1, -1, -1)
-        if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-            mask_length = attention_mask.shape[-1]
-            padding_mask = attention_mask[:, None, None, :].eq(0)
-            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                padding_mask, min_dtype
-            )
-        boolean_mask = (
-            text_mask.unsqueeze(1).unsqueeze(2).expand(-1, causal_mask.size(1), causal_mask.size(2), -1) == 0
-        )
-
-        causal_mask.masked_fill_(boolean_mask, 0)
-        return causal_mask
-
     def _merge_input_ids_with_image_features(
-        self, image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids
+        self, image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids, cache_position
     ):
         _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
+        dtype, device = inputs_embeds.dtype, inputs_embeds.device
+        min_dtype = torch.finfo(dtype).min
+
         scaled_image_features = image_features / (self.config.hidden_size**0.5)
         final_embedding = torch.zeros(
             batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -347,15 +311,33 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features
         )
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
+        if attention_mask is not None:
+            position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
+        else:
+            position_ids = None
 
-        # position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
-        # position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
-        position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
-
-        if token_type_ids is not None and labels is not None:
-            causal_mask = self.construct_causal_mask_with_block_attention(
-                attention_mask, text_mask, inputs_embeds, token_type_ids
+        if token_type_ids is not None:
+            # from llama modeling
+            target_length = cache_position[-1] + 1
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
             )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(token_type_ids[:, None, None, :] == 0, 0)
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+
+
             final_labels = torch.full(
                 (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
             )
@@ -439,8 +421,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
 
+
+                if cache_position is None:
+                    cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device
+                    )
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids
+                    image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids, cache_position
                 )
 
             else:
