@@ -283,12 +283,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def construct_causal_mask_with_block_attention(self, attention_mask, labels, text_mask, inputs_embeds):
+    def construct_causal_mask_with_block_attention(self, attention_mask, text_mask, inputs_embeds, token_type_ids):
         # Modified from gemma
         target_length = attention_mask.shape[-1]
         dtype, device = inputs_embeds.dtype, inputs_embeds.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = labels.shape[1]
+        sequence_length = attention_mask.shape[1]
         causal_mask = torch.full(
             (sequence_length, target_length),
             fill_value=min_dtype,
@@ -297,17 +297,16 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         )
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
-
-        mask = labels == self.config.prefix_suffix_separator_index
-        # Get the index of the first \n in each row
+        # type ids of 1 will be the labels if they exist
+        mask = token_type_ids
         indices = mask.int().argmax(dim=1, keepdim=True)
         range_tensor = torch.arange(mask.size(1), device=device).unsqueeze(0).unsqueeze(1)  # [1, 1, l]
-
         # Create the full block attention mask
         prefix_and_image_and_pad_mask = range_tensor < indices.view(-1, 1, 1)
         prefix_and_image_and_pad_mask = prefix_and_image_and_pad_mask.expand(-1, mask.size(1), -1)
-        causal_mask = causal_mask[None, :].expand(labels.shape[0], -1, -1)
-        causal_mask[prefix_and_image_and_pad_mask] = 0
+        causal_mask = causal_mask[None, :].expand(attention_mask.shape[0], -1, -1)
+        causal_mask = causal_mask.clone()
+        causal_mask = causal_mask.masked_scatter(prefix_and_image_and_pad_mask, torch.zeros_like(causal_mask))
         causal_mask = causal_mask[:, None, :, :].expand(-1, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -323,7 +322,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         causal_mask.masked_fill_(boolean_mask, 0)
         return causal_mask
 
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
+    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids):
         _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         scaled_image_features = image_features / (self.config.hidden_size**0.5)
@@ -351,9 +350,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         # position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
         position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
 
-        if labels is not None:
+        if token_type_ids is not None and labels is not None:
             causal_mask = self.construct_causal_mask_with_block_attention(
-                attention_mask, labels, text_mask, inputs_embeds
+                attention_mask, text_mask, inputs_embeds, token_type_ids
             )
             final_labels = torch.full(
                 (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
@@ -375,6 +374,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -439,7 +439,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 image_features = self.multi_modal_projector(selected_image_feature)
 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, labels
+                    image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids
                 )
 
             else:
@@ -528,6 +528,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         cache_position=None,
         pixel_values=None,
         attention_mask=None,
+        token_type_ids=None,
         **kwargs,
     ):
         past_length = 0
@@ -586,6 +587,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "pixel_values": pixel_values,
+                "token_type_ids": token_type_ids,
             }
         )
         return model_inputs
