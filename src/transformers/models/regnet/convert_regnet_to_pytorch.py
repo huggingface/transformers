@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert RegNet checkpoints from timm and vissl."""
 
-
 import argparse
 import json
 from dataclasses import dataclass, field

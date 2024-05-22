@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -96,9 +96,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {
-    "static": StaticCache,
-}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
 
 
 @dataclass
@@ -1326,24 +1324,33 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_static_cache(self, max_batch_size: int, max_cache_len: int) -> StaticCache:
+    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
         """
-        Sets a static cache for `generate`, that will persist across calls. A new cache will only be initialized a
+        Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache.
 
-        Returns the resulting static cache object.
+        Returns the resulting cache object.
         """
-        needs_new_cache = (
-            not hasattr(self, "_static_cache")
-            or self._static_cache.max_batch_size < max_batch_size
-            or self._static_cache.max_cache_len < max_cache_len
+        cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        need_new_cache = (
+            not hasattr(self, "_cache")
+            or (not isinstance(self._cache, cache_cls))
+            or self._cache.max_batch_size < max_batch_size
         )
-        if needs_new_cache:
+        if cache_implementation == "sliding_window":
+            need_new_cache = need_new_cache or (
+                self._cache.sliding_window_size < self._cache.model_sliding_window_size
+                and max_cache_len > self._cache.max_cache_len
+            )
+        elif cache_implementation == "static":
+            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+
+        if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._static_cache = StaticCache(
+            self._cache = cache_cls(
                 config=self.config,
                 max_batch_size=max_batch_size,
                 max_cache_len=max_cache_len,
@@ -1351,8 +1358,8 @@ class GenerationMixin:
                 dtype=cache_dtype,
             )
         else:
-            self._static_cache.reset()  # reset the cache for a new generation
-        return self._static_cache
+            self._cache.reset()
+        return self._cache
 
     def _prepare_special_tokens(
         self,
@@ -1615,14 +1622,14 @@ class GenerationMixin:
                     "This model does not support the `cache_implementation` argument. Please check the following "
                     "issue: https://github.com/huggingface/transformers/issues/28981."
                 )
-            if generation_config.cache_implementation == "static":
-                if not self._supports_static_cache:
-                    raise ValueError(
-                        "This model does not support `cache_implementation='static'`. Please check the following "
-                        "issue: https://github.com/huggingface/transformers/issues/28981"
-                    )
-                model_kwargs["past_key_values"] = self._get_static_cache(batch_size, generation_config.max_length)
-
+            if generation_config.cache_implementation == "static" and not self._supports_static_cache:
+                raise ValueError(
+                    "This model does not support `cache_implementation='static'`. Please check the following "
+                    "issue: https://github.com/huggingface/transformers/issues/28981"
+                )
+            model_kwargs["past_key_values"] = self._get_cache(
+                generation_config.cache_implementation, batch_size, generation_config.max_length
+            )
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
