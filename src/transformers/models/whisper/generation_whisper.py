@@ -122,7 +122,7 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
     return None
 
 
-def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
+def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_id=None, cut_off_length=None):
     max_total_length = 0
     sequences = []
     if padding not in ["right", "left"]:
@@ -135,12 +135,14 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
             if cut_off_length is not None:
                 sequence = sequence[-cut_off_length:]
 
-            if bos_token_tensor is not None:
+            if bos_token_id is not None:
+                bos_token_tensor = torch.tensor([bos_token_id]).to(sequence.device)
                 sequence = torch.cat([bos_token_tensor, sequence])
 
             sequences.append(sequence)
             max_total_length = max(max_total_length, len(sequences[-1]))
-        elif bos_token_tensor is not None:
+        elif bos_token_id is not None:
+            bos_token_tensor = torch.tensor([bos_token_id]).to(sequence.device)
             sequences.append(bos_token_tensor)
         else:
             sequences.append(torch.tensor([]))
@@ -558,6 +560,7 @@ class WhisperGenerationMixin:
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         # if is_shortform:
+        #     print('with short_form generation: ')
         #     if temperature is not None:
         #         generation_config.temperature = temperature
 
@@ -734,7 +737,12 @@ class WhisperGenerationMixin:
             if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
-        sequences = _pad_to_max_length(final_segments, generation_config.pad_token_id, padding="right")
+        sequences = _pad_to_max_length(
+            final_segments, 
+            pad_token_id = generation_config.pad_token_id, 
+            bos_token_id = generation_config.bos_token_id, 
+            padding="right"
+        )
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
