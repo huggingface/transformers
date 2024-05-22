@@ -136,6 +136,7 @@ _deps = [
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
     "opencv-python",
+    "optimum-benchmark>=0.2.0",
     "optuna",
     "optax>=0.0.8,<=0.1.4",
     "packaging>=20.0",
@@ -409,6 +410,8 @@ extras["torchhub"] = deps_list(
 extras["agents"] = deps_list(
     "diffusers", "accelerate", "datasets", "torch", "sentencepiece", "opencv-python", "Pillow"
 )
+
+extras["benchmark"] = deps_list("optimum-benchmark")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
