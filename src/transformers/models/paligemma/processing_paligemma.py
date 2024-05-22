@@ -16,7 +16,6 @@
 Processor class for PaliGemma.
 """
 
-
 import logging
 from typing import List, Optional, Union
 

@@ -156,7 +156,7 @@ _deps = [
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff==0.1.5",
+    "ruff==0.4.4",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.4.1",
@@ -173,10 +173,10 @@ _deps = [
     "tensorflow-cpu>2.9,<2.16",
     "tensorflow>2.9,<2.16",
     "tensorflow-text<2.16",
-    "tensorflow-probability<2.16",
+    "tensorflow-probability<0.24",
     "tf2onnx",
     "timeout-decorator",
-    "timm",
+    "timm<=0.9.16",
     "tokenizers>=0.19,<0.20",
     "torch",
     "torchaudio",
@@ -339,7 +339,7 @@ extras["testing"] = (
 )
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
-
+extras["ruff"] = deps_list("ruff")
 extras["quality"] = deps_list("datasets", "isort", "ruff", "GitPython", "urllib3")
 
 extras["all"] = (
