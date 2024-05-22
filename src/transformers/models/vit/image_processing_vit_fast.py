@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_transforms import FusedRescaleNormalize, Rescale
+from ...image_transforms import FusedRescaleNormalize, Rescale, NumpyToTensor
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -144,7 +144,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
 
         elif image_type == ImageType.NUMPY:
             # Do we want to permute the channels here?
-            transforms.append(Lambda(lambda x: torch.from_numpy(x)))
+            transforms.append(NumpyToTensor())
 
         # We can combine rescale and normalize into a single operation for speed
         if do_rescale and do_normalize:

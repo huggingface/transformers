@@ -838,3 +838,11 @@ class Rescale:
 
     def __call__(self, image: "torch.Tensor"):
         return image.mul(self.rescale_factor)
+
+
+class NumpyToTensor:
+    """
+    Convert a numpy array to a PyTorch tensor.
+    """
+    def __call__(self, image: np.ndarray):
+        return torch.from_numpy(image)
