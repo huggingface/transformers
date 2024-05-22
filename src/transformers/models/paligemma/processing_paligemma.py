@@ -142,6 +142,25 @@ class PaliGemmaProcessor(ProcessorMixin):
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
+        The usage for PaliGemma fine-tuning preparation is slightly different than usual. Labels passed are suffixes to
+        the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
+        the prefix and the suffix. For instance,
+        ```python
+        image = PIL_cow_image
+        prompt = "answer en Where is the cow standing?"
+        label = "on the beach"
+        inputs = processor(text=prompt, images=image, labels=labels)
+        ```
+        Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
+        ```python
+        inputs["input_ids"][:, 256:]
+        # tensor([[     2,   6006,    603,    573,  13910,   9980, 235336,    108,    477,   573,   8318]])
+        inputs["token_type_ids"][:, 256:]
+        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]])
+        ```
+        Meaning the last three tokens are of "label" ("suffix") type while the other ones are of "prefix" type.
+
+
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
@@ -180,7 +199,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `labels`
+              is provided, the `input_ids` will also contain the labels suffix input ids.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
