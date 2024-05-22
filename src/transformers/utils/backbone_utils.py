@@ -47,8 +47,6 @@ def verify_out_features_out_indices(
             )
 
     if out_indices is not None:
-        if isinstance(out_indices, tuple):
-            out_indices = list(out_indices)
         if not isinstance(out_indices, list):
             raise ValueError(f"out_indices must be a list, got {type(out_indices)}")
         # Convert negative indices to their positive equivalent: [-1,] -> [len(stage_names) - 1,]
@@ -124,6 +122,7 @@ def get_aligned_output_features_output_indices(
         out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
         stage_names (`List[str]`): The names of the stages of the backbone.
     """
+    out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
     verify_out_features_out_indices(out_features=out_features, out_indices=out_indices, stage_names=stage_names)
     output_features, output_indices = _align_output_features_output_indices(
