@@ -97,13 +97,7 @@ class BackboneUtilsTester(unittest.TestCase):
         with pytest.raises(
             ValueError, match="out_features and out_indices should have the same length if both are set"
         ):
-            verify_out_features_out_indices(
-                ["a", "b"],
-                [
-                    0,
-                ],
-                ["a", "b", "c"],
-            )
+            verify_out_features_out_indices(["a", "b"], [0], ["a", "b", "c"])
 
         # Out features should match out indices
         with pytest.raises(
