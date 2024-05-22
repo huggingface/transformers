@@ -317,7 +317,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             position_ids = None
 
         if token_type_ids is not None and labels is not None:
-            # from llama modeling
+            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
             target_length = cache_position[-1] + 1
             causal_mask = torch.full(
                 (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
@@ -330,6 +330,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                # unmask the prefill
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     token_type_ids[:, None, None, :] == 0, 0
                 )
@@ -344,7 +345,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
         else:
             causal_mask = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
-            causal_mask = causal_mask.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
+            causal_mask = causal_mask.to(dtype).expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
             final_labels = None
         return final_embedding, causal_mask, final_labels, position_ids
 
