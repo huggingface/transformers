@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Nezha model."""
 
-
 import math
 import os
 import warnings

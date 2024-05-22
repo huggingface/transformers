@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert DPT checkpoints from the original repository. URL: https://github.com/isl-org/DPT"""
 
-
 import argparse
 import json
 from pathlib import Path
