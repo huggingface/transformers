@@ -190,7 +190,7 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
             Whether or not [`~ImageBindAudioFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_features"]
 
     def __init__(
         self,

@@ -15,7 +15,6 @@
 Image/Text processor class for ImageBind
 """
 
-import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
@@ -26,38 +25,29 @@ from ...tokenization_utils_base import BatchEncoding
 
 class ImageBindProcessor(ProcessorMixin):
     r"""
-    Constructs a ImageBind processor which wraps a ImageBind image processor and a ImageBind tokenizer into a single processor.
-    [`ImageBindProcessor`] offers all the functionalities of [`ImageBindImageProcessor`] and [`ImageBindTokenizerFast`]. See the
-    [`~ImageBindProcessor.__call__`] and [`~ImageBindProcessor.decode`] for more information.
+    Constructs a ImageBind processor which wraps a ImageBind image processor and feature extracotr and a CLIP tokenizer into a single processor.
+
+    [`ImageBindProcessor`] offers all the functionalities of [`ImageBindImageProcessor`], [`ImageBindFeatureExtractor`] and [`CLIPTokenizerFast`].
+    See the [`~ImageBindProcessor.__call__`] and [`~ImageBindProcessor.decode`] for more information.
+
     Args:
-        image_processor ([`ImageBindImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`ImageBindTokenizerFast`], *optional*):
-            The tokenizer is a required input.
+        image_processor ([`ImageBindImageProcessor`]):
+            An instance of [`ImageBindImageProcessor`] to process the images. This is a required input.
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
+            An instance of ['PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]. The tokenizer is a required input.
+        feature_extractor ([`ImageBindFeatureExtractor`]):
+            An instance of [`ImageBindFeatureExtractor`] to extract features from the audios. This is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "feature_extractor"]
     image_processor_class = "ImageBindImageProcessor"
-    tokenizer_class = ("ImageBindTokenizer", "ImageBindTokenizerFast")
+    feature_extractor_class = "ImageBindFeatureExtractor"
+    tokenizer_class = ["CLIPTokenizer", "CLIPTokenizerFast"]
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
+    def __init__(self, image_processor, tokenizer, feature_extractor):
+        super().__init__(image_processor, tokenizer, feature_extractor)
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
-        super().__init__(image_processor, tokenizer)
-
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self, images=None, text=None, audio=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to ImageBindTokenizerFast's [`~ImageBindTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -65,14 +55,23 @@ class ImageBindProcessor(ProcessorMixin):
         ImageBindImageProcessor's [`~ImageBindImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of numpy
+                arrays or a (possibly nested) list of float values. The supported input types are as follows:
+
+                - unbatched: `List[float]`, `np.ndarray` (`ndim=1`)
+                - batched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`)
+                - batched with clips: `List[List[List[float]]]`, `List[List[np.ndarray]]` (`ndim=1`), `List[np.ndarray]` (`ndim=2`), np.ndarray (`ndim=3`)
+
+                The input will always be interpreted as mono channel audio, not stereo, i.e. a single float per timestep.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -88,22 +87,24 @@ class ImageBindProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and images is None:
+        if text is None and images is None and audio is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
+
+        data = {}
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            data.update(encoding)
 
         if images is not None:
             image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            data.update(image_features)
 
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+        if audio is not None:
+            audio_features = self.feature_extractor(audio, return_tensors=return_tensors, **kwargs)
+            data.update(audio_features)
+
+        return BatchEncoding(data=data, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -123,20 +124,5 @@ class ImageBindProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
-            FutureWarning,
-        )
-        return self.image_processor
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))

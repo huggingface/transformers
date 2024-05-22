@@ -16,8 +16,8 @@ import argparse
 
 import torch
 import torchaudio
-from torchvision import transforms
 from datasets import load_dataset
+from torchvision import transforms
 
 from transformers import (
     AutoTokenizer,
@@ -27,11 +27,12 @@ from transformers import (
     ImageBindModel,
     ImageBindProcessor,
 )
+from transformers.utils import logging
+
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
-from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -191,13 +192,15 @@ def convert_imagebind_checkpoint(args):
     if verify_inputs:
         texts, images, audios = prepare_input()
 
-
         original_image_processor = transforms.Compose(
             [
                 transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=OPENAI_CLIP_MEAN, std=OPENAI_CLIP_STD,),
+                transforms.Normalize(
+                    mean=OPENAI_CLIP_MEAN,
+                    std=OPENAI_CLIP_STD,
+                ),
             ]
         )
 
@@ -222,15 +225,27 @@ def convert_imagebind_checkpoint(args):
         assert torch.allclose(inputs_audio_vision["pixel_values"], expected_pixel_values)
         assert torch.allclose(inputs_audio_vision["input_features"][:, :, 0, 0, 0], expected_input_features)
 
-        expected_output_vision = torch.tensor([[ 0.0188,  0.0075,  0.0532,  0.0326, -0.0159],
-        [ 0.0259,  0.0054,  0.0399,  0.0211, -0.0232],
-        [ 0.0020, -0.0281,  0.0052, -0.0194, -0.0027]])
-        expected_output_text = torch.tensor([[-1.3476, -1.5732, -0.7386,  9.7949,  0.5856],
-        [-0.4342, -0.9050, -4.2879,  7.4123, -0.4906],
-        [-1.0745, -4.0049, -1.0697,  5.8861, -0.7583]])
-        expected_output_audio = torch.tensor([[ 0.3245, -0.3749,  0.3955,  0.5600, -0.1932],
-        [ 0.7091,  0.2072, -1.0133,  0.4689, -0.2142],
-        [-0.0282, -0.4923,  1.0058,  0.0459, -0.2271]])
+        expected_output_vision = torch.tensor(
+            [
+                [0.0188, 0.0075, 0.0532, 0.0326, -0.0159],
+                [0.0259, 0.0054, 0.0399, 0.0211, -0.0232],
+                [0.0020, -0.0281, 0.0052, -0.0194, -0.0027],
+            ]
+        )
+        expected_output_text = torch.tensor(
+            [
+                [-1.3476, -1.5732, -0.7386, 9.7949, 0.5856],
+                [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
+                [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
+            ]
+        )
+        expected_output_audio = torch.tensor(
+            [
+                [0.3245, -0.3749, 0.3955, 0.5600, -0.1932],
+                [0.7091, 0.2072, -1.0133, 0.4689, -0.2142],
+                [-0.0282, -0.4923, 1.0058, 0.0459, -0.2271],
+            ]
+        )
     else:
         torch.manual_seed(0)
         input_ids = (torch.rand(3, 77) * 10).to(torch.long)
