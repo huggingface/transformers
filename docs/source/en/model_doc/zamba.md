@@ -19,13 +19,14 @@ Zamba requires you use `transformers` version 4.39.0 or higher:
 pip install transformers>=4.39.0
 ```
 
-In order to run optimized Mamba implementations, you first need to install `mamba-ssm` and `causal-conv1d`:
+In order to run optimized Mamba implementations on a CUDA device, you first need to install `mamba-ssm` and `causal-conv1d`:
 ```bash
 pip install mamba-ssm causal-conv1d>=1.2.0
 ```
-You also have to have the model on a CUDA device.
 
-You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly higher latency. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
+You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly higher latency. 
+
+To run on CPU, please specify `use_mamba_kernels=False` when loading the model using ``AutoModelForCausalLM.from_pretrained``.
 
 ## Inference
 
