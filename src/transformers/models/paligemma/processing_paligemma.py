@@ -329,17 +329,11 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         labels_suffix = suffix_input_ids
 
-        input_ids = [
-            ids + suffix_ids for ids, suffix_ids in zip(pre_input_ids, suffix_input_ids)
-        ]
+        input_ids = [ids + suffix_ids for ids, suffix_ids in zip(pre_input_ids, suffix_input_ids)]
         attention_masks = [
-            mask + suffix_mask
-            for mask, suffix_mask in zip(pre_attention_masks, suffix_attention_masks)
+            mask + suffix_mask for mask, suffix_mask in zip(pre_attention_masks, suffix_attention_masks)
         ]
-        labels = [
-            label + suffix_label
-            for label, suffix_label in zip(labels_prefix, labels_suffix)
-        ]
+        labels = [label + suffix_label for label, suffix_label in zip(labels_prefix, labels_suffix)]
 
         labels = self.tokenizer.pad(
             {"input_ids": labels},
