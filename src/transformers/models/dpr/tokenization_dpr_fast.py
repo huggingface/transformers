@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for DPR."""
 
-
 import collections
 from typing import List, Optional, Union
 
