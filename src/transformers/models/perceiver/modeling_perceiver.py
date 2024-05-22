@@ -850,6 +850,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> labels = torch.tensor([1])
         >>> loss = criterion(logits, labels)
         ```"""
+        print("PerceiverModel")
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -857,6 +858,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
+            print(f"inputs {inputs.shape}")
             inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs)
         else:
             modality_sizes = None
@@ -2751,6 +2753,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
     def forward(self, batch_size: int) -> torch.Tensor:
         position_embeddings = self.position_embeddings
+        print(f"position_embeddings {position_embeddings.shape}")
 
         if batch_size is not None:
             position_embeddings = position_embeddings.expand(batch_size, -1, -1)
@@ -3146,6 +3149,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         This method expects the inputs to always have channels as last dimension.
 
         """
+        print("_build_network_inputs")
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[1:-1]
         indices = np.prod(index_dims)
@@ -3155,6 +3159,8 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs = torch.reshape(inputs, [batch_size, indices, -1])
 
         # Construct the position encoding.
+        print(f"inputs {inputs.shape}")
+        print(f"batch_size {batch_size}")
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":

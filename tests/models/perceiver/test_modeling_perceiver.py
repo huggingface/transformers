@@ -1031,3 +1031,34 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+
+    # in case i forgot the command
+    # RUN_SLOW=1 pytest -v -s tests/models/perceiver/test_modeling_perceiver.py::PerceiverModelIntegrationTest::test_inference_interpolate_pos_encoding
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        image_processor = PerceiverImageProcessor(size=384)
+        model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
+        model.to(torch_device)
+        print(model)
+
+        # prepare inputs
+        image = prepare_img()
+        print(f"image {image}")
+        inputs = image_processor(image, return_tensors="pt").pixel_values.to(torch_device)
+        print("image_processor")
+        print(inputs.shape)
+        input_mask = None
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(inputs=inputs, attention_mask=input_mask)
+        logits = outputs.logits
+
+        # verify logits
+        expected_shape = torch.Size((1, model.config.num_labels))
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = torch.tensor([-1.1652, -0.1992, -0.7520], device=torch_device)
+
+        atol = 1e-3 if IS_ROCM_SYSTEM else 1e-4
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=atol))
