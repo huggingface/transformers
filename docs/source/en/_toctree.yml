@@ -157,7 +157,7 @@
     - local: tf_xla
       title: XLA Integration for TensorFlow Models
     - local: perf_torch_compile
-      title: Optimize inference using `torch.compile()`
+      title: torch.compile()
     title: Inference
   - sections:
     - local: perf_train_gpu_one

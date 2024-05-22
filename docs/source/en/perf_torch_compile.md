@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Optimize inference using torch.compile()
+# torch.compile()
 
 This guide aims to provide a benchmark on the inference speed-ups introduced with [`torch.compile()`](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for [computer vision models in 🤗 Transformers](https://huggingface.co/models?pipeline_tag=image-classification&library=transformers&sort=trending).
 
