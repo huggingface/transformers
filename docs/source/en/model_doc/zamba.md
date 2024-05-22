@@ -5,7 +5,7 @@ Zamba is a large language model (LLM) trained by Zyphra, and made available unde
 
 ## Model details
 
-Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https://github.com/state-spaces/mamba)) and transformer, and was trained using next-token prediction. Zamba uses a shared transformer layer after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba-7B-v1 was pre-trained on 1T tokens of text and code data.
+Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https://github.com/state-spaces/mamba)) and transformer. Zamba consists of a Mamba backbone with a shared transformer block every 6 Mamba layers. We came to this architecture after a series of ablations at small scales, where we found it proved highly effective at combining the inference efficiency of Mamba with the minimal amount of attention required to maintain performance and expressivity. Zambaand was trained using next-token prediction and uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1).  Zamba-7B-v1 was pre-trained on 1T tokens of text and code data. We then performed an annealing phase over 50B high quality tokens.
 
 <img src="https://github.com/Zyphra/HF-zamba/blob/main/zamba-arch.png" width=40% height=40% />
 
