@@ -28,9 +28,7 @@ Before you begin, make sure the following libraries are installed:
 
 ```bash
 pip install auto-gptq
-pip install git+https://github.com/huggingface/optimum.git
-pip install git+https://github.com/huggingface/transformers.git
-pip install --upgrade accelerate
+pip install --upgrade accelerate optimum transformers
 ```
 
 To quantize a model (currently only supported for text models), you need to create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calibrate the weights for quantization, and a tokenizer to prepare the dataset.

@@ -37,9 +37,7 @@ Try Quanto + transformers with this [notebook](https://colab.research.google.com
 Before you begin, make sure the following libraries are installed:
 
 ```bash
-pip install quanto
-pip install git+https://github.com/huggingface/accelerate.git
-pip install git+https://github.com/huggingface/transformers.git
+pip install quanto accelerate transformers
 ```
 
 Now you can quantize a model by passing [`QuantoConfig`] object in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it contains `torch.nn.Linear` layers. 
