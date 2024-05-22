@@ -69,7 +69,7 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token):
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
     """
-    return f"{image_token * image_seq_len}{bos_token}{prompt}"
+    return f"{image_token * image_seq_len}{bos_token}{prompt}\n"
 
 
 class PaliGemmaProcessor(ProcessorMixin):
@@ -255,66 +255,17 @@ class PaliGemmaProcessor(ProcessorMixin):
         if max_length is not None:
             max_length += self.image_seq_length  # max_length has to account for the image tokens
 
-        if tokenize_newline_separately:
-            inputs = self.tokenizer(
-                input_strings,
-                text_pair=labels,
-                add_special_tokens=False,
-                return_tensors=None,
-                padding="do_not_pad",
-                max_length=max_length,
-                truncation=truncation,
-                return_token_type_ids=return_token_type_ids,
-            )
-            newline_token = self.tokenizer.convert_tokens_to_ids("\n")
-            # insert separately tokenized newline token before the first '1' in token type ids
-            if labels is not None:
-                first_one_indices = [token_type_id.index(1) for token_type_id in inputs["token_type_ids"]]
-                input_ids = [
-                    ids[:idx] + [newline_token] + ids[idx:] for ids, idx in zip(inputs["input_ids"], first_one_indices)
-                ]
-
-                attention_masks = [
-                    mask[:idx] + [1] + mask[idx:] for mask, idx in zip(inputs["attention_mask"], first_one_indices)
-                ]
-
-                token_type_ids = [
-                    token_type_id[:idx] + [0] + token_type_id[idx:]
-                    for token_type_id, idx in zip(inputs["token_type_ids"], first_one_indices)
-                ]
-            else:
-                input_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
-
-                attention_masks = [mask + [1] for mask in inputs["attention_mask"]]
-
-                token_type_ids = None
-
-        else:
-            inputs = self.tokenizer(
-                input_strings,
-                text_pair=labels,
-                add_special_tokens=False,
-                return_tensors=None,
-                padding="do_not_pad",
-                max_length=max_length,
-                truncation=truncation,
-                return_token_type_ids=return_token_type_ids,
-            )
-            input_ids = inputs["input_ids"]
-            attention_masks = inputs["attention_mask"]
-            token_type_ids = None if labels is None else inputs["token_type_ids"]
-
-        inputs_to_pad = {"input_ids": input_ids, "attention_mask": attention_masks}
-        if token_type_ids is not None:
-            inputs_to_pad.update({"token_type_ids": token_type_ids})
-        text_inputs = self.tokenizer.pad(
-            inputs_to_pad,
+        inputs = self.tokenizer(
+            input_strings,
+            text_pair=labels,
+            return_tensors=return_tensors,
             padding=padding,
             max_length=max_length,
-            return_tensors=return_tensors,
+            truncation=truncation,
+            return_token_type_ids=return_token_type_ids,
         )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        return BatchFeature(data={**inputs, "pixel_values": pixel_values})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
