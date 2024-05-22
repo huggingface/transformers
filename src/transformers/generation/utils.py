@@ -1430,7 +1430,7 @@ class GenerationMixin:
     def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
-        new `generate` call requires a larger cache.
+        new `generate` call requires a larger cache or uses a different batch size.
 
         Returns the resulting cache object.
         """
