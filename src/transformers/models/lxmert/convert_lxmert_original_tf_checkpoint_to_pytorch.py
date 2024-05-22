@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert LXMERT checkpoint."""
 
-
 import argparse
 
 import torch

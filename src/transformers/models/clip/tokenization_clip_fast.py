@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers

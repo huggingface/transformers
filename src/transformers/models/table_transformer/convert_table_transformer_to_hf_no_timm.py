@@ -17,7 +17,6 @@
 URL: https://github.com/microsoft/table-transformer
 """
 
-
 import argparse
 from pathlib import Path
 
