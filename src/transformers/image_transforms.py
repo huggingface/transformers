@@ -844,5 +844,6 @@ class NumpyToTensor:
     """
     Convert a numpy array to a PyTorch tensor.
     """
+
     def __call__(self, image: np.ndarray):
         return torch.from_numpy(image)
