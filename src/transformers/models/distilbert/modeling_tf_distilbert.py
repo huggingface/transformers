@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 DistilBERT model
+TF 2.0 DistilBERT model
 """
-
 
 from __future__ import annotations
 
