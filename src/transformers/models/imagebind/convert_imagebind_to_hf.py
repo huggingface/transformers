@@ -16,6 +16,7 @@ import argparse
 
 import torch
 import torchaudio
+from torchvision import transforms
 from datasets import load_dataset
 
 from transformers import (
@@ -25,6 +26,10 @@ from transformers import (
     ImageBindImageProcessor,
     ImageBindModel,
     ImageBindProcessor,
+)
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
 )
 from transformers.utils import logging
 
@@ -185,18 +190,14 @@ def convert_imagebind_checkpoint(args):
 
     if verify_inputs:
         texts, images, audios = prepare_input()
-        expected_pixel_values = torch.tensor(
+
+
+        original_image_processor = transforms.Compose(
             [
-                [-0.1134, 0.7392, 1.3354],
-                [-0.6390, 0.1239, 0.2546],
-                [-0.8580, 0.1089, 0.9088],
-            ]
-        )
-        expected_input_features = torch.tensor(
-            [
-                [-1.2776, -0.9167, -1.2776],
-                [-1.2439, -0.8372, -0.8748],
-                [-1.1235, -0.7492, -1.0867],
+                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=OPENAI_CLIP_MEAN, std=OPENAI_CLIP_STD,),
             ]
         )
 
@@ -208,30 +209,28 @@ def convert_imagebind_checkpoint(args):
         inputs_audio_vision = processor(images=images, audios=audios, return_tensors="pt")
         inputs_text_vision = processor(texts=texts, images=images, return_tensors="pt")
 
-        assert torch.equal(inputs_audio_vision["pixel_values"], expected_pixel_values)
-        assert torch.equal(inputs_audio_vision["input_features"], expected_input_features)
+        expected_input_features = torch.tensor(
+            [
+                [-1.2776, -0.9167, -1.2776],
+                [-1.2439, -0.8372, -0.8748],
+                [-1.1235, -0.7492, -1.0867],
+            ]
+        )
 
-        expected_output_vision = torch.tensor(
-            [
-                [0.0020, -0.0281, 0.0052, -0.0194, -0.0027],
-                [0.0259, 0.0054, 0.0399, 0.0211, -0.0232],
-                [0.0186, 0.0058, 0.0546, 0.0351, -0.0180],
-            ]
-        )
-        expected_output_text = torch.tensor(
-            [
-                [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
-                [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
-                [-1.3476, -1.5732, -0.7386, 9.7949, 0.5856],
-            ]
-        )
-        expected_output_audio = torch.tensor(
-            [
-                [-0.0282, -0.4923, 1.0058, 0.0459, -0.2271],
-                [0.7091, 0.2072, -1.0133, 0.4689, -0.2142],
-                [0.3245, -0.3749, 0.3955, 0.5600, -0.1932],
-            ]
-        )
+        expected_pixel_values = torch.stack([original_image_processor(image) for image in images])
+
+        assert torch.allclose(inputs_audio_vision["pixel_values"], expected_pixel_values)
+        assert torch.allclose(inputs_audio_vision["input_features"][:, :, 0, 0, 0], expected_input_features)
+
+        expected_output_vision = torch.tensor([[ 0.0188,  0.0075,  0.0532,  0.0326, -0.0159],
+        [ 0.0259,  0.0054,  0.0399,  0.0211, -0.0232],
+        [ 0.0020, -0.0281,  0.0052, -0.0194, -0.0027]])
+        expected_output_text = torch.tensor([[-1.3476, -1.5732, -0.7386,  9.7949,  0.5856],
+        [-0.4342, -0.9050, -4.2879,  7.4123, -0.4906],
+        [-1.0745, -4.0049, -1.0697,  5.8861, -0.7583]])
+        expected_output_audio = torch.tensor([[ 0.3245, -0.3749,  0.3955,  0.5600, -0.1932],
+        [ 0.7091,  0.2072, -1.0133,  0.4689, -0.2142],
+        [-0.0282, -0.4923,  1.0058,  0.0459, -0.2271]])
     else:
         torch.manual_seed(0)
         input_ids = (torch.rand(3, 77) * 10).to(torch.long)
