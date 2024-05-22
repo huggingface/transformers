@@ -37,7 +37,9 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superglue_indoor"
 
 
-def concat_attentions_tuples_pair(attention_probs_0: Tuple[torch.Tensor], attention_probs_1: Tuple[torch.Tensor]):
+def concat_attentions_tuples_pair(
+    attention_probs_0: Tuple[torch.Tensor], attention_probs_1: Tuple[torch.Tensor]
+) -> Tuple[torch.Tensor]:
     """
     Concatenate two tuple of attention probabilities into one.
     We assume that the attention probabilities are of shape (batch_size, num_heads, num_keypoints_a, num_keypoints_b).
@@ -65,7 +67,7 @@ def concat_attentions_tuples_pair(attention_probs_0: Tuple[torch.Tensor], attent
     return new_attention_probs
 
 
-def stack_attention_probs_list(attention_probs: List[torch.Tensor]):
+def stack_attention_probs_list(attention_probs: List[torch.Tensor]) -> torch.Tensor:
     all_attention_probs_shape_the_same = True
     first_attention_prob_shape = attention_probs[0].shape
     for attention_prob in attention_probs[1:]:
@@ -84,7 +86,9 @@ def stack_attention_probs_list(attention_probs: List[torch.Tensor]):
     return stacked_attention_probs
 
 
-def batch_attention_probs_list(attention_probs: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]):
+def batch_attention_probs_list(
+    attention_probs: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]
+) -> Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]:
     """
     Given a list of attention probabilities, batch them together.
     We assume that the attention probabilities are of shape (batch_size, num_heads, num_keypoints_a, num_keypoints_b).
@@ -111,7 +115,9 @@ def batch_attention_probs_list(attention_probs: Union[List[torch.Tensor], List[T
         return []
 
 
-def concat_hidden_states_tuples_pair(hidden_states_0, hidden_states_1):
+def concat_hidden_states_tuples_pair(
+    hidden_states_0: Tuple[torch.Tensor], hidden_states_1: Tuple[torch.Tensor]
+) -> Tuple[torch.Tensor]:
     """
     Concatenate two tuple of hidden states into one.
     We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
@@ -136,7 +142,7 @@ def concat_hidden_states_tuples_pair(hidden_states_0, hidden_states_1):
     return hidden_states
 
 
-def stack_hidden_states_list(hidden_states: List[torch.Tensor]):
+def stack_hidden_states_list(hidden_states: List[torch.Tensor]) -> torch.Tensor:
     """
     Given a list of hidden states tensors, stack them together using torch.stack.
     We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
@@ -164,7 +170,9 @@ def stack_hidden_states_list(hidden_states: List[torch.Tensor]):
     return stacked_hidden_state
 
 
-def batch_hidden_states(hidden_states):
+def batch_hidden_states(
+    hidden_states: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]
+) -> Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]:
     """
     Given a list of hidden states, batch them together using torch.stack.
     We assume that the hidden states are of shape (batch_size, hidden_state_size, num_keypoints).
@@ -247,7 +255,7 @@ def arange_like(x, dim: int):
 @dataclass
 class KeypointMatchingOutput(ModelOutput):
     """
-    Base class for outputs of image matching models. Due to the nature of keypoint detection and matching, the number of
+    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number of
     keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of images,
     the maximum number of matches is set as the dimension of the matches and matching scores. The mask
     tensor is used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
@@ -446,16 +454,9 @@ class SuperGlueAttentionalGNN(nn.Module):
             delta1 = gnn_outputs1[0]
 
             if output_hidden_states:
-                if not same_num_keypoints:
-                    for hidden_state0, hidden_state1 in zip(gnn_outputs0[1], gnn_outputs1[1]):
-                        new_hidden_state = torch.zeros(2, hidden_state0.shape[1], max_num_keypoints).to(descriptors_0)
-                        new_hidden_state[:, :, : hidden_state0.shape[2]] = hidden_state0
-                        new_hidden_state[:, :, : hidden_state1.shape[2]] = hidden_state1
-                        all_hidden_states = all_hidden_states + (new_hidden_state,)
-                else:
-                    all_hidden_states = all_hidden_states + concat_attentions_tuples_pair(
-                        gnn_outputs0[1], gnn_outputs1[1]
-                    )
+                all_hidden_states = all_hidden_states + concat_hidden_states_tuples_pair(
+                    gnn_outputs0[1], gnn_outputs1[1]
+                )
             if output_attentions:
                 all_attentions = all_attentions + concat_attentions_tuples_pair(gnn_outputs0[2], gnn_outputs1[2])
 
@@ -746,13 +747,56 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             list_matching_scores_1.append(matching_scores_1)
             list_keypoints_0.append(image0_keypoints)
             list_keypoints_1.append(image1_keypoints)
-            list_attentions.append(attentions)
             list_hidden_states.append(hidden_states)
+            list_attentions.append(attentions)
 
+        attentions, hidden_states, keypoints, matches, matches_mask, matching_scores = self.batch_output(
+            batch_size,
+            list_attentions,
+            list_hidden_states,
+            list_keypoints_0,
+            list_keypoints_1,
+            list_matches_0,
+            list_matches_1,
+            list_matching_scores_0,
+            list_matching_scores_1,
+            pixel_values,
+        )
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [matches_mask, matches, matching_scores, keypoints, hidden_states, attentions]
+                if v is not None
+            )
+
+        return KeypointMatchingOutput(
+            loss=loss,
+            mask=matches_mask,
+            matches=matches,
+            matching_scores=matching_scores,
+            keypoints=keypoints,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
+
+    def batch_output(
+        self,
+        batch_size,
+        list_attentions,
+        list_hidden_states,
+        list_keypoints_0,
+        list_keypoints_1,
+        list_matches_0,
+        list_matches_1,
+        list_matching_scores_0,
+        list_matching_scores_1,
+        pixel_values,
+    ):
         maximum_matches = max(
             [
-                max([matches_0.size(1) for matches_0 in list_matches_0]),
-                max([matches_1.size(1) for matches_1 in list_matches_1]),
+                max([matches_0.shape[1] for matches_0 in list_matches_0]),
+                max([matches_1.shape[1] for matches_1 in list_matches_1]),
             ]
         )
         matches = torch.full(
@@ -771,7 +815,6 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             (batch_size, 2, maximum_matches, 2),
             device=pixel_values.device,
         )
-
         for i, (
             _matches_0,
             _matches_1,
@@ -797,23 +840,6 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             matches_mask[i, 1, : _matches_1.shape[1]] = 1
             keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
             keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
-
         hidden_states = batch_hidden_states(list_hidden_states)
         attentions = batch_attention_probs_list(list_attentions)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [matches_mask, matches, matching_scores, keypoints, hidden_states, attentions]
-                if v is not None
-            )
-
-        return KeypointMatchingOutput(
-            loss=loss,
-            mask=matches_mask,
-            matches=matches,
-            matching_scores=matching_scores,
-            keypoints=keypoints,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+        return attentions, hidden_states, keypoints, matches, matches_mask, matching_scores
