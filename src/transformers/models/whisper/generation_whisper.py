@@ -613,7 +613,7 @@ class WhisperGenerationMixin:
         batch_size = input_features.shape[0]
 
         max_frames, seek = self._retrieve_max_frames_and_seek(
-            batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames
+            batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames, is_shortform=is_shortform
         )
 
         # 6.2 Preppare running variables, list for generation
@@ -1383,7 +1383,13 @@ class WhisperGenerationMixin:
         generation_config.condition_on_prev_tokens = condition_on_prev_tokens
 
     @staticmethod
-    def _retrieve_max_frames_and_seek(batch_size, attention_mask, total_input_frames):
+    def _retrieve_max_frames_and_seek(batch_size, attention_mask, total_input_frames, is_shortform):
+
+        if is_shortform: 
+            max_frames = torch.ones((batch_size,), dtype=torch.long) * total_input_frames
+            seek = torch.zeros((batch_size,), dtype=torch.long)
+            return max_frames, seek
+
         if batch_size > 1 and attention_mask is None:
             raise ValueError(
                 "When doing batched long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
