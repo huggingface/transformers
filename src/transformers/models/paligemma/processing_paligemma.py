@@ -231,6 +231,9 @@ class PaliGemmaProcessor(ProcessorMixin):
             pass
         if suffix is not None and _is_str_or_image(suffix):
             suffix = [suffix]
+        if suffix is not None:
+            suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
+
         input_strings = [
             build_string_from_input(
                 prompt=prompt,
