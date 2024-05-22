@@ -162,6 +162,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         Given the input settings build the image transforms using `torchvision.transforms.Compose`.
         """
         transforms = []
+        
         if do_resize:
             transforms.append(
                 Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
@@ -284,6 +285,9 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
 
         images = make_list_of_images(images)
         image_type = get_image_type(images[0])
+
+        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
+            raise ValueError(f"Unsupported input image type {image_type}")
 
         self._validate_input_arguments(
             do_resize=do_resize,
