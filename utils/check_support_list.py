@@ -25,6 +25,7 @@ python utils/check_support_list.py
 
 It has no auto-fix mode.
 """
+
 import os
 from glob import glob
 

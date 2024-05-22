@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for python tokenizers. For fast tokenizers (provided by HuggingFace's tokenizers library) see
- tokenization_utils_fast.py
+Tokenization classes for python tokenizers. For fast tokenizers (provided by HuggingFace's tokenizers library) see
+tokenization_utils_fast.py
 """
+
 import bisect
 import itertools
 import re
@@ -943,12 +944,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     @overload
-    def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str:
-        ...
+    def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
 
     @overload
-    def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = False) -> List[str]:
-        ...
+    def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = False) -> List[str]: ...
 
     def convert_ids_to_tokens(
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False

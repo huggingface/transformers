@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition in streaming mode"""
+"""Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition in streaming mode"""
 
 import logging
 import os
