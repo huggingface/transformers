@@ -34,7 +34,7 @@ class ViTPoseConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
+        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitPoseBackboneConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -51,7 +51,7 @@ class ViTPoseConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_factor (`int`, *optional*, defaults to 4):
-            Factor to upscale te feature maps coming from the ViT backbone.
+            Factor to upscale the feature maps coming from the ViT backbone.
         use_simple_decoder (`bool`, *optional*, defaults to `True`):
             Whether to use a simple decoder to decode the feature maps from the backbone into heatmaps.
 
@@ -75,13 +75,13 @@ class ViTPoseConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config: PretrainedConfig = None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
-        initializer_range=0.02,
-        scale_factor=4,
-        use_simple_decoder=True,
+        backbone: str = None,
+        use_pretrained_backbone: bool = False,
+        use_timm_backbone: bool = False,
+        backbone_kwargs: dict = None,
+        initializer_range: float = 0.02,
+        scale_factor: int = 4,
+        use_simple_decoder: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)

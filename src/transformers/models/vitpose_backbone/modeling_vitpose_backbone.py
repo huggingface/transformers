@@ -48,47 +48,17 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViTPoseBackboneConfig"
 
 
-class ViTPoseBackboneEmbeddings(nn.Module):
-    """
-    Construct the position and patch embeddings.
-    """
-
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
-        super().__init__()
-
-        self.patch_embeddings = ViTPoseBackbonePatchEmbeddings(
-            image_size=config.image_size,
-            patch_size=config.patch_size,
-            num_channels=config.num_channels,
-            embed_dim=config.hidden_size,
-        )
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.patch_embeddings(pixel_values)
-
-        # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
-
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
 class ViTPoseBackbonePatchEmbeddings(nn.Module):
     """Image to Patch Embedding."""
 
-    def __init__(
-        self,
-        image_size: int = 224,
-        patch_size: Union[int, Tuple[int, int]] = 16,
-        num_channels: int = 3,
-        embed_dim: int = 768,
-    ):
+    def __init__(self, config):
         super().__init__()
+
+        image_size = config.image_size
+        patch_size = config.patch_size
+        num_channels = config.num_channels
+        embed_dim = config.hidden_size
+
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -104,10 +74,35 @@ class ViTPoseBackbonePatchEmbeddings(nn.Module):
             raise ValueError(
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
-        x = self.projection(pixel_values)
+        embeddings = self.projection(pixel_values)
 
-        x = x.flatten(2).transpose(1, 2)
-        return x
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+        return embeddings
+
+
+class ViTPoseBackboneEmbeddings(nn.Module):
+    """
+    Construct the position and patch embeddings.
+    """
+
+    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+        super().__init__()
+
+        self.patch_embeddings = ViTPoseBackbonePatchEmbeddings(config)
+        num_patches = self.patch_embeddings.num_patches
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.config = config
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        embeddings = self.patch_embeddings(pixel_values)
+
+        # add positional encoding to each token
+        embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
+
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ViTPoseBackbone
@@ -251,7 +246,7 @@ class ViTPoseBackboneMoEMLP(nn.Module):
         self.experts = nn.ModuleList(experts)
 
     def forward(self, x, indices):
-        expert_x = torch.zeros_like(x[:, :, -self.part_features :], device=x.device, dtype=x.dtype)
+        expert_x = torch.zeros_like(x[:, :, -self.part_features :])
 
         x = self.fc1(x)
         x = self.act(x)
@@ -428,6 +423,11 @@ VITPOSE_BACKBONE_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
 
+        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
+            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
+
+            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
+
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -483,19 +483,15 @@ class ViTPoseBackbone(ViTPoseBackbonePreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> from transformers import ViTPoseBackboneConfig, ViTPoseBackbone
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> config = ViTPoseBackboneConfig(out_indices=[-1])
+        >>> model = ViTPoseBackbone(config)
 
-        >>> processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
-        >>> model = AutoBackbone.from_pretrained("facebook/convnext-tiny-224")
-
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> pixel_values = torch.randn(1, 3, 256, 192)
+        >>> dataset_index = torch.tensor([1])
+        >>> outputs = model(pixel_values, dataset_index)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

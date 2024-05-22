@@ -499,7 +499,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             - maxvals (np.ndarray[batch_size, num_keypoints, 1]):
                 Scores (confidence) of the keypoints.
         """
-        # Avoid being affected
+        # Avoid mutation
         heatmaps = heatmaps.numpy().copy()
 
         batch_size, num_keypoints, height, width = heatmaps.shape

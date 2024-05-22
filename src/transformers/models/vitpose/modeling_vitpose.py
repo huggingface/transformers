@@ -24,7 +24,10 @@ from torch import nn
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_vitpose import ViTPoseConfig
@@ -45,7 +48,7 @@ class PoseEstimatorOutput(ModelOutput):
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
         heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
-            Heatmaps.
+            Heatmaps as predicted by the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
@@ -107,11 +110,13 @@ VITPOSE_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`ViTPoseImageProcessor`]. See
             [`ViTPoseImageProcessor.__call__`] for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
+            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
 
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
+
+        flip_pairs (`torch.tensor`, *optional*):
+            Pairs of keypoints which are mirrored (for example, left ear -- right ear).
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -132,7 +137,7 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
             The output heatmaps obtained from the flipped images.
         flip_pairs (list[tuple()):
             Pairs of keypoints which are mirrored (for example, left ear -- right ear).
-        target_type (str):
+        target_type (`str`):
             GaussianHeatmap or CombinedTarget
 
     Returns:
@@ -223,6 +228,10 @@ class ViTPoseClassicDecoder(nn.Module):
         return heatmaps
 
 
+@add_start_docstrings(
+    "The ViTPose model with a pose estimation head on top.",
+    VITPOSE_START_DOCSTRING,
+)
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__(config)
@@ -240,6 +249,8 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.backbone.get_input_embeddings()
 
+    @add_start_docstrings_to_model_forward(VITPOSE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -250,6 +261,29 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PoseEstimatorOutput]:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, ViTPoseForPoseEstimation
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> processor = AutoImageProcessor.from_pretrained("")
+        >>> model = ViTPoseForPoseEstimation.from_pretrained("")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
+        >>> inputs = processor(image, boxes=boxes, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> heatmaps = outputs.heatmaps
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
