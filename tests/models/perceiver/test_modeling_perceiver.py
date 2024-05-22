@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Perceiver model. """
+"""Testing suite for the PyTorch Perceiver model."""
 
 import copy
 import inspect
@@ -26,7 +26,14 @@ import numpy as np
 from datasets import load_dataset
 
 from transformers import PerceiverConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    IS_ROCM_SYSTEM,
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -930,7 +937,8 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.1652, -0.1992, -0.7520], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        atol = 1e-3 if IS_ROCM_SYSTEM else 1e-4
+        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=atol))
 
     @slow
     def test_inference_image_classification_fourier(self):

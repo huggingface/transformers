@@ -45,6 +45,7 @@ else:
         "Qwen2Model",
         "Qwen2PreTrainedModel",
         "Qwen2ForSequenceClassification",
+        "Qwen2ForTokenClassification",
     ]
 
 
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
         from .modeling_qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
