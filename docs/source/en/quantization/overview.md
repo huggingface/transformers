@@ -18,13 +18,21 @@ rendered properly in your Markdown viewer.
 
 Quantization techniques focus on representing data with less information while also trying to not lose too much accuracy. This often means converting a data type to represent the same information with fewer bits. For example, if your model weights are stored as 32-bit floating points and they're quantized to 16-bit floating points, this halves the model size which makes it easier to store and reduces memory-usage. Lower precision can also speedup inference because it takes less time to perform calculations with fewer bits.
 
-As of today, we can enumerate many quantization methods developped by the community for various usecases. We offer to the community the possibility to easily run these methods and it is up to the users to decide on which quantization method to go with for their usecases, as all of them have their own pros and cons. See the table below for more details.
-
 <Tip>
 
 Interested in adding a new quantization method to Transformers? Read the [HfQuantizer](./contribute) guide to learn how!
 
 </Tip>
+
+## When to use what?
+
+As of today, we can enumerate many quantization methods developped by the community for various usecases. We offer to the community the possibility to easily run these methods and it is up to the users to decide on which quantization method to go with for their usecases, as all of them have their own pros and cons. 
+
+For example, some quantization methods require to calibrate the model with a dataset for more accurate "agressive" compression (up to 1-2 bits quantization), but other methods can work out of the box (i.e. no need for calibration), with on-the-fly quantization. Some users might be interested in extreme bit compression, at the cost of calibrating the model, whereas for other usecases 4-bit compression is sufficient.
+
+Another parameter to take into account would be the compatibility with your target device. Do you want to quantize on CPU? GPU? Apple Silicon devices? 
+
+To sum up, supporting a wide range of quantization methods makes it possible to users the possibility to cherry pick which compression method is the best suited for their specific usecase (are you looking for extreme compression? Do you have any hardware constraint? Are you storage constraint? etc.)
 
 ## Overview
 
@@ -33,10 +41,11 @@ Below is a brief overview of the supported quantization method with their charac
 | Quantization method                 | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable | 🤗 transformers support | Link to library                             |
 |-------------------------------------|-----|----------|----------------|-----------------------|-------------------------|----------------|-------------------------------------|--------------|------------------------|---------------------------------------------|
 | [AQLM](./aqlm)                                | 🟢   | 🟢        | 🔴              | 🔴                     | ?                       | 1 / 2          | 🟢                                   | 🟢            | 🟢                      | https://github.com/Vahe1994/AQLM            |
-| AWQ  | 🔴   | 🟢        | 🟢              | 🔴                     | ?                       | 4              | 🟢                                   | 🟢            | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
+| [AWQ](./awq)  | 🔴   | 🟢        | 🟢              | 🔴                     | ?                       | 4              | 🟢                                   | 🟢            | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
 | [bitsandbytes](./bitsandbytes)                        | 🔴   | 🟢        | 🔴              | 🔴                     | 🔴                       | 4 / 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/TimDettmers/bitsandbytes |
 | [EETQ](./eetq)                                | 🔴   | 🟢        | 🔴              | 🔴                     | ?                       | 8              | 🟢                                   | 🟢            | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
 | GGUF / GGML (llama.cpp)             | 🟢   | 🟢        | 🔴              | 🟢                     | 🔴                       | 1 - 8          | 🔴                                   | 🟢            | [See GGUF section](../gguf)                      | https://github.com/ggerganov/llama.cpp      |
 | [GPTQ](./gptq)                                | 🔴   | 🟢        | 🟢              | 🔴                     | 🔴                       | 4 / 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
 | [HQQ](./hqq)                                 | 🔴   | 🟢        |                | 🔴                     | 🟢                       | 1 - 8          | 🟢                                   | 🔴            | 🟢                      | https://github.com/mobiusml/hqq/            |
 | [Quanto](./quanto)                              | 🟢   | 🟢        |                | 🟢                     | 🟢                       | 2 / 4 / 8      | 🔴                                   | 🔴            | 🟢                      | https://github.com/huggingface/quanto       |
+
