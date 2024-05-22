@@ -1262,6 +1262,7 @@ class GemmaConvert(SpmConverter):
         return normalizers.Replace(" ", "▁")
 
     def vocab(self, proto):
+        tokens_to_add = []
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
             (self.original_tokenizer.eos_token, 0.0),
@@ -1272,8 +1273,9 @@ class GemmaConvert(SpmConverter):
                 vocab += [("\t", piece.score)]
             else:
                 vocab += [(piece.piece, piece.score)]
-        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        return vocab
+            if piece.type == 4:
+                tokens_to_add += [piece.piece]
+        return vocab, tokens_to_add 
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         return pre_tokenizers.Split(" ", "merged_with_previous")
@@ -1293,7 +1295,7 @@ class GemmaConvert(SpmConverter):
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
+        vocab_scores, user_defined_symbols = self.vocab(proto)
         if model_type == 1:
             import tokenizers
 
@@ -1329,7 +1331,7 @@ class GemmaConvert(SpmConverter):
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
         user_defined_symbols = [
-            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
+            AddedToken(token, normalized=True, special=False) for token in user_defined_symbols
         ]
         tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
@@ -1385,6 +1387,7 @@ class LlamaConverter(SpmConverter):
                     AddedToken(self.original_tokenizer.convert_ids_to_tokens(2), normalized=False, special=True),
                 ]
             )
+            tokenizer.add_special_tokens(list(proto.trainer_spec.control_symbols))
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
