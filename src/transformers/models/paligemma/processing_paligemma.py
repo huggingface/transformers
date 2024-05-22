@@ -94,8 +94,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        ignore_index: int = -100,
-        prefix_suffix_separator_index: int = -101,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
@@ -110,15 +108,12 @@ class PaliGemmaProcessor(ProcessorMixin):
         tokens_to_add = {"additional_special_tokens": [image_token]}
         tokenizer.add_special_tokens(tokens_to_add)
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-        self.ignore_index = ignore_index
-        self.prefix_suffix_separator_index = prefix_suffix_separator_index
 
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        suffix: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
         tokenize_newline_separately: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -138,6 +133,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_rescale: bool = None,
+        labels: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -151,9 +148,6 @@ class PaliGemmaProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            suffix (`str`, `List[str]`, `List[List[str]]`):
-                The suffix or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
-                for more information.
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
@@ -180,6 +174,9 @@ class PaliGemmaProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+            labels (`str`, `List[str]`, `List[List[str]]`):
+                The labels of suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+                for more information.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -189,9 +186,11 @@ class PaliGemmaProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- Labels compatible with training if `suffix` is not None
+            - **labels** -- Labels compatible with training if `labels` is not None
         """
-        training = suffix is not None
+
+        return_token_type_ids=True if labels is not None else False
+
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
         if text is None:
@@ -208,8 +207,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
-        if suffix is not None and _is_str_or_image(suffix):
-            suffix = [suffix]
+        if labels is not None and _is_str_or_image(labels):
+            labels = [labels]
         input_strings = [
             build_string_from_input(
                 prompt=prompt,
@@ -239,116 +238,66 @@ class PaliGemmaProcessor(ProcessorMixin):
         if tokenize_newline_separately:
             inputs = self.tokenizer(
                 input_strings,
+                text_pair=labels,
                 add_special_tokens=False,
                 return_tensors=None,
                 padding="do_not_pad",
                 max_length=max_length,
                 truncation=truncation,
+                return_token_type_ids=return_token_type_ids,
             )
             newline_token = self.tokenizer.convert_tokens_to_ids("\n")
-            input_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
-            attention_masks = [mask + [1] for mask in inputs["attention_mask"]]
+            # insert separately tokenized newline token before the first '1' in token type ids
+            if labels is not None:
+                first_one_indices = [token_type_id.index(1) for token_type_id in inputs["token_type_ids"]]
+                input_ids = [
+                    ids[:idx] + [newline_token] + ids[idx:]
+                    for ids, idx in zip(inputs["input_ids"], first_one_indices)
+                ]
+
+                attention_masks = [
+                    mask[:idx] + [1] + mask[idx:]
+                    for mask, idx in zip(inputs["attention_mask"], first_one_indices)
+                ]
+
+                token_type_ids = [
+                    token_type_id[:idx] + [0] + token_type_id[idx:]
+                    for token_type_id, idx in zip(inputs["token_type_ids"], first_one_indices)
+                ]
+            else:
+                input_ids = [ids + [newline_token] for ids in inputs["input_ids"]]
+
+                attention_masks = [mask + [1] for mask in inputs["attention_mask"]]
+
+                token_type_ids = None
 
         else:
             inputs = self.tokenizer(
                 input_strings,
+                text_pair=labels,
                 add_special_tokens=False,
                 return_tensors=None,
                 padding="do_not_pad",
                 max_length=max_length,
                 truncation=truncation,
+                return_token_type_ids=return_token_type_ids
             )
             input_ids = inputs["input_ids"]
             attention_masks = inputs["attention_mask"]
-
-        if training:
-            input_ids, attention_masks, labels = self.tokenize_with_suffix(
-                suffix, input_ids, attention_masks, max_length, truncation, padding
-            )
-
+            token_type_ids = None if labels is None else inputs['token_type_ids']
+        
+        inputs_to_pad = {"input_ids": input_ids, "attention_mask": attention_masks}
+        if token_type_ids is not None:
+            inputs_to_pad.update({'token_type_ids': token_type_ids})
         text_inputs = self.tokenizer.pad(
-            {"input_ids": input_ids, "attention_mask": attention_masks},
+            inputs_to_pad,
             padding=padding,
             max_length=max_length,
             return_tensors=return_tensors,
         )
-        return_data = {**text_inputs, "pixel_values": pixel_values}
-        if training:
-            return_data["labels"] = labels
 
-        return BatchFeature(return_data, tensor_type=return_tensors)
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
-    def tokenize_with_suffix(
-        self,
-        suffix: List[str],
-        pre_input_ids: List[List[int]],
-        pre_attention_masks: List[list[int]],
-        max_length: Optional[int],
-        truncation: Optional[Union[bool, str, TruncationStrategy]],
-        padding: Optional[Union[bool, str, PaddingStrategy]],
-    ):
-        """
-        Generates correct label mask with new special index
-        for where prefix and suffix are separated by \n.
-        Adds <eos> to suffix to match PaliGemma training.
-
-        Args:
-            suffix (List[str]):
-                Suffix batch to be encode
-            pre_input_ids (List[List[int]]):
-                Batch of input_ids list for prefix batches (already encoded)
-            pre_attention_masks: List[list[int]],
-                Batch of prefix attention_masks already encoded
-                (should just be 1s since no padding has been applied)
-            max_length: (Optional[int]):
-                Max_length of output encoding prefix+suffix
-            truncation (Optional[Union[bool, str, TruncationStrategy]]):
-                Truncation strategy of output encoding prefix+suffix
-            padding (Optional[Union[bool, str, PaddingStrategy]]):
-                Padding strategy of output encoding prefix+suffix
-        """
-        suffix_inputs = self.tokenizer(
-            suffix,
-            add_special_tokens=False,
-            return_tensors=None,
-            padding="do_not_pad",
-            max_length=max_length,
-            truncation=truncation,
-        )
-        suffix_input_ids = suffix_inputs["input_ids"]
-        suffix_attention_masks = suffix_inputs["attention_mask"]
-
-        eos_token = self.tokenizer.convert_tokens_to_ids("<eos>")
-
-        suffix_input_ids = [ids + [eos_token] for ids in suffix_input_ids]
-        suffix_attention_masks = [mask + [1] for mask in suffix_attention_masks]
-
-        labels_prefix = [[self.ignore_index for _ in ids] for ids in pre_input_ids]
-        for label in labels_prefix:
-            label[-1] = self.prefix_suffix_separator_index
-
-        labels_suffix = suffix_input_ids
-
-        input_ids = [ids + suffix_ids for ids, suffix_ids in zip(pre_input_ids, suffix_input_ids)]
-        attention_masks = [
-            mask + suffix_mask for mask, suffix_mask in zip(pre_attention_masks, suffix_attention_masks)
-        ]
-        labels = [label + suffix_label for label, suffix_label in zip(labels_prefix, labels_suffix)]
-
-        labels = self.tokenizer.pad(
-            {"input_ids": labels},
-            padding=padding,
-            max_length=max_length,
-            return_tensors=None,
-            return_attention_mask=False,
-        ).input_ids  # In the future, maybe self.tokenizer.pad can pad labels
-
-        for label in labels:
-            for ind, value in enumerate(label):
-                if value == self.tokenizer.pad_token_id:
-                    label[ind] = self.ignore_index
-
-        return input_ids, attention_masks, labels
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
