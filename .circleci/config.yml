@@ -8,12 +8,6 @@ parameters:
         type: boolean
         default: false
 
-on:
-    workflow_run:
-        workflows: [" Build pr ci-docker"]
-        types:
-        - completed
-
 jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
