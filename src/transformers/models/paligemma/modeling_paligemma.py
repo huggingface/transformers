@@ -360,7 +360,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
             )
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
-            final_labels[final_labels == self.config.prefix_suffix_separator_index] = self.config.ignore_index
         else:
             causal_mask = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
             causal_mask = causal_mask.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
