@@ -457,7 +457,7 @@ def main():
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
     validation_transform = A.Compose(
-        [],
+        [A.NoOp()],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 

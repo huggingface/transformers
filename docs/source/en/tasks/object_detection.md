@@ -240,7 +240,7 @@ flip it horizontally, and brighten it. For additional augmentation options, expl
 ... )
 
 >>> validation_transform = A.Compose(
-...     [],
+...     [A.NoOp()],
 ...     bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
 ... )
 ```
