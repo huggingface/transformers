@@ -272,7 +272,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             image_type=image_type,
         )
 
-        self._maybe_update_transforms(
+        transforms = self._maybe_update_transforms(
             do_resize=do_resize,
             do_rescale=do_rescale,
             do_normalize=do_normalize,
@@ -283,7 +283,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             image_std=image_std,
             image_type=image_type,
         )
-        transformed_images = [self._transforms(image) for image in images]
+        transformed_images = [transforms(image) for image in images]
 
         data = {"pixel_values": torch.vstack(transformed_images)}
         return data

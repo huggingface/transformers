@@ -17,6 +17,11 @@ import functools
 from dataclasses import dataclass
 
 from .image_processing_utils import BaseImageProcessor
+from .utils.import_utils import is_torchvision_available
+
+
+if is_torchvision_available():
+    from torchvision.transforms import Compose
 
 
 @dataclass(frozen=True)
@@ -42,7 +47,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     _transform_params = None
     _transform_settings = None
 
-    def _set_transform_settings(self, **kwargs):
+    def _set_transform_settings(self, **kwargs) -> None:
         settings = {}
         for k, v in kwargs.items():
             if k not in self._transform_params:
@@ -50,7 +55,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             settings[k] = v
         self._transform_settings = settings
 
-    def _same_transforms_settings(self, **kwargs):
+    def _same_transforms_settings(self, **kwargs) -> bool:
         """
         Check if the current settings are the same as the current transforms.
         """
@@ -62,13 +67,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 return False
         return True
 
-    def _build_transforms(self, **kwargs):
+    def _build_transforms(self, **kwargs) -> Compose:
         """
         Given the input settings e.g. do_resize, build the image transforms.
         """
         raise NotImplementedError
 
-    def set_transforms(self, **kwargs):
+    def set_transforms(self, **kwargs) -> Compose:
         """
         Set the image transforms based on the given settings.
         If the settings are the same as the current ones, do nothing.
@@ -79,13 +84,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
         transforms = self._build_transforms(**kwargs)
         self._set_transform_settings(**kwargs)
         self._transforms = transforms
+        return transforms
 
     @functools.lru_cache(maxsize=1)
-    def _maybe_update_transforms(self, **kwargs):
+    def _maybe_update_transforms(self, **kwargs) -> Compose:
         """
         If settings are different from those stored in `self._transform_settings`, update
         the image transforms to apply
         """
         if self._same_transforms_settings(**kwargs):
-            return
-        self.set_transforms(**kwargs)
+            return self._transforms
+        return self.set_transforms(**kwargs)
