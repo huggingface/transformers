@@ -78,7 +78,7 @@ deps = {
     "tensorflow-cpu": "tensorflow-cpu>2.9,<2.16",
     "tensorflow": "tensorflow>2.9,<2.16",
     "tensorflow-text": "tensorflow-text<2.16",
-    "tensorflow-probability": "tensorflow-probability<2.16",
+    "tensorflow-probability": "tensorflow-probability<0.24",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",
     "timm": "timm<=0.9.16",
