@@ -1297,7 +1297,7 @@ class UdopStack(UdopPreTrainedModel):
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
 
-        # tie weights of original position bias of encoder
+    def _tie_weights(self):
         for bias in self.relative_bias.biases:
             if isinstance(bias, RelativePositionBias1D):
                 self._tie_or_clone_weights(
