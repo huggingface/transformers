@@ -28,6 +28,7 @@ from .utils import (
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
+    is_torchvision_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -51,6 +52,20 @@ if is_vision_available():
         PILImageResampling = PIL.Image.Resampling
     else:
         PILImageResampling = PIL.Image
+
+    if is_torchvision_available():
+        from torchvision.transforms import InterpolationMode
+
+        pil_torch_interpolation_mapping = {
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+            PILImageResampling.BOX: InterpolationMode.BOX,
+            PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+            PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+            PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+            PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+            PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+        }
+
 
 if TYPE_CHECKING:
     if is_torch_available():

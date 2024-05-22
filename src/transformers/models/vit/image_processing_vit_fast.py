@@ -12,16 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for ViT."""
+"""Fast Image processor class for ViT."""
 
 import functools
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
-
 from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, FusedRescaleNormalize, Rescale
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -29,8 +27,9 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     make_list_of_images,
+    pil_torch_interpolation_mapping,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_numpy_array, is_torch_tensor, logging
 from ...utils.generic import ExplicitEnum
 from ...utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -44,18 +43,9 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-if is_torchvision_available():
-    from torchvision.transforms import Compose, InterpolationMode, Lambda, Normalize, Resize, ToTensor
 
-    pil_torch_interpolation_mapping = {
-        PILImageResampling.NEAREST: InterpolationMode.NEAREST,
-        PILImageResampling.BOX: InterpolationMode.BOX,
-        PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
-        PILImageResampling.HAMMING: InterpolationMode.HAMMING,
-        PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
-        PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-        PILImageResampling.NEAREST: InterpolationMode.NEAREST,
-    }
+if is_torchvision_available():
+    from torchvision.transforms import Compose, Lambda, Normalize, PILToTensor, Resize
 
 
 @dataclass(frozen=True)
@@ -80,9 +70,9 @@ class ImageType(ExplicitEnum):
 def get_image_type(image):
     if is_vision_available() and isinstance(image, Image.Image):
         return ImageType.PIL
-    if is_torch_available() and isinstance(image, torch.Tensor):
+    if is_torch_tensor(image):
         return ImageType.TORCH
-    if isinstance(image, np.ndarray):
+    if is_numpy_array(image):
         return ImageType.NUMPY
     raise ValueError(f"Unrecognised image type {type(image)}")
 
@@ -171,46 +161,29 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         """
         Given the input settings build the image transforms using `torchvision.transforms.Compose`.
         """
-
-        def rescale_image(image, rescale_factor):
-            return image * rescale_factor
-
         transforms = []
         if do_resize:
             transforms.append(
                 Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
             )
 
-        # Regardless of whether we rescale, all PIL and numpy values need to be converted to a torch tensor
+        # All PIL and numpy values need to be converted to a torch tensor
         # to keep cross compatibility with slow image processors
-        convert_to_tensor = image_type in (ImageType.PIL, ImageType.NUMPY)
-        if convert_to_tensor:
-            transforms.append(ToTensor())
+        if image_type == ImageType.PIL:
+            transforms.append(PILToTensor())
 
-        if do_rescale:
-            if convert_to_tensor:
-                # ToTensor scales the pixel values to [0, 1] by dividing by the largest value in the image.
-                # By default, the rescale factor for the image processor is 1 / 255, i.e. assuming the maximum
-                # possible value is 255. Here, if it's different, we need to undo the (assumed) 1/255 scaling
-                # and then rescale again
-                #
-                # NB: This means that the final pixel values will be different in the torchvision transform
-                # depending on the pixels in the image as they become [min_val / max_value, max_value / max_value]
-                # whereas in the image processors they are [min_value * rescale_factor, max_value * rescale_factor]
-                if rescale_factor != 1 / 255:
-                    rescale_factor = rescale_factor * 255
-                    transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
-            else:
-                # If do_rescale is `True`, we should still respect it
-                transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
-        elif convert_to_tensor:
-            # If we've converted to a tensor and do_rescale=False, then we need to unscale.
-            # As with do_scale=True, we assume that the pixel values were rescaled by 1/255
-            rescale_factor = 255
-            transforms.append(Lambda(functools.partial(rescale_image, rescale_factor=rescale_factor)))
+        elif image_type == ImageType.NUMPY:
+            # Do we want to permute the channels here?
+            transforms.append(Lambda(lambda x: torch.from_numpy(x)))
 
-        if do_normalize:
+        # We can combine rescale and normalize into a single operation for speed
+        if do_rescale and do_normalize:
+            transforms.append(FusedRescaleNormalize(image_mean, image_std, rescale_factor=rescale_factor))
+        elif do_rescale:
+            transforms.append(Rescale(rescale_factor=rescale_factor))
+        elif do_normalize:
             transforms.append(Normalize(image_mean, image_std))
+
         return Compose(transforms)
 
     @functools.lru_cache(maxsize=1)
