@@ -546,7 +546,7 @@ class WhisperGenerationMixin:
             begin_index=begin_index,  # begin index is index of first generated decoder token
             is_shortform=is_shortform,
             num_beams=kwargs.get("num_beams", 1),
-            device=next(self.parameters()).device,
+            device=input_features.device,
         )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
