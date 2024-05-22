@@ -14,13 +14,28 @@
 # limitations under the License.
 
 import functools
+from dataclasses import dataclass
 
 from .image_processing_utils import BaseImageProcessor
-from .utils import is_torchvision_available
 
 
-if is_torchvision_available():
-    from torchvision.transforms import functional as F
+@dataclass(frozen=True)
+class SizeDict:
+    """
+    Hashable dictionary to store image size information.
+    """
+
+    height: int = None
+    width: int = None
+    longest_edge: int = None
+    shortest_edge: int = None
+    max_height: int = None
+    max_width: int = None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SizeDict.")
 
 
 class BaseImageProcessorFast(BaseImageProcessor):
@@ -74,35 +89,3 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if self._same_transforms_settings(**kwargs):
             return
         self.set_transforms(**kwargs)
-
-
-def _cast_tensor_to_float(x):
-    if x.is_floating_point():
-        return x
-    return x.float()
-
-
-class FusedRescaleNormalize:
-    """
-    Rescale and normalize the input image in one step.
-    """
-
-    def __init__(self, mean, std, rescale_factor: float = 1.0, inplace: bool = False):
-        self.mean = mean * (1.0 / rescale_factor)
-        self.std = std * (1.0 / rescale_factor)
-
-    def __call__(self, image):
-        image = _cast_tensor_to_float(image)
-        return F.normalize(image, self.mean, self.std, inplace=self.inplace)
-
-
-class Rescale:
-    """
-    Rescale the input image by rescale factor: image *= rescale_factor.
-    """
-
-    def __init__(self, rescale_factor: float = 1.0):
-        self.rescale_factor = rescale_factor
-
-    def __call__(self, image):
-        return image.mul(self.rescale_factor)

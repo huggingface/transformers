@@ -15,23 +15,24 @@
 """Fast Image processor class for ViT."""
 
 import functools
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, FusedRescaleNormalize, Rescale
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_transforms import FusedRescaleNormalize, Rescale
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    ImageType,
     PILImageResampling,
+    get_image_type,
     make_list_of_images,
     pil_torch_interpolation_mapping,
 )
-from ...utils import TensorType, is_numpy_array, is_torch_tensor, logging
-from ...utils.generic import ExplicitEnum
-from ...utils.import_utils import is_torch_available, is_torchvision_available, is_vision_available
+from ...utils import TensorType, logging
+from ...utils.import_utils import is_torch_available, is_torchvision_available
 
 
 logger = logging.get_logger(__name__)
@@ -40,41 +41,9 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from PIL import Image
-
 
 if is_torchvision_available():
     from torchvision.transforms import Compose, Lambda, Normalize, PILToTensor, Resize
-
-
-@dataclass(frozen=True)
-class SizeDict:
-    height: int = None
-    width: int = None
-    longest_edge: int = None
-    shortest_edge: int = None
-
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(f"Key {key} not found in SizeDict.")
-
-
-class ImageType(ExplicitEnum):
-    PIL = "pillow"
-    TORCH = "torch"
-    NUMPY = "numpy"
-
-
-def get_image_type(image):
-    if is_vision_available() and isinstance(image, Image.Image):
-        return ImageType.PIL
-    if is_torch_tensor(image):
-        return ImageType.TORCH
-    if is_numpy_array(image):
-        return ImageType.NUMPY
-    raise ValueError(f"Unrecognised image type {type(image)}")
 
 
 class ViTImageProcessorFast(BaseImageProcessorFast):
@@ -162,7 +131,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         Given the input settings build the image transforms using `torchvision.transforms.Compose`.
         """
         transforms = []
-        
+
         if do_resize:
             transforms.append(
                 Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])

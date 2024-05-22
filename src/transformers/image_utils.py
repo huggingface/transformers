@@ -25,6 +25,7 @@ from packaging import version
 from .utils import (
     ExplicitEnum,
     is_jax_tensor,
+    is_numpy_array,
     is_tf_tensor,
     is_torch_available,
     is_torch_tensor,
@@ -105,14 +106,30 @@ def is_pil_image(img):
     return is_vision_available() and isinstance(img, PIL.Image.Image)
 
 
+class ImageType(ExplicitEnum):
+    PIL = "pillow"
+    TORCH = "torch"
+    NUMPY = "numpy"
+    TENSORFLOW = "tensorflow"
+    JAX = "jax"
+
+
+def get_image_type(image):
+    if is_pil_image(image):
+        return ImageType.PIL
+    if is_torch_tensor(image):
+        return ImageType.TORCH
+    if is_numpy_array(image):
+        return ImageType.NUMPY
+    if is_tf_tensor(image):
+        return ImageType.TENSORFLOW
+    if is_jax_tensor(image):
+        return ImageType.JAX
+    raise ValueError(f"Unrecognised image type {type(image)}")
+
+
 def is_valid_image(img):
-    return (
-        (is_vision_available() and isinstance(img, PIL.Image.Image))
-        or isinstance(img, np.ndarray)
-        or is_torch_tensor(img)
-        or is_tf_tensor(img)
-        or is_jax_tensor(img)
-    )
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
 
 
 def valid_images(imgs):
