@@ -322,7 +322,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         causal_mask.masked_fill_(boolean_mask, 0)
         return causal_mask
 
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids):
+    def _merge_input_ids_with_image_features(
+        self, image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids
+    ):
         _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         scaled_image_features = image_features / (self.config.hidden_size**0.5)

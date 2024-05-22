@@ -134,7 +134,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         do_align_long_axis: bool = None,
         do_rescale: bool = None,
         labels: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -189,7 +188,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **labels** -- Labels compatible with training if `labels` is not None
         """
 
-        return_token_type_ids=True if labels is not None else False
+        return_token_type_ids = True if labels is not None else False
 
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
@@ -251,13 +250,11 @@ class PaliGemmaProcessor(ProcessorMixin):
             if labels is not None:
                 first_one_indices = [token_type_id.index(1) for token_type_id in inputs["token_type_ids"]]
                 input_ids = [
-                    ids[:idx] + [newline_token] + ids[idx:]
-                    for ids, idx in zip(inputs["input_ids"], first_one_indices)
+                    ids[:idx] + [newline_token] + ids[idx:] for ids, idx in zip(inputs["input_ids"], first_one_indices)
                 ]
 
                 attention_masks = [
-                    mask[:idx] + [1] + mask[idx:]
-                    for mask, idx in zip(inputs["attention_mask"], first_one_indices)
+                    mask[:idx] + [1] + mask[idx:] for mask, idx in zip(inputs["attention_mask"], first_one_indices)
                 ]
 
                 token_type_ids = [
@@ -280,15 +277,15 @@ class PaliGemmaProcessor(ProcessorMixin):
                 padding="do_not_pad",
                 max_length=max_length,
                 truncation=truncation,
-                return_token_type_ids=return_token_type_ids
+                return_token_type_ids=return_token_type_ids,
             )
             input_ids = inputs["input_ids"]
             attention_masks = inputs["attention_mask"]
-            token_type_ids = None if labels is None else inputs['token_type_ids']
-        
+            token_type_ids = None if labels is None else inputs["token_type_ids"]
+
         inputs_to_pad = {"input_ids": input_ids, "attention_mask": attention_masks}
         if token_type_ids is not None:
-            inputs_to_pad.update({'token_type_ids': token_type_ids})
+            inputs_to_pad.update({"token_type_ids": token_type_ids})
         text_inputs = self.tokenizer.pad(
             inputs_to_pad,
             padding=padding,
@@ -297,7 +294,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
-
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):
