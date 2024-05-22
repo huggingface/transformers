@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SegGpt model."""
-
+"""PyTorch SegGpt model."""
 
 import collections.abc
 import math
@@ -45,9 +44,6 @@ _CONFIG_FOR_DOC = "SegGptConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "BAAI/seggpt-vit-large"
 _EXPECTED_OUTPUT_SHAPE = [3, 896, 448]
-
-
-from ..deprecated._archive_maps import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

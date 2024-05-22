@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import copy
 import inspect
 import tempfile
 import unittest
@@ -74,6 +75,8 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
+        WatermarkDetector,
+        WatermarkingConfig,
     )
     from transformers.generation.utils import _speculative_sampling
 
@@ -168,7 +171,9 @@ class GenerationTesterMixin:
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
-        input_ids = torch.zeros_like(input_ids[:, :1]) + model._get_decoder_start_token_id()
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -2094,6 +2099,44 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
         )
         self.assertListEqual(low_output.tolist(), high_output.tolist())
+
+    @slow
+    def test_watermark_generation(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I will be", return_tensors="pt").to(torch_device)
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        # generation should work with both input types: WatermarkingConfig or Dict, so let's check it here :)
+        watermark_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+        _ = model.generate(**model_inputs, watermarking_config=watermark_config, do_sample=False, max_length=15)
+
+        args = {
+            "bias": 2.0,
+            "context_width": 1,
+            "seeding_scheme": "selfhash",
+            "greenlist_ratio": 0.25,
+            "hashing_key": 15485863,
+        }
+        output = model.generate(**model_inputs, do_sample=False, max_length=15)
+        output_selfhash = model.generate(**model_inputs, watermarking_config=args, do_sample=False, max_length=15)
+
+        # check that the watermarked text is generating what is should
+        self.assertListEqual(
+            output.tolist(), [[40, 481, 307, 262, 717, 284, 9159, 326, 314, 716, 407, 257, 4336, 286, 262]]
+        )
+        self.assertListEqual(
+            output_selfhash.tolist(), [[40, 481, 307, 2263, 616, 640, 284, 651, 616, 1621, 503, 612, 553, 531, 367]]
+        )
+
+        detector = WatermarkDetector(model_config=model.config, device=torch_device, watermarking_config=args)
+        detection_out_watermarked = detector(output_selfhash[:, input_len:], return_dict=True)
+        detection_out = detector(output[:, input_len:], return_dict=True)
+
+        # check that the detector is detecting watermarked text
+        self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
+        self.assertListEqual(detection_out.prediction.tolist(), [False])
 
     @slow
     def test_beam_search_example_integration(self):

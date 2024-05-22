@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch EfficientFormer model."""
+"""PyTorch EfficientFormer model."""
 
 import itertools
 from dataclasses import dataclass
@@ -48,9 +48,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 448]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
-
-from ..deprecated._archive_maps import EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class EfficientFormerPatchEmbeddings(nn.Module):

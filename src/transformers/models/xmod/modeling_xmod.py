@@ -42,9 +42,6 @@ from .configuration_xmod import XmodConfig
 logger = logging.get_logger(__name__)
 
 
-from ..deprecated._archive_maps import XMOD_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Xmod
 class XmodEmbeddings(nn.Module):
     """

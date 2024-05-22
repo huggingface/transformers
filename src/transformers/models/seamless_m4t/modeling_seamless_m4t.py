@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SeamlessM4T model."""
-
+"""PyTorch SeamlessM4T model."""
 
 import copy
 import math
@@ -49,12 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
 _CONFIG_FOR_DOC = "SeamlessM4TConfig"
-
-
-from ..deprecated._archive_maps import (  # noqa: F401, E402
-    SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,  # noqa: F401, E402
-    SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,  # noqa: F401, E402
-)
 
 
 @dataclass
