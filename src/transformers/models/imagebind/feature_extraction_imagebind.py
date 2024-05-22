@@ -19,6 +19,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_speech_available, is_torch_available, logging
@@ -218,6 +219,21 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         self.num_chunks = num_chunks
         self.return_attention_mask = return_attention_mask
 
+        if not is_speech_available():
+            mel_filters = mel_filter_bank(
+                num_frequency_bins=256,
+                num_mel_filters=self.num_mel_bins,
+                min_frequency=20,
+                max_frequency=sampling_rate // 2,
+                sampling_rate=sampling_rate,
+                norm=None,
+                mel_scale="kaldi",
+                triangularize_in_mel_space=True,
+            )
+
+            self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+            self.window = window_function(400, "hann", periodic=False)
+
     def _extract_fbank_features(
         self,
         waveform: np.ndarray,
@@ -231,17 +247,33 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         # Mean center the waveform
         waveform -= waveform.mean()
 
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        fbank = ta_kaldi.fbank(
-            waveform,
-            sample_frequency=self.sampling_rate,
-            num_mel_bins=self.num_mel_bins,
-            htk_compat=True,
-            use_energy=False,
-            window_type="hanning",
-            dither=0.0,
-            frame_shift=10,
-        )
+        if is_speech_available():
+            waveform = torch.from_numpy(waveform).unsqueeze(0)
+            fbank = ta_kaldi.fbank(
+                waveform,
+                sample_frequency=self.sampling_rate,
+                window_type="hanning",
+                num_mel_bins=self.num_mel_bins,
+            )
+        else:
+            waveform = np.squeeze(waveform)
+            fbank = spectrogram(
+                waveform,
+                self.window,
+                frame_length=400,
+                hop_length=160,
+                fft_length=512,
+                power=2.0,
+                center=False,
+                preemphasis=0.97,
+                mel_filters=self.mel_filters,
+                log_mel="log",
+                mel_floor=1.192092955078125e-07,
+                remove_dc_offset=True,
+            ).T
+
+            fbank = torch.from_numpy(fbank)
+
         # Convert to [mel_bins, num_frames] shape
         fbank = fbank.transpose(0, 1)
         # pad to max_length

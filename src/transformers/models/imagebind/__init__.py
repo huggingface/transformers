@@ -29,6 +29,7 @@ _import_structure = {
         "ImageBindTextConfig",
         "ImageBindVisionConfig",
     ],
+    "feature_extraction_imagebind": ["ImageBindFeatureExtractor"],
     "processing_imagebind": ["ImageBindProcessor"],
 }
 
@@ -40,15 +41,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor"]
-
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_imagebind"] = ["ImageBindFeatureExtractor"]
-
 
 try:
     if not is_torch_available():
@@ -74,6 +66,7 @@ if TYPE_CHECKING:
         ImageBindTextConfig,
         ImageBindVisionConfig,
     )
+    from .feature_extraction_imagebind import ImageBindFeatureExtractor
     from .processing_imagebind import ImageBindProcessor
 
     try:
@@ -83,14 +76,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_imagebind import ImageBindImageProcessor
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_imagebind import ImageBindFeatureExtractor
 
     try:
         if not is_torch_available():
