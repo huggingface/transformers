@@ -268,11 +268,9 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         return_data = {**inputs, "pixel_values": pixel_values}
 
-
-
         if return_token_type_ids:
-            labels = inputs['input_ids'].masked_fill(inputs['token_type_ids'] == 1, -100)
-            return_data.update({'labels': labels})
+            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 1, -100)
+            return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
