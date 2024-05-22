@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Bloom."""
 
-
 import pickle
 from typing import Optional, Tuple
 

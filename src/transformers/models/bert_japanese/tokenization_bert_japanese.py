@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes."""
 
-
 import collections
 import copy
 import os

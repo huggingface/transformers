@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Processing saving/loading class for common processors.
+Processing saving/loading class for common processors.
 """
 
 import copy
