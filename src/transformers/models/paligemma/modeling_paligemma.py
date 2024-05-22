@@ -330,13 +330,13 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(token_type_ids[:, None, None, :] == 0, 0)
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :] == 0, 0
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
                 )
-
-
 
             final_labels = torch.full(
                 (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
@@ -421,10 +421,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 selected_image_feature = image_outputs.last_hidden_state
                 image_features = self.multi_modal_projector(selected_image_feature)
 
-
                 if cache_position is None:
-                    cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device
-                    )
+                    cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels, token_type_ids, cache_position
                 )
