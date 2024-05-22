@@ -507,8 +507,9 @@ class SlidingWindowCache(StaticCache):
         if cache_position.shape[0] > self.max_cache_len:
             k_out = key_states[:, :, -self.max_cache_len :, :]
             v_out = value_states[:, :, -self.max_cache_len :, :]
-            self.key_cache[layer_idx] = k_out
-            self.value_cache[layer_idx] = v_out
+            # Assumption: caches are all zeros at this point, `+=` is equivalent to `=` but compile-friendly
+            self.key_cache[layer_idx] += k_out
+            self.value_cache[layer_idx] += v_out
             # we should return the whole states instead of k_out, v_out to take the whole prompt
             # into consideration when building kv cache instead of just throwing away tokens outside of the window
             return key_states, value_states
@@ -523,5 +524,12 @@ class SlidingWindowCache(StaticCache):
 
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
+
+        # `_.zero()` followed by `+=` is equivalent `=`, but compile-friendly (without graph breaks due to assignment)
+        self.key_cache[layer_idx].zero_()
+        self.value_cache[layer_idx].zero_()
+
+        self.key_cache[layer_idx] += k_out
+        self.value_cache[layer_idx] += v_out
 
         return k_out, v_out
