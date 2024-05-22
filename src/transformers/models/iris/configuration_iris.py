@@ -121,7 +121,6 @@ class IrisConfig(PretrainedConfig):
         "hidden_size": "embed_dim_world_model",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
-        "vocab_size": "vocab_size",
     }
 
     def __init__(
