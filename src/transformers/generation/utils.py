@@ -1360,10 +1360,12 @@ class GenerationMixin:
         model_kwargs["cache_position"] = cache_position + past_length - 1
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
+    def _get_cache(
+        self, cache_implementation: str, max_batch_size: int, max_cache_len: int, device: Union[torch.device, str]
+    ) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
-        new `generate` call requires a larger cache.
+        new `generate` call requires a larger cache or uses a different batch size.
 
         Returns the resulting cache object.
         """
@@ -1386,12 +1388,14 @@ class GenerationMixin:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
-                cache_dtype = self.dtype
+                # `self.dtype` (which calls `ModuleUtilsMixin.dtype()`) is not compileable, so we fall back to
+                # `self.config.torch_dtype`. Compiling `generate` after calling `model.to(some_dtype)` will fail
+                cache_dtype = self.dtype if not is_torchdynamo_compiling() else self.config.torch_dtype
             self._cache = cache_cls(
                 config=self.config,
                 max_batch_size=max_batch_size,
                 max_cache_len=max_cache_len,
-                device=self.device,
+                device=device,
                 dtype=cache_dtype,
             )
         else:
