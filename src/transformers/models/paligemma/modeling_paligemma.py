@@ -283,12 +283,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
-    def construct_causal_mask_with_block_attention(self, attention_mask, input_ids, text_mask, inputs_embeds):
+    def construct_causal_mask_with_block_attention(self, attention_mask, labels, text_mask, inputs_embeds):
         # Modified from gemma
         target_length = attention_mask.shape[-1]
         dtype, device = inputs_embeds.dtype, inputs_embeds.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = input_ids.shape[1]
+        sequence_length = labels.shape[1]
         causal_mask = torch.full(
             (sequence_length, target_length),
             fill_value=min_dtype,
@@ -298,22 +298,21 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         if sequence_length != 1:
             causal_mask = torch.triu(causal_mask, diagonal=1)
 
-        mask = input_ids == self.config.prefix_suffix_separator_index
+        mask = labels == self.config.prefix_suffix_separator_index
         # Get the index of the first \n in each row
-        indices = mask.int().cumsum(dim=1).eq(1).int().argmax(dim=1, keepdim=True)
+        indices = mask.int().argmax(dim=1, keepdim=True)
         range_tensor = torch.arange(mask.size(1), device=device).unsqueeze(0).unsqueeze(1)  # [1, 1, l]
 
         # Create the full block attention mask
         prefix_and_image_and_pad_mask = range_tensor < indices.view(-1, 1, 1)
         prefix_and_image_and_pad_mask = prefix_and_image_and_pad_mask.expand(-1, mask.size(1), -1)
-        causal_mask = causal_mask[None, :].expand(input_ids.shape[0], -1, -1)
+        causal_mask = causal_mask[None, :].expand(labels.shape[0], -1, -1)
         causal_mask[prefix_and_image_and_pad_mask] = 0
         causal_mask = causal_mask[:, None, :, :].expand(-1, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
-            padding_mask = attention_mask[:, None, None, :]
-            padding_mask = padding_mask == 0
+            padding_mask = attention_mask[:, None, None, :].eq(0)
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
             )
@@ -347,20 +346,23 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             image_mask.unsqueeze(-1).expand_as(final_embedding), scaled_image_features
         )
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
-        causal_mask = self.construct_causal_mask_with_block_attention(
-            attention_mask, input_ids, text_mask, inputs_embeds
-        )
 
         # position_ids = torch.arange(0, sequence_length, device=input_ids.device).expand(batch_size, -1)
         # position_ids = torch.where(input_ids == self.pad_token_id, torch.ones_like(position_ids), position_ids)
         position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1)
 
         if labels is not None:
+            causal_mask = self.construct_causal_mask_with_block_attention(
+                attention_mask, labels, text_mask, inputs_embeds
+            )
             final_labels = torch.full(
                 (batch_size, sequence_length), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
             )
             final_labels = torch.where(input_ids != self.pad_token_id, labels, final_labels)
+            final_labels[final_labels == self.config.prefix_suffix_separator_index] = self.config.ignore_index
         else:
+            causal_mask = attention_mask.unsqueeze(1).unsqueeze(2) * attention_mask.unsqueeze(1).unsqueeze(-1)
+            causal_mask = causal_mask.float().expand(-1, self.config.text_config.num_key_value_heads, -1, -1)
             final_labels = None
         return final_embedding, causal_mask, final_labels, position_ids
 

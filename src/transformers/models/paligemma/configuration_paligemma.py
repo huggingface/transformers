@@ -48,9 +48,9 @@ class PaliGemmaConfig(PretrainedConfig):
             Dimension of the multimodal projection space.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden layer of the Language model.
-        prefix_suffix_separator_index (int, *optional*, defaults to 108):
+        prefix_suffix_separator_index (`int`, *optional*, defaults to -101:
             Index of separator between prefix and suffix, since PaliGemma attends to prefix differently.
-            Defaults to index of \n
+            Pass in `labels` similar to `ignore_index`
 
     Example:
 
@@ -85,7 +85,7 @@ class PaliGemmaConfig(PretrainedConfig):
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
-        prefix_suffix_separator_index=108,
+        prefix_suffix_separator_index=-101,
         **kwargs,
     ):
         self.ignore_index = ignore_index
