@@ -18,6 +18,7 @@ import functools
 from typing import Any, Dict, List, Optional, Union
 
 from ...image_processing_utils import get_size_dict
+from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale
 from ...image_utils import (
@@ -43,7 +44,7 @@ if is_torch_available():
 
 
 if is_torchvision_available():
-    from torchvision.transforms import Compose, Normalize, PILToTensor, Resize
+    from torchvision.transforms import Compose, PILToTensor, Resize, Lambda, Normalize
 
 
 class ViTImageProcessorFast(BaseImageProcessorFast):
@@ -121,7 +122,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         size: Dict[str, int],
         resample: PILImageResampling,
         do_rescale: bool,
-        rescale_factor: float,  # dummy
+        rescale_factor: float,
         do_normalize: bool,
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
@@ -286,7 +287,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         transformed_images = [transforms(image) for image in images]
 
         data = {"pixel_values": torch.vstack(transformed_images)}
-        return data
+        return BatchFeature(data, tensor_type=return_tensors)
 
     def to_dict(self) -> Dict[str, Any]:
         result = super().to_dict()

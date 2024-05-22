@@ -378,6 +378,7 @@ def normalize(
 
     if input_data_format is None:
         input_data_format = infer_channel_dimension_format(image)
+
     channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
     num_channels = image.shape[channel_axis]
 
@@ -820,8 +821,9 @@ class FusedRescaleNormalize:
     """
 
     def __init__(self, mean, std, rescale_factor: float = 1.0, inplace: bool = False):
-        self.mean = mean * (1.0 / rescale_factor)
-        self.std = std * (1.0 / rescale_factor)
+        self.mean = torch.tensor(mean) * (1.0 / rescale_factor)
+        self.std = torch.tensor(std) * (1.0 / rescale_factor)
+        self.inplace = inplace
 
     def __call__(self, image: "torch.Tensor"):
         image = _cast_tensor_to_float(image)
@@ -837,7 +839,8 @@ class Rescale:
         self.rescale_factor = rescale_factor
 
     def __call__(self, image: "torch.Tensor"):
-        return image.mul(self.rescale_factor)
+        image = image * self.rescale_factor
+        return image
 
 
 class NumpyToTensor:
