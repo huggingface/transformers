@@ -1,5 +1,5 @@
 import unittest
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from transformers.utils import get_json_schema
 
@@ -234,9 +234,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {
                 "type": "object",
-                "properties": {"x": {"type": "integer", "description": "The input"}, "return": {"type": "integer"}},
+                "properties": {"x": {"type": "integer", "description": "The input"}},
                 "required": ["x"],
             },
+            "return": {"type": "integer"},
         }
         self.assertEqual(schema, expected_schema)
 
@@ -260,11 +261,77 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {
                 "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+            "return": {"type": "integer", "description": "The output"},
+        }
+        self.assertEqual(schema, expected_schema)
+
+    def test_tuple(self):
+        def fn(x: Tuple[int, str]):
+            """
+            Test function
+
+            Args:
+                x: The input
+
+
+            Returns:
+                The output
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
                 "properties": {
-                    "x": {"type": "integer", "description": "The input"},
-                    "return": {"type": "integer", "description": "The output"},
+                    "x": {
+                        "type": "array",
+                        "prefixItems": [{"type": "integer"}, {"type": "string"}],
+                        "description": "The input",
+                    }
                 },
                 "required": ["x"],
             },
         }
         self.assertEqual(schema, expected_schema)
+
+    def test_single_element_tuple_fails(self):
+        def fn(x: Tuple[int]):
+            """
+            Test function
+
+            Args:
+                x: The input
+
+
+            Returns:
+                The output
+            """
+            return x
+
+        # Single-element tuples should just be the type itself, or List[type] for variable-length inputs
+        with self.assertRaises(ValueError):
+            get_json_schema(fn)
+
+    def test_ellipsis_type_fails(self):
+        def fn(x: Tuple[int, ...]):
+            """
+            Test function
+
+            Args:
+                x: The input
+
+
+            Returns:
+                The output
+            """
+            return x
+
+        # Variable length inputs should be specified with List[type], not Tuple[type, ...]
+        with self.assertRaises(ValueError):
+            get_json_schema(fn)

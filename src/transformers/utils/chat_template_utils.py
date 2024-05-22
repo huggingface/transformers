@@ -239,13 +239,24 @@ def _parse_type_hint(hint):
                 return_dict["nullable"] = True
             return return_dict
         elif origin is tuple:
-            raise ValueError(
-                "This helper does not parse Tuple types, as they are usually used to indicate that "
-                "each position is associated with a specific type, and this requires JSON schemas "
-                "that are not supported by most templates. We recommend "
-                "either using List instead for arguments where this is appropriate, or "
-                "splitting arguments with Tuple types into multiple arguments that take single inputs."
-            )
+            if not get_args(hint):
+                return {"type": "array"}
+            if len(get_args(hint)) == 1:
+                raise ValueError(
+                    "Tuple type hints should only be used when the argument has a fixed length and each "
+                    f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
+                    "This should be replaced with an unwrapped type hint instead like "
+                    f"{get_args(hint)[0]}. Alternatively, if the "
+                    "function can actually take a tuple with multiple elements, please either indicate "
+                    f"each element type (e.g. Tuple[{get_args(hint)[0]}, {get_args(hint)[0]}]), "
+                    f"or if the input can be variable length, use List[{get_args(hint)[0]}] instead."
+                )
+            if ... in get_args(hint):
+                raise ValueError(
+                    "'...' is not supported in Tuple type hints. Use List[] types for variable-length"
+                    " inputs instead."
+                )
+            return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in get_args(hint)]}
         elif origin is dict:
             # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
             # However, we can specify the type of the dict values with "additionalProperties"
