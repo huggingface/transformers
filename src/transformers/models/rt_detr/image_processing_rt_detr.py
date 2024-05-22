@@ -642,6 +642,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -671,8 +672,16 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         annotation_list = annotations if annotations is not None else [None] * len(images)
         padded_images = []
@@ -680,7 +689,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         for image, annotation in zip(images, annotation_list):
             padded_image, padded_annotation = self._pad_image(
                 image,
-                pad_size,
+                padded_size,
                 annotation,
                 constant_values=constant_values,
                 data_format=data_format,
@@ -694,7 +703,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
