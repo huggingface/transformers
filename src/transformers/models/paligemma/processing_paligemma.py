@@ -133,7 +133,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_rescale: bool = None,
-        labels: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -142,14 +142,14 @@ class PaliGemmaProcessor(ProcessorMixin):
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
-        The usage for PaliGemma fine-tuning preparation is slightly different than usual. Labels passed are suffixes to
+        The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
         the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
         the prefix and the suffix. For instance,
         ```python
         image = PIL_cow_image
         prompt = "answer en Where is the cow standing?"
-        label = "on the beach"
-        inputs = processor(text=prompt, images=image, labels=labels)
+        suffix = "on the beach"
+        inputs = processor(text=prompt, images=image, suffix=suffix)
         ```
         Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
         ```python
@@ -192,23 +192,23 @@ class PaliGemmaProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            labels (`str`, `List[str]`, `List[List[str]]`):
-                The labels of suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+            suffix (`str`, `List[str]`, `List[List[str]]`):
+                The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
                 for more information.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `labels`
-              is provided, the `input_ids` will also contain the labels suffix input ids.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **labels** -- Labels compatible with training if `labels` is not None
+            - **labels** -- Labels compatible with training if `suffix` is not None
         """
 
-        return_token_type_ids = True if labels is not None else False
+        return_token_type_ids = True if suffix is not None else False
 
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
@@ -227,8 +227,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             text = [text]
         elif isinstance(text, list) and _is_str_or_image(text[0]):
             pass
-        if labels is not None and _is_str_or_image(labels):
-            labels = [labels]
+        if suffix is not None and _is_str_or_image(suffix):
+            suffix = [suffix]
         input_strings = [
             build_string_from_input(
                 prompt=prompt,
@@ -257,15 +257,23 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         inputs = self.tokenizer(
             input_strings,
-            text_pair=labels,
+            text_pair=suffix,
             return_tensors=return_tensors,
             padding=padding,
             max_length=max_length,
             truncation=truncation,
             return_token_type_ids=return_token_type_ids,
+            add_special_tokens=False,
         )
 
-        return BatchFeature(data={**inputs, "pixel_values": pixel_values})
+        return_data = {**inputs, "pixel_values": pixel_values}
+
+
+
+        if return_token_type_ids:
+            labels = inputs['input_ids'].masked_fill(inputs['token_type_ids'] == 1, -100)
+            return_data.update({'labels': labels})
+        return BatchFeature(data=return_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

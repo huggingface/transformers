@@ -316,7 +316,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         else:
             position_ids = None
 
-        if token_type_ids is not None:
+        if token_type_ids is not None and labels is not None:
             # from llama modeling
             target_length = cache_position[-1] + 1
             causal_mask = torch.full(
