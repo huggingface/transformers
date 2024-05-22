@@ -133,16 +133,19 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
     """Flip the flipped heatmaps back to the original form.
 
     Args:
-        output_flipped (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+        output_flipped (`torch.tensor` of shape `(batch_size, num_keypoints, height, width)`):
             The output heatmaps obtained from the flipped images.
-        flip_pairs (list[tuple()):
+        flip_pairs (`torch.Tensor` of shape `(num_keypoints, 2)`):
             Pairs of keypoints which are mirrored (for example, left ear -- right ear).
-        target_type (`str`):
-            GaussianHeatmap or CombinedTarget
+        target_type (`str`, *optional*, defaults to `"GaussianHeatmap"`):
+            Target type to use. Can be GaussianHeatmap or CombinedTarget.
 
     Returns:
-        np.ndarray: heatmaps that flipped back to the original image
+        torch.Tensor: heatmaps that flipped back to the original image
     """
+    if target_type not in ["GaussianHeatmap", "CombinedTarget"]:
+        raise ValueError("target_type should be GaussianHeatmap or CombinedTarget")
+
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
     shape_ori = output_flipped.shape
@@ -151,7 +154,7 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
         channels = 3
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
     output_flipped = output_flipped.reshape(shape_ori[0], -1, channels, shape_ori[2], shape_ori[3])
-    output_flipped_back = output_flipped.copy()
+    output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
     for left, right in flip_pairs.tolist():
@@ -159,7 +162,7 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
         output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
     output_flipped_back = output_flipped_back.reshape(shape_ori)
     # Flip horizontally
-    output_flipped_back = output_flipped_back[..., ::-1]
+    output_flipped_back = output_flipped_back.flip(-1)
     return output_flipped_back
 
 
@@ -185,7 +188,7 @@ class ViTPoseSimpleDecoder(nn.Module):
         heatmaps = self.conv(hidden_state)
 
         if flip_pairs is not None:
-            heatmaps = flip_back(heatmaps.detach().cpu().numpy(), flip_pairs)
+            heatmaps = flip_back(heatmaps, flip_pairs)
 
         return heatmaps
 
@@ -223,7 +226,7 @@ class ViTPoseClassicDecoder(nn.Module):
         heatmaps = self.conv(hidden_state)
 
         if flip_pairs is not None:
-            heatmaps = flip_back(heatmaps.detach().cpu().numpy(), flip_pairs)
+            heatmaps = flip_back(heatmaps, flip_pairs)
 
         return heatmaps
 
@@ -245,9 +248,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.backbone.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(VITPOSE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)

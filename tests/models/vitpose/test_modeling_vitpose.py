@@ -167,7 +167,11 @@ class ViTPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    @unittest.skip(reason="ViTPose does not use inputs_embeds")
+    @unittest.skip(reason="ViTPose does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="ViTPose does not support input and output embeddings")
     def test_inputs_embeds(self):
         pass
 
