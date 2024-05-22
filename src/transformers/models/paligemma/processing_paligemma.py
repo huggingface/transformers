@@ -198,7 +198,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             suffix (`str`, `List[str]`, `List[List[str]]`):
                 The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
-                for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench". 
+                for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
