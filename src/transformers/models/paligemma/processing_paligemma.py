@@ -108,6 +108,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         tokens_to_add = {"additional_special_tokens": [image_token]}
         tokenizer.add_special_tokens(tokens_to_add)
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
 
         super().__init__(image_processor, tokenizer)
 
@@ -263,13 +265,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             max_length=max_length,
             truncation=truncation,
             return_token_type_ids=return_token_type_ids,
-            add_special_tokens=False,
         )
 
         return_data = {**inputs, "pixel_values": pixel_values}
 
         if return_token_type_ids:
-            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 1, -100)
+            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 
