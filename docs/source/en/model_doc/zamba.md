@@ -44,10 +44,6 @@ outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
 
-## Model card
-
-The model cards can be found at:
-* [Zamba-7B](MODEL_CARD_ZAMBA-7B-v1.md)
 
 ## Issues
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/zyphra/zamba-7b)
