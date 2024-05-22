@@ -546,6 +546,7 @@ class WhisperGenerationMixin:
         self._check_decoder_input_ids(kwargs=kwargs)
 
         # 3. Retrieve logits processors
+        device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
@@ -553,7 +554,7 @@ class WhisperGenerationMixin:
             begin_index=begin_index,  # begin index is index of first generated decoder token
             is_shortform=is_shortform,
             num_beams=kwargs.get("num_beams", 1),
-            device=input_features.device,
+            device=device,
         )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output

@@ -1770,7 +1770,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1796,7 +1798,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. prepare beam search scorer
