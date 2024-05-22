@@ -15,7 +15,6 @@ docs/source/en/custom_models.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
 docs/source/en/glossary.md
-docs/source/en/hpo_train.md
 docs/source/en/index.md
 docs/source/en/installation.md
 docs/source/en/internal/audio_utils.md
