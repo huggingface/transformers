@@ -44,7 +44,10 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.label2id = {v: k for k, v in id2label.items()}
 
     if model_name == "rtdetr_r18vd":
-        pass
+        config.backbone = "resnet18d"
+        config.encoder_in_channels = [128, 256, 512]
+        config.hidden_expansion = 0.5
+        config.decoder_layers = 3
     elif model_name == "rtdetr_r34vd":
         config.backbone = "resnet34d"
         config.encoder_in_channels = [128, 256, 512]
@@ -59,10 +62,13 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
-    elif model_name == "rtdetr_18vd_coco_o365":
-        pass
+    elif model_name == "rtdetr_r18vd_coco_o365":
+        config.backbone = "resnet18d"
+        config.encoder_in_channels = [128, 256, 512]
+        config.hidden_expansion = 0.5
+        config.decoder_layers = 3
     elif model_name == "rtdetr_r50vd_coco_o365":
-        pass
+        config.backbone = "resnet50d"
     elif model_name == "rtdetr_r101vd_coco_o365":
         config.backbone = "resnet101d"
         config.encoder_ffn_dim = 2048
@@ -93,7 +99,11 @@ def create_rename_keys(config):
         rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model._backbone.bn1.{last}"))
 
     # stages
-    if config.backbone == "resnet50d":
+    if config.backbone == "resnet18d":
+        layer = [2,2,2,2]
+    elif config.backbone == "resnet34d":
+        layer = [3,4,6,3]
+    elif config.backbone == "resnet50d":
         layer = [3,4,6,3]
     elif config.backbone == "resnet101d":
         layer = [3,4,23,3]
@@ -156,7 +166,7 @@ def create_rename_keys(config):
                     ))
 
             # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
-            if config.backbone not in ['resnet34d', 'resnet18d']:
+            if config.backbone not in ["resnet34d", "resnet18d", "rtdetr_r18vd_coco_o365"]:
                 rename_keys.append(
                     (
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
@@ -238,7 +248,7 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
-    block_levels = 3 if config.backbone not in ["resnet34d", "resnet18d"] else 4
+    block_levels = 3 if config.backbone not in ["resnet34d", "resnet18d", "rtdetr_r18vd_coco_o365"] else 4
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
@@ -560,7 +570,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "rtdetr_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_m_6x_coco_from_paddle.pth",
         "rtdetr_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth",
         "rtdetr_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_6x_coco_from_paddle.pth",
-        "rtdetr_18vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_5x_coco_objects365_from_paddle.pth",
+        "rtdetr_r18vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_5x_coco_objects365_from_paddle.pth",
         "rtdetr_r50vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_2x_coco_objects365_from_paddle.pth",
         "rtdetr_r101vd_coco_o365": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r101vd_2x_coco_objects365_from_paddle.pth",
     }
@@ -581,9 +591,9 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # for two_stage
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
-        # special delete for r34vd
-        if key.startswith("model.backbone.model._backbone.layer1.0.downsample") and config.backbone == "resnet34d":
-            del state_dict[key]
+        # special delete for r34vd and r18d
+        # if key.startswith("model.backbone.model._backbone.layer1.0.downsample") and config.backbone in ["resnet34d", "resnet18d"]:
+        #     del state_dict[key]
 
     # finally, create HuggingFace model and load state dict
     model = RTDetrForObjectDetection(config)
@@ -679,25 +689,68 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
     elif model_name == "rtdetr_r101vd":
         expected_slice_logits = torch.tensor(
-            [[-4.6162, -4.9189, -4.6656], [-4.4701, -4.4997, -4.9659], [-5.6641, -7.9000, -5.0725]]
+            [
+                [-4.6162, -4.9189, -4.6656],
+                [-4.4701, -4.4997, -4.9659],
+                [-5.6641, -7.9000, -5.0725],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7707, 0.4124, 0.4585], [0.2589, 0.5492, 0.4735], [0.1688, 0.1993, 0.2108]]
+            [
+                [0.7707, 0.4124, 0.4585],
+                [0.2589, 0.5492, 0.4735],
+                [0.1688, 0.1993, 0.2108],
+            ]
         )
-    elif model_name == "rtdetr_18vd_coco_o365":
-        pass
+    elif model_name == "rtdetr_r18vd_coco_o365":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.8726, -5.9066, -5.2450],
+                [-4.8157, -6.8764, -5.1656],
+                [-4.7492, -5.7006, -5.1333],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2552, 0.5501, 0.4773],
+                [0.1685, 0.1986, 0.2104],
+                [0.7692, 0.4141, 0.4620],
+            ]
+        )
     elif model_name == "rtdetr_r50vd_coco_o365":
-        pass
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.6491, -3.9252, -5.3163],
+                [-4.1386, -5.0348, -3.9016],
+                [-4.4778, -4.5423, -5.7356],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2583, 0.5492, 0.4747],
+                [0.5501, 0.2754, 0.0574],
+                [0.7693, 0.4137, 0.4613],
+            ]
+        )
     elif model_name == "rtdetr_r101vd_coco_o365":
         expected_slice_logits = torch.tensor(
-            [[-4.5152, -5.6811, -5.7311], [-4.5358, -7.2422, -5.0941], [-4.6919, -5.5834, -6.0145]]
+            [
+                [-4.5152, -5.6811, -5.7311],
+                [-4.5358, -7.2422, -5.0941],
+                [-4.6919, -5.5834, -6.0145],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7703, 0.4140, 0.4583], [0.1686, 0.1991, 0.2107], [0.2570, 0.5496, 0.4750]]
+            [
+                [0.7703, 0.4140, 0.4583],
+                [0.1686, 0.1991, 0.2107],
+                [0.2570, 0.5496, 0.4750],
+            ]
         )
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
 
+    print(outputs.logits[0, :3, :3], outputs.pred_boxes[0, :3, :3])
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
 
