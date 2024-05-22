@@ -1,12 +1,14 @@
+import argparse
+import glob
 import importlib
 import re
 
 import libcst as cst
+from check_copies import fix_ruff
+from libcst import ClassDef, CSTTransformer, CSTVisitor
 from libcst import matchers as m
+from libcst.metadata import MetadataWrapper, ParentNodeProvider, ScopeProvider
 
-
-# Should we use the scope to figure out if classes are imported and inherited from
-# then go from here, instead of visiting the classes?
 
 
 def get_module_source_from_name(module_name: str) -> str:
@@ -20,12 +22,9 @@ def get_module_source_from_name(module_name: str) -> str:
     return source_code
 
 
-from libcst import ClassDef, CSTTransformer, CSTVisitor
-from libcst.metadata import MetadataWrapper, ParentNodeProvider
-
 
 class ClassFinder(CSTVisitor):
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+    METADATA_DEPENDENCIES = (ParentNodeProvider,ScopeProvider)
 
     def __init__(self, python_module):
         self.python_module = python_module
@@ -34,9 +33,11 @@ class ClassFinder(CSTVisitor):
         self.function_def = {}  # def repeat_kv
         self.assignments = {}  # LLAMA_DOCSTRING
         self.protected_imports = {}  # if is_xxx_available()
+        self.class_dependency_mapping = {} # "LlamaModel":["LlamaDecoderLayer, "LlamaRMSNorm", "LlamaPreTrainedModel"], "LlamaDecoderLayer":["LlamaAttention","Llama"]
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.classes[node.name.value] = node
+
 
     def visit_SimpleStatementLine(self, node):
         match node:
@@ -58,7 +59,10 @@ class ClassFinder(CSTVisitor):
             if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                 self.imports[stmt.body[0].names] = node  # match the visit simple statement line to overwrite it
 
-
+    def leave_Call(self, node):
+        if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
+            # We need to get a dependency graph?
+            pass
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def __init__(self, old_name, new_name):
         super().__init__()
@@ -116,27 +120,12 @@ class DiffConverterTransformer(CSTTransformer):
         if m.matches(node.module, m.Attribute()):
             full_statement = self.python_module.code_for_node(node.module)
             for imported_ in node.names:
-                if re.search(r'transformers\.models\..*\.modeling_.*' , full_statement):
+                if re.search(r"transformers\.models\..*\.modeling_.*", full_statement):
                     if full_statement not in self.transformers_imports:
                         source_code = get_module_source_from_name(full_statement)
                         tree = cst.parse_module(source_code)
                         self.transformers_imports[full_statement] = tree
                     self.transformers_mapping[self.python_module.code_for_node(imported_.name)] = full_statement
-
-    def visit_Assign(self, node: cst.Assign) -> None:
-        if m.matches(node.value, m.Name()):
-            parent_package = self.transformers_mapping.get(node.value.value, None)
-            if parent_package:
-                if parent_package not in self.visited_module:
-                    old_name = re.findall(r"[A-Z][a-z0-9]*", node.value.value)[0].lower()
-                    new_name = re.findall(r"[A-Z][a-z0-9]*", node.targets[0].target.value)[0].lower()
-                    class_finder = find_classes_in_file(self.transformers_imports[parent_package], old_name, new_name)
-                    self.visited_module[parent_package] = class_finder
-                    self.functions_to_insert = class_finder.function_def
-
-                self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[
-                    parent_package
-                ].classes[node.targets[0].target.value]
 
     def visit_ClassDef(self, node: cst.Assign) -> None:
         if m.matches(node.name, m.Name()):
@@ -149,6 +138,7 @@ class DiffConverterTransformer(CSTTransformer):
                     if parent_package not in self.visited_module:
                         old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
                         new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
+                        # We need to find all the classes, to copy everything, if they are used
                         class_finder = find_classes_in_file(
                             self.transformers_imports[parent_package], old_name, new_name
                         )
@@ -168,7 +158,7 @@ class DiffConverterTransformer(CSTTransformer):
                     return self.class_mapping[assign]
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-            if re.search(r'transformers\.models\..*\.modeling_.*' , full_statement):
+            if re.search(r"transformers\.models\..*\.modeling_.*", full_statement):
                 return updated_node.with_changes(body=[])
 
         return updated_node
@@ -180,9 +170,9 @@ class DiffConverterTransformer(CSTTransformer):
                 super_classes = self.visited_module[self.transformers_mapping[base_name]].classes
                 replacement_class = super_classes[updated_node.name.value]
                 # Copy methods from original node to replacement node, preserving decorators
-                updated_methods = {f.name.value: f for f in updated_node.body.body if isinstance(f, cst.FunctionDef)}
+                updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
                 replacement_methods = {
-                    f.name.value: f for f in replacement_class.body.body if isinstance(f, cst.FunctionDef)
+                    f.name.value: f for f in replacement_class.body.body if m.matches(f, m.FunctionDef())
                 }
 
                 for name, func in updated_methods.items():
@@ -196,7 +186,7 @@ class DiffConverterTransformer(CSTTransformer):
 
                 # Rebuild the class body with updated methods
                 new_body = [
-                    replacement_methods.get(f.name.value, f) if isinstance(f, cst.FunctionDef) else f
+                    replacement_methods.get(f.name.value, f) if m.matches(f, m.FunctionDef()) else f
                     for f in replacement_class.body.body
                 ]
 
@@ -208,7 +198,7 @@ class DiffConverterTransformer(CSTTransformer):
                 new_replacement_class = new_module.visit(
                     SuperTransformer(
                         temp_module,
-                        {f.name.value: f for f in replacement_class.body.body if isinstance(f, cst.FunctionDef)},
+                        {f.name.value: f for f in replacement_class.body.body if m.matches(f, m.FunctionDef())},
                     )
                 ).body[0]
 
@@ -216,6 +206,20 @@ class DiffConverterTransformer(CSTTransformer):
 
         return updated_node
 
+    def leave_Call(self, original_node, updated_node):
+        func_name = None
+        if m.matches(original_node.func, m.Name()):
+            func_name = original_node.func.value
+        elif isinstance(original_node.func, m.Attribute()):
+            func_name = original_node.func.attr.value
+
+        if func_name and func_name in self.functions_to_insert and func_name not in self.inserted_functions:
+            self.new_body.append(self.functions_to_insert[func_name])
+            self.inserted_functions.add(func_name)
+
+        self.new_body.append(updated_node)
+        return updated_node
+    
     def leave_Module(self, original_node: cst.Assign, node):
         new_body = self.new_body
         for visiter in self.visited_module.values():
@@ -225,19 +229,6 @@ class DiffConverterTransformer(CSTTransformer):
 
         return node.with_changes(body=[*new_body, *node.body])
 
-    # def leave_Call(self, original_node, updated_node):
-    #     func_name = None
-    #     if isinstance(original_node.func, cst.Name):
-    #         func_name = original_node.func.value
-    #     elif isinstance(original_node.func, cst.Attribute):
-    #         func_name = original_node.func.attr.value
-
-    #     if func_name and func_name in self.functions_to_insert and func_name not in self.inserted_functions:
-    #         self.new_body.append(self.functions_to_insert[func_name])
-    #         self.inserted_functions.add(func_name)
-
-    #     self.new_body.append(updated_node)
-    #     return updated_node
 
 
 class SuperTransformer(cst.CSTTransformer):
@@ -311,7 +302,6 @@ class SuperTransformer(cst.CSTTransformer):
         return updated_node
 
 
-from check_copies import fix_ruff
 
 
 def convert_file(diff_file):
@@ -325,9 +315,6 @@ def convert_file(diff_file):
     with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         f.write(ruffed_code)
 
-
-import argparse
-import glob
 
 
 if __name__ == "__main__":

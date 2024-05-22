@@ -24,13 +24,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaSdpaAttention,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -220,19 +216,6 @@ class GemmaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-GemmaFlashAttention2 = LlamaFlashAttention2
-GemmaSdpaAttention = LlamaSdpaAttention
-
-GEMMA_ATTENTION_CLASSES = {
-    "eager": GemmaAttention,
-    "flash_attention_2": GemmaFlashAttention2,
-    "sdpa": GemmaSdpaAttention,
-}
-
-GemmaDecoderLayer = LlamaDecoderLayer
-GemmaPreTrainedModel = LlamaPreTrainedModel
-
-
 class GemmaModel(LlamaModel):
     def forward(
         self,
@@ -369,4 +352,5 @@ class GemmaForCausalLM(LlamaForCausalLM):
         )
 
 
-GemmaForSequenceClassification = LlamaForSequenceClassification
+class GemmaForSequenceClassification(LlamaForSequenceClassification):
+    pass
