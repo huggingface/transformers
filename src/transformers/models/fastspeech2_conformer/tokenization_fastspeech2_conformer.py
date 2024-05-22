@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for FastSpeech2Conformer."""
+
 import json
 import os
 from typing import Optional, Tuple

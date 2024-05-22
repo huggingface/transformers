@@ -29,7 +29,7 @@ To optimize this, you can use a kv-cache to store the past keys and values inste
 The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
 
 > [!WARNING]
-> Currently, only [Command R](./model_doc/cohere), [Gemma](./model_doc/gemma) and [Llama](./model_doc/llama2) models support static kv-cache and torch.compile.
+> Currently, only [Llama](./model_doc/llama2) and a few other models support static kv-cache and torch.compile. Check [this issue](https://github.com/huggingface/transformers/issues/28981) for a live model compatibility list.
 
 For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 

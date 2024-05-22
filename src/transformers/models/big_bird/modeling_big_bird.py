@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BigBird model."""
-
+"""PyTorch BigBird model."""
 
 import math
 import os
@@ -919,11 +918,9 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
                 :, :, :, :to_block_size
             ]  # 1st key block (global)
-            attention_probs[
-                :, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :
-            ] = second_last_attn_weights[
-                :, :, :, to_block_size : 4 * to_block_size
-            ]  # last three blocks (global + sliding)
+            attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
+                second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
+            )  # last three blocks (global + sliding)
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
                 # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
