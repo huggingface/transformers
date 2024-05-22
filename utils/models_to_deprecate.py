@@ -14,6 +14,7 @@
 """
 Script to find a candidate list of models to deprecate based on the number of downloads and the date of the last commit.
 """
+
 import argparse
 import glob
 import json
