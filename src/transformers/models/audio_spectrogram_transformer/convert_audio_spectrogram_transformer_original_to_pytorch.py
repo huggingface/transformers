@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Audio Spectrogram Transformer checkpoints from the original repository. URL: https://github.com/YuanGongND/ast"""
 
-
 import argparse
 import json
 from pathlib import Path

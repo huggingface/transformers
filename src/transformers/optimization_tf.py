@@ -14,7 +14,6 @@
 # ==============================================================================
 """Functions and classes related to optimization (weight updates)."""
 
-
 import re
 from typing import Callable, List, Optional, Union
 

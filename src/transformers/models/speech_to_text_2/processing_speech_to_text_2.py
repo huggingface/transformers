@@ -15,6 +15,7 @@
 """
 Speech processor class for Speech2Text2
 """
+
 import warnings
 from contextlib import contextmanager
 
