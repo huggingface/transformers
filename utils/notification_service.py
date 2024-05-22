@@ -1164,8 +1164,8 @@ if __name__ == "__main__":
             json.dump(job_result, fp, indent=4, ensure_ascii=False)
 
     prev_ci_artifacts = None
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
+    if True or os.environ.get("CI_WORKFLOW_REF") == target_workflow:
         # Get the last previously completed CI's failure tables
         artifact_names = [f"ci_results_{job_name}"]
         output_dir = os.path.join(os.getcwd(), "previous_reports")

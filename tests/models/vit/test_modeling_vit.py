@@ -319,3 +319,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
+
+    def test_foo(self):
+        assert 1 == 2

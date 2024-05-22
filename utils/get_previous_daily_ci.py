@@ -38,6 +38,7 @@ def get_last_daily_ci_runs(token):
             workflow_run_id = workflow_run["id"]
             break
 
+    workflow_run_id = "9089085470"
     return workflow_run_id
 
 
