@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPTNeoX model."""
+"""PyTorch GPTNeoX model."""
 
 from typing import Optional, Tuple, Union
 
@@ -33,9 +33,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "abeja/gpt-neox-japanese-2.7b"
 _CONFIG_FOR_DOC = "GPTNeoXJapaneseConfig"
-
-
-from ..deprecated._archive_maps import GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
@@ -233,7 +230,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoXRotaryEmbedding->RotaryEmbedding
 class RotaryEmbedding(nn.Module):
-    # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding.__init__
+    # Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding.__init__
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 

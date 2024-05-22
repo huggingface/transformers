@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TimeSformer model."""
-
+"""PyTorch TimeSformer model."""
 
 import collections
 from typing import Optional, Tuple, Union
@@ -35,9 +34,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TimesformerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/timesformer"
-
-
-from ..deprecated._archive_maps import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155

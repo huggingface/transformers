@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BLIP model."""
+"""PyTorch BLIP model."""
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
@@ -40,9 +41,6 @@ from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/blip-vqa-base"
-
-
-from ..deprecated._archive_maps import BLIP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -234,15 +232,51 @@ class BlipVisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
+
+        if num_patches == num_positions and height == width:
+            return self.position_embedding
+
+        class_pos_embed = self.position_embedding[:, 0, :]
+        patch_pos_embed = self.position_embedding[:, 1:, :]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
+        if interpolate_pos_encoding:
+            position_embedding = self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            position_embedding = self.position_embedding
+        embeddings = embeddings + position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
 
@@ -512,6 +546,8 @@ BLIP_VISION_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
 """
 
 BLIP_INPUTS_DOCSTRING = r"""
@@ -548,6 +584,8 @@ BLIP_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
 """
 
 
@@ -660,6 +698,7 @@ class BlipVisionModel(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -674,7 +713,7 @@ class BlipVisionModel(BlipPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -782,6 +821,7 @@ class BlipModel(BlipPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -807,12 +847,71 @@ class BlipModel(BlipPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(pixel_values=pixel_values, return_dict=return_dict)
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
 
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
 
         return image_features
+
+    @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
+    def get_multimodal_features(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            multimodal_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The multimodal embeddings
+            obtained by applying the image embeddings to the text encoder using the cross-attention mechanism.
+
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, BlipModel
+
+        >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> texts = ["a photo of a cat", "a photo of a dog"]
+        >>> inputs = processor(images=image, text=texts, padding=True, return_tensors="pt")
+
+        >>> multimodal_features = model.get_multimodal_features(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=True,
+            output_hidden_states=True,
+            return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            return_dict=return_dict,
+        )
+
+        pooled_output = text_outputs[1]  # pooled_output
+        multimodal_features = self.text_projection(pooled_output)
+
+        return multimodal_features
 
     @add_start_docstrings_to_model_forward(BLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipOutput, config_class=BlipConfig)
@@ -826,6 +925,7 @@ class BlipModel(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipOutput]:
         r"""
         Returns:
@@ -863,6 +963,7 @@ class BlipModel(BlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         text_outputs = self.text_model(
@@ -949,6 +1050,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -983,6 +1085,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         image_embeds = vision_outputs[0]
@@ -1015,6 +1118,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
@@ -1050,7 +1154,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         """
 
         batch_size = pixel_values.shape[0]
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
 
         image_embeds = vision_outputs[0]
 
@@ -1124,6 +1231,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         Returns:
@@ -1177,6 +1285,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         image_embeds = vision_outputs[0]
@@ -1229,6 +1338,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
@@ -1266,7 +1376,10 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         2
         ```
         """
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
 
         image_embeds = vision_outputs[0]
 
@@ -1358,6 +1471,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BlipTextVisionModelOutput]:
         r"""
         Returns:
@@ -1391,6 +1505,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         image_embeds = vision_outputs[0]

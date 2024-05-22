@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerOnnxConfig"],
+    "configuration_roformer": ["RoFormerConfig", "RoFormerOnnxConfig"],
     "tokenization_roformer": ["RoFormerTokenizer"],
 }
 
@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_roformer"] = [
-        "ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RoFormerForCausalLM",
         "RoFormerForMaskedLM",
         "RoFormerForMultipleChoice",
@@ -64,7 +63,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_roformer"] = [
-        "TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRoFormerForCausalLM",
         "TFRoFormerForMaskedLM",
         "TFRoFormerForMultipleChoice",
@@ -84,7 +82,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_roformer"] = [
-        "FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FlaxRoFormerForMaskedLM",
         "FlaxRoFormerForMultipleChoice",
         "FlaxRoFormerForQuestionAnswering",
@@ -96,7 +93,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerOnnxConfig
+    from .configuration_roformer import RoFormerConfig, RoFormerOnnxConfig
     from .tokenization_roformer import RoFormerTokenizer
 
     try:
@@ -114,7 +111,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_roformer import (
-            ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             RoFormerForCausalLM,
             RoFormerForMaskedLM,
             RoFormerForMultipleChoice,
@@ -134,7 +130,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_roformer import (
-            TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRoFormerForCausalLM,
             TFRoFormerForMaskedLM,
             TFRoFormerForMultipleChoice,
@@ -153,7 +148,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_roformer import (
-            FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaxRoFormerForMaskedLM,
             FlaxRoFormerForMultipleChoice,
             FlaxRoFormerForQuestionAnswering,

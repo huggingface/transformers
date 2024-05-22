@@ -12,12 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DBRX model. """
-
+"""Testing suite for the PyTorch DBRX model."""
 
 import unittest
-
-from parameterized import parameterized
 
 from transformers import DbrxConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -355,11 +352,6 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip("Dbrx models have weight tying disabled.")
     def test_tied_weights_keys(self):
-        pass
-
-    @unittest.skip("TODO @gante fix this for Llama")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
         pass
 
 

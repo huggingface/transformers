@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 CTRL model."""
+"""TF 2.0 CTRL model."""
 
 from __future__ import annotations
 
@@ -42,9 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
-
-
-from ..deprecated._archive_maps import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def angle_defn(pos, i, d_model_size):

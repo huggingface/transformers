@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class."""
-
+"""Auto Model class."""
 
 import warnings
 from collections import OrderedDict
@@ -58,6 +57,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "TFGPTJModel"),
         ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
+        ("idefics", "TFIdeficsModel"),
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
@@ -112,6 +112,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("funnel", "TFFunnelForPreTraining"),
         ("gpt-sw3", "TFGPT2LMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
+        ("idefics", "TFIdeficsForVisionText2Text"),
         ("layoutlm", "TFLayoutLMForMaskedLM"),
         ("lxmert", "TFLxmertForPreTraining"),
         ("mobilebert", "TFMobileBertForPreTraining"),

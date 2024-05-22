@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 T5 model."""
-
+"""TF 2.0 T5 model."""
 
 from __future__ import annotations
 
@@ -57,9 +56,6 @@ from .configuration_t5 import T5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-
-
-from ..deprecated._archive_maps import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ####################################################

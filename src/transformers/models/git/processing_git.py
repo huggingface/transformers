@@ -76,15 +76,21 @@ class GitProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        tokenizer_kwargs, image_processor_kwargs = {}, {}
+        if kwargs:
+            tokenizer_kwargs = {k: v for k, v in kwargs.items() if k not in self.image_processor._valid_processor_keys}
+            image_processor_kwargs = {
+                k: v for k, v in kwargs.items() if k in self.image_processor._valid_processor_keys
+            }
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs)
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **image_processor_kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values

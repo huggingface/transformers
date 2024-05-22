@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SEW model."""
+"""PyTorch SEW model."""
 
 import math
 import warnings
@@ -54,9 +54,6 @@ _CTC_EXPECTED_LOSS = 0.21
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 3.16
-
-
-from ..deprecated._archive_maps import SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices

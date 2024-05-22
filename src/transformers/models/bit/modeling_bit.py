@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BiT model. Also supports backbone for ViT hybrid."""
+"""PyTorch BiT model. Also supports backbone for ViT hybrid."""
 
 import collections
 import math
@@ -55,9 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/bit-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-
-from ..deprecated._archive_maps import BIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
