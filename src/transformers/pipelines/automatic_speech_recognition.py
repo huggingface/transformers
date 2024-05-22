@@ -498,6 +498,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
                         else:
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
+                    else:
+                        generate_kwargs["num_frames"] = num_frames
 
             tokens = self.model.generate(
                 inputs=inputs,
