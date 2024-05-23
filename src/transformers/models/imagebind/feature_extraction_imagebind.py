@@ -72,7 +72,7 @@ def convert_to_numpy_array(raw_speech):
     elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], (list, tuple)):
         if isinstance(raw_speech[0][0], float):
             # List[List[float]]
-            raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in raw_speech]]
+            raw_speech = [[np.asarray(audio, dtype=np.float32)] for audio in raw_speech]
         elif isinstance(raw_speech[0][0], (list, tuple)):
             # List[List[List[float]]]
             raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in clip] for clip in raw_speech]
@@ -111,7 +111,7 @@ def batch_and_clip_ndarray(array, data_dim=1, dtype=np.float32):
         if array.ndim == data_dim + 2:
             return [list(clips) for clips in array]
         elif array.ndim == data_dim + 1:
-            return [list(array)]
+            return [[clip] for clip in array]
         elif array.ndim == data_dim:
             return [[array]]
         else:
@@ -281,7 +281,7 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
         difference = max_length - n_frames
 
         if abs(difference) / n_frames > 0.2:
-            logger.warning(
+            logger.warning_once(
                 f"Large padding or truncation for {tuple(waveform.shape)} waveform with {n_frames} frames and {max_length} max_length."
             )
 

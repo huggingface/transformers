@@ -20,21 +20,23 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+from datasets import load_dataset
 
 from transformers import (
     ImageBindAudioConfig,
     ImageBindConfig,
+    ImageBindProcessor,
     ImageBindTextConfig,
     ImageBindVisionConfig,
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torchaudio,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_speech_available, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -63,7 +65,10 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
+
+if is_speech_available():
+    import torchaudio
 
 
 class ImageBindTextModelTester:
@@ -794,42 +799,64 @@ class ImageBindModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+def prepare_inputs():
+    ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
+    images = ds["image"]
+    texts = ds["text"]
+    audios = [
+        torchaudio.functional.resample(
+            torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000
+        ).numpy()
+        for audio in ds["audio"]
+    ]
+
+    return images, texts, audios
 
 
 @require_vision
+@require_torchaudio
 @require_torch
 class ImageBindModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        pass
-        # model_name = "facebook/imagebind-huge"
-        # model = ImageBindModel.from_pretrained(model_name).to(torch_device)
-        # processor = ImageBindProcessor.from_pretrained(model_name)
+        model_name = "EduardoPacheco/imagebind-huge"
+        model = ImageBindModel.from_pretrained(model_name).to(torch_device)
+        processor = ImageBindProcessor.from_pretrained(model_name)
 
-        # image = prepare_img()
-        # inputs = processor(
-        #     text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        # ).to(torch_device)
+        images, texts, audios = prepare_inputs()
+        inputs = processor(text=texts, images=images, audios=audios, padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
-        # # forward pass
-        # with torch.no_grad():
-        #     outputs = model(**inputs)
+        with torch.no_grad():
+            outputs_vision_text = model(
+                pixel_values=inputs.pixel_values, input_ids=inputs.input_ids, attention_mask=inputs.attention_mask
+            )
+            outputs_vision_audio = model(pixel_values=inputs.pixel_values, input_features=inputs.input_features)
 
-        # # verify the logits
-        # self.assertEqual(
-        #     outputs.logits_per_image.shape,
-        #     torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
-        # )
-        # self.assertEqual(
-        #     outputs.logits_per_text.shape,
-        #     torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
-        # )
+        expected_image_embeds = torch.tensor(
+            [
+                [0.0188, 0.0075, 0.0532, 0.0326, -0.0159],
+                [0.0190, 0.0106, 0.0275, 0.0189, -0.0268],
+                [-0.0104, -0.0203, 0.0048, -0.0158, 0.0076],
+            ]
+        )
+        expected_text_embeds = torch.tensor(
+            [
+                [-1.3476, -1.5732, -0.7386, 9.7949, 0.5856],
+                [-0.4342, -0.9050, -4.2879, 7.4123, -0.4906],
+                [-1.0745, -4.0049, -1.0697, 5.8861, -0.7583],
+            ]
+        )
+        expected_audio_embeds = torch.tensor(
+            [
+                [0.3245, -0.3749, 0.3955, 0.5600, -0.1932],
+                [0.7091, 0.2072, -1.0133, 0.4689, -0.2142],
+                [-0.0282, -0.4923, 1.0058, 0.0459, -0.2271],
+            ]
+        )
 
-        # expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
-
-        # self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs_vision_text.image_embeds[:, :5], expected_image_embeds, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs_vision_text.text_embeds[:, :5], expected_text_embeds, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs_vision_audio.audio_embeds[:, :5], expected_audio_embeds, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs_vision_text.image_embeds, outputs_vision_audio.image_embeds, atol=1e-4))
