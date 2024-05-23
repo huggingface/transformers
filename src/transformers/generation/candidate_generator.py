@@ -150,6 +150,12 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
 
+        # Disable sampling -- this implementation of assisted generation/speculative decoding uses the assistant
+        # greedily to maximize matches. Disables sampling-related flags to prevent warnings
+        self.generation_config.do_sample = False
+        for attr in ("temperature", "top_p", "min_p", "typical_p", "top_k", "epsilon_cutoff", "eta_cutoff"):
+            setattr(self.generation_config, attr, None)
+
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
         self.main_model_min_length = self.generation_config.min_length

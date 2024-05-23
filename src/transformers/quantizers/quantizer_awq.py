@@ -75,7 +75,7 @@ class AwqQuantizer(HfQuantizer):
         return torch_dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations import get_keys_to_not_convert, replace_with_awq_linear
+        from ..integrations import get_keys_to_not_convert, replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -85,6 +85,8 @@ class AwqQuantizer(HfQuantizer):
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
         )
+
+        model = replace_quantization_scales(model, model.config.model_type)
 
         if not has_been_replaced:
             logger.warning(
