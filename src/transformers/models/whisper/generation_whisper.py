@@ -745,7 +745,10 @@ class WhisperGenerationMixin:
         )
 
         if is_shortform: 
+            # add decoder_input_ids tokens: 
             sequences = torch.cat([decoder_input_ids, sequences], dim=-1)
+            # add eos token: 
+            sequences = torch.cat([sequences, torch.full((2,1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
