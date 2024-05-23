@@ -466,7 +466,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         input_text = "Hello"
         expected_output = (
-            "Hello and welcome to the first day of the new release countdown for the month of May!"
+            "Hello and welcome to the first episode of the new podcast, The Frugal Feminist."
         )
 
         inputs = tokenizer(input_text, return_tensors="pt")
