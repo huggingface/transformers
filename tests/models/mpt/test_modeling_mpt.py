@@ -447,7 +447,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = 'Hello, I\'m a new user of the forum. I have a question about the "Solaris'
+        expected_output = "Hello, I'm a new user of the forum. I have a question about the \"Solaris"
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -465,9 +465,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = (
-            "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n"
-        )
+        expected_output = "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n"
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
