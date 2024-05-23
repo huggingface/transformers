@@ -142,7 +142,7 @@ def parse_google_format_docstring(docstring):
         docstring (str): The docstring to parse.
 
     Returns:
-        dict: A dictionary containing the function description, arguments, and return description.
+        The function description, arguments, and return description.
     """
     # Regular expressions to match the sections
     description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
