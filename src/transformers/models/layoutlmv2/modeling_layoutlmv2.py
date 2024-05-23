@@ -383,7 +383,7 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_pos_bins,
             max_distance=self.max_rel_pos,
         )
-        # Since this is a simple indexing operation that is independent of the input, 
+        # Since this is a simple indexing operation that is independent of the input,
         # no need to track gradients for this operation
         #
         # Without this no_grad context, training speed slows down significantly
@@ -407,7 +407,7 @@ class LayoutLMv2Encoder(nn.Module):
             num_buckets=self.rel_2d_pos_bins,
             max_distance=self.max_rel_2d_pos,
         )
-        # Since this is a simple indexing operation that is independent of the input, 
+        # Since this is a simple indexing operation that is independent of the input,
         # no need to track gradients for this operation
         #
         # Without this no_grad context, training speed slows down significantly
