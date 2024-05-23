@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -21,10 +19,9 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import ImageBindTokenizer, ImageBindTokenizerFast
-from transformers.models.imagebind.tokenization_imagebind import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers import CLIPTokenizer, CLIPTokenizerFast, ImageBindFeatureExtractor
+from transformers.testing_utils import require_torchaudio, require_vision
+from transformers.utils import is_vision_available
 
 
 if is_vision_available():
@@ -33,49 +30,24 @@ if is_vision_available():
     from transformers import ImageBindImageProcessor, ImageBindProcessor
 
 
-# NOTE: currently copied from previous PR (#23284)
-
-
 @require_vision
+@require_torchaudio
 class ImageBindProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-
-        # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
-        # fmt: on
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-        image_processor_map = {
-            "do_resize": True,
-            "size": 20,
-            "do_center_crop": True,
-            "crop_size": 18,
-            "do_normalize": True,
-            "image_mean": [0.48145466, 0.4578275, 0.40821073],
-            "image_std": [0.26862954, 0.26130258, 0.27577711],
-        }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        self.checkpoint = "EduardoPacheco/imagebind-huge"
 
     def get_tokenizer(self, **kwargs):
-        return ImageBindTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return CLIPTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
-        return ImageBindTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return CLIPTokenizerFast.from_pretrained(self.checkpoint, **kwargs)
 
     def get_image_processor(self, **kwargs):
-        return ImageBindImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+        return ImageBindImageProcessor.from_pretrained(self.checkpoint, **kwargs)
+
+    def get_feature_extractor(self, **kwargs):
+        return ImageBindFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -91,52 +63,76 @@ class ImageBindProcessorTest(unittest.TestCase):
 
         return image_inputs
 
+    def prepare_audio_inputs(self):
+        return [np.random.rand(1500)]
+
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
 
-        processor_slow = ImageBindProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+        processor_slow = ImageBindProcessor(
+            tokenizer=tokenizer_slow, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         processor_slow.save_pretrained(self.tmpdirname)
         processor_slow = ImageBindProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = ImageBindProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = ImageBindProcessor(
+            tokenizer=tokenizer_fast, image_processor=image_processor, feature_extractor=feature_extractor
+        )
         processor_fast.save_pretrained(self.tmpdirname)
         processor_fast = ImageBindProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, ImageBindTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, ImageBindTokenizerFast)
+        self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
+        self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor_slow.image_processor, ImageBindImageProcessor)
         self.assertIsInstance(processor_fast.image_processor, ImageBindImageProcessor)
 
+        self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertIsInstance(processor_slow.feature_extractor, ImageBindFeatureExtractor)
+        self.assertIsInstance(processor_fast.feature_extractor, ImageBindFeatureExtractor)
+
     def test_save_load_pretrained_additional_features(self):
-        processor = ImageBindProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = ImageBindProcessor(
+            tokenizer=self.get_tokenizer(),
+            image_processor=self.get_image_processor(),
+            feature_extractor=self.get_feature_extractor(),
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        # Need to put same kwargs for both image_processor and feature_extractor as they share the same config :/
+        image_processor_add_kwargs = self.get_image_processor(do_convert_rgb=False, do_chunk=False, num_chunks=5)
+        feature_extractor_add_kwargs = self.get_feature_extractor(do_convert_rgb=False, do_chunk=False, num_chunks=5)
 
         processor = ImageBindProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_convert_rgb=False, do_chunk=False, num_chunks=5
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, ImageBindTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, ImageBindImageProcessor)
+
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, ImageBindFeatureExtractor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ImageBindProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=self.get_feature_extractor()
+        )
 
         image_input = self.prepare_image_inputs()
 
@@ -146,11 +142,30 @@ class ImageBindProcessorTest(unittest.TestCase):
         for key in input_image_proc.keys():
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
+    def test_feature_extractor(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=self.get_image_processor()
+        )
+
+        raw_speech = self.prepare_audio_inputs()
+
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_processor = processor(audios=raw_speech, return_tensors="np")
+
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = ImageBindProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
 
         input_str = "lower newer"
 
@@ -164,8 +179,11 @@ class ImageBindProcessorTest(unittest.TestCase):
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = ImageBindProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -181,8 +199,11 @@ class ImageBindProcessorTest(unittest.TestCase):
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = ImageBindProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -194,12 +215,16 @@ class ImageBindProcessorTest(unittest.TestCase):
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
 
-        processor = ImageBindProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = ImageBindProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, feature_extractor=feature_extractor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
+        audio_input = self.prepare_audio_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(text=input_str, images=image_input, audios=audio_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
