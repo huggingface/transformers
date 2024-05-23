@@ -24,14 +24,14 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 </Tip>
 
-> [!TIP]
-> If you are new to the quantization field, we recommend you to check out these beginner-friendly courses about quantization
-> in colaboration with DeepLearning.AI:
+<Tip>
 
-> - [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
+If you are new to the quantization field, we recommend you to check out these beginner-friendly courses about quantization in colaboration with DeepLearning.AI:
 
-> - [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth/)
+* [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
+* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth/)
 
+</Tip>
 
 ## When to use what?
 
@@ -45,13 +45,13 @@ In short, supporting a wide range of quantization methods allows you to pick the
 
 Use the table below to help you decide which quantization method to use.
 
-| Quantization method                 | On the fly quantization | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable | 🤗 transformers support | Link to library                             |
+| Quantization method                 | On the fly quantization | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable with 🤗 transformers | 🤗 transformers support | Link to library                             |
 |-------------------------------------|-------------------------|-----|----------|----------------|-----------------------|-------------------------|----------------|-------------------------------------|--------------|------------------------|---------------------------------------------|
 | [AQLM](./aqlm)                                | 🔴                       |  🟢   |     🟢     | 🔴              | 🔴                     | ?                       | 1 / 2          | 🟢                                   | 🟢            | 🟢                      | https://github.com/Vahe1994/AQLM            |
 | [AWQ](./awq) | 🔴                       | 🔴   | 🟢        | 🟢              | 🔴                     | ?                       | 4              | 🟢                                   | 🟢            | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
 | [bitsandbytes](./bitsandbytes)                        | 🟢                       | 🔴   |     🟢     | 🔴              | 🔴                     | 🔴                       | 4 / 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/TimDettmers/bitsandbytes |
 | [EETQ](./eetq)                                | 🟢                       | 🔴   | 🟢        | 🔴              | 🔴                     | ?                       | 8              | 🟢                                   | 🟢            | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
-| GGUF / GGML (llama.cpp)             | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🔴                       | 1 - 8          | 🔴                                   | 🟢            | [See GGUF section](../gguf)                      | https://github.com/ggerganov/llama.cpp      |
+| GGUF / GGML (llama.cpp)             | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🔴                       | 1 - 8          | 🔴                                   | [See GGUF section](../gguf)                | [See GGUF section](../gguf)                      | https://github.com/ggerganov/llama.cpp      |
 | [GPTQ](./gptq)                                | 🔴                       | 🔴   | 🟢        | 🟢              | 🔴                     | 🔴                       | 4 / 8          | 🟢                                   | 🟢            | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
 | [HQQ](./hqq)                                 | 🟢                       | 🔴   | 🟢        | 🔴              | 🔴                     | 🟢                       | 1 - 8          | 🟢                                   | 🔴            | 🟢                      | https://github.com/mobiusml/hqq/            |
 | [Quanto](./quanto)                              | 🟢                       | 🟢   | 🟢        | 🔴              | 🟢                     | 🟢                       | 2 / 4 / 8      | 🔴                                   | 🔴            | 🟢                      | https://github.com/huggingface/quanto       |
