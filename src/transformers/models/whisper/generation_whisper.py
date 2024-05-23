@@ -704,6 +704,7 @@ class WhisperGenerationMixin:
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
+                is_shortform=is_shortform, 
                 kwargs=kwargs,
             )
 
@@ -749,6 +750,11 @@ class WhisperGenerationMixin:
             sequences = torch.cat([decoder_input_ids, sequences], dim=-1)
             # add eos token: 
             sequences = torch.cat([sequences, torch.full((2,1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
+            if return_token_timestamps: 
+                outputs = {}
+                outputs['sequences'] = sequences
+                outputs['token_timestamps'] = torch.stack([d['token_timestamps'] for d in seek_outputs], dim=0)
+                return outputs
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -773,6 +779,7 @@ class WhisperGenerationMixin:
         synced_gpus,
         return_token_timestamps,
         do_condition_on_prev_tokens,
+        is_shortform, 
         kwargs,
     ):
         kwargs = copy.copy(kwargs)
@@ -814,6 +821,7 @@ class WhisperGenerationMixin:
                 decoder_input_ids=decoder_input_ids,
                 return_token_timestamps=return_token_timestamps,
                 generation_config=generation_config,
+                is_shortform=is_shortform, 
             )
 
             # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
@@ -832,14 +840,16 @@ class WhisperGenerationMixin:
                 if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
+                        if not is_shortform: 
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
 
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
+                        if not is_shortform: 
+                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -893,7 +903,7 @@ class WhisperGenerationMixin:
 
         return current_segments
 
-    def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config):
+    def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform):
         # remove all previously passed decoder input ids
         if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
@@ -904,7 +914,8 @@ class WhisperGenerationMixin:
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs, generation_config.alignment_heads, num_frames=num_frames
             )
-            seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
+            if not is_shortform: 
+                seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
