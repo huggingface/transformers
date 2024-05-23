@@ -33,17 +33,15 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 ## When to use what?
 
-As of today, we can enumerate many quantization methods developped by the community for various usecases. We offer to the community the possibility to easily run these methods and it is up to the users to decide on which quantization method to go with for their usecases, as all of them have their own pros and cons. 
+The community has developed many quantization methods for various use cases. With Transformers, you can run any of these integrated methods depending on your use case because each method has their own pros and cons.
 
-For example, some quantization methods require to calibrate the model with a dataset for more accurate "agressive" compression (up to 1-2 bits quantization), but other methods can work out of the box (i.e. no need for calibration), with on-the-fly quantization. Some users might be interested in extreme bit compression, at the cost of calibrating the model, whereas for other usecases 4-bit compression is sufficient.
+For example, some quantization methods require calibrating the model with a dataset for more accurate and "extreme" compression (up to 1-2 bits quantization), while other methods work out of the box with on-the-fly quantization.
 
-Another parameter to take into account would be the compatibility with your target device. Do you want to quantize on CPU? GPU? Apple Silicon devices? 
+Another parameter to consider is compatibility with your target device. Do you want to quantize on a CPU, GPU, or Apple silicon?
 
-To sum up, supporting a wide range of quantization methods makes it possible to users the possibility to cherry pick which compression method is the best suited for their specific usecase (are you looking for extreme compression? Do you have any hardware constraint? Are you storage constraint? etc.)
+In short, supporting a wide range of quantization methods allows you to pick the best quantization method for your specific use case.
 
-## Overview
-
-Below is a brief overview of the supported quantization method with their characteristics:
+Use the table below to help you decide which quantization method to use.
 
 | Quantization method                 | On the fly quantization | CPU | CUDA GPU | RoCm GPU (AMD) | Metal (Apple Silicon) | torch.compile() support | Number of bits | Supports fine-tuning (through PEFT) | Serializable | 🤗 transformers support | Link to library                             |
 |-------------------------------------|-------------------------|-----|----------|----------------|-----------------------|-------------------------|----------------|-------------------------------------|--------------|------------------------|---------------------------------------------|
