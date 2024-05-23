@@ -333,5 +333,5 @@ culture, and they allow us to design the'
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are going to the same party. It is a small party, in a small']
+['Alice and Bob, who were both in their early twenties, were both in the process of']
 ```

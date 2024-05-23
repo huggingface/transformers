@@ -52,6 +52,16 @@ To train a new IDEFICS model from scratch use the m4 codebase (a link will be pr
 [[autodoc]] IdeficsForVisionText2Text
     - forward
 
+## TFIdeficsModel
+
+[[autodoc]] TFIdeficsModel
+    - call
+
+## TFIdeficsForVisionText2Text
+
+[[autodoc]] TFIdeficsForVisionText2Text
+    - call
+
 ## IdeficsImageProcessor
 
 [[autodoc]] IdeficsImageProcessor

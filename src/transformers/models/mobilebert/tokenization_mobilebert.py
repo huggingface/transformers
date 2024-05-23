@@ -15,7 +15,6 @@
 # limitations under the License.
 """Tokenization classes for MobileBERT."""
 
-
 import collections
 import os
 import unicodedata

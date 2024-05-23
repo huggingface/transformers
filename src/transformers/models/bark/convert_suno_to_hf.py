@@ -1,4 +1,5 @@
 """Convert Bark checkpoint."""
+
 import argparse
 import os
 from pathlib import Path

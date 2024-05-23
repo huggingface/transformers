@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 Transformer XL model.
+TF 2.0 Transformer XL model.
 """
 
 from __future__ import annotations
