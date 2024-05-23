@@ -64,6 +64,6 @@ For some quantization methods, they may require "pre-quantizing" the models thro
 
 6. Write the `_process_model_after_weight_loading` method. This method enables implementing additional features that require manipulating the model after loading the weights.
 
-7. Document everything! Make sure your quantization method is documented in the [`docs/source/en/quantization.md`](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/docs/source/en/quantization.md) file.
+7. Document everything! Make sure your quantization method is documented by adding a new file under `docs/source/en/quantization` and adding a new row in the table in `docs/source/en/quantization/overview.md`.
 
 8. Add tests! You should add tests by first adding the package in our nightly Dockerfile inside `docker/transformers-quantization-latest-gpu` and then adding a new test file in `tests/quantization/xxx`. Feel free to check out how it is implemented for other quantization methods.

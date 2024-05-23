@@ -240,7 +240,7 @@ class TextGenerationPipeline(Pipeline):
                   truncate a lot of the prompt and not suitable when generation exceed the model capacity)
             generate_kwargs (`dict`, *optional*):
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Return:
             A list or a list of lists of `dict`: Returns one of the following dictionaries (cannot return a combination
