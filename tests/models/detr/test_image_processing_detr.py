@@ -593,3 +593,22 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
         )
         inputs = image_processor(images=[image_1, image_2], return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([2, 3, 150, 100]))
+
+    def test_longest_edge_shortest_edge_resizing_strategy(self):
+        image_1 = torch.ones([958, 653, 3], dtype=torch.uint8)
+
+        # do_pad=False, longest_edge=640, shortest_edge=640, image=958x653 -> 640x436
+        image_processor = DetrImageProcessor(
+            size={"longest_edge": 640, "shortest_edge": 640},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 640, 436]))
+
+        # do_pad=False, max_height=300, max_width=100, image=958x653 -> 146x100
+        image_processor = DetrImageProcessor(
+            size={"longest_edge": 300, "shortest_edge": 100},
+            do_pad=False,
+        )
+        inputs = image_processor(images=[image_1], return_tensors="pt")
+        self.assertEqual(inputs["pixel_values"].shape, torch.Size([1, 3, 146, 100]))
