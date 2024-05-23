@@ -754,6 +754,7 @@ class WhisperGenerationMixin:
                 outputs = {}
                 outputs['sequences'] = sequences
                 outputs['token_timestamps'] = torch.stack([d['token_timestamps'] for d in seek_outputs], dim=0)
+                # outputs['scores'] = tuple([torch.stack([seek_outputs[0]['scores'][i], seek_outputs[1]['scores'][i]]) for i in range(len(seek_outputs[0]['scores']))] )
                 return outputs
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
