@@ -32,8 +32,7 @@ pip install transformers accelerate bitsandbytes>0.37.0
 
 ```bash
 pip install bitsandbytes>=0.39.0
-pip install --upgrade accelerate
-pip install --upgrade transformers
+pip install --upgrade accelerate transformers
 ```
 
 </hfoption>
@@ -263,8 +262,7 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 
 ## Dequantizing `bitsandbytes` models
 
-Once quantized, you can dequantize the model to the original precision. Note this might result in a small quality loss of the model. Make also sure to have enough GPU RAM to fit the dequantized model. 
-Below is how to perform dequantization on a 4-bit model using `bitsandbytes`.
+Once quantized, you can dequantize the model to the original precision but this might result in a small quality loss of the model. Make sure you have enough GPU RAM to fit the dequantized model. 
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer

@@ -193,9 +193,9 @@ The parameter `modules_to_fuse` should include:
 
 
 
-## Exllama-v2 support
+## ExLlama-v2 support
 
-Recent versions of `autoawq` supports exllama-v2 kernels for faster prefill and decoding. To get started, first install the latest version of `autoawq` by running:
+Recent versions of `autoawq` supports ExLlama-v2 kernels for faster prefill and decoding. To get started, first install the latest version of `autoawq` by running:
 
 ```bash
 pip install git+https://github.com/casper-hansen/AutoAWQ.git

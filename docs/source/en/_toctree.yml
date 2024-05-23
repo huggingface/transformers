@@ -142,7 +142,7 @@
   - local: quantization/overview
     title: Getting started
   - local: quantization/bitsandbytes
-    title: bitsandbytes (LLM.int8() & QLoRA)
+    title: bitsandbytes
   - local: quantization/gptq
     title: GPTQ
   - local: quantization/awq
@@ -158,7 +158,7 @@
   - local: quantization/optimum
     title: Optimum
   - local: quantization/contribute
-    title: Contribute to a new quantization method
+    title: Contribute new quantization method
   title: Quantization Methods
 - sections:
   - local: performance
