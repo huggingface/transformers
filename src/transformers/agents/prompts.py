@@ -350,15 +350,16 @@ Above example were using notional tools that might not exist for you. You only h
 
 <<tool_descriptions>>
 
-You also can perform computations in the python code you generate.
+You also can perform computations in the python code that you generate.
 
 Here are the rules you should always follow to solve your task:
 1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
-2. Make sure the variable you use are all defined.
+2. Use only variables that you defined!
 3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
-4. Do not perform too many operations in a single code block. Split the task into intermediate code blocks. Then use print() to save the intermediate result. Finally, use final_answer() to return the final result.
-5. Call a tool only when needed: do not call the search agent if you do not need information, try to solve the task yourself.
-6. Never re-do a tool call that you previously did with the exact same parameters.
+4. In the code you generate, you can do several tool calls in parallel, but do not perform too many tool calls sequentially in a single block, especialy when the output of one tool call is in an unpredictable format: in that case rather split the task into intermediate code blocks, then use print() to save the intermediate result. Finally, use final_answer() to return the final result.
+For instance if you need to call search for three independant topics, you can do three calls in the same code block. But if you're waiting for the ouput of one search call to generate an image, rather print the search output, then generate the image in the next step.
+5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
+6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """

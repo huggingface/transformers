@@ -29,7 +29,7 @@ class InterpretorError(ValueError):
     pass
 
 
-LIST_SAFE_MODULES = ["random", "math", "time", "queue", "itertools", "re", "stat", "statistics", "unicodedata"]
+LIST_SAFE_MODULES = ["random", "collections", "requests", "math", "time", "queue", "itertools", "re", "stat", "statistics", "unicodedata"]
 
 
 class BreakException(Exception):
@@ -307,7 +307,11 @@ def evaluate_for(for_loop, state, tools):
     result = None
     iterator = evaluate_ast(for_loop.iter, state, tools)
     for counter in iterator:
-        state[for_loop.target.id] = counter
+        if isinstance(for_loop.target, ast.Tuple):
+            for i, elem in enumerate(for_loop.target.elts):
+                state[elem.id] = counter[i]
+        else:
+            state[for_loop.target.id] = counter
         for node in for_loop.body:
             try:
                 line_result = evaluate_ast(node, state, tools)

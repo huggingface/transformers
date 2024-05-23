@@ -353,3 +353,8 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
         assert result == "Ok no one cares"
         assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
+
+    def test_tuple_target_in_iterator(self):
+        code = "for a, b in [('Ralf Weikert', 'Austria'), ('Samuel Seungwon Lee', 'South Korea')]:res = a.split()[0]"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "Samuel"

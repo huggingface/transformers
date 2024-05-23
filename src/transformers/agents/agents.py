@@ -617,7 +617,7 @@ class ReactAgent(Agent):
             }
         ]
         try:
-            return self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            return self.llm_engine(self.prompt)
         except Exception as e:
             return f"Error in generating final llm output: {e}."
 
