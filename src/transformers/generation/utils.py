@@ -1135,13 +1135,7 @@ class GenerationMixin:
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
-        past = model_kwargs.get("past_key_values", None)
-        if isinstance(past, DynamicCache) and not self._supports_cache_class:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support an instance of `DynamicCache` as `past_key_values`. Please "
-                "check the model documentation for supported cache formats."
-            )
-        elif isinstance(past, Cache) and not isinstance(past, DynamicCache) and not self._supports_cache_class:
+        if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
             raise ValueError(
                 f"{self.__class__.__name__} does not support an instance of `Cache` as `past_key_values`. Please "
                 "check the model documentation for supported cache formats."
