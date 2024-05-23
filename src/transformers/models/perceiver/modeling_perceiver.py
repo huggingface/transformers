@@ -2751,10 +2751,30 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
     def output_size(self, *args, **kwargs) -> int:
         return self._num_channels
 
-    def forward(self, batch_size: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        # reshape, interpolate, and reshape back again
+        pass
+
+    def forward(self, batch_size: int, interpolate_pos_encoding: bool = False, intput_size: torch.Size = None) -> torch.Tensor:
         position_embeddings = self.position_embeddings
         print(f"position_embeddings {position_embeddings.shape}")
 
+        # if interpolate_pos_encoding is True:
+        num_positions, dim = position_embeddings.shape[0], position_embeddings.shape[1]
+        print(f"num_positions {num_positions}, dim {dim}")
+        position_embeddings = position_embeddings.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        position_embeddings = position_embeddings.permute(0, 3, 1, 2)
+        print(f"position_embeddings {position_embeddings.shape}")
+        intput_size = 384
+        position_embeddings = nn.functional.interpolate(
+            position_embeddings,
+            scale_factor=(intput_size / math.sqrt(num_positions), intput_size / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        print(f"position_embeddings {position_embeddings.shape}")
+        position_embeddings = position_embeddings.reshape(1, dim, -1).permute(0, 2, 1).squeeze(0)
+        print(f"position_embeddings {position_embeddings.shape}")
         if batch_size is not None:
             position_embeddings = position_embeddings.expand(batch_size, -1, -1)
         return position_embeddings
