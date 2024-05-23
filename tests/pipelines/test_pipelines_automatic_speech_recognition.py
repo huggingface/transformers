@@ -1345,6 +1345,42 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     @slow
+    def test_whisper_prompted(self):
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to("cuda")
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            chunk_length_s=30,
+            batch_size=16,
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
+        whisper_prompt = "Mr. Quillter."
+        prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt")
+
+        unprompted_result = pipe(sample.copy())["text"]
+        prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]
+
+        # fmt: off
+        EXPECTED_UNPROMPTED_RESULT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really Greek after all and can discover in it but little of rocky Ithaca. Lennils, pictures are a sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampoo or a Turkish bath. Next man"
+        EXPECTED_PROMPTED_RESULT = " Mr. Quillter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quillter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really great after all, and can discover in it but little of rocky Ithaca. Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampoo or a Turkish bath. Next man."
+        # fmt: on
+
+        self.assertEqual(unprompted_result, EXPECTED_UNPROMPTED_RESULT)
+        self.assertEqual(prompted_result, EXPECTED_PROMPTED_RESULT)
+
+    @require_torch
+    @slow
     def test_whisper_longform(self):
         # fmt: off
         EXPECTED_RESULT = " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on Saturday, Rusty Cargo, container down by the Wharf, and challenge toothless drifters to the godless bughouse lets of tournament that is my segment. MUSIC Meanwhile!"
@@ -1569,10 +1605,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             "input_values"
         ]
         outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
-        self.assertEqual(len(outs), 2)
-        self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
-        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
-        self.assertEqual([o["is_last"] for o in outs], [False, True])
+        self.assertEqual(len(outs), 1)
+        self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
+        self.assertEqual([o["is_last"] for o in outs], [True])
 
         outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
         self.assertEqual(len(outs), 2)

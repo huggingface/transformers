@@ -897,11 +897,15 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     right_stride_start = None
 
     all_special_ids = set(tokenizer.all_special_ids)
+    prompt_token_id = tokenizer.convert_tokens_to_ids("<|startofprev|>")
+    decoder_start_token_id = tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
     # - iterate over all outputs
     for chunk_id, output in enumerate(model_outputs):
         # We can drop everything to Python list, it's going to make
         # our lives easier
         token_ids = output["tokens"][0].tolist()
+        # (possibly) remove the prompt from the token ids
+        token_ids = tokenizer._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
         if return_timestamps == "word":
             token_timestamps = output["token_timestamps"][0].tolist()
 
