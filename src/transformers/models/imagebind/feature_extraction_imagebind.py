@@ -404,13 +404,8 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
             for clip in raw_speech
         ]
 
+        features = np.asarray(features)
         padded_inputs = BatchFeature({"input_features": features})
-
-        input_values = padded_inputs.get("input_features")
-        if isinstance(input_values[0][0], list):
-            padded_inputs["input_features"] = [
-                [np.asarray(feature, dtype=np.float32) for feature in clip] for clip in input_values
-            ]
 
         if do_normalize:
             padded_inputs["input_features"] = [
