@@ -45,6 +45,7 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
+        AutoProcessor,
         AutoTokenizer,
         BartForCausalLM,
         BartForConditionalGeneration,
@@ -2918,6 +2919,67 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model.generate(**inputs, **generation_kwargs)
         # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
         self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
+
+    @slow
+    def test_validate_assistant(self):
+        # Generate a random sample:
+        inputs = np.random.rand(160000)
+
+        # Load a main encoder-decoder model:
+        model_id = "openai/whisper-large-v2"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        )
+        model.to(torch_device)
+
+        # process the input:
+        features = processor(inputs, return_tensors="pt").to(torch_device)
+
+        # Load an encoder-decoder assistant with same encoder as the main model:
+        assistant_distil_model_id = "distil-whisper/distil-large-v2"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_seq_to_seq).sum())
+
+        # Load its decoder only version:
+        assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
+            assistant_distil_model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_causal_lm).sum())
+
+        # Load an encoder-decoder assistant with a different encoder than the main model:
+        assistant_distil_model_id = "openai/whisper-tiny"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_seq_to_seq).sum())
+
+        # Load its decoder only version:
+        assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
+            assistant_distil_model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        ).to(torch_device)
+        # It will raise an error as the encoder of the main and assistant model are not compatible:
+        with self.assertRaises(ValueError):
+            model.generate(**features, assistant_model=assistant_causal_lm)
+
+        # Load an encoder-decoder model with a different tokenizer than the main model:
+        assistant_distil_model_id = "hf-internal-testing/tiny-random-SeamlessM4Tv2ForSpeechToText"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+        ).to(torch_device)
+        # This should raise an error as the main and assistant model don't use the same tokenizer:
+        with self.assertRaises(ValueError):
+            model.generate(**features, assistant_model=assistant_seq_to_seq)
 
     def test_compare_unprocessed_logit_scores(self):
         # Get unprocessed logit scores back from model generate function.
