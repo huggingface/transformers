@@ -33,7 +33,7 @@ jobs:
       - 
         name: Set tag
         run: |
-              if [ ${{contains(github.event.head_commit.message, '[build-ci-image]')}} ]; then
+              if ${{contains(github.event.head_commit.message, '[build-ci-image]')}}; then
                   echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV" 
                   echo "setting it to DEV!"
               else
