@@ -19,6 +19,9 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
+description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
 def _get_json_schema_type(param_type):
@@ -144,10 +147,6 @@ def parse_google_format_docstring(docstring):
     Returns:
         The function description, arguments, and return description.
     """
-    # Regular expressions to match the sections
-    description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
-    args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
-    returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
     # Extract the sections
     description_match = description_re.search(docstring)
