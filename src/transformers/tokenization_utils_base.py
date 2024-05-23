@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+from inspect import isfunction
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -47,6 +48,7 @@ from .utils import (
     copy_func,
     download_url,
     extract_commit_hash,
+    get_json_schema,
     is_flax_available,
     is_jax_tensor,
     is_mlx_available,
@@ -1815,10 +1817,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # The add_json_schema decorator for tools adds a schema under the `json_schema` attribute. If we're passed
-        # decorated functions, let's extract the schema decoration now
+        # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
         if tools is not None:
-            tools = [tool.json_schema if hasattr(tool, "json_schema") else tool for tool in tools]
+            tool_schemas = []
+            for tool in tools:
+                if isinstance(tool, dict):
+                    tool_schemas.append(tool)
+                elif isfunction(tool):
+                    tool_schemas.append(get_json_schema(tool))
+                else:
+                    raise ValueError(
+                        "Tools should either be a JSON schema, or a callable function with type hints "
+                        "and a docstring suitable for auto-conversion to a schema."
+                    )
+        else:
+            tool_schemas = None
 
         rendered = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
@@ -1828,7 +1841,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat = chat.messages
             rendered_chat = compiled_template.render(
                 messages=chat,
-                tools=tools,
+                tools=tool_schemas,
                 documents=documents,
                 add_generation_prompt=add_generation_prompt,
                 **template_kwargs,

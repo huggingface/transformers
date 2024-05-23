@@ -336,19 +336,16 @@ This will yield:
 }
 ```
 
-We can use this function, or the equivalent [`add_json_schema`] decorator, to avoid the need to manually write JSON
-schemas when passing tools to the chat template:
+We can use this function to avoid the need to manually write JSON schemas when passing tools to the chat template.
+In addition, if you pass functions in the `tools` argument, they will automatically be converted with this function:
 
 ```python
 import datetime
-from transformers.utils import add_json_schema
 
-@add_json_schema
 def current_time():
     """Get the current local time as a string."""
     return str(datetime.now())
 
-@add_json_schema
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
@@ -369,7 +366,7 @@ model_input = tokenizer.apply_chat_template(
 
 #### Notes on automatic conversion
 
-`get_json_schema` and `add_json_schema` both expect a specific docstring format. The docstring should
+`get_json_schema` expects a specific docstring format. The docstring should
 begin with a description of the function, followed by an `Args:` block that describes each argument. It can also
 optionally include a `Returns:` block that describes the value(s) returned by the function. Many templates ignore this,
 because the model will see the return format after calling the function anyway, but some require it.
