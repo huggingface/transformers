@@ -15,7 +15,6 @@
 Image/Text processor class for ImageBind
 """
 
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 

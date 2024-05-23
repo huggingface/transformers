@@ -13,7 +13,6 @@
 # limitations under the License.
 """Feature extractor class for ImageBind."""
 
-
 from fractions import Fraction
 from typing import List, Optional, Tuple, Union
 
