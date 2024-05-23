@@ -1034,7 +1034,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        image_processor = PerceiverImageProcessor(size=384)
+        image_processor = PerceiverImageProcessor(size={"height": 384, "width": 384})
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 

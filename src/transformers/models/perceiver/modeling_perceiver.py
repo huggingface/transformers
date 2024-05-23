@@ -699,7 +699,7 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
@@ -765,7 +765,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PerceiverModelOutput]:
         r"""
@@ -1261,7 +1261,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, PerceiverClassifierOutput]:
@@ -2767,12 +2767,13 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
     def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_positions, dim = position_embeddings.shape[0], position_embeddings.shape[1]
+        new_height = new_width = math.sqrt(num_positions)
         position_embeddings = position_embeddings.reshape(
-            1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim
+            1, int(new_height), int(new_width), dim
         ).permute(0, 3, 1, 2)
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
-            scale_factor=(height / math.sqrt(num_positions), width / math.sqrt(num_positions)),
+            scale_factor=(height / new_height, width / new_width,
             mode="bicubic",
             align_corners=False,
         )
@@ -2780,12 +2781,12 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         return position_embeddings
 
     def forward(
-        self, batch_size: int, interpolate_pos_encoding: bool = False, intput_size: torch.Size = None
+        self, batch_size: int, interpolate_pos_encoding: bool = False, input_size: torch.Size = None
     ) -> torch.Tensor:
         position_embeddings = self.position_embeddings
 
         if interpolate_pos_encoding:
-            height, width = intput_size
+            height, width = input_size
             height, width = height + 0.1, width + 0.1
             position_embeddings = self.interpolate_pos_encoding(position_embeddings, height, width)
 
@@ -2901,7 +2902,7 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
         inputs: torch.LongTensor,
         pos: Optional[torch.Tensor] = None,
         network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = None,
+        interpolate_pos_encoding: bool = False,
     ):
         embeddings_without_pos = self.embeddings(inputs)
 
@@ -3225,7 +3226,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         inputs: torch.Tensor,
         pos: Optional[torch.Tensor] = None,
         network_input_is_1d: bool = True,
-        interpolate_pos_encoding: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
     ):
         if self.prep_type == "conv":
             # Convnet image featurization.
