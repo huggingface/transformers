@@ -63,9 +63,6 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to use masked unit attention in each layer of the Transformer encoder.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate.
-        use_separate_position_embedding (`bool`, *optional*, defaults to `False`):
-            Whether to use separate position embedding for temporal and spatial dimensions. Must be `True` for videos.
-            and `False` for images.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
@@ -135,7 +132,6 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         masked_unit_size=[8, 8],
         masked_unit_attention=[True, True, False, False],
         drop_path_rate=0.0,
-        use_separate_position_embedding=False,
         num_channels=3,
         hidden_act="gelu",
         initializer_range=0.02,
@@ -177,7 +173,6 @@ class HieraConfig(BackboneConfigMixin, PretrainedConfig):
         self.masked_unit_size = masked_unit_size
         self.masked_unit_attention = masked_unit_attention
         self.drop_path_rate = drop_path_rate
-        self.use_separate_position_embedding = use_separate_position_embedding
         self.num_channels = num_channels
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range

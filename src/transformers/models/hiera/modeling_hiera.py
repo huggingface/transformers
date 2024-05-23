@@ -215,10 +215,8 @@ class HieraConvND(nn.Module):
             self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
         elif n == 2:
             self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-        elif n == 3:
-            self.conv = nn.Conv3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
         else:
-            raise ValueError(f"Unsupported number of dimensions: {n}. Only 1, 2, and 3 are supported.")
+            raise ValueError(f"Unsupported number of dimensions: {n}. Only 1 and 2 are supported.")
 
     def forward(self, x):
         return self.conv(x)
@@ -236,10 +234,8 @@ class HieraPatchEmbeddings(nn.Module):
 
         # Support any number of spatial dimensions
         self.spatial_dims = len(config.patch_size)
-        if self.spatial_dims not in (2, 3):
-            raise ValueError(
-                f"The number of dimensions of the input image should be 2 or 3, but got {self.spatial_dims}."
-            )
+        if self.spatial_dims != 2:
+            raise ValueError(f"The number of dimensions of the input image should be 2, but got {self.spatial_dims}.")
         self.num_channels = config.num_channels
         self.image_size = config.image_size[-2:]
         self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
@@ -349,24 +345,11 @@ class HieraEmbeddings(nn.Module):
         self.tokens_spatial_shape = [i // s for i, s in zip(config.image_size, config.patch_stride)]
         self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)]
         self.num_tokens = math.prod(self.tokens_spatial_shape)
-        self.sep_pos_embed = config.use_separate_position_embedding
         self.is_mae = is_mae
 
         self.patch_embeddings = HieraPatchEmbeddings(config, is_mae=is_mae)
 
-        if self.sep_pos_embed:
-            self.position_embeddings_spatial = nn.Parameter(
-                torch.zeros(
-                    1,
-                    self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
-                    config.embed_dim,
-                )
-            )
-            self.position_embeddings_temporal = nn.Parameter(
-                torch.zeros(1, self.tokens_spatial_shape[0], config.embed_dim)
-            )
-        else:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_tokens, config.embed_dim))
 
     def interpolate_pos_encoding(
         self, embeddings: torch.Tensor, pos_embeds: torch.Tensor, height: int, width: int
@@ -384,8 +367,8 @@ class HieraEmbeddings(nn.Module):
         if num_patches == num_positions and height == width:
             return pos_embeds
         dim = embeddings.shape[-1]
-        h0 = height // self.patch_stride[0] if not self.sep_pos_embed else height // self.patch_stride[1]
-        w0 = width // self.patch_stride[1] if not self.sep_pos_embed else width // self.patch_stride[2]
+        h0 = height // self.patch_stride[0]
+        w0 = width // self.patch_stride[1]
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
         h0, w0 = h0 + 0.1, w0 + 0.1
@@ -405,30 +388,13 @@ class HieraEmbeddings(nn.Module):
     def get_position_embedding(
         self, embeddings: torch.Tensor, height: int, width: int, interpolate_pos_encoding: bool
     ) -> torch.Tensor:
-        if self.sep_pos_embed:
-            spatial = self.position_embeddings_spatial
-            spatial = (
-                self.interpolate_pos_encoding(embeddings, spatial, height, width)
-                if interpolate_pos_encoding
-                else spatial
-            )
-            spatial = spatial.repeat(1, self.tokens_spatial_shape[0], 1)
-
-            temporal = torch.repeat_interleave(
-                self.position_embeddings_temporal,
-                self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
-                dim=1,
-            )
-
-            return spatial + temporal
-        else:
-            position_embeddings = self.position_embeddings
-            position_embeddings = (
-                self.interpolate_pos_encoding(embeddings, position_embeddings, height, width)
-                if interpolate_pos_encoding
-                else position_embeddings
-            )
-            return position_embeddings
+        position_embeddings = self.position_embeddings
+        position_embeddings = (
+            self.interpolate_pos_encoding(embeddings, position_embeddings, height, width)
+            if interpolate_pos_encoding
+            else position_embeddings
+        )
+        return position_embeddings
 
     def forward(
         self,
@@ -441,8 +407,11 @@ class HieraEmbeddings(nn.Module):
             pixel_values, noise=noise, interpolate_pos_encoding=interpolate_pos_encoding
         )
 
+        height, width = pixel_values.shape[-2:]
+        embeddings, mask, ids_restore = self.patch_embeddings(
+            pixel_values, noise=noise, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         embeddings = embeddings + self.get_position_embedding(embeddings, height, width, interpolate_pos_encoding)
-
         return embeddings, mask, ids_restore
 
 
@@ -763,7 +732,6 @@ class HieraEncoder(nn.Module):
 
         If no mask is provided returns:
             - [batch_size, height, width, hidden_size] for 2d
-            - [batch_size, frames, height, width, hidden_size] for 3d
         If a mask is provided returns:
             - [batch_size, num_mask_units, mask_unit_height, mask_unit_width, hidden_size] for 2d
         """
@@ -931,17 +899,13 @@ class HieraPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
 
         if isinstance(module, HieraEmbeddings):
-            if self.config.use_separate_position_embedding:
-                nn.init.trunc_normal_(module.position_embeddings_spatial, std=std)
-                nn.init.trunc_normal_(module.position_embeddings_temporal, std=std)
-            else:
-                nn.init.trunc_normal_(module.position_embeddings, std=std)
+            nn.init.trunc_normal_(module.position_embeddings, std=std)
 
         elif isinstance(module, HieraDecoder):
             nn.init.trunc_normal_(module.mask_token, std=std)
             nn.init.trunc_normal_(module.decoder_position_embeddings, std=std)
 
-        elif isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
+        elif isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
             nn.init.trunc_normal_(module.weight, std=std)
             if module.bias is not None:
                 nn.init.constant_(module.bias, std)
@@ -1315,32 +1279,13 @@ class HieraForPreTraining(HieraPreTrainedModel):
 
         return label
 
-    def get_pixel_label_3d(self, pixel_values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        # mask (boolean tensor): True means *masked*
-        pixel_values = pixel_values[:, :, :: self.patch_stride[0], :, :]
-
-        size = self.pred_stride
-        label = pixel_values.unfold(3, size, size).unfold(4, size, size)
-        # Different from 2D
-        label = label.permute(0, 2, 3, 4, 5, 6, 1)
-        label = label.flatten(1, 3).flatten(2)
-        label = label[mask.bool()]
-        if self.config.normalize_pixel_loss:
-            mean = label.mean(dim=-1, keepdim=True)
-            var = label.var(dim=-1, keepdim=True)
-            label = (label - mean) / (var + 1.0e-6) ** 0.5
-
-        return label
-
     def forward_loss(self, pixel_values: torch.Tensor, logits: torch.Tensor, mask: torch.BoolTensor):
         # We invert the mask such that 1.0 is *masked*
         mask = 1 - mask
         if len(self.config.query_stride) == 2:
             label = self.get_pixel_label_2d(pixel_values, mask)
-        elif len(self.config.query_stride) == 3:
-            label = self.get_pixel_label_3d(pixel_values, mask)
         else:
-            raise NotImplementedError("Only images and videos are supported")
+            raise NotImplementedError("Only images are supported")
 
         logits = logits[mask.bool()]
         loss = (logits - label) ** 2
