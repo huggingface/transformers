@@ -15,9 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """BERT finetuning runner.
-   Finetuning the library models for multiple choice on SWAG (Bert).
+Finetuning the library models for multiple choice on SWAG (Bert).
 """
-
 
 import argparse
 import csv

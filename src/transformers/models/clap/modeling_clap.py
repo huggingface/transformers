@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLAP model."""
+"""PyTorch CLAP model."""
+
 import collections
 import math
 from dataclasses import dataclass
@@ -43,9 +44,6 @@ from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "laion/clap-htsat-fused"
-
-
-from ..deprecated._archive_maps import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
@@ -1376,11 +1374,18 @@ class ClapTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ClapText
+CLAP_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": ClapTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ClapText,BERT->CLAP_TEXT
 class ClapTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = ClapTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = CLAP_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = ClapTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1763,7 +1768,6 @@ class ClapTextModel(ClapPreTrainedModel):
 
     config_class = ClapTextConfig
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ClapText
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1782,7 +1786,6 @@ class ClapTextModel(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

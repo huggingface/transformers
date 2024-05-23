@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MVP model."""
+"""PyTorch MVP model."""
+
 import copy
 import math
 from typing import List, Optional, Tuple, Union
@@ -52,9 +53,6 @@ _CONFIG_FOR_DOC = "MvpConfig"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-
-from ..deprecated._archive_maps import MVP_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

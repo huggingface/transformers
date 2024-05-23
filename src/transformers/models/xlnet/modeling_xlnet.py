@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch XLNet model.
+PyTorch XLNet model.
 """
+
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -42,9 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
-
-
-from ..deprecated._archive_maps import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):

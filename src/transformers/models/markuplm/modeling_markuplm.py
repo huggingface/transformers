@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MarkupLM model."""
+"""PyTorch MarkupLM model."""
 
 import math
 import os
@@ -51,9 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
-
-
-from ..deprecated._archive_maps import MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class XPathEmbeddings(nn.Module):
@@ -316,6 +313,9 @@ class MarkupLMLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -468,11 +468,18 @@ class MarkupLMSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM
+MARKUPLM_SELF_ATTENTION_CLASSES = {
+    "eager": MarkupLMSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM,BERT->MARKUPLM
 class MarkupLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MarkupLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = MARKUPLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = MarkupLMSelfOutput(config)
         self.pruned_heads = set()
 
@@ -797,7 +804,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMModel(MarkupLMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->MarkupLM
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"]}
+_import_structure = {"configuration_regnet": ["RegNetConfig"]}
 
 try:
     if not is_torch_available():
@@ -31,7 +31,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_regnet"] = [
-        "REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RegNetForImageClassification",
         "RegNetModel",
         "RegNetPreTrainedModel",
@@ -44,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_regnet"] = [
-        "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFRegNetForImageClassification",
         "TFRegNetModel",
         "TFRegNetPreTrainedModel",
@@ -64,7 +62,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
+    from .configuration_regnet import RegNetConfig
 
     try:
         if not is_torch_available():
@@ -73,7 +71,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_regnet import (
-            REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             RegNetForImageClassification,
             RegNetModel,
             RegNetPreTrainedModel,
@@ -86,7 +83,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_regnet import (
-            TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRegNetForImageClassification,
             TFRegNetModel,
             TFRegNetPreTrainedModel,

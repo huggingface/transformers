@@ -22,12 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_efficientformer": [
-        "EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "EfficientFormerConfig",
-    ]
-}
+_import_structure = {"configuration_efficientformer": ["EfficientFormerConfig"]}
 
 try:
     if not is_vision_available():
@@ -44,7 +39,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_efficientformer"] = [
-        "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "EfficientFormerForImageClassification",
         "EfficientFormerForImageClassificationWithTeacher",
         "EfficientFormerModel",
@@ -58,7 +52,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_efficientformer"] = [
-        "TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFEfficientFormerForImageClassification",
         "TFEfficientFormerForImageClassificationWithTeacher",
         "TFEfficientFormerModel",
@@ -66,7 +59,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
+    from .configuration_efficientformer import EfficientFormerConfig
 
     try:
         if not is_vision_available():
@@ -83,7 +76,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_efficientformer import (
-            EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             EfficientFormerForImageClassification,
             EfficientFormerForImageClassificationWithTeacher,
             EfficientFormerModel,
@@ -96,7 +88,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_efficientformer import (
-            TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFEfficientFormerForImageClassification,
             TFEfficientFormerForImageClassificationWithTeacher,
             TFEfficientFormerModel,

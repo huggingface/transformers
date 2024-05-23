@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Phi-3 model."""
+"""PyTorch Phi-3 model."""
 
 import inspect
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -59,12 +58,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/Phi-3-mini-4k-instruct"
 _CONFIG_FOR_DOC = "Phi3Config"
 
-PHI3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/Phi-3-mini-4k-instruct",
-    "microsoft/Phi-3-mini-128k-instruct",
-    # See all Phi-3 models at https://huggingface.co/models?filter=Phi-3
-]
-
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Phi3
 class Phi3RMSNorm(nn.Module):
@@ -105,15 +98,14 @@ class Phi3RotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
+
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.inv_freq is None:
-            self.inv_freq = 1.0 / (
-                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
-            )
+        self.inv_freq.to(x.device)
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 since bfloat16 loses precision on long contexts
@@ -437,7 +429,6 @@ class Phi3FlashAttention2(Phi3Attention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # Phi3FlashAttention2 attention does not support output_attentions
 
@@ -448,14 +439,6 @@ class Phi3FlashAttention2(Phi3Attention):
             raise ValueError("The current flash attention version does not support sliding window attention.")
 
         output_attentions = False
-
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -795,14 +778,18 @@ class Phi3SdpaAttention(Phi3Attention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -842,12 +829,7 @@ class Phi3DecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -1419,7 +1401,7 @@ class Phi3ForSequenceClassification(Phi3PreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

@@ -38,7 +38,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate accelerate
+pip install transformers datasets evaluate accelerate pillow torchvision scikit-learn
 ```
 
 We encourage you to log in to your Hugging Face account to upload and share your model with the community. When prompted, enter your token to log in:
