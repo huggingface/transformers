@@ -89,13 +89,13 @@ def get_json_schema(func):
     >>> tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
     >>> messages = [{"role": "user", "content": "What is 179 x 4571?"}]
     >>> formatted_chat = tokenizer.apply_chat_template(
-    >>>                       messages,
-    >>>                       tools=[multiply_schema],
-    >>>                       chat_template="tool_use",
-    >>>                       return_dict=True,
-    >>>                       return_tensors="pt",
-    >>>                       add_generation_prompt=True
-    >>>                       )
+    >>>     messages,
+    >>>     tools=[multiply_schema],
+    >>>     chat_template="tool_use",
+    >>>     return_dict=True,
+    >>>     return_tensors="pt",
+    >>>     add_generation_prompt=True
+    >>> )
     >>> # The formatted chat can now be passed to model.generate()
     ```
 
