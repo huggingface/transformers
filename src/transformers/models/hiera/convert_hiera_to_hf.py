@@ -80,15 +80,7 @@ def create_rename_keys(config: HieraConfig, base_model: bool, mae_model: bool):
         ]
     )
 
-    if config.use_separate_position_embedding:
-        rename_keys.extend(
-            [
-                ("pos_embed_spatial", "hiera.embeddings.position_embeddings_spatial"),
-                ("pos_embed_temporal", "hiera.embeddings.position_embeddings_temporal")
-            ]
-        )
-    else:
-        rename_keys.append(("pos_embed", "hiera.embeddings.position_embeddings"))
+    rename_keys.append(("pos_embed", "hiera.embeddings.position_embeddings"))
 
     if base_model:
         # layernorm + pooler
@@ -168,10 +160,8 @@ def prepare_img():
 
 def get_labels_for_classifier(model_name: str) -> Tuple[Dict[int, str], Dict[str, int], int]:
     repo_id = "huggingface/label-files"
-    if model_name.endswith("16x224"):
-        filename = "kinetics400-id2label.json"
-    else:
-        filename = "imagenet-1k-id2label.json"
+
+    filename = "imagenet-1k-id2label.json"
 
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
@@ -334,7 +324,7 @@ def convert_hiera_checkpoint(args):
         elif mae_model:
             hub_name = f"{model_name}-mae"
         else:
-            hub_name = f"{model_name}-k400" if model_name.endswith("16x224") else f"{model_name}-in1k"
+            hub_name = f"{model_name}-in1k"
         repo_id = f"EduardoPacheco/{hub_name}"
         print(f"Pushing model and processor for {model_name} to hub at {repo_id}")
         model.push_to_hub(repo_id)

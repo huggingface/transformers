@@ -206,22 +206,6 @@ class HieraForPreTrainingOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class HieraConvND(nn.Module):
-    def __init__(self, n: int, in_channels: int, out_channels: int, kernel_size, stride=1, padding=0):
-        super().__init__()
-        if n == 0:
-            self.conv = nn.Identity()
-        elif n == 1:
-            self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-        elif n == 2:
-            self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-        else:
-            raise ValueError(f"Unsupported number of dimensions: {n}. Only 1 and 2 are supported.")
-
-    def forward(self, x):
-        return self.conv(x)
-
-
 class HieraPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -242,9 +226,7 @@ class HieraPatchEmbeddings(nn.Module):
         self.mask_spatial_shape = [i // s for i, s in zip(self.tokens_spatial_shape, config.masked_unit_size)]
         self.mask_ratio = config.mask_ratio
         self.is_mae = is_mae
-
-        self.projection = HieraConvND(
-            self.spatial_dims,
+        self.projection = nn.Conv2d(
             self.num_channels,
             config.embed_dim,
             kernel_size=config.patch_size,
@@ -1198,8 +1180,7 @@ class HieraMultiScaleHead(nn.Module):
             kernel = [i // s for i, s in zip(current_masked_unit_size, self.mask_unit_spatial_shape_final)]
             current_masked_unit_size = [i // s for i, s in zip(current_masked_unit_size, config.query_stride)]
             self.multi_scale_fusion_heads.append(
-                HieraConvND(
-                    len(config.query_stride),
+                nn.Conv2d(
                     self.stage_dimensions[idx],
                     self.stage_dimensions[-1],
                     kernel_size=kernel,
