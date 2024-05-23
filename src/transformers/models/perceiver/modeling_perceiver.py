@@ -2773,7 +2773,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         ).permute(0, 3, 1, 2)
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
-            scale_factor=(height / new_height, width / new_width,
+            scale_factor=(height / new_height, width / new_width),
             mode="bicubic",
             align_corners=False,
         )
