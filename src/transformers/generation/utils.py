@@ -1418,7 +1418,7 @@ class GenerationMixin:
             return bos_token_id
         else:
             return
-        
+
     def _supports_default_dynamic_cache(self) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
