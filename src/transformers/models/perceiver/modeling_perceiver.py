@@ -2766,18 +2766,18 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         return self._num_channels
 
     def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        num_positions, dim = position_embeddings.shape[0], position_embeddings.shape[1]
+        num_positions = position_embeddings.shape[0]
         new_height = new_width = math.sqrt(num_positions)
-        position_embeddings = position_embeddings.reshape(
-            1, int(new_height), int(new_width), dim
-        ).permute(0, 3, 1, 2)
+        position_embeddings = position_embeddings.reshape(1, int(new_height), int(new_width), self._num_channels).permute(
+            0, 3, 1, 2
+        )
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
             scale_factor=(height / new_height, width / new_width),
             mode="bicubic",
             align_corners=False,
         )
-        position_embeddings = position_embeddings.reshape(1, dim, -1).permute(0, 2, 1).squeeze(0)
+        position_embeddings = position_embeddings.reshape(1, self._num_channels, -1).permute(0, 2, 1).squeeze(0)
         return position_embeddings
 
     def forward(
