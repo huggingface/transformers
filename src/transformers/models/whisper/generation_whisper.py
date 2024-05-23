@@ -123,6 +123,7 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
 
 
 def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_id=None, cut_off_length=None):
+
     max_total_length = 0
     sequences = []
     if padding not in ["right", "left"]:
@@ -740,9 +741,11 @@ class WhisperGenerationMixin:
         sequences = _pad_to_max_length(
             final_segments, 
             pad_token_id = generation_config.pad_token_id, 
-            bos_token_id = generation_config.bos_token_id, 
             padding="right"
         )
+
+        if is_shortform: 
+            sequences = torch.cat([decoder_input_ids, sequences], dim=-1)
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -844,7 +847,7 @@ class WhisperGenerationMixin:
                     generation_config,
                     self.config.vocab_size,
                     temperature,
-                )
+                )                    
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
@@ -858,14 +861,14 @@ class WhisperGenerationMixin:
                     new_segment_input.append(segment_input[i])
                     new_decoder_input_ids.append(decoder_input_ids[i])
                     if "decoder_attention_mask" in kwargs:
-                        new_decoder_attention_mask.append(kwargs["decoder_attention_mask"][i])
+                        new_decoder_attention_mask.append(kwargs["decoder_attention_mask"][i]) 
 
             fallback_index_map = new_fallback_index_map
 
             # if no sequence needs to be run with temperature fallback, we're finished
             if len(fallback_index_map) == 0 or fallback_idx == len(temperatures) - 1:
                 seek_sequences = seek_sequence_list
-                seek_outputs = seek_outputs_list
+                seek_outputs = seek_outputs_list     
                 break
 
             # if we're still in the loop, make sure that decoder_input_ids and segment inputs are tensors
