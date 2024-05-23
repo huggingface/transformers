@@ -116,22 +116,8 @@ class TextClassificationPipelineTests(unittest.TestCase):
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
-    @require_torch
-    @require_torch_bf16
-    def test_accepts_torch_bf16(self):
-        text_classifier = pipeline(
-            task="text-classification",
-            model="hf-internal-testing/tiny-random-distilbert",
-            framework="pt",
-            device=torch.bfloat16,
-        )
-
-        outputs = text_classifier("This is great !")
-        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
-
-    @require_torch
     @require_torch_fp16
-    def test_accepts_torch_bf16(self):
+    def test_accepts_torch_fp16(self):
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
@@ -142,7 +128,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
-    @require_torch
+    @require_torch_bf16
     def test_accepts_torch_bf16(self):
         text_classifier = pipeline(
             task="text-classification",
