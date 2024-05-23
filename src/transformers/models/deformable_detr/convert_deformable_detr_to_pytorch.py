@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Deformable DETR checkpoints."""
 
-
 import argparse
 import json
 from pathlib import Path

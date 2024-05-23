@@ -400,7 +400,7 @@ def optimize(onnx_model_path: Path) -> Path:
     sess_option.optimized_model_filepath = opt_model_path.as_posix()
     _ = InferenceSession(onnx_model_path.as_posix(), sess_option)
 
-    print(f"Optimized model has been written at {opt_model_path}: \N{heavy check mark}")
+    print(f"Optimized model has been written at {opt_model_path}: \N{HEAVY CHECK MARK}")
     print("/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\")
 
     return opt_model_path
@@ -475,7 +475,7 @@ def quantize(onnx_model_path: Path) -> Path:
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
-    print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    print(f"Quantized model has been written at {quantized_model_path}: \N{HEAVY CHECK MARK}")
     onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
@@ -489,9 +489,9 @@ def verify(path: Path):
     try:
         onnx_options = SessionOptions()
         _ = InferenceSession(path.as_posix(), onnx_options, providers=["CPUExecutionProvider"])
-        print(f"Model {path} correctly loaded: \N{heavy check mark}")
+        print(f"Model {path} correctly loaded: \N{HEAVY CHECK MARK}")
     except RuntimeException as re:
-        print(f"Error while loading the model {re}: \N{heavy ballot x}")
+        print(f"Error while loading the model {re}: \N{HEAVY BALLOT X}")
 
 
 if __name__ == "__main__":

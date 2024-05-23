@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch Phi-3 model."""
+"""PyTorch Phi-3 model."""
 
 import inspect
 import math

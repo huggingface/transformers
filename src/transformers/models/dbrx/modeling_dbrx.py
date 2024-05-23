@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DBRX model. """
+"""PyTorch DBRX model."""
 
 import math
 from typing import Any, Optional, Tuple, Union
@@ -937,6 +937,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_quantized_cache = True
     _supports_static_cache = True
 
     def _init_weights(self, module: nn.Module):
