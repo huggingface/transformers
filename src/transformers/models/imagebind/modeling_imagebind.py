@@ -1210,8 +1210,8 @@ class ImageBindTextModel(ImageBindPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ImageBindTextModel
 
-        >>> model = ImageBindTextModel.from_pretrained("facebook/imagebind-huge")
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindTextModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> tokenizer = AutoTokenizer.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -1332,8 +1332,8 @@ class ImageBindVisionModel(ImageBindPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, ImageBindVisionModel
 
-        >>> model = ImageBindVisionModel.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindVisionModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1449,17 +1449,18 @@ class ImageBindAudioModel(ImageBindPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torchaudio
+        >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ImageBindAudioModel
 
-        >>> model = ImageBindAudioModel.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
+        >>> audio = ds[0]["audio"]
+        >>> audio = torchaudio.functional.resample(torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000).numpy()
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> model = ImageBindAudioModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(audios=audio, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1545,8 +1546,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ImageBindModel
 
-        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> tokenizer = AutoTokenizer.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1592,8 +1593,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, ImageBindModel
 
-        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1645,17 +1646,18 @@ class ImageBindModel(ImageBindPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torchaudio
+        >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ImageBindModel
 
-        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
+        >>> audio = ds[0]["audio"]
+        >>> audio = torchaudio.functional.resample(torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000).numpy()
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> model = ImageBindModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(audios=audio, return_tensors="pt")
 
         >>> audio_features = model.get_audio_features(**inputs)
         ```"""
@@ -1710,8 +1712,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, ImageBindModel
 
-        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindModel.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1883,8 +1885,8 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ImageBindTextModelWithProjection
 
-        >>> model = ImageBindTextModelWithProjection.from_pretrained("facebook/imagebind-huge")
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindTextModelWithProjection.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> tokenizer = AutoTokenizer.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -1964,8 +1966,8 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, ImageBindVisionModelWithProjection
 
-        >>> model = ImageBindVisionModelWithProjection.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> model = ImageBindVisionModelWithProjection.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -2053,17 +2055,19 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
+        >>> import torchaudio
+        >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ImageBindAudioModelWithProjection
 
-        >>> model = ImageBindAudioModelWithProjection.from_pretrained("facebook/imagebind-huge")
-        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+        >>> ds = load_dataset("EduardoPacheco/imagebind-example-data", split="train")
+        >>> audio = ds[0]["audio"]
+        >>> audio = torchaudio.functional.resample(torch.from_numpy(audio["array"]), orig_freq=audio["sampling_rate"], new_freq=16000).numpy()
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> model = ImageBindAudioModelWithProjection.from_pretrained("EduardoPacheco/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/imagebind-huge")
 
-        >>> inputs = processor(images=image, return_tensors="pt")  # TODO
+        >>> inputs = processor(audios=audio, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
