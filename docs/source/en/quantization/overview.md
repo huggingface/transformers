@@ -26,7 +26,7 @@ Interested in adding a new quantization method to Transformers? Read the [HfQuan
 
 <Tip>
 
-If you are new to the quantization field, we recommend you to check out these beginner-friendly courses about quantization in colaboration with DeepLearning.AI:
+If you are new to the quantization field, we recommend you to check out these beginner-friendly courses about quantization in collaboration with DeepLearning.AI:
 
 * [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
 * [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth/)
