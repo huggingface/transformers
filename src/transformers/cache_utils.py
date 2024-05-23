@@ -427,6 +427,18 @@ class DynamicCache(Cache):
             layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
             cache.update(layer_keys, layer_values, idx)
         return cache
+    
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
+            self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
 class QuantizedCache(DynamicCache):

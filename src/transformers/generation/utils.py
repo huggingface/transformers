@@ -2184,9 +2184,7 @@ class GenerationMixin:
                 past = model_kwargs["past_key_values"]
                 # If it is a static cache, modify it in-place layer after layer to save memory
                 if isinstance(past, DynamicCache):
-                    for layer_idx in range(len(past)):
-                        past.key_cache[layer_idx] = past.key_cache[layer_idx].repeat_interleave(top_k, dim=0)
-                        past.value_cache[layer_idx] = past.value_cache[layer_idx].repeat_interleave(top_k, dim=0)
+                    past.batch_repeat_interleave(top_k)
                 else:
                     new_key_values = []
                     for layer in past:
@@ -2288,13 +2286,7 @@ class GenerationMixin:
                 next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
                 # Do it in-place layer per layer to save memory
                 if isinstance(next_past_key_values, DynamicCache):
-                    for layer_idx in range(len(next_past_key_values)):
-                        next_past_key_values.key_cache[layer_idx] = next_past_key_values.key_cache[layer_idx][
-                            augmented_idx, ...
-                        ]
-                        next_past_key_values.value_cache[layer_idx] = next_past_key_values.value_cache[layer_idx][
-                            augmented_idx, ...
-                        ]
+                    next_past_key_values.batch_select_indices(augmented_idx)
                 else:
                     new_key_values = []
                     for layer in next_past_key_values:
