@@ -12,8 +12,14 @@ def get_json_schema(func):
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
     the function, as well as the names, types and descriptions for each of its arguments. `get_json_schema()` requires
-    that the function has a docstring, and that each argument has a description in the docstring, in the format
-    `:param arg_name: arg_description`. It also requires that all the function arguments have a valid Python type hint.
+    that the function has a docstring, and that each argument has a description in the docstring, in the standard
+    Google docstring format shown below. It also requires that all the function arguments have a valid Python type hint.
+
+    Although it is not required, a `Returns` block can also be added, which will be included in the schema. This is
+    optional because most chat templates ignore the return value of the function. Each argument description
+    can also have an optional `(choices: ...)` block at the end, such as `(choices: ["tea", "coffee"])`, which will be
+    parsed into an `enum` field in the schema. Note that this will only be parsed correctly if it is at the end of the
+    line.
 
     Args:
         func: The function to generate a JSON schema for.
