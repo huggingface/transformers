@@ -290,7 +290,8 @@ class ImageBindFeatureExtractor(SequenceFeatureExtractor):
             fbank = torch.nn.functional.pad(fbank, (0, difference), mode="constant", value=0)
         elif difference < 0:
             fbank = fbank[:, 0:max_length]
-
+        # Add 1 channel so that dimension of fbank is [1, num_mel_bins, num_frames]
+        fbank = fbank.unsqueeze(0)
         fbank = fbank.numpy()
 
         return fbank

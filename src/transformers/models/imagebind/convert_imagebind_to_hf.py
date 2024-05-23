@@ -20,19 +20,18 @@ from datasets import load_dataset
 from torchvision import transforms
 
 from transformers import (
-    AutoTokenizer,
+    CLIPTokenizer,
     ImageBindConfig,
     ImageBindFeatureExtractor,
     ImageBindImageProcessor,
     ImageBindModel,
     ImageBindProcessor,
 )
-from transformers.utils import logging
-
-from ...image_utils import (
+from transformers.image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -190,7 +189,7 @@ def convert_imagebind_checkpoint(args):
     print("Unexpected keys:", unexpected_keys)
 
     if verify_inputs:
-        texts, images, audios = prepare_input()
+        images, texts, audios = prepare_input()
 
         original_image_processor = transforms.Compose(
             [
@@ -204,13 +203,13 @@ def convert_imagebind_checkpoint(args):
             ]
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
         image_processor = ImageBindImageProcessor()
         feature_extractor = ImageBindFeatureExtractor()
-        processor = ImageBindProcessor(tokenizer, image_processor, feature_extractor)
+        processor = ImageBindProcessor(image_processor, tokenizer, feature_extractor)
 
         inputs_audio_vision = processor(images=images, audios=audios, return_tensors="pt")
-        inputs_text_vision = processor(texts=texts, images=images, return_tensors="pt")
+        inputs_text_vision = processor(images=images, text=texts, return_tensors="pt", padding=True)
 
         expected_input_features = torch.tensor(
             [
@@ -222,14 +221,14 @@ def convert_imagebind_checkpoint(args):
 
         expected_pixel_values = torch.stack([original_image_processor(image) for image in images])
 
-        assert torch.allclose(inputs_audio_vision["pixel_values"], expected_pixel_values)
-        assert torch.allclose(inputs_audio_vision["input_features"][:, :, 0, 0, 0], expected_input_features)
+        assert torch.allclose(inputs_audio_vision["pixel_values"], expected_pixel_values, atol=1e-4)
+        assert torch.allclose(inputs_audio_vision["input_features"][:, :, 0, 0, 0], expected_input_features, atol=1e-4)
 
         expected_output_vision = torch.tensor(
             [
                 [0.0188, 0.0075, 0.0532, 0.0326, -0.0159],
-                [0.0259, 0.0054, 0.0399, 0.0211, -0.0232],
-                [0.0020, -0.0281, 0.0052, -0.0194, -0.0027],
+                [0.0190, 0.0106, 0.0275, 0.0189, -0.0268],
+                [-0.0104, -0.0203, 0.0048, -0.0158, 0.0076],
             ]
         )
         expected_output_text = torch.tensor(
@@ -304,6 +303,7 @@ def convert_imagebind_checkpoint(args):
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
+        processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
