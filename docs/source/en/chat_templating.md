@@ -398,7 +398,7 @@ document2 = {
 
 model_input = tokenizer.apply_chat_template(
     messages,
-    documents = [document1, document2]
+    documents=[document1, document2]
 )
 ```
 
