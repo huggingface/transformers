@@ -1097,6 +1097,25 @@ class GenerationMixin:
                 exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
             raise TypeError(exception_message)
 
+    def _validate_assistant(self, assistant_model):
+        if assistant_model is None:
+            return
+
+        if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
+            attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
+            attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
+            are_equal = all(
+                getattr(self.config, attr) == getattr(assistant_model.config, attr) for attr in attributes_to_check
+            )
+            if not are_equal:
+                raise ValueError(
+                    "The main model and the assistant don't have compatible encoder-dependent input shapes. "
+                    "Ensure you load the assistant with the correct encoder-decoder class, e.g. `AutoModelForSpeechSeq2Seq` for Whisper."
+                )
+
+        if not self.config.vocab_size == assistant_model.config.vocab_size:
+            raise ValueError("Make sure the main and assistant model use the same tokenizer")
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
@@ -1361,6 +1380,23 @@ class GenerationMixin:
             self._cache.reset()
         return self._cache
 
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
+    ) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id
+            if decoder_start_token_id is not None
+            else self.generation_config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        else:
+            return
+
     def _prepare_special_tokens(
         self,
         generation_config: GenerationConfig,
@@ -1385,11 +1421,16 @@ class GenerationMixin:
                 return token
             return torch.tensor(token, device=device, dtype=torch.long)
 
+        # for BC we also try to get `decoder_start_token_id` from model's generation config (#30892)
+        if self.config.is_encoder_decoder:
+            generation_config.decoder_start_token_id = self._get_decoder_start_token_id(
+                generation_config.decoder_start_token_id, generation_config.bos_token_id
+            )
+
         bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
         eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
         pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
         decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
-        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
         if eos_token_id is not None and eos_token_id.ndim == 0:
@@ -1525,6 +1566,7 @@ class GenerationMixin:
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_assistant(assistant_model)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
