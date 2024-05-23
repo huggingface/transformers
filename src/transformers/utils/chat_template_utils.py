@@ -169,8 +169,6 @@ def parse_google_format_docstring(docstring):
 
 def _convert_type_hints_to_json_schema(func):
     type_hints = get_type_hints(func)
-    properties = {}
-
     signature = inspect.signature(func)
     required = []
     for param_name, param in signature.parameters.items():
@@ -179,6 +177,7 @@ def _convert_type_hints_to_json_schema(func):
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
+    properties = {}
     for param_name, param_type in type_hints.items():
         properties[param_name] = _parse_type_hint(param_type)
 
