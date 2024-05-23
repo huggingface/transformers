@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import Phi3Config, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -396,6 +397,16 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @slow
 @require_torch
 class Phi3IntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     def test_model_phi3_mini_4k_instruct_logits(self):
         input_ids = {
             "input_ids": torch.tensor(
@@ -471,3 +482,57 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch_gpu
+    def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        # if version.parse(torch.__version__) < version.parse("2.3.0"):
+        #    self.skipTest("This test requires torch >= 2.3 to run.")
+
+        NUM_TOKENS_TO_GENERATE = 40
+        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
+        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        EXPECTED_TEXT_COMPLETION = {
+            8: [
+                "Can you provide ways to eat combinations of bananas and dragonfruits? Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and dragonfruits:\n\n1",
+            ],
+            7: [
+                "Can you provide ways to eat combinations of bananas and dragonfruits? Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and dragonfruits:\n\n1",
+            ],
+        }
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct", torch_dtype=torch.float16).to(
+            torch_device
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        # Dynamic Cache
+        generated_ids = model.generate(inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
+
+        # Static Cache
+        generated_ids = model.generate(
+            inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_text)
+
+        # Static Cache + compile
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
