@@ -427,7 +427,7 @@ class DynamicCache(Cache):
             layer_values = torch.cat([current.value_cache[idx] for current in splits], dim=0)
             cache.update(layer_keys, layer_values, idx)
         return cache
-    
+
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
         for layer_idx in range(len(self)):
