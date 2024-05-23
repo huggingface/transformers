@@ -828,6 +828,29 @@ class ImageBindModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
+        expected_input_features = torch.tensor(
+            [
+                [-1.2776, -0.9167, -1.2776],
+                [-1.2439, -0.8372, -0.8748],
+                [-1.1235, -0.7492, -1.0867],
+            ]
+        )
+
+        expected_pixel_values = torch.tensor(
+            [[-0.1134, 0.7392, 1.3069], [-0.6244, 0.1089, 0.2688], [-0.8434, 0.1089, 0.9088]]
+        )
+
+        expected_input_ids = torch.tensor(
+            [[49406, 320, 3329, 49407, 49407], [49406, 320, 1615, 49407, 49407], [49406, 320, 1929, 269, 49407]]
+        )
+
+        expected_attention_mask = torch.tensor([[1, 1, 1, 1, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 1]])
+
+        self.assertTrue(torch.allclose(inputs.input_features[:, :, 0, 0, 0], expected_input_features, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs.pixel_values[:, :, 0, 0], expected_pixel_values, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs.input_ids, expected_input_ids, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs.attention_mask, expected_attention_mask, atol=1e-4))
+
         with torch.no_grad():
             outputs_vision_text = model(
                 pixel_values=inputs.pixel_values, input_ids=inputs.input_ids, attention_mask=inputs.attention_mask
