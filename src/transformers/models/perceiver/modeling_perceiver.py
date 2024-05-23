@@ -699,13 +699,24 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    """The Perceiver: a scalable, fully attentional architecture.""",
+    """The Perceiver: a scalable, fully attentional architecture.
+
+    <Tip>
+
+        Note that it's possible to fine-tune Perceiver on higher resolution images than the ones it has been trained on, by
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
+
+    </Tip>
+    """,
     PERCEIVER_MODEL_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
@@ -858,7 +869,9 @@ class PerceiverModel(PerceiverPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if self.input_preprocessor is not None:
-            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(inputs, interpolate_pos_encoding=interpolate_pos_encoding)
+            inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(
+                inputs, interpolate_pos_encoding=interpolate_pos_encoding
+            )
         else:
             modality_sizes = None
             inputs_without_pos = None
@@ -2754,7 +2767,9 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
     def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_positions, dim = position_embeddings.shape[0], position_embeddings.shape[1]
-        position_embeddings = position_embeddings.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim).permute(0, 3, 1, 2)
+        position_embeddings = position_embeddings.reshape(
+            1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim
+        ).permute(0, 3, 1, 2)
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
             scale_factor=(height / math.sqrt(num_positions), width / math.sqrt(num_positions)),
@@ -2764,7 +2779,9 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         position_embeddings = position_embeddings.reshape(1, dim, -1).permute(0, 2, 1).squeeze(0)
         return position_embeddings
 
-    def forward(self, batch_size: int, interpolate_pos_encoding: bool = False, intput_size: torch.Size = None) -> torch.Tensor:
+    def forward(
+        self, batch_size: int, interpolate_pos_encoding: bool = False, intput_size: torch.Size = None
+    ) -> torch.Tensor:
         position_embeddings = self.position_embeddings
 
         if interpolate_pos_encoding:
@@ -2879,7 +2896,13 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.d_model
 
-    def forward(self, inputs: torch.LongTensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = None):
+    def forward(
+        self,
+        inputs: torch.LongTensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = None,
+    ):
         embeddings_without_pos = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
@@ -3159,7 +3182,9 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         return inp_dim + pos_dim
 
-    def _build_network_inputs(self, inputs: torch.Tensor, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = False):
+    def _build_network_inputs(
+        self, inputs: torch.Tensor, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = False
+    ):
         """
         Construct the final input, including position encoding.
 
@@ -3195,7 +3220,13 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs_with_pos = inputs + pos_enc
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True, interpolate_pos_encoding: Optional[bool] = None):
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: Optional[bool] = None,
+    ):
         if self.prep_type == "conv":
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
@@ -3412,7 +3443,11 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         return common_channel_size
 
     def forward(
-        self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True, interpolate_pos_encoding: bool = None
+        self,
+        inputs: Mapping[str, torch.Tensor],
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = None,
     ) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}

@@ -1032,7 +1032,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
 
-    # RUN_SLOW=1 pytest -v -s tests/models/perceiver/test_modeling_perceiver.py::PerceiverModelIntegrationTest::test_inference_interpolate_pos_encoding
     @slow
     def test_inference_interpolate_pos_encoding(self):
         image_processor = PerceiverImageProcessor(size=384)
