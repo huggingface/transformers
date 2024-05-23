@@ -190,72 +190,82 @@ def _convert_type_hints_to_json_schema(func):
 
 
 def _parse_type_hint(hint):
-    if (origin := get_origin(hint)) is not None:
-        if origin is Union:
-            # If it's a union of basic types, we can express that as a simple list in the schema
-            if all(t in BASIC_TYPES for t in get_args(hint)):
-                return_dict = {
-                    "type": [_get_json_schema_type(t)["type"] for t in get_args(hint) if t not in (type(None), ...)]
-                }
-                if len(return_dict["type"]) == 1:
-                    return_dict["type"] = return_dict["type"][0]
-            else:
-                # A union of more complex types requires us to recurse into each subtype
-                return_dict = {
-                    "anyOf": [_parse_type_hint(t) for t in get_args(hint) if t not in (type(None), ...)],
-                }
-                if len(return_dict["anyOf"]) == 1:
-                    return_dict = return_dict["anyOf"][0]
-            if type(None) in get_args(hint):
-                return_dict["nullable"] = True
-            return return_dict
-        elif origin is list:
-            if not get_args(hint):
-                return {"type": "array"}
-            if all(t in BASIC_TYPES for t in get_args(hint)):
-                # Similarly to unions, a list of basic types can be expressed as a list in the schema
-                items = {"type": [_get_json_schema_type(t)["type"] for t in get_args(hint) if t != type(None)]}
-                if len(items["type"]) == 1:
-                    items["type"] = items["type"][0]
-            else:
-                # And a list of more complex types requires us to recurse into each subtype again
-                items = {"anyOf": [_parse_type_hint(t) for t in get_args(hint) if t not in (type(None), ...)]}
-                if len(items["anyOf"]) == 1:
-                    items = items["anyOf"][0]
-            return_dict = {"type": "array", "items": items}
-            if type(None) in get_args(hint):
-                return_dict["nullable"] = True
-            return return_dict
-        elif origin is tuple:
-            if not get_args(hint):
-                return {"type": "array"}
-            if len(get_args(hint)) == 1:
-                raise ValueError(
-                    "Tuple type hints should only be used when the argument has a fixed length and each "
-                    f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
-                    "This should be replaced with an unwrapped type hint instead like "
-                    f"{get_args(hint)[0]}. Alternatively, if the "
-                    "function can actually take a tuple with multiple elements, please either indicate "
-                    f"each element type (e.g. Tuple[{get_args(hint)[0]}, {get_args(hint)[0]}]), "
-                    f"or if the input can be variable length, use List[{get_args(hint)[0]}] instead."
-                )
-            if ... in get_args(hint):
-                raise ValueError(
-                    "'...' is not supported in Tuple type hints. Use List[] types for variable-length"
-                    " inputs instead."
-                )
-            return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in get_args(hint)]}
-        elif origin is dict:
-            # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
-            # However, we can specify the type of the dict values with "additionalProperties"
-            out = {"type": "object"}
-            if len(get_args(hint)) == 2:
-                out["additionalProperties"] = _parse_type_hint(get_args(hint)[1])
-            return out
-        else:
-            raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
-    else:
+    origin = get_origin(hint)
+    args = get_args(hint)
+    
+    if origin is None:
         return _get_json_schema_type(hint)
+
+    if origin is Union:
+        # If it's a union of basic types, we can express that as a simple list in the schema
+        if all(t in BASIC_TYPES for t in args):
+            return_dict = {
+                "type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]
+            }
+            if len(return_dict["type"]) == 1:
+                return_dict["type"] = return_dict["type"][0]
+        else:
+            # A union of more complex types requires us to recurse into each subtype
+            return_dict = {
+                "anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)],
+            }
+            if len(return_dict["anyOf"]) == 1:
+                return_dict = return_dict["anyOf"][0]
+        if type(None) in args:
+            return_dict["nullable"] = True
+        return return_dict
+
+    if origin is list:
+        if not args:
+            return {"type": "array"}
+
+        # Similarly to unions, a list of basic types can be expressed as a list in the schema
+        if all(t in BASIC_TYPES for t in args):
+            items = {"type": [_get_json_schema_type(t)["type"] for t in args if t != type(None)]}
+            if len(items["type"]) == 1:
+                items["type"] = items["type"][0]
+        else:
+            # And a list of more complex types requires us to recurse into each subtype again
+            items = {"anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)]}
+            if len(items["anyOf"]) == 1:
+                items = items["anyOf"][0]
+
+        return_dict = {"type": "array", "items": items}
+        
+        if type(None) in args:
+            return_dict["nullable"] = True
+        
+        return return_dict
+
+    if origin is tuple:
+        if not args:
+            return {"type": "array"}
+        if len(args) == 1:
+            raise ValueError(
+                "Tuple type hints should only be used when the argument has a fixed length and each "
+                f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
+                "This should be replaced with an unwrapped type hint instead like "
+                f"{args[0]}. Alternatively, if the "
+                "function can actually take a tuple with multiple elements, please either indicate "
+                f"each element type (e.g. Tuple[{args[0]}, {args[0]}]), "
+                f"or if the input can be variable length, use List[{args[0]}] instead."
+            )
+        if ... in args:
+            raise ValueError(
+                "'...' is not supported in Tuple type hints. Use List[] types for variable-length"
+                " inputs instead."
+            )
+        return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
+
+    if origin is dict:
+        # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
+        # However, we can specify the type of the dict values with "additionalProperties"
+        out = {"type": "object"}
+        if len(args) == 2:
+            out["additionalProperties"] = _parse_type_hint(args[1])
+        return out
+
+    raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
 def _get_json_schema_type(param_type):
