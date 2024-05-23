@@ -84,6 +84,7 @@ class ImageBindProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **input_features** -- List of input features to be fed to a model. Returned when `audios` is not `None`.
         """
 
         if text is None and images is None and audios is None:

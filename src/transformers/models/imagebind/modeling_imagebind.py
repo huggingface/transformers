@@ -43,12 +43,7 @@ from .configuration_imagebind import (
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/imagebind-huge"
-
-IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/imagebind-huge",
-    # See all ImageBind models at https://huggingface.co/models?filter=imagebind
-]
+_CHECKPOINT_FOR_DOC = "EduardoPacheco/imagebind-huge"
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -65,9 +60,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# TODO: can use code already in transformers?
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ImageBind.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 

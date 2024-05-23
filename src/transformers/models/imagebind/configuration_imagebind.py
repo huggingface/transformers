@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,10 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/imagebind-huge": "https://huggingface.co/facebook/imagebind-huge/resolve/main/config.json",
-}
 
 
 def update_config_dict(
