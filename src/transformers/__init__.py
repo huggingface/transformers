@@ -1191,7 +1191,17 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
-    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache", "StaticCache"]
+    _import_structure["cache_utils"] = [
+        "Cache",
+        "CacheConfig",
+        "DynamicCache",
+        "HQQQuantizedCache",
+        "QuantizedCache",
+        "QuantizedCacheConfig",
+        "QuantoQuantizedCache",
+        "SinkCache",
+        "StaticCache",
+    ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -5822,7 +5832,17 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
-        from .cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+        from .cache_utils import (
+            Cache,
+            CacheConfig,
+            DynamicCache,
+            HQQQuantizedCache,
+            QuantizedCache,
+            QuantizedCacheConfig,
+            QuantoQuantizedCache,
+            SinkCache,
+            StaticCache,
+        )
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
