@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
+
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer

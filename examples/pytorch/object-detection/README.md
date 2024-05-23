@@ -50,7 +50,7 @@ python run_object_detection.py \
     --per_device_train_batch_size 8 \
     --gradient_accumulation_steps 1 \
     --remove_unused_columns false \
-    --eval_do_concat_batches false \ 
+    --eval_do_concat_batches false \
     --ignore_mismatched_sizes true \
     --metric_for_best_model eval_map \
     --greater_is_better true \
@@ -200,6 +200,7 @@ Where `metadata.jsonl` is a file with the following structure:
 {"file_name": "0002.jpg", "objects": {"bbox": [[810.0, 100.0, 57.0, 28.0]], "categories": [1], "id": [2], "area": [40.0]}}
 ...
 ```
+Trining script support bounding boxes in COCO format (x_min, y_min, width, height).
 
 Then, you cat load the dataset with just a few lines of code:
 

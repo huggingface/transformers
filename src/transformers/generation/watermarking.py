@@ -68,7 +68,6 @@ class WatermarkDetectorOutput:
 
 
 class WatermarkDetector:
-
     r"""
     Detector for detection of watermark generated text. The detector needs to be given the exact same settings that were
     given during text generation to replicate the watermark greenlist generation and so detect the watermark. This includes

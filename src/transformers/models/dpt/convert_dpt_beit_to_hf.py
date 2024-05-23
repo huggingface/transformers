@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert DPT 3.1 checkpoints from the MiDaS repository. URL: https://github.com/isl-org/MiDaS"""
 
-
 import argparse
 from pathlib import Path
 
