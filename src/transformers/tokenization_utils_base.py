@@ -1707,10 +1707,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (`List[Dict]`, *optional*): 
+            tools (`List[Dict]`, *optional*):
                 A list of tools (callable functions) that will be accessible to the model. If the template does not
                 support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
-                giving the name, description and argument types for the tool. See our 
+                giving the name, description and argument types for the tool. See our
                 [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
                 for more information.
             documents (`List[Dict[str, str]]`, *optional*):
@@ -1719,7 +1719,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 effect. We recommend that each document should be a dict containing "title" and "text" keys. Please
                 see the RAG section of the [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#arguments-for-RAG)
                 for examples of passing documents with chat templates.
-            chat_template (`str`, *optional*): 
+            chat_template (`str`, *optional*):
                 A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
                 argument, as the model's template will be used by default.
             add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate

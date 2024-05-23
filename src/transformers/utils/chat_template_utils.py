@@ -191,16 +191,14 @@ def _convert_type_hints_to_json_schema(func):
 def _parse_type_hint(hint):
     origin = get_origin(hint)
     args = get_args(hint)
-    
+
     if origin is None:
         return _get_json_schema_type(hint)
 
     if origin is Union:
         # If it's a union of basic types, we can express that as a simple list in the schema
         if all(t in BASIC_TYPES for t in args):
-            return_dict = {
-                "type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]
-            }
+            return_dict = {"type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]}
             if len(return_dict["type"]) == 1:
                 return_dict["type"] = return_dict["type"][0]
         else:
@@ -230,10 +228,10 @@ def _parse_type_hint(hint):
                 items = items["anyOf"][0]
 
         return_dict = {"type": "array", "items": items}
-        
+
         if type(None) in args:
             return_dict["nullable"] = True
-        
+
         return return_dict
 
     if origin is tuple:
@@ -251,8 +249,7 @@ def _parse_type_hint(hint):
             )
         if ... in args:
             raise ValueError(
-                "'...' is not supported in Tuple type hints. Use List[] types for variable-length"
-                " inputs instead."
+                "'...' is not supported in Tuple type hints. Use List[] types for variable-length" " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
 
