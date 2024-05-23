@@ -316,7 +316,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         else:
             position_ids = None
 
-        if token_type_ids is not None and labels is not None:
+        if labels is not None:
             # we are training thus we need to create a full mask on the image + prefix but causal on suffix
             target_length = cache_position[-1] + 1
             causal_mask = torch.full(
@@ -331,9 +331,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
                 # unmask the prefill
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    token_type_ids[:, None, None, :] == 0, 0
-                )
+                if token_type_ids is not None:
+                    causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                        token_type_ids[:, None, None, :] == 0, 0
+                    )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
