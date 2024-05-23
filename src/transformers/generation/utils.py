@@ -1675,7 +1675,7 @@ class GenerationMixin:
                 "Cache object) is unsupported. Please use only one of the two."
             )
         elif generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in in NEED_SETUP_CACHE_CLASSES_MAPPING:
+            if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._supports_static_cache:
                     raise ValueError(
                         "This model does not support `cache_implementation='static'`. Please check the following "
