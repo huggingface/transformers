@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PLBART model."""
+"""PyTorch PLBART model."""
+
 import copy
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union

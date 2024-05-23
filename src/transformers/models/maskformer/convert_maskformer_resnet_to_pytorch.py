@@ -15,7 +15,6 @@
 """Convert MaskFormer checkpoints with ResNet backbone from the original repository. URL:
 https://github.com/facebookresearch/MaskFormer"""
 
-
 import argparse
 import json
 import pickle
