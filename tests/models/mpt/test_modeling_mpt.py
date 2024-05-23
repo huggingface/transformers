@@ -492,7 +492,7 @@ class MptIntegrationTests(unittest.TestCase):
 
         expected_output = [
             "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for the",
-            "Today I am going at the gym and then I am going to go to the grocery store and get some food. I am going to make",
+            "Today I am going at the gym and then I am going to go to the grocery store. I am going to buy some food and some",
         ]
         outputs = model.generate(**inputs, max_new_tokens=20)
 
