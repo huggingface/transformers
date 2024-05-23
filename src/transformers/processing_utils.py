@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Processing saving/loading class for common processors.
+Processing saving/loading class for common processors.
 """
 
 import copy
@@ -30,6 +30,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     direct_transformers_import,
@@ -355,10 +356,15 @@ class ProcessorMixin(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {processor_file} from cache at {resolved_processor_file}")
 
-        if "auto_map" in processor_dict and not is_local:
-            processor_dict["auto_map"] = add_model_info_to_auto_map(
-                processor_dict["auto_map"], pretrained_model_name_or_path
-            )
+        if not is_local:
+            if "auto_map" in processor_dict:
+                processor_dict["auto_map"] = add_model_info_to_auto_map(
+                    processor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in processor_dict:
+                processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    processor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
 
         return processor_dict, kwargs
 

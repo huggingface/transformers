@@ -47,6 +47,7 @@ if is_torch_available():
         LlamaForCausalLM,
         LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
+        LlamaForTokenClassification,
         LlamaModel,
         LlamaTokenizer,
     )
@@ -286,7 +287,13 @@ class LlamaModelTester:
 @require_torch
 class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForQuestionAnswering)
+        (
+            LlamaModel,
+            LlamaForCausalLM,
+            LlamaForSequenceClassification,
+            LlamaForQuestionAnswering,
+            LlamaForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -298,6 +305,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "text-generation": LlamaForCausalLM,
             "zero-shot": LlamaForSequenceClassification,
             "question-answering": LlamaForQuestionAnswering,
+            "token-classification": LlamaForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -369,6 +377,21 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_llama_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = LlamaForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -692,6 +715,11 @@ class LlamaIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        #
+        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
+        #
+        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
             8: [
                 "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
@@ -707,7 +735,15 @@ class LlamaIntegrationTest(unittest.TestCase):
                 "My favorite all time favorite condiment is ketchup. I love it on hamburgers, hot dogs, fries, eggs, "
                 "and even on a good old fashioned cheeseburger. I love it on everything. I love it so",
             ],
+            9: [
+                "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial"
+                " reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
+                "theory of relativ",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs,"
+                " my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            ],
         }
+        expected_text_completion_idx = 8
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -722,7 +758,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION[8], dynamic_text)  # Both GPU architectures have the same output
+        self.assertEqual(
+            EXPECTED_TEXT_COMPLETION[expected_text_completion_idx], dynamic_text
+        )  # Both GPU architectures have the same output
 
         # Static Cache
         generated_ids = model.generate(

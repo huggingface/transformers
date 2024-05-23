@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Musicgen model."""
+"""PyTorch Musicgen model."""
+
 import copy
 import inspect
 import math
@@ -618,6 +619,11 @@ class MusicgenSdpaAttention(MusicgenAttention):
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+
         # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
         # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
         attn_output = torch.nn.functional.scaled_dot_product_attention(
@@ -626,8 +632,7 @@ class MusicgenSdpaAttention(MusicgenAttention):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
+            is_causal=is_causal,
         )
 
         if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):

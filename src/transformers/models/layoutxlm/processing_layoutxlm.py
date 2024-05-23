@@ -15,6 +15,7 @@
 """
 Processor class for LayoutXLM.
 """
+
 import warnings
 from typing import List, Optional, Union
 

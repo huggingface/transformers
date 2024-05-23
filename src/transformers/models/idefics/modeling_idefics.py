@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Idefics model."""
+"""PyTorch Idefics model."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -478,7 +479,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -660,14 +661,18 @@ class IdeficsAttention(nn.Module):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        attn_output = nn.functional.scaled_dot_product_attention(
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
             value_states,
             attn_mask=attention_mask,
-            dropout_p=self.dropout,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
         )
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
