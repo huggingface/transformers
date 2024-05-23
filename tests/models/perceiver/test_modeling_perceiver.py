@@ -1046,7 +1046,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         with torch.no_grad():
-            outputs = model(inputs=inputs, attention_mask=input_mask)
+            outputs = model(inputs=inputs, attention_mask=input_mask, interpolate_pos_encoding=True)
         logits = outputs.logits
 
         # verify logits
