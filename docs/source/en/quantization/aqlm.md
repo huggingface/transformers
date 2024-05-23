@@ -28,7 +28,18 @@ pip install aqlm[gpu,cpu]
 
 The library provides efficient kernels for both GPU and CPU inference and training.
 
-The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM).
+The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/AQLM). To run AQLM models simply load a model that has been quantized with AQLM:
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "ISTA-DASLab/Mixtral-8x7b-AQLM-2Bit-1x16-hf",
+    torch_dtype="auto", 
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("ISTA-DASLab/Mixtral-8x7b-AQLM-2Bit-1x16-hf")
+```
 
 ## PEFT
 
