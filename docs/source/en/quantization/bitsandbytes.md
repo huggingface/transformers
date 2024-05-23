@@ -38,7 +38,7 @@ pip install --upgrade accelerate transformers
 </hfoption>
 </hfoptions>
 
-Now you can quantize a model with the `load_in_8bit` or `load_in_4bit` parameters in the [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it supports loading with Accelerate and contains `torch.nn.Linear` layers.
+Now you can quantize a model by passing a `BitsAndBytesConfig` to [`~PreTrainedModel.from_pretrained`] method. This works for any model in any modality, as long as it supports loading with Accelerate and contains `torch.nn.Linear` layers.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
@@ -46,27 +46,43 @@ Now you can quantize a model with the `load_in_8bit` or `load_in_4bit` parameter
 Quantizing a model in 8-bit halves the memory-usage, and for large models, set `device_map="auto"` to efficiently use the GPUs available:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_8bit = AutoModelForCausalLM.from_pretrained("bigscience/bloom-1b7", device_map="auto", load_in_8bit=True)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-1b7", 
+    quantization_config=quantization_config
+)
 ```
 
 By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    "facebook/opt-350m", 
+    quantization_config=quantization_config, 
+    torch_dtype=torch.float32
+)
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
 Once a model is quantized to 8-bit, you can't push the quantized weights to the Hub unless you're using the latest version of Transformers and bitsandbytes. If you have the latest versions, then you can push the 8-bit model to the Hub with the [`~PreTrainedModel.push_to_hub`] method. The quantization config.json file is pushed first, followed by the quantized model weights.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m", device_map="auto", load_in_8bit=True)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-560m", 
+    quantization_config=quantization_config
+)
 tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
 model.push_to_hub("bloom-560m-8bit")
@@ -78,18 +94,29 @@ model.push_to_hub("bloom-560m-8bit")
 Quantizing a model in 4-bit reduces your memory-usage by 4x, and for large models, set `device_map="auto"` to efficiently use the GPUs available:
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_4bit = AutoModelForCausalLM.from_pretrained("bigscience/bloom-1b7", device_map="auto", load_in_4bit=True)
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+model_4bit = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-1b7",
+    quantization_config=quantization_config
+)
 ```
 
 By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4bit=True, torch_dtype=torch.float32)
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+
+model_4bit = AutoModelForCausalLM.from_pretrained(
+    "facebook/opt-350m",
+    quantization_config=quantization_config, 
+    torch_dtype=torch.float32
+)
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
