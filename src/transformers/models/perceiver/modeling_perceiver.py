@@ -2768,9 +2768,9 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
     def interpolate_pos_encoding(self, position_embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_positions = position_embeddings.shape[0]
         new_height = new_width = math.sqrt(num_positions)
-        position_embeddings = position_embeddings.reshape(1, int(new_height), int(new_width), self._num_channels).permute(
-            0, 3, 1, 2
-        )
+        position_embeddings = position_embeddings.reshape(
+            1, int(new_height), int(new_width), self._num_channels
+        ).permute(0, 3, 1, 2)
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
             scale_factor=(height / new_height, width / new_width),
@@ -3391,7 +3391,13 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
 
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        pos: Optional[torch.Tensor] = None,
+        network_input_is_1d: bool = True,
+        interpolate_pos_encoding: bool = False,
+    ):
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs)
@@ -3448,7 +3454,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         inputs: Mapping[str, torch.Tensor],
         pos: Optional[torch.Tensor] = None,
         network_input_is_1d: bool = True,
-        interpolate_pos_encoding: bool = None,
+        interpolate_pos_encoding: bool = False,
     ) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}
