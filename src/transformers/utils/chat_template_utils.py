@@ -21,6 +21,155 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 
 
+def _get_json_schema_type(param_type):
+    if param_type == int:
+        return {"type": "integer"}
+    elif param_type == float:
+        return {"type": "number"}
+    elif param_type == str:
+        return {"type": "string"}
+    elif param_type == bool:
+        return {"type": "boolean"}
+    elif param_type == Any:
+        return {}
+    else:
+        return {"type": "object"}
+
+
+def _parse_type_hint(hint):
+    origin = get_origin(hint)
+    args = get_args(hint)
+
+    if origin is None:
+        return _get_json_schema_type(hint)
+
+    if origin is Union:
+        # If it's a union of basic types, we can express that as a simple list in the schema
+        if all(t in BASIC_TYPES for t in args):
+            return_dict = {"type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]}
+            if len(return_dict["type"]) == 1:
+                return_dict["type"] = return_dict["type"][0]
+        else:
+            # A union of more complex types requires us to recurse into each subtype
+            return_dict = {
+                "anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)],
+            }
+            if len(return_dict["anyOf"]) == 1:
+                return_dict = return_dict["anyOf"][0]
+        if type(None) in args:
+            return_dict["nullable"] = True
+        return return_dict
+
+    if origin is list:
+        if not args:
+            return {"type": "array"}
+
+        # Similarly to unions, a list of basic types can be expressed as a list in the schema
+        if all(t in BASIC_TYPES for t in args):
+            items = {"type": [_get_json_schema_type(t)["type"] for t in args if t != type(None)]}
+            if len(items["type"]) == 1:
+                items["type"] = items["type"][0]
+        else:
+            # And a list of more complex types requires us to recurse into each subtype again
+            items = {"anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)]}
+            if len(items["anyOf"]) == 1:
+                items = items["anyOf"][0]
+
+        return_dict = {"type": "array", "items": items}
+
+        if type(None) in args:
+            return_dict["nullable"] = True
+
+        return return_dict
+
+    if origin is tuple:
+        if not args:
+            return {"type": "array"}
+        if len(args) == 1:
+            raise ValueError(
+                "Tuple type hints should only be used when the argument has a fixed length and each "
+                f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
+                "This should be replaced with an unwrapped type hint instead like "
+                f"{args[0]}. Alternatively, if the "
+                "function can actually take a tuple with multiple elements, please either indicate "
+                f"each element type (e.g. Tuple[{args[0]}, {args[0]}]), "
+                f"or if the input can be variable length, use List[{args[0]}] instead."
+            )
+        if ... in args:
+            raise ValueError(
+                "'...' is not supported in Tuple type hints. Use List[] types for variable-length" " inputs instead."
+            )
+        return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
+
+    if origin is dict:
+        # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
+        # However, we can specify the type of the dict values with "additionalProperties"
+        out = {"type": "object"}
+        if len(args) == 2:
+            out["additionalProperties"] = _parse_type_hint(args[1])
+        return out
+
+    raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
+
+
+def _convert_type_hints_to_json_schema(func):
+    type_hints = get_type_hints(func)
+    signature = inspect.signature(func)
+    required = []
+    for param_name, param in signature.parameters.items():
+        if param.annotation == inspect.Parameter.empty:
+            raise ValueError(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+        if param.default == inspect.Parameter.empty:
+            required.append(param_name)
+
+    properties = {}
+    for param_name, param_type in type_hints.items():
+        properties[param_name] = _parse_type_hint(param_type)
+
+    schema = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
+
+    return schema
+
+
+def parse_google_format_docstring(docstring):
+    """
+    Parses a Google-style docstring to extract the function description,
+    argument descriptions, and return description.
+
+    Args:
+        docstring (str): The docstring to parse.
+
+    Returns:
+        dict: A dictionary containing the function description, arguments, and return description.
+    """
+    # Regular expressions to match the sections
+    description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
+    args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+    returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
+
+    # Extract the sections
+    description_match = description_re.search(docstring)
+    args_match = args_re.search(docstring)
+    returns_match = returns_re.search(docstring)
+
+    # Clean and store the sections
+    description = description_match.group(1).strip() if description_match else None
+    args = args_match.group(1).strip() if args_match else None
+    returns = returns_match.group(1).strip() if returns_match else None
+
+    # Parsing the arguments into a dictionary
+    args_dict = {}
+    if args is not None:
+        arg_lines = args.split("\n")
+        for line in arg_lines:
+            arg_name, arg_desc = line.split(":", 1)
+            args_dict[arg_name.strip()] = arg_desc.strip()
+
+    return description, args_dict, returns
+
+
 def get_json_schema(func):
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
@@ -128,152 +277,3 @@ def get_json_schema(func):
     if return_dict is not None:
         output["return"] = return_dict
     return output
-
-
-def parse_google_format_docstring(docstring):
-    """
-    Parses a Google-style docstring to extract the function description,
-    argument descriptions, and return description.
-
-    Args:
-        docstring (str): The docstring to parse.
-
-    Returns:
-        dict: A dictionary containing the function description, arguments, and return description.
-    """
-    # Regular expressions to match the sections
-    description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
-    args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
-    returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
-
-    # Extract the sections
-    description_match = description_re.search(docstring)
-    args_match = args_re.search(docstring)
-    returns_match = returns_re.search(docstring)
-
-    # Clean and store the sections
-    description = description_match.group(1).strip() if description_match else None
-    args = args_match.group(1).strip() if args_match else None
-    returns = returns_match.group(1).strip() if returns_match else None
-
-    # Parsing the arguments into a dictionary
-    args_dict = {}
-    if args is not None:
-        arg_lines = args.split("\n")
-        for line in arg_lines:
-            arg_name, arg_desc = line.split(":", 1)
-            args_dict[arg_name.strip()] = arg_desc.strip()
-
-    return description, args_dict, returns
-
-
-def _convert_type_hints_to_json_schema(func):
-    type_hints = get_type_hints(func)
-    signature = inspect.signature(func)
-    required = []
-    for param_name, param in signature.parameters.items():
-        if param.annotation == inspect.Parameter.empty:
-            raise ValueError(f"Argument {param.name} is missing a type hint in function {func.__name__}")
-        if param.default == inspect.Parameter.empty:
-            required.append(param_name)
-
-    properties = {}
-    for param_name, param_type in type_hints.items():
-        properties[param_name] = _parse_type_hint(param_type)
-
-    schema = {"type": "object", "properties": properties}
-    if required:
-        schema["required"] = required
-
-    return schema
-
-
-def _parse_type_hint(hint):
-    origin = get_origin(hint)
-    args = get_args(hint)
-
-    if origin is None:
-        return _get_json_schema_type(hint)
-
-    if origin is Union:
-        # If it's a union of basic types, we can express that as a simple list in the schema
-        if all(t in BASIC_TYPES for t in args):
-            return_dict = {"type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]}
-            if len(return_dict["type"]) == 1:
-                return_dict["type"] = return_dict["type"][0]
-        else:
-            # A union of more complex types requires us to recurse into each subtype
-            return_dict = {
-                "anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)],
-            }
-            if len(return_dict["anyOf"]) == 1:
-                return_dict = return_dict["anyOf"][0]
-        if type(None) in args:
-            return_dict["nullable"] = True
-        return return_dict
-
-    if origin is list:
-        if not args:
-            return {"type": "array"}
-
-        # Similarly to unions, a list of basic types can be expressed as a list in the schema
-        if all(t in BASIC_TYPES for t in args):
-            items = {"type": [_get_json_schema_type(t)["type"] for t in args if t != type(None)]}
-            if len(items["type"]) == 1:
-                items["type"] = items["type"][0]
-        else:
-            # And a list of more complex types requires us to recurse into each subtype again
-            items = {"anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)]}
-            if len(items["anyOf"]) == 1:
-                items = items["anyOf"][0]
-
-        return_dict = {"type": "array", "items": items}
-
-        if type(None) in args:
-            return_dict["nullable"] = True
-
-        return return_dict
-
-    if origin is tuple:
-        if not args:
-            return {"type": "array"}
-        if len(args) == 1:
-            raise ValueError(
-                "Tuple type hints should only be used when the argument has a fixed length and each "
-                f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
-                "This should be replaced with an unwrapped type hint instead like "
-                f"{args[0]}. Alternatively, if the "
-                "function can actually take a tuple with multiple elements, please either indicate "
-                f"each element type (e.g. Tuple[{args[0]}, {args[0]}]), "
-                f"or if the input can be variable length, use List[{args[0]}] instead."
-            )
-        if ... in args:
-            raise ValueError(
-                "'...' is not supported in Tuple type hints. Use List[] types for variable-length" " inputs instead."
-            )
-        return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
-
-    if origin is dict:
-        # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
-        # However, we can specify the type of the dict values with "additionalProperties"
-        out = {"type": "object"}
-        if len(args) == 2:
-            out["additionalProperties"] = _parse_type_hint(args[1])
-        return out
-
-    raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
-
-
-def _get_json_schema_type(param_type):
-    if param_type == int:
-        return {"type": "integer"}
-    elif param_type == float:
-        return {"type": "number"}
-    elif param_type == str:
-        return {"type": "string"}
-    elif param_type == bool:
-        return {"type": "boolean"}
-    elif param_type == Any:
-        return {}
-    else:
-        return {"type": "object"}
