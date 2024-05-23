@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -658,6 +659,7 @@ class MistralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
