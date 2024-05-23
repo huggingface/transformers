@@ -271,7 +271,9 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640
-        encoding = image_processor(images=image, return_tensors="pt", do_resize=False, do_pad=False)
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
         encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
@@ -288,14 +290,16 @@ class TvpModelIntegrationTests(unittest.TestCase):
 
         image_processor = self.default_image_processor
         image = prepare_img()  # 480X640
-        encoding = image_processor(images=image, return_tensors="pt", do_resize=False, do_pad=False)
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
         input_ids = torch.tensor([[1, 2]])
         attention_mask = torch.tensor([[1, 1]])
         encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
         encoding.to(torch_device)
 
         with torch.no_grad():
-            outputs = model(**encoding, interpolate_pos_encoding=True)
+            outputs = model(**encoding, interpolate_pos_encoding=True, output_hidden_states=True)
 
-        expected_shape = torch.Size((1, 2))
-        assert outputs.logits.shape == expected_shape
+        expected_shape = torch.Size((1, 1212, 128))
+        assert outputs.hidden_states[-1].shape == expected_shape
