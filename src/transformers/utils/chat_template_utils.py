@@ -1,4 +1,5 @@
 import inspect
+import json
 import re
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
@@ -96,7 +97,12 @@ def get_json_schema(func):
             raise ValueError(
                 f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
             )
-        json_schema["properties"][arg]["description"] = param_descriptions[arg]
+        desc = param_descriptions[arg]
+        enum_choices = re.search(r"\(choices:\s*([^)]+)\)\s*$", desc, flags=re.IGNORECASE)
+        if enum_choices:
+            json_schema["properties"][arg]["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            desc = enum_choices.string[: enum_choices.start()].strip()
+        json_schema["properties"][arg]["description"] = desc
 
     output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:

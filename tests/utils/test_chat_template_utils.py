@@ -335,3 +335,37 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         # Variable length inputs should be specified with List[type], not Tuple[type, ...]
         with self.assertRaises(ValueError):
             get_json_schema(fn)
+
+    def test_enum_extraction(self):
+        def fn(temperature_format: str):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use (Choices: ["celsius", "fahrenheit"])
+
+
+            Returns:
+                The temperature
+            """
+            return -40.0
+
+        # Let's see if that gets correctly parsed as an enum
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "temperature_format": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature format to use",
+                    }
+                },
+                "required": ["temperature_format"],
+            },
+        }
+
+        self.assertEqual(schema, expected_schema)
