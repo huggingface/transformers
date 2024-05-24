@@ -102,7 +102,8 @@ def _parse_type_hint(hint):
         if ... in args:
             raise ValueError(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length" " inputs instead."
+                "Use List[] types for variable-length"
+                " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
 
