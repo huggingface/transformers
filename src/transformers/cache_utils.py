@@ -533,3 +533,8 @@ class SlidingWindowCache(StaticCache):
         self.value_cache[layer_idx] += v_out
 
         return k_out, v_out
+
+    def get_max_length(self) -> Optional[int]:
+        # in theory there is no limit because the sliding window size is fixed
+        # no matter how long the sentence is
+        return None
