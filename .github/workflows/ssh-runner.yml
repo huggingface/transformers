@@ -10,7 +10,7 @@ on:
         description: 'Name of the Docker image'
         required: true
       num_gpus:
-        description: 'Type of runner to test (`single` or `multi`)'
+        description: 'Type of the number of gpus to use (`single` or `multi`)'
         required: true
 
 env:
