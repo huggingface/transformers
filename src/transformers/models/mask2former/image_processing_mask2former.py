@@ -15,7 +15,6 @@
 """Image processor class for Mask2Former."""
 
 import math
-import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -50,6 +49,7 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -396,6 +396,9 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
+    @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
+    @deprecate_kwarg("max_size", version="4.27.0")
     def __init__(
         self,
         do_resize: bool = True,
@@ -411,31 +414,9 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ):
-        if "size_divisibility" in kwargs:
-            warnings.warn(
-                "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisor` instead.",
-                FutureWarning,
-            )
-            size_divisor = kwargs.pop("size_divisibility")
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
-                " instead.",
-                FutureWarning,
-            )
-            # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
-            # `size` can still be pass in as an int
-            self._max_size = kwargs.pop("max_size")
-        else:
-            self._max_size = 1333
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
+        # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
+        # `size` can still be pass in as an int
+        self._max_size = kwargs.pop("max_size", 1333)
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
@@ -482,12 +463,13 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         if "max_size" in kwargs:
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "size_divisibility" in kwargs:
-            image_processor_dict["size_divisibility"] = kwargs.pop("size_divisibility")
+            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
         if "reduce_labels" in image_processor_dict:
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
+    @deprecate_kwarg("max_size", version="4.27.0")
     def resize(
         self,
         image: np.ndarray,
@@ -517,15 +499,10 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+
+        # Deprecated, backward compatibility
+        max_size = kwargs.pop("max_size", None)
+
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size, max_size = size["shortest_edge"], size["longest_edge"]
@@ -702,6 +679,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             segmentation_map = segmentation_map.squeeze(0)
         return segmentation_map
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
+    @deprecate_kwarg("pad_and_return_pixel_mask", version="4.41.0")
     def preprocess(
         self,
         images: ImageInput,
@@ -723,19 +702,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
-                FutureWarning,
-            )
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use"
-                " `do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False, max_size=self._max_size)
