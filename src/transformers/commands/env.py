@@ -26,6 +26,7 @@ from ..utils import (
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
+    is_torch_npu_available,
 )
 from . import BaseTransformersCLICommand
 
@@ -88,6 +89,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
             pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
+            pt_npu_available = is_torch_npu_available()
 
         tf_version = "not installed"
         tf_cuda_available = "NA"
@@ -132,6 +134,11 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
+        if pt_cuda_available:
+            info["GPU type"] = torch.cuda.get_device_name()
+        elif pt_npu_available:
+            info["NPU type"] = torch.npu.get_device_name()
+            info["CANN version"] = torch.version.cann
 
         print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")
         print(self.format_dict(info))
