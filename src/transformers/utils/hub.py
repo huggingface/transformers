@@ -77,7 +77,7 @@ from .logging import tqdm
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
+_is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
 
 def is_offline_mode():
