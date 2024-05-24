@@ -139,6 +139,9 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
             Pairs of keypoints which are mirrored (for example, left ear -- right ear).
         target_type (`str`, *optional*, defaults to `"GaussianHeatmap"`):
             Target type to use. Can be GaussianHeatmap or CombinedTarget.
+            GaussianHeatmap: Classification target with gaussian distribution.
+            CombinedTarget: The combination of classification target (response map) and regression target (offset map).
+            Paper ref: Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
     Returns:
         torch.Tensor: heatmaps that flipped back to the original image

@@ -28,7 +28,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import ViTPoseForPoseEstimation
 

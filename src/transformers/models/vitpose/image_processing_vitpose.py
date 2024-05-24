@@ -149,28 +149,33 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
         num_keypoints: K
 
     Args:
-        coords (np.ndarray[K, ndims]):
+        coords (`np.ndarray[K, ndims]`):
 
             * If ndims=2, corrds are predicted keypoint location.
             * If ndims=4, corrds are composed of (x, y, scores, tags)
             * If ndims=5, corrds are composed of (x, y, scores, tags,
               flipped_tags)
 
-        center (np.ndarray[2, ]): Center of the bounding box (x, y).
-        scale (np.ndarray[2, ]): Scale of the bounding box
-            wrt [width, height].
-        output_size (np.ndarray[2, ] | list(2,)):
+        center (`np.ndarray[2,]`):
+            Center of the bounding box (x, y).
+        scale (`np.ndarray[2,]`):
+            Scale of the bounding box wrt [width, height].
+        output_size (`np.ndarray[2,] or `List(2,)`):
             Size of the destination heatmaps.
-        use_udp (bool):
+        use_udp (`bool`, *optional*, defaults to `False`):
             Whether to use unbiased data processing.
 
     Returns:
         np.ndarray: Predicted coordinates in the images.
     """
-    assert coords.shape[1] in (2, 4, 5)
-    assert len(center) == 2
-    assert len(scale) == 2
-    assert len(output_size) == 2
+    if coords.shape[1] not in (2, 4, 5):
+        raise ValueError("Coordinates need to have either 2, 4 or 5 dimensions.")
+    if len(center) != 2:
+        raise ValueError("Center needs to have 2 elements, one for x and one for y.")
+    if len(scale) != 2:
+        raise ValueError("Scale needs to consist of a width and height")
+    if len(output_size) != 2:
+        raise ValueError("Output size needs to consist of a width and height")
 
     # Recover the scale which is normalized by a factor of 200.
     scale = scale * 200.0
@@ -315,12 +320,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             else to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
         )
         image = cv2.warpAffine(cv2_image, transformation, size, flags=cv2.INTER_LINEAR)
-        # transform image back to input_data_format
-        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
 
-        # move back to input_data_format
-        if data_format is not None:
-            image = to_channel_dimension_format(image, data_format, input_data_format)
+        image = to_channel_dimension_format(image, data_format, ChannelDimension.LAST)
 
         return image
 
@@ -468,28 +469,11 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Center of the bounding box (x, y).
             scale (np.ndarray[N, 2]):
                 Scale of the bounding box wrt height/width.
-            post_process (str/None):
-                Choice of methods to post-process heatmaps.
-                Currently supported: None, 'default', 'unbiased', 'megvii'.
-            unbiased (bool)
-                Option to use unbiased decoding. Mutually exclusive with megvii.
-                Note: this arg is deprecated and unbiased=True can be replaced
-                by post_process='unbiased'. Paper ref: Zhang et al. Distribution-Aware Coordinate
-                Representation for Human Pose Estimation (CVPR 2020).
             kernel (int):
-                aussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
+                Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
-            valid_radius_factor (float):
-                The radius factor of the positive area in classification heatmap for UDP.
-            use_udp (bool):
+            use_udp (`bool`, *optional*, defaults to `False`):
                 Use unbiased data processing.
-            target_type (str):
-                'GaussianHeatmap' or 'CombinedTarget'.
-                GaussianHeatmap: Classification target with gaussian distribution.
-                CombinedTarget: The combination of classification target
-                (response map) and regression target (offset map).
-                Paper ref: Huang et al. The Devil is in the Details: Delving into
-                Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
         Returns:
             tuple: A tuple containing keypoint predictions and scores.
