@@ -21,6 +21,7 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_split_re = re.compile(r"(?:^|\n)\s*(\w+)\s*(?:\(\w+\))?:\s*(.*?)\s*(?=\n\s*\w|\Z)", re.DOTALL)
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
@@ -155,16 +156,16 @@ def parse_google_format_docstring(docstring):
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    args = args_match.group(1).strip() if args_match else None
+    docstring_args = args_match.group(1).strip() if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
-    args_dict = {}
-    if args is not None:
-        arg_lines = args.split("\n")
-        for line in arg_lines:
-            arg_name, arg_desc = line.split(":", 1)
-            args_dict[arg_name.strip()] = arg_desc.strip()
+    if docstring_args is not None:
+        docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
+        matches = args_split_re.findall(docstring_args)
+        args_dict = {match[0]: match[1].replace("\n", " ").strip() for match in matches}
+    else:
+        args_dict = {}
 
     return description, args_dict, returns
 

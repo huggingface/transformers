@@ -383,3 +383,35 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
 
         self.assertEqual(schema, expected_schema)
+
+    def test_multiline_docstring_with_types(self):
+        def fn(x: int, y: int):
+            """
+            Test function
+
+            Args:
+                x (int): The first input
+
+                y (int): The second input. This is a longer description
+                         that spans multiple lines with indentation and stuff.
+
+            Returns:
+                God knows what
+            """
+            pass
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The first input"},
+                    "y": {"type": "integer", "description": "The second input. This is a longer description"},
+                },
+                "required": ["x", "y"],
+            },
+        }
+
+        self.assertEqual(schema, expected_schema)
