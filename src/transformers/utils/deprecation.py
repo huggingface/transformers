@@ -1,12 +1,11 @@
-import packaging.version
-
 from functools import wraps
 from typing import Optional
 from warnings import warn
 
+import packaging.version
 
-from . import ExplicitEnum
 from .. import __version__
+from . import ExplicitEnum
 
 
 class Action(ExplicitEnum):
@@ -41,7 +40,7 @@ def deprecate_kwarg(
     Raises:
         ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True
     """
-    
+
     deprecated_version = packaging.version.parse(version)
     current_version = packaging.version.parse(__version__)
     is_already_deprecated = current_version >= deprecated_version
@@ -54,10 +53,9 @@ def deprecate_kwarg(
     def wrapper(func):
         @wraps(func)
         def wrapped_func(*args, **kwargs):
-
             minimum_action = None
             message = None
-            
+
             # deprecated kwarg and its new version are set for function call -> replace it with new name
             if old_name in kwargs and new_name is not None and new_name in kwargs:
                 minimum_action = Action.RAISE if raise_if_both_names else Action.NOTIFY
@@ -89,5 +87,5 @@ def deprecate_kwarg(
             return func(*args, **kwargs)
 
         return wrapped_func
-            
+
     return wrapper
