@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIP model."""
-
+"""PyTorch CLIP model."""
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
@@ -1135,8 +1134,10 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp().to(text_embeds.device)
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * logit_scale.to(
+            text_embeds.device
+        )
         logits_per_image = logits_per_text.t()
 
         loss = None

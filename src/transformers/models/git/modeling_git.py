@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch GIT model."""
 
-
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union

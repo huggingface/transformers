@@ -209,11 +209,15 @@ class WhisperGenerationMixin:
             # 2. num_frames is different, compute the DTW matrix for each sample sequentially
 
             # we're using np.unique because num_frames can be int/list/tuple
-            if len(np.unique(num_frames)) == 1:
-                # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
-                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
-
+            if isinstance(num_frames, int):
                 weights = weights[..., : num_frames // 2]
+
+            elif isinstance(num_frames, (list, tuple, np.ndarray)) and len(np.unique(num_frames)) == 1:
+                weights = weights[..., : num_frames[0] // 2]
+
+            elif isinstance(num_frames, (torch.Tensor)) and len(torch.unique(num_frames)) == 1:
+                weights = weights[..., : num_frames[0] // 2]
+
             else:
                 # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
@@ -231,7 +235,7 @@ class WhisperGenerationMixin:
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray, torch.Tensor)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
@@ -475,6 +479,7 @@ class WhisperGenerationMixin:
                 "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
                 FutureWarning,
             )
+
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -779,11 +784,11 @@ class WhisperGenerationMixin:
                     del generate_kwargs[key]
             seek_outputs = super().generate(
                 segment_input,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
@@ -1128,12 +1133,12 @@ class WhisperGenerationMixin:
             forced_decoder_ids = config.forced_decoder_ids
 
         if forced_decoder_ids is not None and task is not None:
-            logger.info(
+            logger.warning_once(
                 f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of task={task}."
             )
             forced_decoder_ids = None
         elif forced_decoder_ids is not None and language is not None:
-            logger.info(
+            logger.warning_once(
                 f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of language={language}."
             )
             forced_decoder_ids = None

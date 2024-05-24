@@ -21,7 +21,6 @@ import os.path
 import random
 import re
 import tempfile
-import unittest
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -444,7 +443,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -457,7 +455,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         with tempfile.TemporaryDirectory() as saved_model_path:
@@ -471,7 +468,6 @@ class ModelTesterMixin:
     @slow
     @require_accelerate
     @mark.accelerate_tests
-    @unittest.skip("Need to fix since we have a device mismatch")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         with tempfile.TemporaryDirectory() as saved_model_path:
             for model_class in self.all_model_classes:
@@ -482,6 +478,8 @@ class ModelTesterMixin:
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
+        from accelerate.utils.modeling import named_module_tensors
+
         # Load the low usage and the normal models.
         model_low_usage, loading_info = model_class.from_pretrained(
             saved_model_path,
@@ -496,15 +494,12 @@ class ModelTesterMixin:
         # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
         # subsequently loaded with the correct values and onto the correct device. We check if there are any
         # remaining params that were not properly loaded.
-        for name, param in model_low_usage.named_parameters():
+        for name, tensor in named_module_tensors(model_low_usage, recurse=True):
             self.assertNotEqual(
-                param.device,
+                tensor.device,
                 torch.device("meta"),
-                "Parameter '" + name + "' has not been properly loaded and has device=meta.",
+                "Tensor '" + name + "' has not been properly loaded and has device=meta.",
             )
-
-        # Tests moving the model to a device other than meta.
-        model_low_usage.to(torch_device)
 
         # Check that the parameters are equal.
         for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
@@ -4015,6 +4010,47 @@ class ModelTesterMixin:
                     _ = model(**inputs_dict)
 
     @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_can_compile_dynamic(self):
+        compute_capability = torch.cuda.get_device_capability()
+        major, _ = compute_capability
+
+        if not torch.version.cuda or major < 8:
+            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            if config.model_type in ["dbrx"]:
+                self.skipTest(
+                    "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
+                )
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model.to(torch_device)
+
+                # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
+                # on input tensors will be required. `mark_dynamic` currently raises inconsistent shape errors.
+                model = torch.compile(model, dynamic=True)
+
+                inputs_dict.pop("attention_mask", None)
+                inputs_dict.pop("decoder_attention_mask", None)
+                for name, inp in inputs_dict.items():
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                        inputs_dict[name] = inp.to(torch.float16)
+
+                # use no_grad to save some memory
+                with torch.no_grad():
+                    _ = model(**inputs_dict)
+
+    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
@@ -4371,6 +4407,8 @@ class ModelTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            if getattr(config, "sliding_window", 0) > 0:
+                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
             (
