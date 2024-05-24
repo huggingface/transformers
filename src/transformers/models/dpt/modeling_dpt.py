@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DPT (Dense Prediction Transformers) model.
+"""PyTorch DPT (Dense Prediction Transformers) model.
 
 This implementation is heavily inspired by OpenMMLab's implementation, found here:
 https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_heads/dpt_head.py.
 
 """
-
 
 import collections.abc
 import math
