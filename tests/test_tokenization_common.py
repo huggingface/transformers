@@ -4167,7 +4167,8 @@ class TokenizerTesterMixin:
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:
             return
-
+        # Tests the expected appearance (or absence) of special token in encoded output,
+        # explicit values are not tested because tokenization is model dependent and can change
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "<my_new_token>"
             special_sentence = f"Hey this is a {special_token} token"
@@ -4206,10 +4207,10 @@ class TokenizerTesterMixin:
                 self.assertTrue(special_token_id not in py_tokens_output)
                 self.assertTrue(special_token_id not in rust_tokens_output)
 
-                with tempfile.mkdtemp() as tmp_dir
+                with tempfile.mkdtemp() as tmp_dir:
                     tokenizer_py.save_pretrained(tmp_dir)
                     fast_from_saved = self.tokenizer_class.from_pretrained(tmp_dir)
-    
+
                 output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
                 self.assertTrue(special_token not in output_tokens_reloaded_split)
 
