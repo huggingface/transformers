@@ -28,7 +28,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import ViTPoseBackboneConfig, ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
-from transformers.image_transforms import coco_to_pascal_voc
+from transformers.models.vitpose.image_processing_vitpose import coco_to_pascal_voc
 
 
 def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor):
@@ -40,14 +40,12 @@ def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_pro
         centers[i, :] = img_metas[i]["center"]
         scales[i, :] = img_metas[i]["scale"]
 
-    preds, maxvals = image_processor.keypoints_from_heatmaps(
-        output_heatmap, center=centers, scale=scales, use_udp=True
-    )
+    preds, scores = image_processor.keypoints_from_heatmaps(output_heatmap, center=centers, scale=scales, use_udp=True)
 
     all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
     all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
     all_preds[:, :, 0:2] = preds[:, :, 0:2]
-    all_preds[:, :, 2:3] = maxvals
+    all_preds[:, :, 2:3] = scores
     all_boxes[:, 0:2] = centers[:, 0:2]
     all_boxes[:, 2:4] = scales[:, 0:2]
     all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)

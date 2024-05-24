@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import box_to_center_and_scale, coco_to_pascal_voc, to_channel_dimension_format
+from ...image_transforms import box_to_center_and_scale, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -46,6 +46,27 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
+def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from the COCO format to the Pascal VOC format.
+
+    In other words, converts from (top_left_x, top_left_y, width, height) format
+    to (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+
+    Args:
+        bboxes (`ndarray` of shape `(batch_size, 4)):
+            Bounding boxes in COCO format.
+
+    Returns:
+        `np.ndarray` of shape `(batch_size, 4) in Pascal VOC format.
+    """
+    bbox_xyxy = bboxes.copy()
+    bbox_xyxy[:, 2] = bbox_xyxy[:, 2] + bbox_xyxy[:, 0] - 1
+    bbox_xyxy[:, 3] = bbox_xyxy[:, 3] + bbox_xyxy[:, 1] - 1
+
+    return bbox_xyxy
+
+
 def _get_max_preds(heatmaps):
     """Get keypoint predictions from score maps.
 
@@ -56,8 +77,10 @@ def _get_max_preds(heatmaps):
     Returns:
         tuple: A tuple containing aggregated results.
 
-        - preds (np.ndarray[N, K, 2]): Predicted keypoint location.
-        - maxvals (np.ndarray[N, K, 1]): Scores (confidence) of the keypoints.
+        - preds (np.ndarray[N, K, 2]):
+            Predicted keypoint location.
+        - scores (np.ndarray[N, K, 1]):
+            Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
         raise ValueError("Heatmaps should be numpy.ndarray")
@@ -67,14 +90,14 @@ def _get_max_preds(heatmaps):
     batch_size, num_keypoints, _, width = heatmaps.shape
     heatmaps_reshaped = heatmaps.reshape((batch_size, num_keypoints, -1))
     idx = np.argmax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
-    maxvals = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
+    scores = np.amax(heatmaps_reshaped, 2).reshape((batch_size, num_keypoints, 1))
 
     preds = np.tile(idx, (1, 1, 2)).astype(np.float32)
     preds[:, :, 0] = preds[:, :, 0] % width
     preds[:, :, 1] = preds[:, :, 1] // width
 
-    preds = np.where(np.tile(maxvals, (1, 1, 2)) > 0.0, preds, -1)
-    return preds, maxvals
+    preds = np.where(np.tile(scores, (1, 1, 2)) > 0.0, preds, -1)
+    return preds, scores
 
 
 def post_dark_udp(coords, batch_heatmaps, kernel=3):
@@ -480,7 +503,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
             - preds (np.ndarray[batch_size, num_keypoints, 2]):
                 Predicted keypoint location in images.
-            - maxvals (np.ndarray[batch_size, num_keypoints, 1]):
+            - scores (np.ndarray[batch_size, num_keypoints, 1]):
                 Scores (confidence) of the keypoints.
         """
         # Avoid mutation
@@ -488,7 +511,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         batch_size, num_keypoints, height, width = heatmaps.shape
 
-        preds, maxvals = _get_max_preds(heatmaps)
+        preds, scores = _get_max_preds(heatmaps)
 
         preds = post_dark_udp(preds, heatmaps, kernel=kernel)
 
@@ -496,7 +519,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             preds[i] = transform_preds(preds[i], center[i], scale[i], [width, height], use_udp=use_udp)
 
-        return preds, maxvals
+        return preds, scores
 
     def post_process_pose_estimation(self, outputs, boxes, kernel_size=11, use_udp=True):
         """
@@ -523,14 +546,14 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             centers[i, :] = center
             scales[i, :] = scale
 
-        preds, maxvals = self.keypoints_from_heatmaps(
+        preds, scores = self.keypoints_from_heatmaps(
             outputs.heatmaps, centers, scales, kernel=kernel_size, use_udp=use_udp
         )
 
         all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
         all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
         all_preds[:, :, 0:2] = preds[:, :, 0:2]
-        all_preds[:, :, 2:3] = maxvals
+        all_preds[:, :, 2:3] = scores
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
         all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
