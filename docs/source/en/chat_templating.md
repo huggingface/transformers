@@ -290,7 +290,9 @@ Each function you pass to the `tools` argument of `apply_chat_template` is conve
 [JSON schema](https://json-schema.org/learn/getting-started-step-by-step. These schemas
 are then passed to the model chat template. In other words, tool-use models do not see your functions directly, and they
 never see the actual code inside them. What they care about is the function **definitions** and the **arguments** they
-need to pass to them - they care about what the tools do and how to use them, not how they work!
+need to pass to them - they care about what the tools do and how to use them, not how they work! It is up to you
+to read their outputs, detect if they have requested to use a tool, pass their arguments to the tool function, and
+return the response in the chat.
 
 Generating JSON schemas to pass to the template should be automatic and invisible as long as your functions
 follow the specification above, but if you encounter problems, or you simply want more control over the conversion, 
