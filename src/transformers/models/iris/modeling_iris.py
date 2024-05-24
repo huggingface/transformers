@@ -186,7 +186,7 @@ class TokenizerEncoderOutput:
     tokens: torch.LongTensor
 
 
-class Slicer(nn.Module):
+class IrisSlicer(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
         super().__init__()
         self.block_size = block_mask.size(0)
