@@ -1835,6 +1835,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             tool_schemas = None
 
+        if documents is not None:
+            for document in documents:
+                if not isinstance(document, dict):
+                    raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
+
         rendered = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         for chat in conversations:
