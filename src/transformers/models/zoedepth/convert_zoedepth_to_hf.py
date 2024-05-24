@@ -19,7 +19,6 @@ Original logits where obtained by running the following code:
 !python inference.py
 """
 
-
 import argparse
 from pathlib import Path
 
