@@ -41,7 +41,6 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import (
@@ -53,6 +52,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.kwargs_validation import filter_out_non_signature_kwargs
 
 
 logger = logging.get_logger(__name__)
@@ -418,12 +418,15 @@ class OneFormerImageProcessor(BaseImageProcessor):
             JSON file containing class information for the dataset. See `shi-labs/oneformer_demo/cityscapes_panoptic.json` for an example.
         num_text (`int`, *optional*):
             Number of text entries in the text input list.
+        num_labels (`int`, *optional*):
+            The number of labels in the segmentation map.
     """
 
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @deprecate_kwarg("max_size", version="4.27.0")
+    @filter_out_non_signature_kwargs(extra=["max_size"])
     def __init__(
         self,
         do_resize: bool = True,
@@ -439,8 +442,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         repo_path: Optional[str] = "shi-labs/oneformer_demo",
         class_info_file: str = None,
         num_text: Optional[int] = None,
+        num_labels: Optional[int] = None,
         **kwargs,
     ):
+        super().__init__()
+
         # Deprecated, backward compatibility
         self._max_size = kwargs.pop("max_size", 1333)
 
@@ -450,7 +456,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         if class_info_file is None:
             raise ValueError("You must provide a `class_info_file`")
 
-        super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -465,25 +470,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.repo_path = repo_path
         self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
         self.num_text = num_text
-        self._valid_processor_keys = [
-            "images",
-            "task_inputs",
-            "segmentation_maps",
-            "instance_id_to_semantic_id",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "ignore_index",
-            "do_reduce_labels",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
+        self.num_labels = num_labels
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -496,6 +483,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         return super().from_dict(image_processor_dict, **kwargs)
 
     @deprecate_kwarg("max_size", version="4.27.0")
+    @filter_out_non_signature_kwargs(extra=["max_size"])
     def resize(
         self,
         image: np.ndarray,
@@ -677,6 +665,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             segmentation_map = segmentation_map.squeeze(0)
         return segmentation_map
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -696,7 +685,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> BatchFeature:
         if task_inputs is None:
             # Default value
@@ -719,8 +707,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
