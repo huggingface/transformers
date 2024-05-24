@@ -3402,6 +3402,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 "revision": revision,
                                 "proxies": proxies,
                                 "token": token,
+                                "cache_dir": cache_dir,
+                                "local_files_only": local_files_only,
                             }
                             cached_file_kwargs = {
                                 "cache_dir": cache_dir,
@@ -3429,6 +3431,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             "revision": revision,
                             "proxies": proxies,
                             "token": token,
+                            "cache_dir": cache_dir,
+                            "local_files_only": local_files_only,
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
