@@ -57,11 +57,6 @@ _CHECKPOINT_FOR_DOC = "ruffy369/iris-breakout"
 _CONFIG_FOR_DOC = "IrisConfig"
 
 
-IRIS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ruffy369/iris-breakout",
-    # See all Iris models at https://huggingface.co/models?filter=iris
-]
-
 
 @dataclass
 class IrisOutput(ModelOutput):
