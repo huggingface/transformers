@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for UDOP model."""
-
+"""Tokenization classes for UDOP model."""
 
 import os
 from shutil import copyfile
@@ -426,6 +425,11 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutxlm.tokenization_layoutxlm_fast.LayoutXLMTokenizerFast.tokenize
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
+
+        self._tokenizer.encode_special_tokens = kwargs.pop(
+            "split_special_tokens", self._tokenizer.encode_special_tokens
+        )
+
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
         )

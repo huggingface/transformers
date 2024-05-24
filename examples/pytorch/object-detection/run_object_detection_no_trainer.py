@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning 🤗 Transformers model for object detection with Accelerate."""
+"""Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse
 import json
@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.42.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -120,7 +120,10 @@ def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]
 
 # Copied from examples/pytorch/object-detection/run_object_detection.augment_and_transform_batch
 def augment_and_transform_batch(
-    examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
+    examples: Mapping[str, Any],
+    transform: A.Compose,
+    image_processor: AutoImageProcessor,
+    return_pixel_mask: bool = False,
 ) -> BatchFeature:
     """Apply augmentations and format annotations in COCO format for object detection task"""
 
@@ -141,6 +144,9 @@ def augment_and_transform_batch(
 
     # Apply the image processor transformations: resizing, rescaling, normalization
     result = image_processor(images=images, annotations=annotations, return_tensors="pt")
+
+    if not return_pixel_mask:
+        result.pop("pixel_mask", None)
 
     return result
 
@@ -473,12 +479,10 @@ def main():
     )
     image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path,
-        # At this moment we recommend using external transform to pad and resize images.
-        # It`s faster and yields much better results for object-detection models.
-        do_pad=False,
-        do_resize=False,
-        # We will save image size parameter in config just for reference
-        size={"longest_edge": args.image_square_size},
+        do_resize=True,
+        size={"max_height": args.image_square_size, "max_width": args.image_square_size},
+        do_pad=True,
+        pad_size={"height": args.image_square_size, "width": args.image_square_size},
         **common_pretrained_args,
     )
 
@@ -486,10 +490,6 @@ def main():
     # Define image augmentations and dataset transforms
     # ------------------------------------------------------------------------------------------------
     max_size = args.image_square_size
-    basic_transforms = [
-        A.LongestMaxSize(max_size=max_size),
-        A.PadIfNeeded(max_size, max_size, border_mode=0, value=(128, 128, 128), position="top_left"),
-    ]
     train_augment_and_transform = A.Compose(
         [
             A.Compose(
@@ -511,12 +511,11 @@ def main():
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
             A.HueSaturationValue(p=0.1),
-            *basic_transforms,
         ],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True, min_area=25),
     )
     validation_transform = A.Compose(
-        basic_transforms,
+        [A.NoOp()],
         bbox_params=A.BboxParams(format="coco", label_fields=["category"], clip=True),
     )
 
