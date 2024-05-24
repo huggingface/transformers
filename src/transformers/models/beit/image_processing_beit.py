@@ -31,11 +31,11 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.kwargs_validation import filter_out_non_signature_kwargs
 
 
 if is_vision_available():
@@ -94,6 +94,7 @@ class BeitImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
+    @filter_out_non_signature_kwargs()
     def __init__(
         self,
         do_resize: bool = True,
@@ -107,9 +108,8 @@ class BeitImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
-        **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__()
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
@@ -125,24 +125,6 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
-        self._valid_processor_keys = [
-            "images",
-            "segmentation_maps",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_reduce_labels",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -323,6 +305,7 @@ class BeitImageProcessor(BaseImageProcessor):
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -341,7 +324,6 @@ class BeitImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -411,8 +393,6 @@ class BeitImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
 

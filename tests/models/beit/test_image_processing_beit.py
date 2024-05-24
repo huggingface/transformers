@@ -273,10 +273,13 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(encoding["labels"].max().item() <= 255)
 
     def test_removed_deprecated_kwargs(self):
-        # test we are not able to create the image processor with the deprecated kwargs
-        image_processor_dict = {**self.image_processor_dict, "reduce_labels": True}
-        with self.assertRaises(ValueError):
-            self.image_processing_class(**image_processor_dict)
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
 
         # test we still support reduce_labels with config
         image_processor = self.image_processing_class.from_dict(image_processor_dict)
