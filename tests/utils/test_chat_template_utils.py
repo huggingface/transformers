@@ -418,7 +418,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
     def test_everything_all_at_once(self):
         def fn(
-            x: str, y: Optional[List[Union[int, str]]], z: Tuple[Union[int, str]] = (42, "hello")
+            x: str, y: Optional[List[Union[int, str]]], z: Tuple[Union[int, str], str] = (42, "hello")
         ) -> Tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
@@ -428,9 +428,9 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                    description and also contains
                    (choices: ["a", "b", "c"])
 
-                y (List[int, str], *optional*): The second input. It's a big list with a single-line description.
+                y (List[Union[int, str], *optional*): The second input. It's a big list with a single-line description.
 
-                z (Tuple[int, str]): The third input. It's some kind of tuple with a default arg.
+                z (Tuple[Union[int, str], str]): The third input. It's some kind of tuple with a default arg.
 
             Returns:
                 The output. The return description is also a big multiline
@@ -439,5 +439,31 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             pass
 
         schema = get_json_schema(fn)
-        breakpoint()
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function with multiple args, and docstring args that we have to strip out.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "string", "description": "The first input. It's got a big multiline"},
+                    "y": {
+                        "type": "array",
+                        "items": {"type": ["integer", "string"]},
+                        "nullable": True,
+                        "description": "The second input. It's a big list with a single-line description.",
+                    },
+                    "z": {
+                        "type": "array",
+                        "prefixItems": [{"type": ["integer", "string"]}, {"type": "string"}],
+                        "description": "The third input. It's some kind of tuple with a default arg.",
+                    },
+                },
+                "required": ["x", "y"],
+            },
+            "return": {
+                "type": "array",
+                "prefixItems": [{"type": "integer"}, {"type": "string"}],
+                "description": "The output. The return description is also a big multiline\n    description that spans multiple lines.",
+            },
+        }
         self.assertEqual(schema, expected_schema)

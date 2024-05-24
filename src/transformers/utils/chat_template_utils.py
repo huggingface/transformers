@@ -21,7 +21,7 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
-args_split_re = re.compile(r"(?:^|\n)\s*(\w+)\s*(?:\(\w+\))?:\s*(.*?)\s*(?=\n\s*\w|\Z)", re.DOTALL)
+args_split_re = re.compile(r"(?:^|\n)\s*(\w+)\s*(?:\([\w\s\[\],.*]+\))?:\s*(.*?)\s*(?=\n\s*\w|\Z)", re.DOTALL)
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
@@ -90,10 +90,10 @@ def _parse_type_hint(hint):
         if not args:
             return {"type": "array"}
         if len(args) == 1:
-            breakpoint()
             raise ValueError(
-                f"The type hint {hint.replace('typing.', '')} is a Tuple with a single element, which we do not "
-                "support as it is rarely necessary. If this input can contain more than one element, we recommend "
+                f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
+                "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
+                "more than one element, we recommend "
                 "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
                 "pass the element directly."
             )
