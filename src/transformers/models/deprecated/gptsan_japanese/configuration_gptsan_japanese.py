@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GPTSAN-japanese model configuration"""
-
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ....configuration_utils import PretrainedConfig
+from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
