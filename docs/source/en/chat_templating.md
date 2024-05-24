@@ -274,13 +274,14 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-In order for this to work correctly, you should use the following conventions, so that the functions can be parsed
-correctly as tools:
+In order for this to work correctly, you should write your functions in the format above, so that they can be parsed
+correctly as tools. Specifically, you should follow these rules:
 
-- Each function should have a descriptive name
-- Every argument should have a type hint
-- The function should have a docstring in the standard Google style (in other words, an initial function description  
-  followed by an `Args:` block that describes the arguments. It is not necessary to include types in the `Args:` block.
+- The function should have a descriptive name
+- Every argument must have a type hint
+- The function must have a docstring in the standard Google style (in other words, an initial function description  
+  followed by an `Args:` block that describes the arguments, unless the function does not have any arguments. 
+  It is not necessary to include types in the `Args:` block.
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
   because most tool-use models ignore them.
 
