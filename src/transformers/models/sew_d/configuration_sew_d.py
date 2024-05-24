@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW-D model configuration"""
+"""SEW-D model configuration"""
 
 import functools
 import operator
@@ -278,11 +278,6 @@ class SEWDConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
-
-    @property
-    def hidden_dropout(self):
-        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
-        return self._hidden_dropout
 
     def to_dict(self):
         """

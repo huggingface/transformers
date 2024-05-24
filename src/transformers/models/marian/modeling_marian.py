@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
-
 import copy
 import math
 from typing import Dict, List, Optional, Tuple, Union

@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Training and inference using the library models for sequence classification on GLUE (Bert, Albert) with PABEE."""
-
+"""Training and inference using the library models for sequence classification on GLUE (Bert, Albert) with PABEE."""
 
 import argparse
 import glob

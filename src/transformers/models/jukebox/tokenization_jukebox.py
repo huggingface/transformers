@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI Jukebox."""
 
-
 import json
 import os
 import re

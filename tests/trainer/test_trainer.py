@@ -63,6 +63,7 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_galore_torch,
     require_intel_extension_for_pytorch,
+    require_lomo,
     require_optuna,
     require_peft,
     require_ray,
@@ -128,9 +129,14 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
 GRAD_ACCUM_KWARGS_VERSION_AVAILABLE = is_accelerate_available("0.28")
+if is_accelerate_available():
+    from accelerate import Accelerator
+    from accelerate.state import AcceleratorState
+
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -1225,6 +1231,49 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             trainer.evaluate()
 
+    @require_lomo
+    @require_torch_gpu
+    def test_lomo(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        previous_params = {n: p.clone() for n, p in tiny_llama.named_parameters()}
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(tmpdir, learning_rate=1e-2, logging_steps=5, optim="lomo", max_steps=20)
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
+        for name, param in tiny_llama.named_parameters():
+            self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
+
+    @require_lomo
+    @require_torch_gpu
+    def test_adalomo(self):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Trainer without inf/nan filter
+            args = TrainingArguments(
+                tmpdir,
+                learning_rate=1e-9,
+                logging_steps=5,
+                optim="adalomo",
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+
+            # Check this works
+            _ = trainer.train()
+
     def test_galore_matched_modules(self):
         regex_patterns = [r".*.attn.*", r".*.mlp.*"]
 
@@ -1968,6 +2017,56 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
                 )
 
+    def test_load_best_model_with_save(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                evaluation_strategy="steps",
+                eval_steps=5,
+                max_steps=9,
+            )
+            trainer.train()
+            # Check that we have the last known step:
+            assert os.path.exists(
+                os.path.join(tmpdir, f"checkpoint-{trainer.state.max_steps}")
+            ), f"Could not find checkpoint-{trainer.state.max_steps}"
+            # And then check the last step
+            assert os.path.exists(os.path.join(tmpdir, "checkpoint-9")), "Could not find checkpoint-9"
+
+        # Now test that using a limit works
+        # Should result in:
+        # - save at step 5 (but is deleted)
+        # - save at step 10 (loaded in at the end when `load_best_model=True`)
+        # - save at step 11
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                save_steps=5,
+                evaluation_strategy="steps",
+                eval_steps=5,
+                load_best_model_at_end=True,
+                save_total_limit=2,
+                max_steps=11,
+            )
+            trainer.train()
+            # Check that we have the last known step:
+            assert os.path.exists(os.path.join(tmpdir, "checkpoint-11")), "Could not find checkpoint-11"
+            # And then check the last multiple
+            assert os.path.exists(os.path.join(tmpdir, "checkpoint-10")), "Could not find checkpoint-10"
+            # Finally check that we don't have an old one
+            assert not os.path.exists(os.path.join(tmpdir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
+
+            # Finally check that the right model was loaded in, checkpoint-10
+            # this goes by the last `eval` step check to do so, so it won't be
+            # the last model *saved*
+            model_state = trainer.model.state_dict()
+            final_model_weights = safetensors.torch.load_file(
+                os.path.join(tmpdir, "checkpoint-10", "model.safetensors")
+            )
+            for k, v in model_state.items():
+                assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
+
     @require_torch_multi_accelerator
     def test_run_seq2seq_double_train_wrap_once(self):
         # test that we don't wrap the model more than once
@@ -2503,7 +2602,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
-        training_args = TrainingArguments(output_dir="./examples", use_cpu=True)
+        training_args = TrainingArguments(output_dir="./examples", use_cpu=True, report_to="none")
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
@@ -2524,6 +2623,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             output_dir="./examples",
             use_cpu=True,
             per_device_eval_batch_size=1,
+            report_to="none",
         )
         trainer = Trainer(
             model=model,
@@ -3059,6 +3159,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "--predict_with_generate",
                 "--ddp_timeout",
                 "60",
+                "--report_to",
+                "none",
             ]
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
@@ -3265,6 +3367,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 eval_dataset = SampleIterableDataset()
                 trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
                 self.assertEqual(trainer.accelerator.split_batches, True)
+
+    def test_accelerator_custom_state(self):
+        AcceleratorState._reset_state(reset_partial_state=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError) as cm:
+                _ = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config={"use_configured_state": True})
+                self.assertIn("Please define this beforehand", str(cm.warnings[0].message))
+            _ = Accelerator()
+            _ = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config={"use_configured_state": True})
+        AcceleratorState._reset_state(reset_partial_state=True)
 
     @require_accelerate_version_min_0_28
     def test_accelerator_config_from_dict_grad_accum_num_steps(self):
