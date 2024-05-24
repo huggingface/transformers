@@ -647,7 +647,7 @@ class PretrainedConfig(PushToHubMixin):
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", None)
+        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
