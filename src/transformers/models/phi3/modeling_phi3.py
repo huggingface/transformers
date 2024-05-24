@@ -710,6 +710,7 @@ class Phi3SdpaAttention(Phi3Attention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        _length=0,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -811,6 +812,7 @@ class Phi3DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        _length=0,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -844,6 +846,7 @@ class Phi3DecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            _length=_length,
         )
 
         hidden_states = residual + self.resid_attn_dropout(attn_outputs)
@@ -1028,6 +1031,7 @@ class Phi3Model(Phi3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        _length=0,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1089,6 +1093,7 @@ class Phi3Model(Phi3PreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    _length=_length,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1261,6 +1266,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        _length = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1306,6 +1312,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            _length=_length,
         )
 
         hidden_states = outputs[0]
@@ -1412,6 +1419,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
+                "_length": int(cache_position[-1]) + 1,
             }
         )
         return model_inputs
