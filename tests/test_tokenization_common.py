@@ -4206,10 +4206,10 @@ class TokenizerTesterMixin:
                 self.assertTrue(special_token_id not in py_tokens_output)
                 self.assertTrue(special_token_id not in rust_tokens_output)
 
-                tmpdirname = tempfile.mkdtemp()
-                tokenizer_py.save_pretrained(tmpdirname)
-                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
-
+                with tempfile.mkdtemp() as tmp_dir
+                    tokenizer_py.save_pretrained(tmp_dir)
+                    fast_from_saved = self.tokenizer_class.from_pretrained(tmp_dir)
+    
                 output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
                 self.assertTrue(special_token not in output_tokens_reloaded_split)
 
