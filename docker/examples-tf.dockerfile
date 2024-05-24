@@ -4,7 +4,7 @@ USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
 RUN apt-get install -y g++ cmake
 ENV VIRTUAL_ENV=/usr/local
-RUN pip --no-cache-dir install uv && uv venv
+RUN pip --no-cache-dir install uv==0.1.45 && uv venv
 RUN uv pip install --no-cache-dir -U pip setuptools albumentations seqeval
 RUN pip install  --upgrade --no-cache-dir "transformers[tf-cpu,sklearn,testing,sentencepiece,tf-speech,vision]"
 RUN uv pip install --no-cache-dir  "protobuf==3.20.3" 
