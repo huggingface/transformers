@@ -42,8 +42,8 @@ class ClassFinder(CSTVisitor):
     def visit_SimpleStatementLine(self, node):
         match node:
             case cst.SimpleStatementLine(body=[cst.Assign(targets=[_], value=_)]):
-                if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
-                    self.assignments[node.body[0]] = node
+                if m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()):
+                    self.assignments[node.body[0].targets[0].target.value] = node
             case cst.SimpleStatementLine(body=[cst.Import(names=[_])]):
                 self.imports[node.body[0].names] = node
             case cst.SimpleStatementLine(body=[cst.ImportFrom(_)]):
@@ -60,9 +60,27 @@ class ClassFinder(CSTVisitor):
                 self.imports[stmt.body[0].names] = node  # match the visit simple statement line to overwrite it
 
     def leave_Call(self, node):
-        if isinstance(self.get_metadata(cst.metadata.ParentNodeProvider, node), cst.Module):
-            # We need to get a dependency graph?
+        if self.python_module.code_for_node(node.func) in self.function_def or node.func.value in self.classes:
+            caller = self.get_metadata(cst.metadata.ScopeProvider,node).parent.name
+            if caller in self.class_dependency_mapping:
+                if node.func.value not in self.class_dependency_mapping[caller] :
+                    self.class_dependency_mapping[caller] += [node.func.value]
+            else:
+                self.class_dependency_mapping[caller] = [node.func.value]
+        elif m.matches(node, m.Call(m.Subscript(value=m.Name()))):
+            caller = self.get_metadata(cst.metadata.ScopeProvider,node).parent.name
+            dep = node.func.value.value
+            if dep in self.assignments:
+                if caller in self.class_dependency_mapping:
+                    if dep not in self.class_dependency_mapping[caller] :
+                        self.class_dependency_mapping[caller] += [dep]
+                else:
+                    self.class_dependency_mapping[caller] = [dep]
+
+    def leave_Name(self, node): 
+        if node.value in self.classes.keys() | self.assignments.keys() | self.function_def.keys():
             pass
+
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def __init__(self, old_name, new_name):
         super().__init__()
@@ -126,6 +144,12 @@ class DiffConverterTransformer(CSTTransformer):
                         tree = cst.parse_module(source_code)
                         self.transformers_imports[full_statement] = tree
                     self.transformers_mapping[self.python_module.code_for_node(imported_.name)] = full_statement
+                if re.search(r"transformers\.models\..*\.configuration_.*", full_statement):
+                    if full_statement not in self.transformers_imports:
+                        source_code = get_module_source_from_name(full_statement)
+                        tree = cst.parse_module(source_code)
+                        self.transformers_imports[full_statement] = tree
+                    self.transformers_mapping[self.python_module.code_for_node(imported_.name)] = full_statement
 
     def visit_ClassDef(self, node: cst.Assign) -> None:
         if m.matches(node.name, m.Name()):
@@ -147,6 +171,11 @@ class DiffConverterTransformer(CSTTransformer):
                     self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[
                         parent_package
                     ].classes[class_name]
+                if self.visited_module[parent_package]:
+                    if class_name in self.visited_module[parent_package].class_dependency_mapping:
+                        # that's were we get all the nodes we need to write.
+                        pass
+
 
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
         match updated_node:
@@ -158,7 +187,7 @@ class DiffConverterTransformer(CSTTransformer):
                     return self.class_mapping[assign]
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-            if re.search(r"transformers\.models\..*\.modeling_.*", full_statement):
+            if re.search(r"transformers\.models\..*\.[modeling|configuration]_.*", full_statement):
                 return updated_node.with_changes(body=[])
 
         return updated_node
@@ -210,7 +239,7 @@ class DiffConverterTransformer(CSTTransformer):
         func_name = None
         if m.matches(original_node.func, m.Name()):
             func_name = original_node.func.value
-        elif isinstance(original_node.func, m.Attribute()):
+        elif m.matches(original_node.func, m.Attribute()):
             func_name = original_node.func.attr.value
 
         if func_name and func_name in self.functions_to_insert and func_name not in self.inserted_functions:
@@ -315,6 +344,9 @@ def convert_file(diff_file):
     with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         f.write(ruffed_code)
 
+    # ruffed_code = fix_ruff(new_mod.config_code)
+    # with open(diff_file.replace("diff_", "modeling_"), "w") as f:
+    #     f.write(ruffed_code)
 
 
 if __name__ == "__main__":

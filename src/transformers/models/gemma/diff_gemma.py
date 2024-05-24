@@ -30,17 +30,19 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
+from transformers.models.llama.configuration_llama import LlamaConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
-from .configuration_gemma import GemmaConfig
 
 
 logger = logging.get_logger(__name__)
 
+
+class GemmaConfig(LlamaConfig):
+    model_type = "gemma"
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
