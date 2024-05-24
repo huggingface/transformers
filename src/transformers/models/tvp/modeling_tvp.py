@@ -246,7 +246,7 @@ class TvpVisualInputEmbedding(nn.Module):
 
         # This interpolation gets triggered ONLY when the input image dim is larger in any dimenstion than the original position embeddings
         if interpolate_pos_encoding and (
-            height > self.max_grid_row_position_embeddings or width > self.max_grid_row_position_embeddings
+            height > self.max_grid_row_position_embeddings or width > self.max_grid_col_position_embeddings
         ):
             grid = grid + self.interpolate_pos_encoding(positional_embeddings, height, width)
         else:
