@@ -137,7 +137,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {
                         "type": "array",
-                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
+                        "items": {"type": "array", "items": {"type": ["string", "integer"]}},
                         "description": "The input",
                     }
                 },
@@ -418,7 +418,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
     def test_everything_all_at_once(self):
         def fn(
-            x: str, y: Optional[List[Union[int, str]]], z: Tuple[Union[int, str], str] = (42, "hello")
+            x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")
         ) -> Tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
@@ -448,13 +448,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     "x": {"type": "string", "description": "The first input. It's got a big multiline"},
                     "y": {
                         "type": "array",
-                        "items": {"type": ["integer", "string"]},
+                        "items": {"type": ["string", "integer"]},
                         "nullable": True,
                         "description": "The second input. It's a big list with a single-line description.",
                     },
                     "z": {
                         "type": "array",
-                        "prefixItems": [{"type": ["integer", "string"]}, {"type": "string"}],
+                        "prefixItems": [{"type": ["string", "integer"]}, {"type": "string"}],
                         "description": "The third input. It's some kind of tuple with a default arg.",
                     },
                 },
