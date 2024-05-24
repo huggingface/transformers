@@ -657,7 +657,7 @@ class IrisNetLinLayer(nn.Module):
 class IrisVgg16(torch.nn.Module):
     def __init__(self, requires_grad: bool = False, pretrained: bool = True) -> None:
         super(IrisVgg16, self).__init__()
-        vgg_pretrained_features = models.IrisVgg16(pretrained=pretrained).features
+        vgg_pretrained_features = models.vgg16(pretrained=pretrained).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
         self.slice3 = torch.nn.Sequential()
@@ -1118,117 +1118,6 @@ class IrisSelfAttention(nn.Module):
 
         return (y, att)
 
-
-class IrisWorldModelEnv:
-    # Define a type alias for gym.Env
-    GymEnv: Type = "gym.Env"
-
-    def __init__(
-        self,
-        tokenizer: torch.nn.Module,
-        world_model: torch.nn.Module,
-        device: Union[str, torch.device],
-        env: Optional[GymEnv] = None,
-    ) -> None:
-        self.device = torch.device(device)
-        self.world_model = world_model.to(self.device).eval()
-        self.tokenizer = tokenizer.to(self.device).eval()
-
-        self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
-
-        self.env = env
-
-    @property
-    def num_observations_tokens(self) -> int:
-        return self._num_observations_tokens
-
-    @torch.no_grad()
-    def reset(self) -> torch.FloatTensor:
-        assert self.env is not None
-        obs = (
-            torchvision.transforms.functional.to_tensor(self.env.reset()).to(self.device).unsqueeze(0)
-        )  # (1, C, H, W) in [0., 1.]
-        return self.reset_from_initial_observations(obs)
-
-    @torch.no_grad()
-    def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0].tokens  # (B, C, H, W) -> (B, K)
-        _, num_observations_tokens = obs_tokens.shape
-        if self.num_observations_tokens is None:
-            self._num_observations_tokens = num_observations_tokens
-
-        _ = self.refresh_keys_values_with_initial_obs_tokens(obs_tokens)
-        self.obs_tokens = obs_tokens
-
-        return self.decode_obs_tokens()
-
-    @torch.no_grad()
-    def refresh_keys_values_with_initial_obs_tokens(self, obs_tokens: torch.LongTensor) -> torch.FloatTensor:
-        n, num_observations_tokens = obs_tokens.shape
-        assert num_observations_tokens == self.num_observations_tokens
-        self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(
-            n=n, max_tokens=self.world_model.config.max_tokens
-        )
-        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)[0]
-        return outputs_wm.output_sequence  # (B, K, E)
-
-    @torch.no_grad()
-    def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
-        assert self.keys_values_wm is not None and self.num_observations_tokens is not None
-        num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
-
-        output_sequence, obs_tokens = [], []
-
-        if self.keys_values_wm.size + num_passes > self.world_model.config.max_tokens:
-            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
-
-        token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
-        token = token.reshape(-1, 1).to(self.device)  # (B, 1)
-
-        for k in range(num_passes):  # assumption that there is only one action token.
-            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)[0]
-            output_sequence.append(outputs_wm.output_sequence)
-
-            if k == 0:
-                reward = (
-                    Categorical(logits=outputs_wm.logits_rewards).sample().float().cpu().numpy().reshape(-1) - 1
-                )  # (B,)
-                done = (
-                    Categorical(logits=outputs_wm.logits_ends).sample().cpu().numpy().astype(bool).reshape(-1)
-                )  # (B,)
-
-            if k < self.num_observations_tokens:
-                token = Categorical(logits=outputs_wm.logits_observations).sample()
-                obs_tokens.append(token)
-
-        output_sequence = torch.cat(output_sequence, dim=1)  # (B, 1 + K, E)
-        self.obs_tokens = torch.cat(obs_tokens, dim=1)  # (B, K)
-
-        obs = self.decode_obs_tokens() if should_predict_next_obs else None
-        return obs, reward, done, None
-
-    @torch.no_grad()
-    def render_batch(self) -> List[Image.Image]:
-        frames = self.decode_obs_tokens().detach().cpu()
-        frames = (frames.permute(0, 2, 3, 1).contiguous()).mul(255).numpy().astype(np.uint8)
-        return [Image.fromarray(frame) for frame in frames]
-
-    @torch.no_grad()
-    def decode_obs_tokens(self) -> List[Image.Image]:
-        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)  # (B, K, E)
-        h = int(np.sqrt(self.num_observations_tokens))
-        z = embedded_tokens.permute(0, 2, 1)
-        z = z.view(z.shape[0], z.shape[1], h, z.shape[2] // h).contiguous()
-
-        rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (B, C, H, W)
-        return torch.clamp(rec, 0, 1)
-
-    @torch.no_grad()
-    def render(self):
-        assert self.obs_tokens.shape == (1, self.num_observations_tokens)
-        return self.render_batch()[0]
-
-
 @dataclass
 class IrisWorldModelOutput:
     output_sequence: torch.FloatTensor
@@ -1369,6 +1258,92 @@ class IrisWorldModel(nn.Module):
         labels_rewards = (rewards.sign() + 1).masked_fill(mask_fill, -100).long()  # Rewards clipped to {-1, 0, 1}
         labels_ends = ends.masked_fill(mask_fill, -100)
         return labels_observations.reshape(-1), labels_rewards.reshape(-1), labels_ends.reshape(-1)
+
+
+class IrisWorldModelImagine:
+    
+    def __init__(
+        self,
+        tokenizer: torch.nn.Module,
+        world_model: torch.nn.Module,
+        device: Union[str, torch.device],
+    ) -> None:
+        self.device = torch.device(device)
+        self.world_model = world_model.to(self.device).eval()
+        self.tokenizer = tokenizer.to(self.device).eval()
+
+        self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
+
+    @property
+    def num_observations_tokens(self) -> int:
+        return self._num_observations_tokens
+
+    @torch.no_grad()
+    def refresh_keys_values_with_initial_obs_tokens(self, obs_tokens: torch.LongTensor) -> torch.FloatTensor:
+        n, num_observations_tokens = obs_tokens.shape
+        assert num_observations_tokens == self.num_observations_tokens
+        self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(
+            n=n, max_tokens=self.world_model.config.max_tokens
+        )
+        outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)[0]
+        return outputs_wm.output_sequence  # (B, K, E)
+
+    @torch.no_grad()
+    def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0].tokens  # (B, C, H, W) -> (B, K)
+        _, num_observations_tokens = obs_tokens.shape
+        if self.num_observations_tokens is None:
+            self._num_observations_tokens = num_observations_tokens
+
+        _ = self.refresh_keys_values_with_initial_obs_tokens(obs_tokens)
+        self.obs_tokens = obs_tokens
+
+        return self.decode_obs_tokens()
+
+    @torch.no_grad()
+    def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
+        assert self.keys_values_wm is not None and self.num_observations_tokens is not None
+        num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
+
+        output_sequence, obs_tokens = [], []
+
+        if self.keys_values_wm.size + num_passes > self.world_model.config.max_tokens:
+            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
+
+        token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
+        token = token.reshape(-1, 1).to(self.device)  # (B, 1)
+
+        for k in range(num_passes):  # assumption that there is only one action token.
+            outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)[0]
+            output_sequence.append(outputs_wm.output_sequence)
+
+            if k == 0:
+                reward = (
+                    Categorical(logits=outputs_wm.logits_rewards).sample().float().cpu().numpy().reshape(-1) - 1
+                )  # (B,)
+                done = (
+                    Categorical(logits=outputs_wm.logits_ends).sample().cpu().numpy().astype(bool).reshape(-1)
+                )  # (B,)
+
+            if k < self.num_observations_tokens:
+                token = Categorical(logits=outputs_wm.logits_observations).sample()
+                obs_tokens.append(token)
+
+        output_sequence = torch.cat(output_sequence, dim=1)  # (B, 1 + K, E)
+        self.obs_tokens = torch.cat(obs_tokens, dim=1)  # (B, K)
+
+        obs = self.decode_obs_tokens() if should_predict_next_obs else None
+        return obs, reward, done, None
+
+    @torch.no_grad()
+    def decode_obs_tokens(self) -> List[Image.Image]:
+        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)  # (B, K, E)
+        h = int(np.sqrt(self.num_observations_tokens))
+        z = embedded_tokens.permute(0, 2, 1)
+        z = z.view(z.shape[0], z.shape[1], h, z.shape[2] // h).contiguous()
+
+        rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (B, C, H, W)
+        return torch.clamp(rec, 0, 1)
 
 
 @dataclass
@@ -1552,7 +1527,7 @@ class IrisActorCritic(nn.Module):
         assert initial_observations.ndim == 5 and initial_observations.shape[2:] == (3, 64, 64)
         assert mask_padding[:, -1].all()
         device = initial_observations.device
-        wm_env = IrisWorldModelEnv(tokenizer, world_model, device)
+        wm_imagine = IrisWorldModelImagine(tokenizer, world_model, device)
 
         all_actions = []
         all_logits_actions = []
@@ -1576,13 +1551,13 @@ class IrisActorCritic(nn.Module):
             n=initial_observations.size(0), burnin_observations=burnin_observations, mask_padding=mask_padding[:, :-1]
         )
 
-        obs = wm_env.reset_from_initial_observations(initial_observations[:, -1])
+        obs = wm_imagine.reset_from_initial_observations(initial_observations[:, -1])
         for k in tqdm(range(horizon), disable=not show_pbar, desc="Imagination", file=sys.stdout):
             all_observations.append(obs)
 
             outputs_ac, hidden_states, _ = self(obs, output_hidden_states, output_attentions)
             action_token = Categorical(logits=outputs_ac.logits_actions).sample()
-            obs, reward, done, _ = wm_env.step(action_token, should_predict_next_obs=(k < horizon - 1))
+            obs, reward, done, _ = wm_imagine.step(action_token, should_predict_next_obs=(k < horizon - 1))
 
             all_actions.append(action_token)
             all_logits_actions.append(outputs_ac.logits_actions)
