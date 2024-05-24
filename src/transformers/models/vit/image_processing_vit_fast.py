@@ -133,11 +133,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         """
         transforms = []
 
-        if do_resize:
-            transforms.append(
-                Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
-            )
-
         # All PIL and numpy values need to be converted to a torch tensor
         # to keep cross compatibility with slow image processors
         if image_type == ImageType.PIL:
@@ -146,6 +141,11 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         elif image_type == ImageType.NUMPY:
             # Do we want to permute the channels here?
             transforms.append(NumpyToTensor())
+
+        if do_resize:
+            transforms.append(
+                Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
+            )
 
         # We can combine rescale and normalize into a single operation for speed
         if do_rescale and do_normalize:
@@ -273,7 +273,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             image_type=image_type,
         )
 
-        transforms = self._maybe_update_transforms(
+        transforms = self.get_transforms(
             do_resize=do_resize,
             do_rescale=do_rescale,
             do_normalize=do_normalize,

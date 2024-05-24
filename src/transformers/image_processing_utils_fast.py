@@ -45,27 +45,6 @@ class SizeDict:
 
 class BaseImageProcessorFast(BaseImageProcessor):
     _transform_params = None
-    _transform_settings = None
-
-    def _set_transform_settings(self, **kwargs) -> None:
-        settings = {}
-        for k, v in kwargs.items():
-            if k not in self._transform_params:
-                raise ValueError(f"Invalid transform parameter {k}={v}.")
-            settings[k] = v
-        self._transform_settings = settings
-
-    def _same_transforms_settings(self, **kwargs) -> bool:
-        """
-        Check if the current settings are the same as the current transforms.
-        """
-        if self._transform_settings is None:
-            return False
-
-        for key, value in kwargs.items():
-            if value not in self._transform_settings or value != self._transform_settings[key]:
-                return False
-        return True
 
     def _build_transforms(self, **kwargs) -> "Compose":
         """
@@ -73,25 +52,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         raise NotImplementedError
 
-    def set_transforms(self, **kwargs) -> "Compose":
-        """
-        Set the image transforms based on the given settings.
-        If the settings are the same as the current ones, do nothing.
-        """
-        if self._same_transforms_settings(**kwargs):
-            return self._transforms
-
-        transforms = self._build_transforms(**kwargs)
-        self._set_transform_settings(**kwargs)
-        self._transforms = transforms
-        return transforms
+    def _validate_params(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            if k not in self._transform_params:
+                raise ValueError(f"Invalid transform parameter {k}={v}.")
 
     @functools.lru_cache(maxsize=1)
-    def _maybe_update_transforms(self, **kwargs) -> "Compose":
-        """
-        If settings are different from those stored in `self._transform_settings`, update
-        the image transforms to apply
-        """
-        if self._same_transforms_settings(**kwargs):
-            return self._transforms
-        return self.set_transforms(**kwargs)
+    def get_transforms(self, **kwargs) -> "Compose":
+        self._validate_params(**kwargs)
+        return self._build_transforms(**kwargs)
