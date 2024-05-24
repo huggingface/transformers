@@ -354,7 +354,7 @@ class Phi3Attention(nn.Module):
         if past_key_value is not None:
             kv_length += past_key_value.get_seq_length(self.layer_idx)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, kv_length)
+        cos, sin = self.rotary_emb(value_states, position_ids, _length)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
