@@ -106,7 +106,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 

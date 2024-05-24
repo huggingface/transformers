@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Data2Vec Vision model."""
-
+"""TF 2.0 Data2Vec Vision model."""
 
 from __future__ import annotations
 

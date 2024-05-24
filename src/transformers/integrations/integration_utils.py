@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+
 import functools
 import importlib.metadata
 import importlib.util
@@ -796,7 +797,7 @@ class WandbCallback(TrainerCallback):
             except AttributeError:
                 logger.info("Could not log the number of model parameters in Weights & Biases.")
 
-            # log the initial model and architecture to an artifact
+            # log the initial model architecture to an artifact
             with tempfile.TemporaryDirectory() as temp_dir:
                 model_name = (
                     f"model-{self._wandb.run.id}"
@@ -812,7 +813,6 @@ class WandbCallback(TrainerCallback):
                         "initial_model": True,
                     },
                 )
-                model.save_pretrained(temp_dir)
                 # add the architecture to a separate text file
                 save_model_architecture_to_file(model, temp_dir)
 
@@ -1545,6 +1545,11 @@ class CodeCarbonCallback(TrainerCallback):
             raise RuntimeError(
                 "CodeCarbonCallback requires `codecarbon` to be installed. Run `pip install codecarbon`."
             )
+        elif torch.version.hip:
+            raise RuntimeError(
+                "CodeCarbonCallback requires `codecarbon` package, which is not compatible with AMD ROCm (https://github.com/mlco2/codecarbon/pull/490). When using the Trainer, please specify the `report_to` argument (https://huggingface.co/docs/transformers/v4.39.3/en/main_classes/trainer#transformers.TrainingArguments.report_to) to disable CodeCarbonCallback."
+            )
+
         import codecarbon
 
         self._codecarbon = codecarbon

@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-    Benchmarking the library on inference and training in PyTorch.
+Benchmarking the library on inference and training in PyTorch.
 """
-
 
 import timeit
 from typing import Callable, Optional

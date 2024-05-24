@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" TensorFlow DPR model for Open Domain Question Answering."""
+"""TensorFlow DPR model for Open Domain Question Answering."""
 
 from __future__ import annotations
 
