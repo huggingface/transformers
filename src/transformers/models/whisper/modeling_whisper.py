@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache, OneShotStaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 
 from ...modeling_outputs import (
@@ -297,32 +297,30 @@ class WhisperAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states)
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-
-        # if (
-        #     is_cross_attention
-        #     and past_key_value is not None
-        #     and past_key_value[0].shape[2] == key_value_states.shape[1]
-        # ):
-        #     # reuse k,v, cross_attentions
-        #     key_states = past_key_value[0]
-        #     value_states = past_key_value[1]
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states)
-            value_states = self.v_proj(key_value_states)
+        need_update_cache = self.is_decoder and past_key_value is not None
+        
+        # reuse cross attn kv cache except for the first generation step
+        # case 1: DynamicCache, check if we have computed the current layer
+        # case 2: OneShotStaticCache, check if the flag has been set, for `torch.compile`
+        if is_cross_attention and ((isinstance(past_key_value, DynamicCache) and self.layer_idx < len(past_key_value.key_cache))
+            or isinstance(past_key_value, OneShotStaticCache) and past_key_value.query_cache_filled_status(self.layer_idx)):
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
+            need_update_cache = False
         else:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
-
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-
-        if self.is_decoder and past_key_value is not None and not is_cross_attention:
+            if is_cross_attention:
+                key_states = self.k_proj(key_value_states)
+                value_states = self.v_proj(key_value_states)
+            else:
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+        
+        if need_update_cache:
+            # when we do cross attention we need to set cache_position for source sequence
+            if is_cross_attention:
+                cache_position = torch.arange(0, key_value_states.shape[1], dtype=cache_position.dtype, device=cache_position.device)
             cache_kwargs = {"cache_position" : cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -414,34 +412,31 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # get query proj
         query_states = self.q_proj(hidden_states)
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        # if (
-        #     is_cross_attention
-        #     and past_key_value is not None
-        #     and past_key_value[0].shape[2] == key_value_states.shape[1]
-        # ):
-        #     # reuse k,v, cross_attentions
-        #     key_states = past_key_value[0].transpose(1, 2)
-        #     value_states = past_key_value[1].transpose(1, 2)
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states)
-            value_states = self.v_proj(key_value_states)
+        need_update_cache = self.is_decoder and past_key_value is not None
+        
+        # reuse cross attn kv cache except for the first generation step
+        # can only be DynamicCache becuase StaticCache is banned for flash attention
+        if is_cross_attention and isinstance(past_key_value, DynamicCache) and self.layer_idx < len(past_key_value.key_cache):
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
+            need_update_cache = False
         else:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
-
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-
-        if self.is_decoder and past_key_value is not None and not is_cross_attention:
+            if is_cross_attention:
+                key_states = self.k_proj(key_value_states)
+                value_states = self.v_proj(key_value_states)
+            else:
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+        
+        if need_update_cache:
+            # when we do cross attention we need to set cache_position for source sequence
+            if is_cross_attention:
+                cache_position = torch.arange(0, key_value_states.shape[1], dtype=cache_position.dtype, device=cache_position.device)
             cache_kwargs = {"cache_position" : cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-        
+
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
         
 
@@ -620,42 +615,39 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
-        is_cross_attention = key_value_states is not None
-
+        is_cross_attention = True if key_value_states is not None else False
         bsz, tgt_len, _ = hidden_states.size()
-
         # get query proj
         query_states = self.q_proj(hidden_states)
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        # if (
-        #     is_cross_attention
-        #     and past_key_value is not None
-        #     and past_key_value[0].shape[2] == key_value_states.shape[1]
-        # ):
-        #     # reuse k,v, cross_attentions
-        #     key_states = past_key_value[0]
-        #     value_states = past_key_value[1]
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states)
-            value_states = self.v_proj(key_value_states)
+        need_update_cache = self.is_decoder and past_key_value is not None
+        
+        # reuse cross attn kv cache except for the first generation step
+        # case 1: DynamicCache, check if we have computed the current layer
+        # case 2: OneShotStaticCache, check if the flag has been set, for `torch.compile`
+        if is_cross_attention and ((isinstance(past_key_value, DynamicCache) and self.layer_idx < len(past_key_value.key_cache))
+            or isinstance(past_key_value, OneShotStaticCache) and past_key_value.query_cache_filled_status(self.layer_idx)):
+            key_states = past_key_value.key_cache[self.layer_idx]
+            value_states = past_key_value.value_cache[self.layer_idx]
+            need_update_cache = False
         else:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
-
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
-
-        if self.is_decoder and past_key_value is not None and not is_cross_attention:
+            if is_cross_attention:
+                key_states = self.k_proj(key_value_states)
+                value_states = self.v_proj(key_value_states)
+            else:
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1,2)
+        
+        if need_update_cache:
+            # when we do cross attention we need to set cache_position for source sequence
+            if is_cross_attention:
+                cache_position = torch.arange(0, key_value_states.shape[1], dtype=cache_position.dtype, device=cache_position.device)
             cache_kwargs = {"cache_position" : cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-    
+        
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
@@ -666,7 +658,6 @@ class WhisperSdpaAttention(WhisperAttention):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
-
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
@@ -808,7 +799,7 @@ class WhisperDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[Cache]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
@@ -826,7 +817,7 @@ class WhisperDecoderLayer(nn.Module):
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
                 size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_value (`Tuple(Cache)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -834,13 +825,14 @@ class WhisperDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
+        self_atten_key_value, cross_attn_key_value = None, None
+        if past_key_value is not None:
+            self_atten_key_value, cross_attn_key_value = past_key_value
+
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        # self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights, self_atten_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            past_key_value=self_atten_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -850,27 +842,23 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            # cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights, cross_attn_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=None,
+                past_key_value=cross_attn_key_value,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            # present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -887,7 +875,7 @@ class WhisperDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         if use_cache:
-            outputs += (present_key_value,)
+            outputs += ((self_atten_key_value, cross_attn_key_value),)
 
         return outputs
 
@@ -1001,13 +989,17 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+        past_key_values (`Cache` or `tuple(Cache)` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            Three formats are allowed:
+            - `Cache` instance, when we do pure decoding without outputs from encoders;
+            - Tuple of [`~cache_utils.Cache`] instance, when we do generation based on outputs from encoders;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+                `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1298,23 +1290,21 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            past_key_values (`Cache` or `tuple(Cache)` or `tuple(tuple(torch.FloatTensor))`, *optional*):
                 Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
                 blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
                 returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-                Two formats are allowed:
-                - a [`~cache_utils.Cache`] instance;
+                Three formats are allowed:
+                - `Cache` instance, when we do pure decoding without outputs from encoders;
+                - Tuple of [`~cache_utils.Cache`] instance, when we do generation based on outputs from encoders;
                 - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-                cache format.
+                    shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+                    `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
-                The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-                legacy cache format will be returned.
-
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-                have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-                of shape `(batch_size, sequence_length)`.
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+                don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+                `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -1355,12 +1345,46 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache:
+            if past_key_values is None:
+                return_legacy_cache = True
+                past_key_values = (DynamicCache(), DynamicCache() if encoder_hidden_states is not None else None)
+            elif isinstance(past_key_values, Cache):
+                if encoder_hidden_states is not None:
+                    raise ValueError(
+                        "Passing a single cache instance with `encoder_hidden_states` passed are not allowed, "
+                        "you should considering passing in a tuple of two cache instances (`DynamicCache`, `DynamicCache`) "
+                        "or (`StaticCache`, `OneShotStaticCache`) if you are using `torch.compile`"
+                    )
+                past_key_values = (past_key_values, None)
+            else:
+                assert isinstance(past_key_values, tuple)
+                if not isinstance(past_key_values[0], Cache):
+                    # tuple of tuple of tensors
+                    return_legacy_cache = True
+                    if len(past_key_values[0]) != 4 and encoder_hidden_states is not None:
+                        raise ValueError(
+                            "Expect `past_key_values` to contain tuples of 4 tensors when `encoder_hidden_states` are passed"
+                        )
+
+                    cross_attn_kv_cache = None
+                    if encoder_hidden_states is not None:
+                        cross_attn_kv_cache = DynamicCache.from_legacy_cache(tuple(past_key_value[2:] for past_key_value in past_key_values))
+
+                    past_key_values = (
+                        DynamicCache.from_legacy_cache(tuple(past_key_value[:2] for past_key_value in past_key_values)), 
+                        cross_attn_kv_cache
+                    )
+                else:
+                    # tuple of caches, do sanity check
+                    if encoder_hidden_states is None or len(past_key_values) != 2:
+                        raise ValueError(
+                            "Please pass a single cache instance instead of a tuple if `encoder_hidden_states` is not passed ,"
+                            "and make sure to pass a tuple of two cache instances otherwise"
+                        )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = past_key_values[0].get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -1374,7 +1398,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         
         use_head_mask = head_mask is not None
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, use_head_mask, output_attentions
+            attention_mask, inputs_embeds, cache_position, past_key_values[0], use_head_mask, output_attentions
         )
         
         # decoder layers
@@ -1442,9 +1466,19 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+        if isinstance(next_cache, tuple) and encoder_hidden_states is None:
+            assert next_cache[1] is None
+            next_cache = next_cache[0]
+
         if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-        
+            if encoder_hidden_states is None:
+                next_cache = next_cache.to_legacy_cache()
+            else:
+                next_cache = tuple(
+                    self_attn_kv + cross_attn_kv for self_attn_kv, cross_attn_kv in 
+                    zip(next_cache[0].to_legacy_cache(), next_cache[1].to_legacy_cache())
+                )
+
         if not return_dict:
             return tuple(
                 v
@@ -1628,7 +1662,7 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Union[Cache, Tuple[torch.FloatTensor]]]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1763,7 +1797,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Union[Cache, Tuple[torch.FloatTensor]]]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1869,10 +1903,15 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
 
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+            if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], Cache):
+                past_self_attn_key_value = past_key_values[0]
             else:
-                past_length = past_key_values[0][0].shape[2]
+                past_self_attn_key_value = past_key_values
+
+            if isinstance(past_self_attn_key_value, Cache):
+                past_length = cache_position[0] if cache_position is not None else past_self_attn_key_value.get_seq_length()
+            else:
+                past_length = past_self_attn_key_value[0][0].shape[2]
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:
                 remove_prefix_length = past_length
@@ -1969,16 +2008,18 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[Cache, Tuple[Union[Cache, Tuple[torch.FloatTensor]]]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
@@ -1991,6 +2032,9 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
                 [What are attention masks?](../glossary#attention-mask)
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                config.n_positions - 1]`.
             encoder_outputs  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
@@ -2002,14 +2046,19 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional
-                tensors are only required when the model is used as a decoder in a Sequence to Sequence model. Contains
-                pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-                blocks) that can be used (see `past_key_values` input) to speed up sequential decoding. If
-                `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            past_key_values (`Cache` or `tuple(Cache)` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+                Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+                blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+                returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+                Three formats are allowed:
+                - `Cache` instance, when we do pure decoding without outputs from encoders;
+                - Tuple of [`~cache_utils.Cache`] instance, when we do generation based on outputs from encoders;
+                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                    shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+                    `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
                 don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
                 `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2033,7 +2082,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+                this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+                the complete sequence length.
         Returns:
 
         Example:
@@ -2080,10 +2132,12 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         logits = self.proj_out(outputs[0])
@@ -2114,10 +2168,18 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
+        cache_position=None,
         **kwargs,
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], Cache):
+                past_self_attn_key_value = past_key_values[0]
+            else:
+                past_self_attn_key_value = past_key_values
+            if isinstance(past_self_attn_key_value, Cache):
+                past_length = cache_position[0] if cache_position is not None else past_self_attn_key_value.get_seq_length()
+            else:
+                past_length = past_self_attn_key_value[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -2127,13 +2189,14 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
-
+        
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
-            "input_ids": input_ids,
+            "input_ids": input_ids.contiguous(),
             "use_cache": use_cache,
             "attention_mask": attention_mask,
+            "cache_position": cache_position,
         }
 
     @staticmethod

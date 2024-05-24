@@ -4413,6 +4413,8 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            # for models with un-certain ops like dropout in training mode
+            model = model.eval()
 
             (
                 input_ids,

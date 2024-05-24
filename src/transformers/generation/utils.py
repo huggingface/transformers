@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache, OneShotStaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -96,7 +96,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache}
+NEED_SETUP_CACHE_CLASSES_MAPPING = {"static": StaticCache, "sliding_window": SlidingWindowCache, "one_shot": OneShotStaticCache}
 
 
 @dataclass
@@ -1313,10 +1313,15 @@ class GenerationMixin:
 
         past_length = 0
         if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], Cache):
-                past_length = model_kwargs["past_key_values"].get_seq_length()
+            past_key_values = model_kwargs["past_key_values"]
+            # double cache case in encoder decoder arch
+            if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], (tuple, Cache)):
+                past_key_values = past_key_values[0]
+
+            if isinstance(past_key_values, Cache):
+                past_length = past_key_values.get_seq_length()
             else:
-                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+                past_length = past_key_values[0][0].shape[2]
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -1335,7 +1340,7 @@ class GenerationMixin:
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size < max_batch_size
+            or self._cache.max_batch_size != max_batch_size
         )
         if cache_implementation == "sliding_window":
             need_new_cache = need_new_cache or (
@@ -1344,6 +1349,10 @@ class GenerationMixin:
             )
         elif cache_implementation == "static":
             need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+        elif cache_implementation == "one_shot":
+            # for one-shot cache, we should reset it everytime so that we don't reuse
+            # the key value states for the last generation
+            need_new_cache = True
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
@@ -1627,9 +1636,17 @@ class GenerationMixin:
                     "This model does not support `cache_implementation='static'`. Please check the following "
                     "issue: https://github.com/huggingface/transformers/issues/28981"
                 )
-            model_kwargs["past_key_values"] = self._get_cache(
-                generation_config.cache_implementation, batch_size, generation_config.max_length
-            )
+            if self.config.is_encoder_decoder:
+                # manually set another cache for cross attention, this is a little hacky
+                encoder_outputs = model_kwargs["encoder_outputs"][0]
+                model_kwargs["past_key_values"] = (
+                    self._get_cache(generation_config.cache_implementation, batch_size, generation_config.max_length),
+                    self._get_cache("one_shot", encoder_outputs.shape[0], encoder_outputs.shape[1])
+                )
+            else:
+                model_kwargs["past_key_values"] = self._get_cache(
+                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                )
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
@@ -2373,7 +2390,6 @@ class GenerationMixin:
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
-
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)

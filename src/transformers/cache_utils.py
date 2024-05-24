@@ -569,3 +569,39 @@ class SlidingWindowCache(Cache):
     def reset(self):
         self.key_cache.zero_()
         self.value_cache.zero_()
+
+
+class OneShotStaticCache(StaticCache):
+    """
+    OneShotStaticCache is for cases where we update the cache only once and the cache remains constant after, it's useful in
+    encoder decoder models where we need to cache the key and value states of cross attention layer, in which case we only need
+    to compute and update the cache in the first generation step.
+
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+    """
+    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+        super().__init__(config, max_batch_size, max_cache_len, device, dtype)
+        self.cache_filled = [False for _ in range(config.num_hidden_layers)]
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, cache_kwargs: Dict[str, Any] | None = None) -> Tuple[torch.Tensor]:
+        if self.cache_filled[layer_idx]:
+            return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        self.cache_filled[layer_idx] = True
+        return super().update(key_states, value_states, layer_idx, cache_kwargs)
+
+    def query_cache_filled_status(self, layer_idx: int) -> bool:
+        return self.cache_filled[layer_idx]
+
+    def reset(self):
+        super().reset()
+        self.cache_filled = [False for _ in range(len(self.cache_filled))]
