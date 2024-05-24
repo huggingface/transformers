@@ -3010,7 +3010,10 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
+            elif param_device in ["mps"]:
+                self.assertEqual(param.device, torch.device("mps"))
             else:
+                # when loaded with device_map, `param_device` are integer values for cuda/xpu/npu/mlu
                 self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
