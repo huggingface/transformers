@@ -179,10 +179,7 @@ def get_json_schema(func):
     Google docstring format shown below. It also requires that all the function arguments have a valid Python type hint.
 
     Although it is not required, a `Returns` block can also be added, which will be included in the schema. This is
-    optional because most chat templates ignore the return value of the function. Each argument description
-    can also have an optional `(choices: ...)` block at the end, such as `(choices: ["tea", "coffee"])`, which will be
-    parsed into an `enum` field in the schema. Note that this will only be parsed correctly if it is at the end of the
-    line.
+    optional because most chat templates ignore the return value of the function.
 
     Args:
         func: The function to generate a JSON schema for.
@@ -248,8 +245,37 @@ def get_json_schema(func):
     >>> # The formatted chat can now be passed to model.generate()
     ```
 
-    In many cases, it is more convenient to simply pass the functions directly to apply_chat_template and let it
-    autogenerate schemas than calling this function directly.
+    Each argument description can also have an optional `(choices: ...)` block at the end, such as
+    `(choices: ["tea", "coffee"])`, which will be parsed into an `enum` field in the schema. Note that this will
+    only be parsed correctly if it is at the end of the line:
+
+    ```python
+    >>> def drink_beverage(beverage: str):
+    >>>    '''
+    >>>    A function that drinks a beverage
+    >>>
+    >>>    Args:
+    >>>        beverage: The beverage to drink (choices: ["tea", "coffee"])
+    >>>    '''
+    >>>    pass
+    >>>
+    >>> print(get_json_schema(drink_beverage))
+    ```
+    {
+        'name': 'drink_beverage',
+        'description': 'A function that drinks a beverage',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'beverage': {
+                    'type': 'string',
+                    'enum': ['tea', 'coffee'],
+                    'description': 'The beverage to drink'
+                    }
+                },
+            'required': ['beverage']
+        }
+    }
     """
     doc = inspect.getdoc(func)
     if not doc:
