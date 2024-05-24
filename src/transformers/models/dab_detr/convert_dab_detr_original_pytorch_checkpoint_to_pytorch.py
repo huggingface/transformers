@@ -172,8 +172,8 @@ rename_keys.extend(
 
         ("refpoint_embed.weight", "query_refpoint_embeddings.weight"),
 
-        ("class_embed.weight", "class_embed.weight"),
-        ("class_embed.bias", "class_embed.bias"),
+        ("class_embed.weight", "class_labels_classifier.weight"),
+        ("class_embed.bias", "class_labels_classifier.bias"),
 
         ("transformer.encoder.query_scale.layers.0.weight", "encoder.query_scale.layers.0.weight"),
         ("transformer.encoder.query_scale.layers.0.bias", "encoder.query_scale.layers.0.bias"),
@@ -291,7 +291,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     logger.info(f"Converting model {model_name}...")
 
     # load original model from torch hub
-    state_dict = torch.load("/Users/davidhajdu/Desktop/checkpoint.pth", map_location=torch.device('cpu'))['model']
+    state_dict = torch.load("/Users/davidhajdu/Desktop/dab_detr_r50.pth", map_location=torch.device('cpu'))['model']
     # rename keys
     for src, dest in rename_keys:
         if is_panoptic:
@@ -301,7 +301,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # query, key and value matrices need special treatment
     # read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = "dab_detr.model." if is_panoptic else "" # TODO: model.
+    prefix = "dab_detr.model." if is_panoptic else "model."
     for key in state_dict.copy().keys():
         if is_panoptic:
             if (
@@ -324,14 +324,21 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = DABDETRModel(config)  # DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
+    model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
     # model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
     outputs = model(pixel_values)
-    print(outputs)
+    logits, pred_boxes, auxiliary_outputs = outputs
+    print(logits)  # ['pred_logits'][0, :3, :3])
+    print(pred_boxes)
+    torch.save(logits, 'logits.pth')
+    torch.save(pred_boxes, 'pred_boxes.pth')
+    
+    # Serialize data into file:
+    # torch.save(outputs, 'tensors.pth')
     # assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
     # assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
     # if is_panoptic:
@@ -342,13 +349,6 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     # model.save_pretrained(pytorch_dump_folder_path)
     # image_processor.save_pretrained(pytorch_dump_folder_path)
-
-def run():
-    config = DABDETRConfig()
-    model = DABDETRModel(config)
-    # print(model)
-    for n, p in model.named_parameters():
-        print(n, p.shape)
 
 
 if __name__ == "__main__":
@@ -365,4 +365,3 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_dab_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path)
-    #run()
