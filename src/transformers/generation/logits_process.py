@@ -110,7 +110,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
-        device (`str`, *optional*):
+        device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
 
     Examples:
@@ -139,12 +139,9 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = None):
+    def __init__(self, min_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
-
-        if device is None:
-            device = "cpu"
 
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
@@ -177,7 +174,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
-        device (`str`, *optional*):
+        device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
 
     Examples:
@@ -206,7 +203,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         prompt_length_to_skip: int,
         min_new_tokens: int,
         eos_token_id: Union[int, List[int], torch.Tensor],
-        device: str = None,
+        device: str = "cpu",
     ):
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
@@ -214,9 +211,6 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         ]:
             if not isinstance(arg_value, int) or arg_value < 0:
                 raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
-
-        if device is None:
-            device = "cpu"
 
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
@@ -791,7 +785,7 @@ class EtaLogitsWarper(LogitsWarper):
             Specifies the minimum number of tokens that must be kept for generation, regardless of their probabilities.
             For example, if `min_tokens_to_keep` is set to 1, at least one token will always be kept for generation,
             even if all tokens have probabilities below the cutoff `eta`.
-        device (`str`, *optional*):
+        device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
 
     Examples:
@@ -821,7 +815,7 @@ class EtaLogitsWarper(LogitsWarper):
     """
 
     def __init__(
-        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = None
+        self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1, device: str = "cpu"
     ):
         epsilon = float(epsilon)
         if epsilon <= 0 or epsilon >= 1:
@@ -832,8 +826,6 @@ class EtaLogitsWarper(LogitsWarper):
             raise ValueError(
                 f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
             )
-        if device is None:
-            device = "cpu"
 
         self.epsilon = torch.tensor(epsilon, device=device)
         self.filter_value = filter_value
@@ -1547,7 +1539,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
             The maximum length of the sequence to be generated.
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
-        device (`str`, *optional*):
+        device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
 
     Examples:
@@ -1572,11 +1564,8 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = None):
+    def __init__(self, max_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
         self.max_length = max_length
-
-        if device is None:
-            device = "cpu"
 
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
@@ -1791,9 +1780,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, begin_suppress_tokens, begin_index, device: str = None):
-        if device is None:
-            device = "cpu"
+    def __init__(self, begin_suppress_tokens, begin_index, device: str = "cpu"):
         self.begin_suppress_tokens = torch.tensor(list(begin_suppress_tokens), device=device)
         self.begin_index = begin_index
 
@@ -1840,9 +1827,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, suppress_tokens, device: str = None):
-        if device is None:
-            device = "cpu"
+    def __init__(self, suppress_tokens, device: str = "cpu"):
         self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -2318,9 +2303,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             Minimum end of speech threshold.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor], min_eos_p: float, device: str = None):
-        if device is None:
-            device = "cpu"
+    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor], min_eos_p: float, device: str = "cpu"):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
