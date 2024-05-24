@@ -1033,8 +1033,10 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = CLIPTextTransformer(text_config, attn_implementation=config._attn_implementation)
-        self.vision_model = CLIPVisionTransformer(vision_config, attn_implementation=config._attn_implementation)
+        self.text_model = CLIPTextModel.from_config(text_config, attn_implementation=config._attn_implementation)
+        self.vision_model = CLIPVisionModel._from_config(
+            vision_config, attn_implementation=config._attn_implementation
+        )
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
