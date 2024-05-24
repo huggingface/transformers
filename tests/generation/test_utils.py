@@ -27,8 +27,8 @@ from transformers import is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
-    require_quanto,
     require_auto_gptq,
+    require_quanto,
     require_torch,
     require_torch_multi_accelerator,
     slow,

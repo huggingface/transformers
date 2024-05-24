@@ -2005,9 +2005,9 @@ class GenerationMixin:
                 "argument of `generate`."
             )
 
-        bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
+        bos_token_id, pad_token_id = tokenizer.bos_token_id, tokenizer.pad_token_id
         vocab_trie = ExtensionsTrie(tokenizer.get_vocab())
-        gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
+        generation_config = GenerationConfig(max_new_tokens=1, pad_token_id=pad_token_id)
 
         # assumption: leading/trailing whitespace is not meaningful, so the prompts are
         # stripped before re-tokenizing to desensitize generation to whitespace artefacts
@@ -2019,7 +2019,7 @@ class GenerationMixin:
         ).input_ids.to(input_ids.device)
 
         # replace bos with pad to not condition healing on it
-        input_ids = torch.where(input_ids == bos_id, pad_id, input_ids)
+        input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
         tail_ids = input_ids[:, -1].tolist()
         space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
@@ -2029,7 +2029,7 @@ class GenerationMixin:
 
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
-            if torch.all(batch_ids == pad_id).item():
+            if torch.all(batch_ids == pad_token_id).item():
                 continue  # skip empty sequences (all pad ids)
 
             # apply bias for alternatives (extensions) to the tail token
@@ -2039,14 +2039,14 @@ class GenerationMixin:
 
             # slightly favor original token to limit aggressive healing e.g. 'http' -> 'https'
             seq_bias[(tail_id,)] += 1.0
-            gen_cfg.update(sequence_bias=seq_bias)
+            generation_config.update(sequence_bias=seq_bias)
 
             trimmed_ids = batch_ids[:-1]
             # if the prompt is a single (non-pad) token, regenerate from bos
-            if len(batch_ids[batch_ids != pad_id]) == 1:
-                trimmed_ids[-1] = bos_id
+            if len(batch_ids[batch_ids != pad_token_id]) == 1:
+                trimmed_ids[-1] = bos_token_id
 
-            input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=gen_cfg)
+            input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=generation_config)
 
         return input_ids
 
