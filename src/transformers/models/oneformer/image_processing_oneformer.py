@@ -16,7 +16,6 @@
 
 import json
 import os
-import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -53,6 +52,7 @@ from ...utils import (
     is_torch_tensor,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -422,6 +422,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
+    @deprecate_kwarg("max_size", version="4.27.0")
     def __init__(
         self,
         do_resize: bool = True,
@@ -439,12 +441,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
         num_text: Optional[int] = None,
         **kwargs,
     ):
-        if "reduce_labels" in kwargs:
-            raise ValueError("The `reduce_labels` parameter has been deprecated. Use `do_reduce_labels` instead.")
-        if "max_size" in kwargs:
-            self._max_size = kwargs.pop("max_size")
-        else:
-            self._max_size = 1333
+        # Deprecated, backward compatibility
+        self._max_size = kwargs.pop("max_size", 1333)
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": self._max_size}
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
@@ -497,6 +495,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
+    @deprecate_kwarg("max_size", version="4.27.0")
     def resize(
         self,
         image: np.ndarray,
@@ -510,15 +509,10 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
         int, smaller edge of the image will be matched to this number.
         """
-        if "max_size" in kwargs:
-            warnings.warn(
-                "The `max_size` parameter is deprecated and will be removed in v4.27. "
-                "Please specify in `size['longest_edge'] instead`.",
-                FutureWarning,
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
+
+        # Deprecated, backward compatibility
+        max_size = kwargs.pop("max_size", None)
+
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             size, max_size = size["shortest_edge"], size["longest_edge"]
@@ -704,12 +698,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
-                FutureWarning,
-            )
-
         if task_inputs is None:
             # Default value
             task_inputs = ["panoptic"]

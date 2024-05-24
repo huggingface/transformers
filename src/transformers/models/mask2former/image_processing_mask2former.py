@@ -468,8 +468,8 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     @deprecate_kwarg("max_size", version="4.27.0")
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     def resize(
         self,
         image: np.ndarray,
@@ -680,7 +680,6 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return segmentation_map
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
-    @deprecate_kwarg("pad_and_return_pixel_mask", version="4.41.0")
     def preprocess(
         self,
         images: ImageInput,

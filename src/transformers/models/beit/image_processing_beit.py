@@ -35,6 +35,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 if is_vision_available():
@@ -92,6 +93,7 @@ class BeitImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     def __init__(
         self,
         do_resize: bool = True,
@@ -107,8 +109,6 @@ class BeitImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
-        if "reduce_labels" in kwargs:
-            raise ValueError("The `reduce_labels` parameter has been deprecated. Use `do_reduce_labels` instead.")
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
@@ -322,6 +322,7 @@ class BeitImageProcessor(BaseImageProcessor):
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     def preprocess(
         self,
         images: ImageInput,
