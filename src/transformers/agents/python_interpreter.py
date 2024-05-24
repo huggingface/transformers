@@ -29,7 +29,19 @@ class InterpretorError(ValueError):
     pass
 
 
-LIST_SAFE_MODULES = ["random", "collections", "requests", "math", "time", "queue", "itertools", "re", "stat", "statistics", "unicodedata"]
+LIST_SAFE_MODULES = [
+    "random",
+    "collections",
+    "requests",
+    "math",
+    "time",
+    "queue",
+    "itertools",
+    "re",
+    "stat",
+    "statistics",
+    "unicodedata",
+]
 
 
 class BreakException(Exception):

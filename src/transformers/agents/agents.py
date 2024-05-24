@@ -598,7 +598,6 @@ class ReactAgent(Agent):
         if "final_answer" not in self._toolbox.tools:
             self._toolbox.add_tool(FinalAnswerTool())
 
-
     def provide_final_answer(self, task) -> str:
         """
         This method provides a final answer to the task, based on the logs of the agent's interactions.
@@ -620,7 +619,6 @@ class ReactAgent(Agent):
             return self.llm_engine(self.prompt)
         except Exception as e:
             return f"Error in generating final llm output: {e}."
-
 
     def run(self, task: str, stream: bool = False, **kwargs):
         """
@@ -644,7 +642,6 @@ class ReactAgent(Agent):
         else:
             return self.direct_run(task, **kwargs)
 
-
     def stream_run(self, task: str, **kwargs):
         self.initialize_for_run(task, **kwargs)
 
@@ -653,8 +650,8 @@ class ReactAgent(Agent):
         while final_answer is None and iteration < self.max_iterations:
             try:
                 step_logs = self.step()
-                if 'final_answer' in step_logs:
-                    final_answer = step_logs['final_answer']
+                if "final_answer" in step_logs:
+                    final_answer = step_logs["final_answer"]
             except AgentError as e:
                 self.logger.error(e, exc_info=1)
                 self.logs[-1]["error"] = e
@@ -664,17 +661,14 @@ class ReactAgent(Agent):
 
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
-            final_step_log = {
-                "error": AgentMaxIterationsError(error_message)
-            }
+            final_step_log = {"error": AgentMaxIterationsError(error_message)}
             self.logs.append(final_step_log)
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
             final_step_log["final_answer"] = final_answer
             yield final_step_log
 
-        return final_answer
-
+        yield final_answer
 
     def direct_run(self, task: str, **kwargs):
         self.initialize_for_run(task, **kwargs)
@@ -684,8 +678,8 @@ class ReactAgent(Agent):
         while final_answer is None and iteration < self.max_iterations:
             try:
                 step_logs = self.step()
-                if 'final_answer' in step_logs:
-                    final_answer = step_logs['final_answer']
+                if "final_answer" in step_logs:
+                    final_answer = step_logs["final_answer"]
             except AgentError as e:
                 self.logger.error(e, exc_info=1)
                 self.logs[-1]["error"] = e
@@ -694,9 +688,7 @@ class ReactAgent(Agent):
 
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
-            final_step_log = {
-                "error": AgentMaxIterationsError(error_message)
-            }
+            final_step_log = {"error": AgentMaxIterationsError(error_message)}
             self.logs.append(final_step_log)
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
