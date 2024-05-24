@@ -107,23 +107,19 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
     - Zhang et al. Distribution-Aware Coordinate Representation for Human Pose Estimation (CVPR 2020).
 
-    Note:
-        - batch size: B
-        - num keypoints: K
-        - num persons: N
-        - height of heatmaps: H
-        - width of heatmaps: W
-
-        B=1 for bottom_up paradigm where all persons share the same heatmap.
-        B=N for top_down paradigm where each person has its own heatmaps.
-
     Args:
-        coords (np.ndarray[N, K, 2]): Initial coordinates of human pose.
-        batch_heatmaps (np.ndarray[B, K, H, W]): batch_heatmaps
-        kernel (int): Gaussian kernel size (K) for modulation.
+        coords (`np.ndarray` of shape `(num_persons, num_keypoints, 2)`):
+            Initial coordinates of human pose.
+        batch_heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width)`):
+            Batched heatmaps as predicted by the model.
+            A batch_size of 1 is used for the bottom up paradigm where all persons share the same heatmap.
+            A batch_size of `num_persons` is used for the top down paradigm where each person has its own heatmaps.
+        kernel (`int`, *optional*, defaults to 3):
+            Gaussian kernel size (K) for modulation.
 
     Returns:
-        np.ndarray([N, K, 2]): Refined coordinates.
+        `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
+            Refined coordinates.
     """
     if not isinstance(batch_heatmaps, np.ndarray):
         batch_heatmaps = batch_heatmaps.cpu().numpy()
@@ -434,8 +430,8 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         # transformations (affine transformation + rescaling + normalization)
-        new_images = []
         if self.do_affine_transform:
+            new_images = []
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = box_to_center_and_scale(
@@ -445,8 +441,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
                     )
                     new_images.append(transformed_image)
-
-        images = new_images
+            images = new_images
 
         # TODO each image might have a variable number of boxes => padding?
         # since the number of boxes can differ per image, the image processor takes a list
