@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViT Hybrid model. """
-
+"""Testing suite for the PyTorch ViT Hybrid model."""
 
 import unittest
 
@@ -58,6 +57,7 @@ class ViTHybridModelTester:
         initializer_range=0.02,
         backbone_featmap_shape=[1, 16, 4, 4],
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -77,6 +77,7 @@ class ViTHybridModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.backbone_featmap_shape = backbone_featmap_shape
+        self.attn_implementation = attn_implementation
 
         # in ViT hybrid, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         # the number of patches is based on the feature map of the backbone, which by default uses an output stride
@@ -122,6 +123,7 @@ class ViTHybridModelTester:
             backbone_featmap_shape=self.backbone_featmap_shape,
             backbone_config=backbone_config,
             backbone=None,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

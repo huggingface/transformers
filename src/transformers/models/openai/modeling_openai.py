@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch OpenAI GPT model."""
 
-
 import json
 import math
 import os

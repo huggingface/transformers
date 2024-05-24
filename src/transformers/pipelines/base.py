@@ -845,6 +845,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 device = -1
 
         if is_torch_available() and self.framework == "pt":
+            if device == -1 and self.model.device is not None:
+                device = self.model.device
             if isinstance(device, torch.device):
                 if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
@@ -871,11 +873,10 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             self.device = device if device is not None else -1
 
         self.binary_output = binary_output
-
-        # We shouldn't call `model.to()` for models loaded with accelerate
+        # We shouldn't call `model.to()` for models loaded with accelerate as well as the case that model is already on device
         if (
             self.framework == "pt"
-            and self.device is not None
+            and self.model.device != self.device
             and not (isinstance(self.device, int) and self.device < 0)
             and hf_device_map is None
         ):

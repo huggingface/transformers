@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert DiT checkpoints from the unilm repository."""
 
-
 import argparse
 import json
 from pathlib import Path
