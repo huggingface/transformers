@@ -17,7 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch StableLM model."""
+"""PyTorch StableLM model."""
+
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -831,6 +832,7 @@ class StableLmPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_cache_class = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

@@ -16,7 +16,6 @@
 RetriBERT model
 """
 
-
 import math
 from typing import Optional
 

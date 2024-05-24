@@ -784,11 +784,11 @@ class WhisperGenerationMixin:
                     del generate_kwargs[key]
             seek_outputs = super().generate(
                 segment_input,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
@@ -1133,12 +1133,12 @@ class WhisperGenerationMixin:
             forced_decoder_ids = config.forced_decoder_ids
 
         if forced_decoder_ids is not None and task is not None:
-            logger.info(
+            logger.warning_once(
                 f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of task={task}."
             )
             forced_decoder_ids = None
         elif forced_decoder_ids is not None and language is not None:
-            logger.info(
+            logger.warning_once(
                 f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of language={language}."
             )
             forced_decoder_ids = None

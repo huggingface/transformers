@@ -270,7 +270,7 @@ class ConversationalPipeline(Pipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](./main_classes/text_generation)).
 
         Returns:
             [`Conversation`] or a list of [`Conversation`]: Conversation(s) with updated generated responses for those
