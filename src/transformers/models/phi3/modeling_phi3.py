@@ -331,6 +331,7 @@ class Phi3Attention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
+        _length=0,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if not is_torchdynamo_compiling:
             logger.warning_once(
@@ -745,7 +746,7 @@ class Phi3SdpaAttention(Phi3Attention):
         if past_key_value is not None:
             kv_length += past_key_value.get_seq_length(self.layer_idx)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=kv_length)
+        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=_length)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
