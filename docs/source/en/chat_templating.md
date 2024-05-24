@@ -233,9 +233,9 @@ The sun.</s>
 
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
-## Can I pass other arguments to the chat template?
+## Advanced: Extra inputs to chat templates
 
-Yes, you can! The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
+The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
 argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
 chat templates for many things. There are no restrictions on the names or the format of these arguments - you can pass
 strings, lists, dicts or whatever else you want. 
@@ -244,57 +244,57 @@ That said, there are some common use-cases for these extra arguments,
 such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
 we have some opinionated recommendations about what the names and formats of these arguments should be.
 
-### Arguments for tool use
+### Tool use / function calling
 
-"Tool use" LLMs can choose to call functions as external tools before generating an answer. Our recommendation for
-tool use models is that their template
-should accept a `tools` argument. This should be a list of tools, defined via [JSON Schema](https://json-schema.org/). Each "tool"
-is a single function that the model can choose to call, and the schema should include the function name, its description
-and the expected spec for its arguments.
-
-#### Example
+"Tool use" LLMs can choose to call functions as external tools before generating an answer. When passing tools
+to a tool-use model, you can simply pass a list of functions to the `tools` argument:
 
 ```python
-# A simple function that takes no arguments
-current_time = {
-    "name": "current_time",
-    "description": "Get the current local time as a string.",
-    "parameters": {
-                'type': 'object',
-                'properties': {}
-            },
-    }
+import datetime
 
-# A more complete function that takes two numerical arguments
-multiply = {
-    "name": "multiply",
-    "description": "Multiply two numbers together.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "a": {"type": "number", "description": "The first number to multiply."},
-            "b": {"type": "number", "description": "The second number to multiply."},
-        },
-        "required": ["a", "b"],
-        }
-    }
+def current_time():
+    """Get the current local time as a string."""
+    return str(datetime.now())
+
+def multiply(a: float, b: float):
+    """
+    A function that multiplies two numbers
+    
+    Args:
+        a: The first number to multiply
+        b: The second number to multiply
+    """
+    return a * b
+
+tools = [current_time, multiply]
 
 model_input = tokenizer.apply_chat_template(
     messages,
-    tools = [current_time, multiply]
+    tools=tools
 )
 ```
 
-JSON schemas permit highly detailed parameter specifications, so you can pass in functions with very complex, nested
-arguments. Be careful, however - we find that in practice this can degrade performance, even for state-of-the-art 
-models. We recommend trying to keep your tool schemas simple and flat where possible.
+In order for this to work correctly, you should use the following conventions, so that the functions can be parsed
+correctly as tools:
 
-### Automated function conversion for tool use
+- Each function should have a descriptive name
+- Every argument should have a type hint
+- The function should have a docstring in the standard Google style (in other words, an initial function description  
+  followed by an `Args:` block that describes the arguments. It is not necessary to include types in the `Args:` block.
+- The function can have a return type and a `Returns:` block in the docstring. However, these are optional
+  because most tool-use models ignore them.
 
-Although JSON schemas are precise, widely-supported and language-agnostic, they can be a bit verbose, which means
-that writing them can be annoying. Don't panic, though, we have a solution! You can simply define Python functions
-as tools, and use the [`get_json_schema`] function. This function will automatically generate a JSON schema for any
-function that has a valid docstring with parameter annotations and valid type hints. Let's see it in action!
+### Understanding tool schemas
+
+Each function you pass to the `tools` argument of `apply_chat_template` is converted into a 
+[JSON schema](https://json-schema.org/learn/getting-started-step-by-step. These schemas
+are then passed to the model chat template. In other words, tool-use models do not see your functions directly, and they
+never see the actual code inside them. What they care about is the function **definitions** and the **arguments** they
+need to pass to them - they care about what the tools do and how to use them, not how they work!
+
+Generating JSON schemas to pass to the template should be automatic and invisible as long as your functions
+follow the specification above, but if you encounter problems, or you simply want more control over the conversion, 
+you can handle the conversion manually. Here is an example of a manual schema conversion.
 
 ```python
 from transformers.utils import get_json_schema
@@ -336,45 +336,47 @@ This will yield:
 }
 ```
 
-We can use this function to avoid the need to manually write JSON schemas when passing tools to the chat template.
-In addition, if you pass functions in the `tools` argument, they will automatically be converted with this function:
+If you wish, you can edit these schemas, or even write them from scratch yourself without using `get_json_schema` at 
+all. JSON schemas can be passed directly to the `tools` argument of 
+`apply_chat_template` - this gives you a lot of power to define precise schemas for more complex functions. Be careful,
+though - the more complex your schemas, the more likely the model is to get confused when dealing with them! We 
+recommend simple function signatures where possible, keeping arguments (and especially complex, nested arguments) 
+to a minimum.
+
+Here is an example of defining schemas by hand, and passing them directly to `apply_chat_template`:
 
 ```python
-import datetime
+# A simple function that takes no arguments
+current_time = {
+    "name": "current_time",
+    "description": "Get the current local time as a string.",
+    "parameters": {
+                'type': 'object',
+                'properties': {}
+            },
+    }
 
-def current_time():
-    """Get the current local time as a string."""
-    return str(datetime.now())
-
-def multiply(a: float, b: float):
-    """
-    A function that multiplies two numbers
-    
-    Args:
-        a: The first number to multiply
-        b: The second number to multiply
-    """
-    return a * b
-
-tools = [current_time, multiply]
+# A more complete function that takes two numerical arguments
+multiply = {
+    "name": "multiply",
+    "description": "Multiply two numbers together.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "a": {"type": "number", "description": "The first number to multiply."},
+            "b": {"type": "number", "description": "The second number to multiply."},
+        },
+        "required": ["a", "b"],
+        }
+    }
 
 model_input = tokenizer.apply_chat_template(
     messages,
-    tools=tools
+    tools = [current_time, multiply]
 )
 ```
 
-#### Notes on automatic conversion
-
-`get_json_schema` expects a specific docstring format. The docstring should
-begin with a description of the function, followed by an `Args:` block that describes each argument. It can also
-optionally include a `Returns:` block that describes the value(s) returned by the function. Many templates ignore this,
-because the model will see the return format after calling the function anyway, but some require it.
-
-Argument descriptions in the docstring should not include the argument types - these are read from the type hints
-in the function signature instead.
-
-### Arguments for RAG
+### Retrieval-augmented generation
 
 "Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
 to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
@@ -383,7 +385,7 @@ should accept a `documents` argument. This should be a list of documents, where 
 is a single dict with `title` and `contents` keys, both of which are strings. Because this format is much simpler
 than the JSON schemas used for tools, no helper functions are necessary.
 
-#### Example
+Here's an example of a RAG template in action:
 
 ```python
 document1 = {
