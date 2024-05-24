@@ -81,10 +81,10 @@ class Cache:
 
     @property
     def seen_tokens(self):
-        logger.warning_once(
-            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
-            "model input instead."
-        )
+        # logger.warning_once(
+        #    "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
+        #    "model input instead."
+        # )
         if hasattr(self, "_seen_tokens"):
             return self._seen_tokens
         else:
@@ -752,6 +752,7 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self._seen_tokens = 0
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -788,6 +789,9 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+        if layer_idx == 0:
+            self._seen_tokens += 1
+
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
@@ -802,7 +806,12 @@ class StaticCache(Cache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
-        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+
+        # since we cannot get the seq_length of each layer directly and rely on `_seen_tokens` which is
+        # updated every "layer_idx" == 0, this is a hack to get the actual seq_length for the given layer_idx
+        # this part of code otherwise fails when used to verify attn_weight shape in some models
+        return self.seen_tokens if layer_idx == 0 else self.seen_tokens - 1
+        # return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
@@ -810,6 +819,7 @@ class StaticCache(Cache):
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
+        self._seen_tokens = 0
         for layer_idx in range(len(self.key_cache)):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
