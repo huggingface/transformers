@@ -22,7 +22,7 @@ from transformers.testing_utils import TestCasePlus, require_torch
 class OfflineTests(TestCasePlus):
     @require_torch
     def test_offline_mode(self):
-        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
+        # this test is a bit tricky since HF_HUB_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
 
@@ -60,8 +60,8 @@ socket.socket = offline_socket
 
         # should succeed
         env = self.get_env()
-        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
-        env["TRANSFORMERS_OFFLINE"] = "1"
+        # should succeed as HF_HUB_OFFLINE=1 tells it to use local files
+        env["HF_HUB_OFFLINE"] = "1"
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
@@ -107,7 +107,7 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_sharded_checkpoint(self):
-        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
+        # this test is a bit tricky since HF_HUB_OFFLINE can only be changed before
         # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
         # while running an external program
 
@@ -144,12 +144,12 @@ socket.socket = offline_socket
         cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
 
         # Doesn't fail anymore since the model is in the cache due to other tests, so commenting this.
-        # env["TRANSFORMERS_OFFLINE"] = "0"
+        # env["HF_HUB_OFFLINE"] = "0"
         # result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         # self.assertEqual(result.returncode, 1, result.stderr)
 
-        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
-        env["TRANSFORMERS_OFFLINE"] = "1"
+        # should succeed as HF_HUB_OFFLINE=1 tells it to use local files
+        env["HF_HUB_OFFLINE"] = "1"
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
@@ -170,7 +170,7 @@ def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled
 socket.socket = offline_socket
         """
         env = self.get_env()
-        env["TRANSFORMERS_OFFLINE"] = "1"
+        env["HF_HUB_OFFLINE"] = "1"
         cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 1, result.stderr)
@@ -199,8 +199,8 @@ print("success")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
 
-        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
-        env["TRANSFORMERS_OFFLINE"] = "1"
+        # should succeed as HF_HUB_OFFLINE=1 tells it to use local files
+        env["HF_HUB_OFFLINE"] = "1"
         result = subprocess.run(cmd, env=env, check=False, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("success", result.stdout.decode())
