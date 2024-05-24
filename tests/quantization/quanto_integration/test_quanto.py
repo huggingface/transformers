@@ -440,6 +440,7 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
         self.assertIn("We don't support quantizing the activations with transformers library", str(e.exception))
 
 
+@require_quanto
 @require_torch_gpu
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
