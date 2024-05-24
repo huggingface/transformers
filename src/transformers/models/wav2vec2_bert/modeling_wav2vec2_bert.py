@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2-BERT model."""
+"""PyTorch Wav2Vec2-BERT model."""
 
 import math
 import warnings
@@ -62,9 +62,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 146, 1024]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we are glad to welcome his gospel'"
 _CTC_EXPECTED_LOSS = 17.04
-
-
-from ..deprecated._archive_maps import WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask

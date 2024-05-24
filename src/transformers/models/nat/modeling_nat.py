@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Neighborhood Attention Transformer model."""
-
+"""PyTorch Neighborhood Attention Transformer model."""
 
 import math
 from dataclasses import dataclass
@@ -66,9 +65,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 7, 7, 512]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "shi-labs/nat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-
-from ..deprecated._archive_maps import NAT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # drop_path and NatDropPath are from the timm library.

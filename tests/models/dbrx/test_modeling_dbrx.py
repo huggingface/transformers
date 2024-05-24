@@ -12,12 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DBRX model. """
-
+"""Testing suite for the PyTorch DBRX model."""
 
 import unittest
-
-from parameterized import parameterized
 
 from transformers import DbrxConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -357,9 +354,18 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip("TODO @gante fix this for Llama")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
+    # Offload does not work with Dbrx models because of the forward of DbrxExperts where we chunk the experts.
+    # The issue is that the offloaded weights of the mlp layer are still on meta device (w1_chunked, v1_chunked, w2_chunked)
+    @unittest.skip("Dbrx models do not work with offload")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Dbrx models do not work with offload")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Dbrx models do not work with offload")
+    def test_disk_offload_bin(self):
         pass
 
 

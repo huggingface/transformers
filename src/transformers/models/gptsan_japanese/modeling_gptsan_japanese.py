@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPTSANJapanese model."""
-
+"""PyTorch GPTSANJapanese model."""
 
 import copy
 from typing import List, Optional, Tuple, Union
@@ -44,8 +43,6 @@ _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-
-from ..deprecated._archive_maps import GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow ViTMAE model. """
-
+"""Testing suite for the TensorFlow ViTMAE model."""
 
 from __future__ import annotations
 
@@ -72,6 +71,7 @@ class TFViTMAEModelTester:
         num_labels=3,
         mask_ratio=0.6,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +91,7 @@ class TFViTMAEModelTester:
         self.initializer_range = initializer_range
         self.mask_ratio = mask_ratio
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in ViTMAE, the expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
         # (we add 1 for the [CLS] token)
@@ -127,6 +128,7 @@ class TFViTMAEModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             mask_ratio=self.mask_ratio,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

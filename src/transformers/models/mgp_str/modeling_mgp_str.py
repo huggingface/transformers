@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MGP-STR model."""
+"""PyTorch MGP-STR model."""
 
 import collections.abc
 from dataclasses import dataclass
@@ -43,9 +43,6 @@ _TOKENIZER_FOR_DOC = "MgpstrTokenizer"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
-
-
-from ..deprecated._archive_maps import MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path

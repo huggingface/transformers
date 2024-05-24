@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FocalNet model."""
-
+"""PyTorch FocalNet model."""
 
 import collections.abc
 import math
@@ -52,9 +51,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/focalnet-tiny"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass

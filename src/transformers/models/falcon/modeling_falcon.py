@@ -15,7 +15,6 @@
 """PyTorch Falcon model."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import torch
@@ -59,8 +58,6 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-from ..deprecated._archive_maps import FALCON_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
 
 _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
@@ -84,7 +81,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.apply_rotary_pos_emb
+# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -126,7 +123,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Falcon
+# Copied from transformers.models.mixtral.modeling_mixtral.MixtralRotaryEmbedding with Mixtral->Falcon
 class FalconRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -395,13 +392,7 @@ class FalconAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -443,16 +434,19 @@ class FalconAttention(nn.Module):
 
         if alibi is None:
             if self._use_sdpa and not output_attentions:
-                attn_output = F.scaled_dot_product_attention(
+                # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+                # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+                # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not
+                # create a causal mask in case query_length == 1.
+                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
-                    attention_mask,
-                    0.0,
-                    # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
-                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
+                    attn_mask=attention_mask,
+                    dropout_p=0.0,
+                    is_causal=is_causal,
                 )
-
                 attention_scores = None
             else:
                 attention_scores = query_layer @ key_layer.transpose(-1, -2)
@@ -475,13 +469,16 @@ class FalconAttention(nn.Module):
 
         else:
             if self._use_sdpa and not output_attentions and head_mask is None:
-                attn_output = F.scaled_dot_product_attention(
+                # We dispatch to SDPA's Flash Attention or Efficient kernels via this if statement instead of an
+                # inline conditional assignment to support both torch.compile's `dynamic=True` and `fullgraph=True`
+                is_causal = True if self.is_causal and attention_mask is None and query_length > 1 else False
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
                     attn_mask=attention_mask,
                     dropout_p=self.attention_dropout.p if self.training else 0.0,
-                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
+                    is_causal=is_causal,
                 )
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
@@ -551,16 +548,7 @@ class FalconFlashAttention2(FalconAttention):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
-
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
         # 3 x [batch_size, seq_length, num_heads, head_dim]
@@ -769,15 +757,20 @@ class FalconDecoderLayer(nn.Module):
         self.hidden_dropout = config.hidden_dropout
         self.config = config
 
-        if config.new_decoder_architecture:
-            # The layer norm before self-attention
-            self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            # The layer norm before the MLP
-            self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        else:
+        if config.num_ln_in_parallel_attn is None and config.new_decoder_architecture:
+            config.num_ln_in_parallel_attn = 2
+
+        if not config.parallel_attn:
+            self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-            if not config.parallel_attn:
-                self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        else:
+            if config.num_ln_in_parallel_attn == 2:
+                # The layer norm before self-attention
+                self.ln_attn = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+                # The layer norm before the MLP
+                self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            else:
+                self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
@@ -789,16 +782,10 @@ class FalconDecoderLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        **kwargs,
     ):
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         residual = hidden_states
 
-        if self.config.new_decoder_architecture:
+        if self.config.new_decoder_architecture and self.config.num_ln_in_parallel_attn == 2:
             attention_layernorm_out = self.ln_attn(hidden_states)
             mlp_layernorm_out = self.ln_mlp(hidden_states)
         else:
@@ -814,7 +801,6 @@ class FalconDecoderLayer(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            **kwargs,
         )
 
         attention_output = attn_outputs[0]
@@ -827,6 +813,13 @@ class FalconDecoderLayer(nn.Module):
                     attention_output, residual, self.config.attention_dropout, training=self.training
                 )
                 mlp_layernorm_out = self.post_attention_layernorm(residual)
+
+        if (
+            self.config.new_decoder_architecture
+            and self.config.parallel_attn
+            and self.config.num_ln_in_parallel_attn == 1
+        ):
+            mlp_layernorm_out = attention_layernorm_out
 
         outputs = attn_outputs[1:]
 

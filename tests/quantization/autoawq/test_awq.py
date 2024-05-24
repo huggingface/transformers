@@ -288,7 +288,7 @@ class AwqFusedTest(unittest.TestCase):
         "You end up exactly where you started. Where are you?"
     )
 
-    EXPECTED_GENERATION = prompt + "\n\nYou are at the starting point.\n\nIf"
+    EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
@@ -471,3 +471,22 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
+
+
+@slow
+@require_torch_gpu
+@require_auto_awq
+@require_accelerate
+class AwqScaleTest(unittest.TestCase):
+    model_name = "TechxGenus/starcoder2-3b-AWQ"
+
+    def test_load_quantized_model(self):
+        from awq.modules.act import ScaledActivation
+
+        """
+        Simple test that checks if the scales have been replaced in the quantized model
+        """
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map="cuda"
+        )
+        self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))

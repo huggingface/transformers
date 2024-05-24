@@ -23,7 +23,7 @@
     title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
-  - local: transformers_agents
+  - local: agents
     title: Agents
   - local: llm_tutorial
     title: Generation with LLMs
@@ -133,20 +133,38 @@
     title: Notebooks with examples
   - local: community
     title: Community resources
-  - local: custom_tools
-    title: Custom Tools and Prompts
   - local: troubleshooting
     title: Troubleshoot
-  - local: hf_quantizer
-    title: Contribute new quantization method
+  - local: gguf
+    title: Interoperability with GGUF files
   title: Developer guides
+- sections:
+  - local: quantization/overview
+    title: Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: quantization/gptq
+    title: GPTQ
+  - local: quantization/awq
+    title: AWQ
+  - local: quantization/aqlm
+    title: AQLM
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/eetq
+    title: EETQ
+  - local: quantization/hqq
+    title: HQQ
+  - local: quantization/optimum
+    title: Optimum
+  - local: quantization/contribute
+    title: Contribute new quantization method
+  title: Quantization Methods
 - sections:
   - local: performance
     title: Overview
   - local: llm_optims
     title: LLM inference optimization
-  - local: quantization
-    title: Quantization
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
@@ -388,6 +406,8 @@
         title: I-BERT
       - local: model_doc/jamba
         title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led
@@ -784,6 +804,8 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paligemma
+        title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct
@@ -804,6 +826,8 @@
         title: TVP
       - local: model_doc/udop
         title: UDOP
+      - local: model_doc/video_llava
+        title: VideoLlava
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vipllava
