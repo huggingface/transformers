@@ -255,7 +255,7 @@ class WhisperAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
+        if is_decoder and layer_idx is None:
             logger.warning_once(
                 f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
                 "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
@@ -1398,7 +1398,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         
         use_head_mask = head_mask is not None
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values[0], use_head_mask, output_attentions
+            attention_mask, inputs_embeds, cache_position, past_key_values[0] if past_key_values is not None else None, 
+            use_head_mask, output_attentions
         )
         
         # decoder layers

@@ -1315,7 +1315,7 @@ class GenerationMixin:
         if "past_key_values" in model_kwargs:
             past_key_values = model_kwargs["past_key_values"]
             # double cache case in encoder decoder arch
-            if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], (tuple, Cache)):
+            if isinstance(past_key_values, tuple) and isinstance(past_key_values[0], Cache):
                 past_key_values = past_key_values[0]
 
             if isinstance(past_key_values, Cache):

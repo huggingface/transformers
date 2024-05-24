@@ -25,6 +25,7 @@ import unittest
 
 import numpy as np
 import pytest
+from parameterized import parameterized
 from huggingface_hub import hf_hub_download
 
 import transformers
@@ -897,7 +898,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @slow
     def test_flash_attn_2_inference_equivalence(self):
         import torch
-
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
                 return
@@ -957,9 +957,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
+                model_fa.eval()
 
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
                 model.to(torch_device)
+                model.eval()
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
                 dummy_input = dummy_input.to(torch.float16)
@@ -1535,7 +1537,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
-
+    
+    @unittest.skip("Skip this for now because conditional generation needs two caches")
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        pass
 
 @require_torch
 @require_torchaudio
