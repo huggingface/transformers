@@ -101,7 +101,9 @@ def get_max_height_width(
     return (max_height, max_width)
 
 
-def get_size_with_aspect_ratio(image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: in t = 16) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(
+    image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+) -> Tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
 
