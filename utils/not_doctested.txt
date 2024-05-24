@@ -885,6 +885,8 @@ src/transformers/models/wavlm/convert_wavlm_original_s3prl_checkpoint_to_pytorch
 src/transformers/models/whisper/convert_openai_to_hf.py
 src/transformers/models/whisper/english_normalizer.py
 src/transformers/models/whisper/modeling_flax_whisper.py
+src/transformers/models/x_clip/configuration_x_clip.py
+src/transformers/models/x_clip/convert_x_clip_original_pytorch_to_hf.py
 src/transformers/models/xglm/configuration_xglm.py
 src/transformers/models/xglm/convert_xglm_original_ckpt_to_trfms.py
 src/transformers/models/xglm/modeling_flax_xglm.py

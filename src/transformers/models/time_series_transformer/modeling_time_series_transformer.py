@@ -21,18 +21,18 @@ import numpy as np
 import torch
 from torch import nn
 
-from ....activations import ACT2FN
-from ....modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
-from ....modeling_outputs import (
+from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     SampleTSPredictionOutput,
     Seq2SeqTSModelOutput,
     Seq2SeqTSPredictionOutput,
 )
-from ....modeling_utils import PreTrainedModel
-from ....time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ....utils import (
+from ...modeling_utils import PreTrainedModel
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
+from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,

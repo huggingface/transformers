@@ -360,7 +360,6 @@ _import_structure = {
         "Speech2Text2Tokenizer",
     ],
     "models.deprecated.tapex": ["TapexTokenizer"],
-    "models.deprecated.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.deprecated.trajectory_transformer": ["TrajectoryTransformerConfig"],
     "models.deprecated.transfo_xl": [
         "TransfoXLConfig",
@@ -374,12 +373,6 @@ _import_structure = {
     ],
     "models.deprecated.van": ["VanConfig"],
     "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
-    "models.deprecated.x_clip": [
-        "XCLIPConfig",
-        "XCLIPProcessor",
-        "XCLIPTextConfig",
-        "XCLIPVisionConfig",
-    ],
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
@@ -719,6 +712,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.trocr": [
@@ -786,6 +780,12 @@ _import_structure = {
         "WhisperFeatureExtractor",
         "WhisperProcessor",
         "WhisperTokenizer",
+    ],
+    "models.x_clip": [
+        "XCLIPConfig",
+        "XCLIPProcessor",
+        "XCLIPTextConfig",
+        "XCLIPVisionConfig",
     ],
     "models.xglm": ["XGLMConfig"],
     "models.xlm": ["XLMConfig", "XLMTokenizer"],
@@ -1900,13 +1900,6 @@ else:
     _import_structure["models.deprecated.speech_to_text_2"].extend(
         ["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"]
     )
-    _import_structure["models.deprecated.time_series_transformer"].extend(
-        [
-            "TimeSeriesTransformerForPrediction",
-            "TimeSeriesTransformerModel",
-            "TimeSeriesTransformerPreTrainedModel",
-        ]
-    )
     _import_structure["models.deprecated.trajectory_transformer"].extend(
         [
             "TrajectoryTransformerModel",
@@ -1943,14 +1936,6 @@ else:
             "ViTHybridForImageClassification",
             "ViTHybridModel",
             "ViTHybridPreTrainedModel",
-        ]
-    )
-    _import_structure["models.deprecated.x_clip"].extend(
-        [
-            "XCLIPModel",
-            "XCLIPPreTrainedModel",
-            "XCLIPTextModel",
-            "XCLIPVisionModel",
         ]
     )
     _import_structure["models.deprecated.xlm_prophetnet"].extend(
@@ -3221,6 +3206,13 @@ else:
             "load_tf_weights_in_tapas",
         ]
     )
+    _import_structure["models.time_series_transformer"].extend(
+        [
+            "TimeSeriesTransformerForPrediction",
+            "TimeSeriesTransformerModel",
+            "TimeSeriesTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.timesformer"].extend(
         [
             "TimesformerForVideoClassification",
@@ -3438,6 +3430,14 @@ else:
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
+        ]
+    )
+    _import_structure["models.x_clip"].extend(
+        [
+            "XCLIPModel",
+            "XCLIPPreTrainedModel",
+            "XCLIPTextModel",
+            "XCLIPVisionModel",
         ]
     )
     _import_structure["models.xglm"].extend(
@@ -4933,9 +4933,6 @@ if TYPE_CHECKING:
         Speech2Text2Tokenizer,
     )
     from .models.deprecated.tapex import TapexTokenizer
-    from .models.deprecated.time_series_transformer import (
-        TimeSeriesTransformerConfig,
-    )
     from .models.deprecated.trajectory_transformer import (
         TrajectoryTransformerConfig,
     )
@@ -4952,12 +4949,6 @@ if TYPE_CHECKING:
     from .models.deprecated.van import VanConfig
     from .models.deprecated.vit_hybrid import (
         ViTHybridConfig,
-    )
-    from .models.deprecated.x_clip import (
-        XCLIPConfig,
-        XCLIPProcessor,
-        XCLIPTextConfig,
-        XCLIPVisionConfig,
     )
     from .models.deprecated.xlm_prophetnet import (
         XLMProphetNetConfig,
@@ -5334,6 +5325,9 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.time_series_transformer import (
+        TimeSeriesTransformerConfig,
+    )
     from .models.timesformer import (
         TimesformerConfig,
     )
@@ -5410,6 +5404,12 @@ if TYPE_CHECKING:
         WhisperFeatureExtractor,
         WhisperProcessor,
         WhisperTokenizer,
+    )
+    from .models.x_clip import (
+        XCLIPConfig,
+        XCLIPProcessor,
+        XCLIPTextConfig,
+        XCLIPVisionConfig,
     )
     from .models.xglm import XGLMConfig
     from .models.xlm import XLMConfig, XLMTokenizer
@@ -6412,11 +6412,6 @@ if TYPE_CHECKING:
             Speech2Text2ForCausalLM,
             Speech2Text2PreTrainedModel,
         )
-        from .models.deprecated.time_series_transformer import (
-            TimeSeriesTransformerForPrediction,
-            TimeSeriesTransformerModel,
-            TimeSeriesTransformerPreTrainedModel,
-        )
         from .models.deprecated.trajectory_transformer import (
             TrajectoryTransformerModel,
             TrajectoryTransformerPreTrainedModel,
@@ -6444,12 +6439,6 @@ if TYPE_CHECKING:
             ViTHybridForImageClassification,
             ViTHybridModel,
             ViTHybridPreTrainedModel,
-        )
-        from .models.deprecated.x_clip import (
-            XCLIPModel,
-            XCLIPPreTrainedModel,
-            XCLIPTextModel,
-            XCLIPVisionModel,
         )
         from .models.deprecated.xlm_prophetnet import (
             XLMProphetNetDecoder,
@@ -7452,6 +7441,11 @@ if TYPE_CHECKING:
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
         )
+        from .models.time_series_transformer import (
+            TimeSeriesTransformerForPrediction,
+            TimeSeriesTransformerModel,
+            TimeSeriesTransformerPreTrainedModel,
+        )
         from .models.timesformer import (
             TimesformerForVideoClassification,
             TimesformerModel,
@@ -7616,6 +7610,12 @@ if TYPE_CHECKING:
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
+        )
+        from .models.x_clip import (
+            XCLIPModel,
+            XCLIPPreTrainedModel,
+            XCLIPTextModel,
+            XCLIPVisionModel,
         )
         from .models.xglm import (
             XGLMForCausalLM,

@@ -18,8 +18,8 @@ Image/Text processor class for XCLIP
 
 import warnings
 
-from ....processing_utils import ProcessorMixin
-from ....tokenization_utils_base import BatchEncoding
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding
 
 
 class XCLIPProcessor(ProcessorMixin):

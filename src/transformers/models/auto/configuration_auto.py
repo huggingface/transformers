@@ -602,13 +602,11 @@ DEPRECATED_MODELS = [
     "retribert",
     "speech_to_text_2",
     "tapex",
-    "time_series_transformer",
     "trajectory_transformer",
     "transfo_xl",
     "tvlt",
     "van",
     "vit_hybrid",
-    "x_clip",
     "xlm_prophetnet",
 ]
 

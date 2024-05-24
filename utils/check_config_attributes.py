@@ -86,6 +86,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # used internally to calculate the feature size
     "InformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate the feature size
+    "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
+    # used internally to calculate the feature size
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
