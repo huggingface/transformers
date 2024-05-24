@@ -412,10 +412,10 @@ class CLIPMLP(nn.Module):
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig, attn_implementation="eager"):
+    def __init__(self, config: CLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIP_ATTENTION_CLASSES[attn_implementation](config)
+        self.self_attn = CLIP_ATTENTION_CLASSES[config._attn_implementation](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -638,15 +638,10 @@ class CLIPEncoder(nn.Module):
         config: CLIPConfig
     """
 
-    def __init__(self, config: CLIPConfig, attn_implementation="eager"):
+    def __init__(self, config: CLIPConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList(
-            [
-                CLIPEncoderLayer(config, attn_implementation=attn_implementation)
-                for _ in range(config.num_hidden_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -732,12 +727,12 @@ class CLIPEncoder(nn.Module):
 
 
 class CLIPTextTransformer(nn.Module):
-    def __init__(self, config: CLIPTextConfig, attn_implementation="eager"):
+    def __init__(self, config: CLIPTextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = CLIPTextEmbeddings(config)
-        self.encoder = CLIPEncoder(config, attn_implementation=attn_implementation)
+        self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         # For `pooled_output` computation
@@ -890,14 +885,14 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
 
 class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig, attn_implementation="eager"):
+    def __init__(self, config: CLIPVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = CLIPVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLIPEncoder(config, attn_implementation=attn_implementation)
+        self.encoder = CLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
@@ -1034,9 +1029,7 @@ class CLIPModel(CLIPPreTrainedModel):
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = CLIPTextModel.from_config(text_config, attn_implementation=config._attn_implementation)
-        self.vision_model = CLIPVisionModel._from_config(
-            vision_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_model = CLIPVisionModel.from_config(vision_config, attn_implementation=config._attn_implementation)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1251,7 +1244,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
 
-        self.text_model = CLIPTextTransformer(config)
+        self.text_model = CLIPTextModel.from_config(config, attn_implementation=config._attn_implementation)
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1331,7 +1324,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        self.vision_model = CLIPVisionTransformer(config)
+        self.vision_model = CLIPVisionModel.from_config(config, attn_implementation=config._attn_implementation)
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1410,7 +1403,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vision_model = CLIPVisionTransformer(
+        self.vision_model = CLIPVisionModel.from_config(
             config.vision_config, attn_implementation=config._attn_implementation
         )
 
