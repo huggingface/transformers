@@ -114,7 +114,7 @@ class GetFromCacheTests(unittest.TestCase):
             hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
 
             # Cache dir + offline mode => return True
-            assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
+            assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
     def test_get_file_from_repo_distant(self):
         # `get_file_from_repo` returns None if the file does not exist
