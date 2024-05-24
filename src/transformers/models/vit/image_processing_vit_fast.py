@@ -17,8 +17,8 @@
 import functools
 from typing import Any, Dict, List, Optional, Union
 
-from ...image_processing_utils import get_size_dict
 from ...image_processing_base import BatchFeature
+from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale
 from ...image_utils import (
@@ -44,7 +44,7 @@ if is_torch_available():
 
 
 if is_torchvision_available():
-    from torchvision.transforms import Compose, PILToTensor, Resize, Lambda, Normalize
+    from torchvision.transforms import Compose, Normalize, PILToTensor, Resize
 
 
 class ViTImageProcessorFast(BaseImageProcessorFast):
