@@ -90,14 +90,12 @@ def _parse_type_hint(hint):
         if not args:
             return {"type": "array"}
         if len(args) == 1:
+            breakpoint()
             raise ValueError(
-                "Tuple type hints should only be used when the argument has a fixed length and each "
-                f"element has a specific type. The hint {hint} indicates a Tuple of length 1. "
-                "This should be replaced with an unwrapped type hint instead like "
-                f"{args[0]}. Alternatively, if the "
-                "function can actually take a tuple with multiple elements, please either indicate "
-                f"each element type (e.g. Tuple[{args[0]}, {args[0]}]), "
-                f"or if the input can be variable length, use List[{args[0]}] instead."
+                f"The type hint {hint.replace('typing.', '')} is a Tuple with a single element, which we do not "
+                "support as it is rarely necessary. If this input can contain more than one element, we recommend "
+                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "pass the element directly."
             )
         if ... in args:
             raise ValueError(

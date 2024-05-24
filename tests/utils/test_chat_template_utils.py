@@ -137,7 +137,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "properties": {
                     "x": {
                         "type": "array",
-                        "items": {"type": "array", "items": {"type": ["string", "integer"]}},
+                        "items": {"type": "array", "items": {"type": ["integer", "string"]}},
                         "description": "The input",
                     }
                 },
@@ -414,4 +414,30 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
 
+        self.assertEqual(schema, expected_schema)
+
+    def test_everything_all_at_once(self):
+        def fn(
+            x: str, y: Optional[List[Union[int, str]]], z: Tuple[Union[int, str]] = (42, "hello")
+        ) -> Tuple[int, str]:
+            """
+            Test function with multiple args, and docstring args that we have to strip out.
+
+            Args:
+                x (str): The first input. It's got a big multiline
+                   description and also contains
+                   (choices: ["a", "b", "c"])
+
+                y (List[int, str], *optional*): The second input. It's a big list with a single-line description.
+
+                z (Tuple[int, str]): The third input. It's some kind of tuple with a default arg.
+
+            Returns:
+                The output. The return description is also a big multiline
+                description that spans multiple lines.
+            """
+            pass
+
+        schema = get_json_schema(fn)
+        breakpoint()
         self.assertEqual(schema, expected_schema)
