@@ -35,7 +35,8 @@ from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
-
+from ...generation.utils import GenerateEncoderDecoderOutput
+                    
 
 logger = logging.get_logger(__name__)
 
@@ -615,7 +616,6 @@ class WhisperGenerationMixin:
 
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
         temperature = temperatures[0]
-        batch_size = input_features.shape[0]
 
         max_frames, seek = self._retrieve_max_frames_and_seek(
             batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames, is_shortform=is_shortform
@@ -649,14 +649,19 @@ class WhisperGenerationMixin:
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
             # 6.4 cut out next 30s segment from input features
-            segment_input = self._get_input_segment(
-                input_features=input_features,
-                seek=seek,
-                seek_num_frames=seek_num_frames,
-                num_segment_frames=num_segment_frames,
-                cur_bsz=cur_bsz,
-                batch_idx_map=batch_idx_map,
-            )
+            if input_features is not None: 
+                # When doing assistant decoding, we only use the "encoder_decoder_outputs"
+                # in kwargs. 'segment_input' will be set to None.  
+                segment_input = self._get_input_segment(
+                    input_features=input_features,
+                    seek=seek,
+                    seek_num_frames=seek_num_frames,
+                    num_segment_frames=num_segment_frames,
+                    cur_bsz=cur_bsz,
+                    batch_idx_map=batch_idx_map,
+                )
+            else: 
+                segment_input = None
 
             # 6.5 prepare decoder input ids
             if not is_shortform: 
@@ -665,6 +670,9 @@ class WhisperGenerationMixin:
                 )
             else: 
                 suppress_tokens = None
+
+            # Remove decoder_input_ids if present in kwargs: 
+            decoder_input_ids = kwargs.pop("decoder_input_ids", None)
 
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
@@ -675,10 +683,11 @@ class WhisperGenerationMixin:
                 prompt_ids=prompt_ids,
                 generation_config=generation_config,
                 config=self.config,
-                device=segment_input.device,
+                device=init_tokens.device,
                 suppress_tokens=suppress_tokens,
                 kwargs=kwargs,
             )
+
 
             # 6.6 set max new tokens or max length
             self._set_max_new_tokens_and_length(
@@ -694,7 +703,21 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.8 Run generate with fallback
-            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(
+            if segment_input is None: 
+                seek_outputs = super().generate(
+                    segment_input,
+                    generation_config=generation_config,
+                    logits_processor=logits_processor,
+                    stopping_criteria=stopping_criteria,
+                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                    synced_gpus=synced_gpus,
+                    decoder_input_ids=decoder_input_ids,
+                    **kwargs,
+                )
+                return seek_outputs
+
+            else: 
+                seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
@@ -757,12 +780,16 @@ class WhisperGenerationMixin:
             # add eos token: 
             if generation_config.max_new_tokens is None: 
                 sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
+
+            sequences = GenerateEncoderDecoderOutput(
+                    sequences=sequences, 
+            )
             
             if return_token_timestamps: 
                 outputs = {}
                 outputs['sequences'] = sequences
                 outputs['token_timestamps'] = torch.stack([d['token_timestamps'] for d in seek_outputs], dim=0)
-                # outputs['scores'] = tuple([torch.stack([seek_outputs[0]['scores'][i], seek_outputs[1]['scores'][i]]) for i in range(len(seek_outputs[0]['scores']))] )
+                outputs['scores'] = tuple([torch.stack([seek_outputs[0]['scores'][i], seek_outputs[1]['scores'][i]]) for i in range(len(seek_outputs[0]['scores']))] )
                 return outputs
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
