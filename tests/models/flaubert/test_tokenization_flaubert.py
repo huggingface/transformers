@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,33 +34,7 @@ class FlaubertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "w</w>",
-            "r</w>",
-            "t</w>",
-            "i</w>",
-            "lo",
-            "low",
-            "ne",
-            "new",
-            "er</w>",
-            "low</w>",
-            "lowest</w>",
-            "new</w>",
-            "newer</w>",
-            "wider</w>",
-            "<unk>",
-        ]
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "w</w>", "r</w>", "t</w>", "i</w>", "lo", "low", "ne", "new", "er</w>", "low</w>", "lowest</w>", "new</w>", "newer</w>", "wider</w>", "<unk>"] # fmt: skip
 
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["n e 300", "ne w 301", "e r</w> 302", ""]
