@@ -755,7 +755,9 @@ class WhisperGenerationMixin:
             # add decoder_input_ids tokens: 
             sequences = torch.cat([decoder_input_ids, sequences], dim=-1)
             # add eos token: 
-            sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
+            if generation_config.max_new_tokens is None: 
+                sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
+            
             if return_token_timestamps: 
                 outputs = {}
                 outputs['sequences'] = sequences
