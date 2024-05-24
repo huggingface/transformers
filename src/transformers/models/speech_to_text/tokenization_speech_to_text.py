@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Speech2Text."""
+
 import json
 import os
 from pathlib import Path

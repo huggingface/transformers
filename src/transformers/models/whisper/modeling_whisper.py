@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Whisper model."""
+"""PyTorch Whisper model."""
+
 import math
 from typing import Optional, Tuple, Union
 
@@ -1393,7 +1394,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             position_ids = cache_position.unsqueeze(0)
 
         positions = self.embed_positions(inputs_embeds, position_ids=position_ids)
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         
         use_head_mask = head_mask is not None
