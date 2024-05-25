@@ -91,19 +91,19 @@ class Blip2ImageTextMatchingModelOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
             The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of [`Blip2ImageTextMatchingModelVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`Blip2ImageTextMatchingModelTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
+        vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`Blip2ImageTextMatchingModelVisionModel`].
     """
 
@@ -550,7 +550,8 @@ BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        use_image_text_matching_head (`bool`, *optional*): Whether to return the Image-Text Matching or Contrastive scores.
+        use_image_text_matching_head (`bool`, *optional*):
+            Whether to return the Image-Text Matching or Contrastive scores.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
