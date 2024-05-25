@@ -12,9 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Llava-NeXT model. """
+"""Testing suite for the PyTorch Llava-NeXT model."""
 
-import copy
 import gc
 import unittest
 
@@ -28,15 +27,27 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_bitsandbytes,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_torch_available():
     import torch
+
+    from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
@@ -112,7 +123,7 @@ class LlavaNextVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 342
+        self.encoder_seq_length = 341
         self.image_grid_pinpoints = [[32, 32]]
 
     def get_config(self):
@@ -144,10 +155,15 @@ class LlavaNextVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        # make attention mask left-padded to avoid issues with "model has no attribute padding_side"
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        attention_mask[:, :1] = 0
         # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
+        labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
+        # maskout where the image token is
+        labels[:, 1] == self.ignore_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_sizes": torch.tensor(
@@ -155,8 +171,42 @@ class LlavaNextVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "labels": labels,
         }
         return config, inputs_dict
+
+    def create_and_check_llava_next_model_fp16_forward(
+        self, config, input_ids, pixel_values, attention_mask, image_sizes
+    ):
+        model = LlavaNextForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+        logits = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            image_sizes=image_sizes,
+            pixel_values=pixel_values.to(torch.bfloat16),
+            return_dict=True,
+        )["logits"]
+        self.parent.assertFalse(torch.isnan(logits).any().item())
+
+    def create_and_check_llava_next_model_fp16_autocast_forward(
+        self, config, input_ids, pixel_values, attention_mask, image_sizes
+    ):
+        config.torch_dtype = torch.float16
+        model = LlavaNextForConditionalGeneration(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            logits = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                image_sizes=image_sizes,
+                pixel_values=pixel_values.to(torch.bfloat16),
+                return_dict=True,
+            )["logits"]
+        self.parent.assertFalse(torch.isnan(logits).any().item())
 
 
 @require_torch
@@ -215,171 +265,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_cpu_offload(self):
         pass
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_tokens_embeddings with config.vocab_size->config.text_config.vocab_size
-    def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
-
-            if self.model_tester.is_training is False:
-                model.eval()
-
-            model_vocab_size = config.text_config.vocab_size
-            # Retrieve the embeddings and clone theme
-            model_embed = model.resize_token_embeddings(model_vocab_size)
-            cloned_embeddings = model_embed.weight.clone()
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
-
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-
-            # make sure that decoder_input_ids are resized as well
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            models_equal = True
-            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
-
-            model_vocab_size = config.text_config.vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
-            self.assertTrue(model.config.text_config.vocab_size + 10, model_vocab_size)
-
-            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
-            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
-
-            self.assertTrue(model_embed.weight.shape[0], model.config.text_config.vocab_size)
-            self.assertTrue(model.config.text_config.vocab_size, model.vocab_size)
-
-            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
-            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
-
-            # Check that resizing a model to a multiple of pad_to_multiple leads to a model of exactly that size
-            target_dimension = 128
-            model_embed = model.resize_token_embeddings(target_dimension, pad_to_multiple_of=64)
-            self.assertTrue(model_embed.weight.shape[0], target_dimension)
-
-            with self.assertRaisesRegex(
-                ValueError,
-                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
-            ):
-                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
-
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_resize_embeddings_untied with config.vocab_size->config.text_config.vocab_size
-    def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        original_config.tie_word_embeddings = False
-
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config).to(torch_device)
-
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.text_config.vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.text_config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_tie_model_weights with config.vocab_size->config.text_config.vocab_size
-    def test_tie_model_weights(self):
-        if not self.test_torchscript:
-            return
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_same_values(layer_1, layer_2):
-            equal = True
-            for p1, p2 in zip(layer_1.weight, layer_2.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    equal = False
-            return equal
-
-        for model_class in self.all_model_classes:
-            config.torchscript = True
-            model_not_tied = model_class(config)
-            if model_not_tied.get_output_embeddings() is None:
-                continue
-
-            config_tied = copy.deepcopy(config)
-            config_tied.torchscript = False
-            model_tied = model_class(config_tied)
-            params_tied = list(model_tied.parameters())
-            # Check that the embedding layer and decoding layer are the same in size and in value
-            # self.assertTrue(check_same_values(embeddings, decoding))
-
-            # Check that after resize they remain tied.
-            model_tied.resize_token_embeddings(config.text_config.vocab_size + 10)
-            params_tied_2 = list(model_tied.parameters())
-            self.assertEqual(len(params_tied_2), len(params_tied))
-
 
 @require_torch
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -405,14 +290,20 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(self.prompt, self.image, return_tensors="pt")
 
         # verify inputs against original implementation
-        filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
+        filepath = hf_hub_download(
+            repo_id="nielsr/test-image",
+            filename="llava_1_6_input_ids.pt",
+            repo_type="dataset",
+        )
         original_input_ids = torch.load(filepath, map_location="cpu")
         # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
         original_input_ids[original_input_ids == -200] = model.config.image_token_index
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
         filepath = hf_hub_download(
-            repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset"
+            repo_id="nielsr/test-image",
+            filename="llava_1_6_pixel_values.pt",
+            repo_type="dataset",
         )
         original_pixel_values = torch.load(filepath, map_location="cpu")
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
@@ -423,7 +314,11 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         expected_slice = torch.tensor(
-            [[-4.7695, -4.5664, -0.2786], [-10.6250, -10.8906, -2.5254], [-6.7383, -7.2461, -0.6787]],
+            [
+                [-4.7695, -4.5664, -0.2786],
+                [-10.6250, -10.8906, -2.5254],
+                [-6.7383, -7.2461, -0.6787],
+            ],
             dtype=torch.float32,
             device=torch_device,
         )
@@ -448,17 +343,20 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         cats_image = Image.open(requests.get(url, stream=True).raw)
 
         inputs = self.processor(
-            [self.prompt, self.prompt], images=[self.image, cats_image], return_tensors="pt", padding=True
+            [self.prompt, self.prompt],
+            images=[self.image, cats_image],
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device)
 
-        # make sure image_sizes are the same
-        # as otherwise batched generation doesn't work
-        inputs.image_sizes[1] = inputs.image_sizes[0]
-
+        # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
 
     @slow
     @require_bitsandbytes
@@ -484,4 +382,86 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_batch_different_resolutions(self):
+        model = LlavaNextForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-mistral-7b-hf",
+            load_in_4bit=True,
+        )
+
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
+        cats_image = Image.open(requests.get(url, stream=True).raw)
+        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+
+        inputs = self.processor(
+            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+        ).to(torch_device)
+        pixel_values = inputs["pixel_values"]
+
+        # verify pixel values are padded correctly with 0 when one image has more num_patches than the other
+        image_num_patches = [
+            image_size_to_num_patches(
+                image_size=imsize,
+                grid_pinpoints=model.config.image_grid_pinpoints,
+                patch_size=model.config.vision_config.image_size,
+            )
+            for imsize in inputs["image_sizes"]
+        ]
+        for pix_val, num_patch in zip(pixel_values, image_num_patches):
+            self.assertTrue(torch.all(pix_val[num_patch:] == 0))  # pad on the right
+            for i in range(num_patch):
+                self.assertFalse(torch.all(pix_val[i : i + 1] == 0))  # no padding expected in any of patches
+
+        # check loss when labels are passed
+        inputs["labels"] = inputs["input_ids"].clone()
+        with torch.no_grad():
+            output = model(**inputs)
+
+        expected_slice = torch.tensor(
+            [[-0.0308, -0.0313, -0.0314], [-0.3064, -0.3013, -0.2986], [-0.1226, -0.1246, -0.1210]],
+            dtype=torch.float32,
+            device=torch_device,
+        )
+        assert torch.allclose(output.logits[0, -3:, -3:], expected_slice, atol=1e-3)
+        assert torch.allclose(output.loss, torch.tensor(6.8619, device=torch_device))
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=50)
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a forested area with a misty or foggy atmosphere. In the foreground, there is a grassy field with a few deer grazing. The deer are partially obscured by the fog, and the trees in the background'  # fmt: skip
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_batch_matches_single(self):
+        model = LlavaNextForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-v1.6-mistral-7b-hf",
+            load_in_4bit=True,
+        )
+
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
+        cats_image = Image.open(requests.get(url, stream=True).raw)
+        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+
+        inputs_batched = self.processor(
+            [self.prompt, self.prompt], images=[lowres_img, cats_image], return_tensors="pt", padding=True
+        ).to(torch_device)
+
+        inputs_single = self.processor(self.prompt, images=lowres_img, return_tensors="pt", padding=True).to(
+            torch_device
+        )
+
+        # verify generation
+        output_batched = model.generate(**inputs_batched, max_new_tokens=50)
+        output_single = model.generate(**inputs_single, max_new_tokens=50)
+        self.assertEqual(
+            self.processor.decode(output_batched[0], skip_special_tokens=True),
+            self.processor.decode(output_single[0], skip_special_tokens=True),
         )

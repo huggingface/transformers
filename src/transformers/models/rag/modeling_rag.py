@@ -1458,6 +1458,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask)
+
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
@@ -1537,18 +1540,23 @@ class RagTokenForGeneration(RagPreTrainedModel):
             logits_processor=logits_processor,
         )
 
+        prepared_stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria
+        )
+
         if generation_config.num_beams == 1:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
                     " greedy search."
                 )
-            return self._greedy_search(
+            return self._sample(
                 input_ids,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=False,
+                streamer=None,
                 **model_kwargs,
             )
         elif generation_config.num_beams > 1:
@@ -1567,9 +1575,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 input_ids,
                 beam_scorer,
                 logits_processor=pre_processor,
-                max_length=generation_config.max_length,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=False,
                 **model_kwargs,
             )
         else:

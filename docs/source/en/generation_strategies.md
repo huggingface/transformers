@@ -21,7 +21,7 @@ more. It also plays a role in a variety of mixed-modality applications that have
 and vision-to-text. Some of the models that can generate text include
 GPT2, XLNet, OpenAI GPT, CTRL, TransformerXL, XLM, Bart, T5, GIT, Whisper.
 
-Check out a few examples that use [`~transformers.generation_utils.GenerationMixin.generate`] method to produce
+Check out a few examples that use [`~generation.GenerationMixin.generate`] method to produce
 text outputs for different tasks:
 * [Text summarization](./tasks/summarization#inference)
 * [Image captioning](./model_doc/git#transformers.GitForCausalLM.forward.example)
@@ -172,6 +172,92 @@ your screen, one word at a time:
 >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
 An increasing sequence: one, two, three, four, five, six, seven, eight, nine, ten, eleven,
 ```
+
+
+## KV Cache Quantization
+
+The `generate()` method supports caching keys and values to enhance efficiency and avoid re-computations. However the key and value
+cache can occupy a large portion of memory, becoming a bottleneck for long-context generation, especially for Large Language Models.
+Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed. 
+
+KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
+(https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
+
+To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
+Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`QuantizedCacheConfig`] class.
+One has to indicate which quantization backend to use in the [`QuantizedCacheConfig`], the default is `quanto`.
+
+<Tip warning={true}>
+
+Cache quantization can be detrimental if the context length is short and there is enough GPU VRAM available to run without cache quantization.
+
+</Tip>
+
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+>>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+>>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
+>>> inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
+
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
+>>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+I like rock music because it's loud and energetic. It's a great way to express myself and rel
+
+>>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+>>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
+I like rock music because it's loud and energetic. I like to listen to it when I'm feeling
+```
+
+## Watermarking
+
+The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green". 
+When generating the "green" will have a small 'bias' value added to their logits, thus having a higher chance to be generated.
+The watermarked text can be detected by calculating the proportion of "green" tokens in the text and estimating how likely it is
+statistically to obtain that amount of "green" tokens for human-generated text. This watermarking strategy was proposed in the paper 
+["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on 
+the inner functioning of watermarking, it is recommended to refer to the paper.
+
+The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
+to detect watermarked text. To trigger watermarking, pass in a [`WatermarkingConfig`] with needed arguments directly to the
+`.generate()` method or add it to the [`GenerationConfig`]. Watermarked text can be later detected with a [`WatermarkDetector`].
+
+
+<Tip warning={true}>
+
+The WatermarkDetector internally relies on the proportion of "green" tokens, and whether generated text follows the coloring pattern.
+That is why it is recommended to strip off the prompt text, if it is much longer than the generated text.
+This also can have an effect when one sequence in the batch is a lot longer causing other rows to be padded.
+Additionally, the detector **must** be initiated with identical watermark configuration arguments used when generating.
+
+</Tip>
+
+Let's generate some text with watermarking. In the below code snippet, we set the bias to 2.5 which is a value that
+will be added to "green" tokens' logits. After generating watermarked text, we can pass it directly to the `WatermarkDetector`
+to check if the text is machine-generated (outputs `True` for machine-generated and `False` otherwise).
+
+```python
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, WatermarkDetector, WatermarkingConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+>>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+>>> tok.pad_token_id = tok.eos_token_id
+>>> tok.padding_side = "left"
+
+>>> inputs = tok(["This is the beginning of a long story", "Alice and Bob are"], padding=True, return_tensors="pt")
+>>> input_len = inputs["input_ids"].shape[-1]
+
+>>> watermarking_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+>>> out = model.generate(**inputs, watermarking_config=watermarking_config, do_sample=False, max_length=20)
+
+>>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
+>>> detection_out = detector(out, return_dict=True)
+>>> detection_out.prediction
+array([True, True])
+```
+
 
 ## Decoding strategies
 

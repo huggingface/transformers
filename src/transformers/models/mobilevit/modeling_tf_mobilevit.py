@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" TensorFlow 2.0 MobileViT model."""
+"""TensorFlow 2.0 MobileViT model."""
 
 from __future__ import annotations
 
@@ -59,9 +59,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:

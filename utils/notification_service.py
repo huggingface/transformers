@@ -416,7 +416,7 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -426,18 +426,18 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
-            # if the last run produces artifact named `prev_ci_results`
+            # if the last run produces artifact named `ci_results_{job_name}`
             if (
-                "prev_ci_results" in self.prev_ci_artifacts
-                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
+                f"ci_results_{job_name}" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
+                prev_model_failures = self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
                 if len(entries_changed) > 0:
                     # Save the complete difference
@@ -447,7 +447,7 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
+                    file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/changed_model_failures_report.txt")
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -636,7 +636,7 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True):
+    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
             return {}
 
@@ -644,10 +644,10 @@ class Message:
 
         prev_model_results = {}
         if (
-            "prev_ci_results" in self.prev_ci_artifacts
-            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+            f"ci_results_{job_name}" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts[f"ci_results_{job_name}"]
         ):
-            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+            prev_model_results = json.loads(self.prev_ci_artifacts[f"ci_results_{job_name}"]["model_results.json"])
 
         all_failure_lines = {}
         for job, job_result in sorted_dict:
@@ -675,6 +675,8 @@ class Message:
                         all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
 
         MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        if not to_truncate:
+            MAX_ERROR_TEXT = float("inf")
         failure_text = ""
         for line, devices in all_failure_lines.items():
             new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
@@ -759,6 +761,13 @@ class Message:
             )
 
             time.sleep(1)
+
+        # To save the list of new model failures
+        blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        failure_text = blocks[-1]["text"]["text"]
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -1142,25 +1151,38 @@ if __name__ == "__main__":
             with open(os.path.join(directory, "selected_warnings.json")) as fp:
                 selected_warnings = json.load(fp)
 
-    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
-        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+    if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
+        os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
     if job_name == "run_models_gpu":
-        with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+        with open(f"ci_results_{job_name}/model_results.json", "w", encoding="UTF-8") as fp:
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
+    # Must have the same keys as in `additional_results`.
+    # The values are used as the file names where to save the corresponding CI job results.
+    test_to_result_name = {
+        "PyTorch pipelines": "torch_pipeline",
+        "TensorFlow pipelines": "tf_pipeline",
+        "Examples directory": "example",
+        "Torch CUDA extension tests": "deepspeed",
+    }
+    for job, job_result in additional_results.items():
+        with open(f"ci_results_{job_name}/{test_to_result_name[job]}_results.json", "w", encoding="UTF-8") as fp:
+            json.dump(job_result, fp, indent=4, ensure_ascii=False)
+
     prev_ci_artifacts = None
-    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
-        # Get the last previously completed CI's failure tables
-        artifact_names = ["prev_ci_results"]
-        output_dir = os.path.join(os.getcwd(), "previous_reports")
-        os.makedirs(output_dir, exist_ok=True)
-        prev_ci_artifacts = get_last_daily_ci_reports(
-            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-        )
+    if job_name == "run_models_gpu":
+        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
+        if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+            # Get the last previously completed CI's failure tables
+            artifact_names = [f"ci_results_{job_name}"]
+            output_dir = os.path.join(os.getcwd(), "previous_reports")
+            os.makedirs(output_dir, exist_ok=True)
+            prev_ci_artifacts = get_last_daily_ci_reports(
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+            )
 
     message = Message(
         title,

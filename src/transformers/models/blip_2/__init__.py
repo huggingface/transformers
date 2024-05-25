@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_blip_2": [
-        "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Blip2Config",
         "Blip2QFormerConfig",
         "Blip2VisionConfig",
@@ -33,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_blip_2"] = [
-        "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Blip2Model",
         "Blip2VisionModelWithProjection",
         "Blip2QFormerModel",
@@ -46,7 +44,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_blip_2 import (
-        BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Blip2Config,
         Blip2QFormerConfig,
         Blip2VisionConfig,
@@ -60,7 +57,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_blip_2 import (
-            BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Blip2ForConditionalGeneration,
             Blip2ForImageTextRetrieval,
             Blip2Model,
