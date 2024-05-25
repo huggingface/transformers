@@ -36,6 +36,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_causal_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
 from .configuration_gpt_neox import GPTNeoXConfig
@@ -78,6 +82,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTNeoXLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -516,6 +521,124 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
         )
 
 
+class GPTNeoXSdpaAttention(GPTNeoXAttention):
+    """
+    GPTNeoX attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `GPTNeoXAttention` as the weights of the module stays untouched. The only changes are on the forward pass
+    to adapt to the SDPA API.
+    """
+
+    # Adapted from GPTNeoXAttention.forward and following other sdpa implementations such as LlamaSdpaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        position_ids: torch.LongTensor,
+        head_mask: Optional[torch.FloatTensor] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.Tensor] = None,
+    ):
+        if output_attentions or head_mask is not None:
+            logger.warning_once(
+                "GPTNeoXModel is using GPTNeoXSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` "
+                "does not support `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. '
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                layer_past=layer_past,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                padding_mask=padding_mask
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+        has_layer_past = layer_past is not None
+
+        # Compute QKV
+        # Attention heads [batch, seq_len, hidden_size]
+        #   --> [batch, seq_len, (np * 3 * head_size)]
+        qkv = self.query_key_value(hidden_states)
+
+        # [batch, seq_len, (num_heads * 3 * head_size)]
+        #   --> [batch, seq_len, num_heads, 3 * head_size]
+        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
+        qkv = qkv.view(*new_qkv_shape)
+
+        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
+        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
+        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
+
+        # Compute rotary embeddings on rotary_ndims
+        query_rot = query[..., : self.rotary_ndims]
+        query_pass = query[..., self.rotary_ndims :]
+        key_rot = key[..., : self.rotary_ndims]
+        key_pass = key[..., self.rotary_ndims :]
+
+        # Compute token offset for rotary embeddings (when decoding)
+        seq_len = key.shape[-2]
+        if has_layer_past:
+            seq_len += layer_past[0].shape[-2]
+        cos, sin = self.rotary_emb(value, seq_len=seq_len)
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query = torch.cat((query, query_pass), dim=-1)
+        key = torch.cat((key, key_pass), dim=-1)
+
+        # Cache KV values
+        if has_layer_past:
+            past_key = layer_past[0]
+            past_value = layer_past[1]
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+        present = (key, value) if use_cache else None
+
+        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
+        target_dtype = value.dtype
+        if query.dtype != target_dtype:
+            query = query.to(target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(target_dtype)
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query.device.type == 'cuda' and causal_mask is not None:
+            query = query.contiguous()
+            key = key.contiguous()
+            value = value.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=causal_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal
+        )
+
+        # Reshape outputs
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+
+        attn_output = self.dense(attn_output)
+
+        return attn_output, present, None
+
+
 def attention_mask_func(attention_scores, ltor_mask):
     attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
     return attention_scores
@@ -660,6 +783,7 @@ class GPTNeoXMLP(nn.Module):
 GPT_NEOX_ATTENTION_CLASSES = {
     "eager": GPTNeoXAttention,
     "flash_attention_2": GPTNeoXFlashAttention2,
+    "sdpa": GPTNeoXSdpaAttention
 }
 
 
@@ -786,7 +910,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.gradient_checkpointing = False
 
@@ -859,28 +985,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # Attention mask.
-        if attention_mask is not None:
-            assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
-            if self._use_flash_attention_2:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            else:
-                # We create a 3D attention mask from a 2D tensor mask.
-                # Sizes are [batch_size, 1, 1, to_seq_length]
-                # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-                # this attention mask is more simple than the triangular masking of causal attention
-                # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-                attention_mask = attention_mask[:, None, None, :]
-
-                # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-                # masked positions, this operation will create a tensor which is 0.0 for
-                # positions we want to attend and the dtype's smallest value for masked positions.
-                # Since we are adding it to the raw scores before the softmax, this is
-                # effectively the same as removing these entirely.
-                attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-                attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -890,6 +994,27 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
+
+        # Attention mask.
+        if attention_mask is not None:
+            assert batch_size > 0, "batch_size has to be defined and > 0"
+            attention_mask = attention_mask.view(batch_size, -1)
+            if self._use_flash_attention_2:
+                attention_mask = attention_mask if 0 in attention_mask else None
+            elif self._use_sdpa and not output_attentions:
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask=attention_mask,
+                    input_shape=(batch_size, seq_length),
+                    inputs_embeds=inputs_embeds,
+                    past_key_values_length=past_length
+                )
+            else:
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask=attention_mask,
+                    input_shape=(batch_size, seq_length),
+                    inputs_embeds=inputs_embeds,
+                    past_key_values_length=past_length
+                )
 
         hidden_states = self.emb_dropout(inputs_embeds)
 
