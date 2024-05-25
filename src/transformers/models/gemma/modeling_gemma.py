@@ -892,7 +892,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 1
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: embed_tokens", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -909,7 +909,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 2
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: past_seen_tokens", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -925,7 +925,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 3
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: cache_position", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -939,7 +939,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 4
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: position_ids", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -952,7 +952,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 5
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: causal_mask", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -972,7 +972,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 6
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: normalizer", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -1022,7 +1022,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 7
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: for decoder_layer in self.layers", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -1035,7 +1035,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 8
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: self.norm", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
@@ -1056,7 +1056,7 @@ class GemmaModel(GemmaPreTrainedModel):
         e = (t - s).total_seconds()
         idx = 9
         if idx not in timing:
-            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+            timing[idx] = {"name": "GemmaModel: next_cache", "timing": 0.0}
         timing[idx]["timing"] += e
 
         torch.cuda.synchronize()
