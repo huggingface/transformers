@@ -1210,7 +1210,7 @@ class Blip2TextRetrievalModelTester:
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = Blip2ForImageTextRetrieval(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(pixel_values, input_ids, attention_mask)
+            result = model(pixel_values, input_ids, attention_mask, use_image_text_matching_head=True)
 
         self.parent.assertEqual(
             result.logits_per_image.shape,
@@ -1218,7 +1218,7 @@ class Blip2TextRetrievalModelTester:
         )
 
         with torch.no_grad():
-            result = model(pixel_values, input_ids, attention_mask, use_image_text_matching_head=False)
+            result = model(pixel_values, input_ids, attention_mask)
 
         self.parent.assertEqual(
             result.logits_per_image.shape,
@@ -1315,7 +1315,12 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         model.eval()
 
         with torch.no_grad():
-            outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
+            outputs = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_image_text_matching_head=True,
+            )
         self.assertEqual(outputs.logits_per_image.shape, (self.model_tester.qformer_model_tester.batch_size, 2))
 
         with torch.no_grad():
@@ -1323,7 +1328,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                use_image_text_matching_head=False,
             )
         self.assertEqual(
             outputs.logits_per_image.shape,
@@ -1575,8 +1579,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=text, return_tensors="pt").to(torch_device)
 
         # forward pass
-        out_itm = model(**inputs)
-        out = model(**inputs, use_image_text_matching_head=False)
+        out_itm = model(**inputs, use_image_text_matching_head=True)
+        out = model(**inputs)
 
         # verify
         expected_scores = torch.Tensor([[0.0238, 0.9762]])
@@ -1594,8 +1598,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=text, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # forward pass
-        out_itm = model(**inputs)
-        out = model(**inputs, use_image_text_matching_head=False)
+        out_itm = model(**inputs, use_image_text_matching_head=True)
+        out = model(**inputs)
 
         # verify
         expected_scores = torch.Tensor([[0.0239, 0.9761]])

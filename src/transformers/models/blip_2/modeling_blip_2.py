@@ -2310,7 +2310,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        use_image_text_matching_head: Optional[bool] = True,
+        use_image_text_matching_head: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
