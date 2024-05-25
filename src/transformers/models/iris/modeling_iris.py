@@ -33,6 +33,7 @@ from torch.distributions.categorical import Categorical
 from torch.nn import functional as F
 from tqdm import tqdm
 
+from ...cache_utils import StaticCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -898,118 +899,35 @@ class IrisTransformerConfig:
         return self.tokens_per_block * self.max_blocks
 
 
-class IrisCache:
-    def __init__(
-        self, num_samples: int, num_heads: int, max_tokens: int, embed_dim: int, device: torch.device
-    ) -> None:
-        assert embed_dim % num_heads == 0
-        self._num_samples, self._cache, self._size = num_samples, None, None
-        self._reset = lambda num_samples: torch.empty(
-            num_samples, num_heads, max_tokens, embed_dim // num_heads, device=device
-        )  # (num_samples, num_heads, max_tokens, num_z_channels)
-        self.reset()
-
-    @property
-    def shape(self) -> Tuple[int, int, int, int]:
-        num_samples, num_heads, _, head_dim = self._cache.shape
-        return num_samples, num_heads, self._size, head_dim
-
-    def reset(self) -> None:
-        self._cache = self._reset(self._num_samples)
-        self._size = 0
-
-    def prune(self, mask: np.ndarray) -> None:
-        assert mask.ndim == 1 and mask.shape[0] == self.shape[0]
-        self._cache = self._cache[mask]
-        self._num_samples = self._cache.shape[0]
-
-    def get(self) -> torch.Tensor:
-        return self._cache[:, :, : self._size, :]
-
-    def update(self, x: torch.Tensor) -> None:
-        assert (x.ndim == self._cache.ndim) and all(x.size(i) == self._cache.size(i) for i in (0, 1, 3))
-        assert self._size + x.size(2) <= self._cache.shape[2]
-        self._cache = IrisAssignWithoutInplaceCheck.apply(self._cache, x, 2, self._size, self._size + x.size(2))
-        self._size += x.size(2)
-
-
-class IrisKVCache:
-    def __init__(self, num_samples: int, num_heads: int, max_tokens: int, embed_dim: int, device: torch.device) -> None:
-        self._k_cache = IrisCache (num_samples, num_heads, max_tokens, embed_dim, device)
-        self._v_cache = IrisCache (num_samples, num_heads, max_tokens, embed_dim, device)
-
-    @property
-    def shape(self) -> Tuple[int, int, int, int]:
-        return self._k_cache.shape
-
-    def reset(self) -> None:
-        self._k_cache.reset()
-        self._v_cache.reset()
-
-    def prune(self, mask: np.ndarray) -> None:
-        self._k_cache.prune(mask)
-        self._v_cache.prune(mask)
-
-    def get(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self._k_cache.get(), self._v_cache.get()
-
-    def update(self, k: torch.Tensor, v: torch.Tensor):
-        self._k_cache.update(k)
-        self._v_cache.update(v)
-
-
 class IrisKeysValues:
     def __init__(
-        self, num_samples: int, num_heads: int, max_tokens: int, embed_dim: int, num_layers: int, device: torch.device
+        self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device
     ) -> None:
-        self._keys_values = tuple([IrisKVCache(num_samples, num_heads, max_tokens, embed_dim, device) for _ in range(num_layers)])
-
-    def __getitem__(self, key: int) -> IrisKVCache:
-        return self._keys_values[key]
+        self._keys_values = StaticCache(config=IrisConfig(), max_batch_size=num_samples, max_cache_len=max_tokens, device=device) 
+        self._size = []
+        self.num_layers = num_layers
+        self.reset()
+        
+    def __getitem__(self, key: int) -> StaticCache:
+        return self._keys_values.key_cache[key][:, :, : self._size[key], :],self._keys_values.value_cache[key][:, :, : self._size[key], :]
 
     def __len__(self):
-        return len(self._keys_values)
+        return len(self._keys_values.key_cache)
 
     @property
     def size(self):
-        return self._keys_values[0].shape[2]
+        return self._keys_values.max_batch_size, self._keys_values.num_key_value_heads, self._size, self._keys_values.head_dim
+        
 
     def reset(self) -> None:
-        for kv_cache in self._keys_values:
-            kv_cache.reset()
-
-    def prune(self, mask: np.ndarray) -> None:
-        for kv_cache in self._keys_values:
-            kv_cache.prune(mask)
-
-
-class IrisAssignWithoutInplaceCheck(torch.autograd.Function):
-    """
-    Inspired from : https://discuss.pytorch.org/t/disable-in-place-correctness-version-check-any-other-workaround/90738/4
-    Warning : do not use it to overwrite a slice twice.
-    """
-
-    @staticmethod
-    def get_slice(dim: int, start: int, stop: int) -> Tuple[slice]:
-        return tuple(
-            [
-                slice(None),
-            ]
-            * dim
-            + [slice(start, stop)]
-        )
-
-    @staticmethod
-    def forward(ctx, input: torch.Tensor, value: torch.Tensor, dim: int, start: int, stop: int) -> torch.Tensor:
-        ctx.dim = dim
-        ctx.start = start
-        ctx.stop = stop
-        input.data[IrisAssignWithoutInplaceCheck.get_slice(dim, start, stop)] = value
-        return input
-
-    @staticmethod
-    def backward(ctx, grad_out: torch.Tensor) -> Tuple[torch.Tensor]:
-        return grad_out, grad_out[IrisAssignWithoutInplaceCheck.get_slice(ctx.dim, ctx.start, ctx.stop)], None, None, None
+        self._keys_values.reset()
+        self._size = [0]*self.num_layers
+    
+    def update(self, k: torch.Tensor, v: torch.Tensor, layer_num: int) -> None:
+        
+        self._keys_values.key_cache[layer_num],self._keys_values.value_cache[layer_num] = self._keys_values.update(k,v,layer_num,cache_kwargs={"cache_position": torch.arange(k.shape[2])})
+        if self._size[layer_num] != k.size(2):
+            self._size[layer_num] += k.size(2)
 
 
 class IrisTransformer(nn.Module):
@@ -1022,7 +940,7 @@ class IrisTransformer(nn.Module):
 
     def generate_empty_keys_values(self, num_samples: int, max_tokens: int) -> IrisKeysValues:
         device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
-        return IrisKeysValues(num_samples, self.config.num_heads, max_tokens, self.config.embed_dim, self.config.num_layers, device)
+        return IrisKeysValues(num_samples, max_tokens, self.config.num_layers, device)
 
     def forward(
         self,
@@ -1038,7 +956,7 @@ class IrisTransformer(nn.Module):
         x = self.drop(sequences)
         hidden_states = hidden_states + (x,) if output_hidden_states else None
         for i, block in enumerate(self.blocks):
-            x, attention = block(x, None if past_keys_values is None else past_keys_values[i])
+            x, attention = block(x, None if past_keys_values is None else past_keys_values,i)
             # Add attention weights (shape: (batch_size, num_heads, target_sequence_length, source_sequence_length))
             attentions = attentions + (attention,) if output_attentions else None
             # Add hidden state to the tuple
@@ -1048,7 +966,6 @@ class IrisTransformer(nn.Module):
         hidden_states = hidden_states + (x,) if output_hidden_states else None
 
         return x, hidden_states, attentions
-
 
 class IrisBlock(nn.Module):
     def __init__(self, config: IrisTransformerConfig) -> None:
@@ -1063,12 +980,11 @@ class IrisBlock(nn.Module):
             nn.Dropout(config.resid_pdrop),
         )
 
-    def forward(self, x: torch.Tensor, past_keys_values: Optional[IrisKeysValues] = None) -> torch.Tensor:
-        x_attn, attentions = self.attn(self.ln1(x), past_keys_values)
+    def forward(self, x: torch.Tensor, past_keys_values: Optional[IrisKeysValues] = None, layer_num: int = None) -> torch.Tensor:
+        x_attn, attentions = self.attn(self.ln1(x), past_keys_values,layer_num)
         x = x + x_attn
         x = x + self.mlp(self.ln2(x))
         return x, attentions
-
 
 class IrisSelfAttention(nn.Module):
     def __init__(self, config: IrisTransformerConfig) -> None:
@@ -1092,20 +1008,24 @@ class IrisSelfAttention(nn.Module):
         )
         self.register_buffer("mask", causal_mask if config.attention == "causal" else block_causal_mask)
 
-    def forward(self, x: torch.Tensor, kv_cache: Optional[IrisKVCache] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, kv_cache: Optional[StaticCache] = None, layer_num: int = None) -> torch.Tensor:
         batch_size, num_timesteps, num_z_channels = x.size()
+
         if kv_cache is not None:
-            num_samples, num_heads, max_tokens, embed_dim = kv_cache.shape
+            num_samples, num_heads, max_tokens, embed_dim = kv_cache.size
             assert num_heads == self.num_heads and num_samples == batch_size and embed_dim * num_heads == num_z_channels
         else:
             max_tokens = 0
+        max_tokens = max_tokens[layer_num] if kv_cache is not None else max_tokens
+
         query = self.query(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
         key = self.key(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
         value = self.value(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
 
         if kv_cache is not None:
-            kv_cache.update(key, value)
-            key, value = kv_cache.get()
+            kv_cache.update(key, value, layer_num)
+            key, value = kv_cache[layer_num]
+
 
         att = (query @ key.transpose(-2, -1)) * (1.0 / math.sqrt(key.size(-1)))
         att = att.masked_fill(self.mask[max_tokens : max_tokens + num_timesteps, : max_tokens + num_timesteps] == 0, float("-inf"))
@@ -1186,7 +1106,7 @@ class IrisWorldModel(nn.Module):
     ) -> IrisWorldModelOutput:
         num_steps = tokens.size(1)  # (B, T)
         assert num_steps <= self.config.max_tokens
-        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+        prev_steps = 0 if past_keys_values is None else past_keys_values.size[2][0]
 
         sequences = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(
             prev_steps + torch.arange(num_steps, device=tokens.device)
@@ -1308,7 +1228,7 @@ class IrisWorldModelImagine:
 
         output_sequence, obs_tokens = [], []
 
-        if self.keys_values_wm.size + num_passes > self.world_model.config.max_tokens:
+        if self.keys_values_wm.size[2][0] + num_passes > self.world_model.config.max_tokens:
             _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
