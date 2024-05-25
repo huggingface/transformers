@@ -181,6 +181,9 @@ text
 </hfoption>
 </hfoptions>
 
+> [!TIP]
+> Regardless of the strategy used with `torch.compile`, through `forward` or [`~GenerationMixin.generate`], you can avoid shape-related recompilations if you left-pad your LLM inputs to a limited set of values. The [`pad_to_multiple_of` tokenizer flag](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.__call__.pad_to_multiple_of) is your friend!
+
 ## Speculative decoding
 
 > [!TIP]
