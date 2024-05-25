@@ -37,6 +37,15 @@ class ClassFinder(CSTVisitor):
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.classes[node.name.value] = node
+        for k in node.bases:
+            name = self.python_module.code_for_node(k)
+            self.class_dependency_mapping.update(
+                {
+                    node.name.value: {
+                        name: self.class_dependency_mapping.get(name) , **self.class_dependency_mapping.get(node.name.value, {})
+                    }
+                }
+            )
 
 
     def visit_SimpleStatementLine(self, node):
@@ -59,19 +68,23 @@ class ClassFinder(CSTVisitor):
             if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                 self.imports[stmt.body[0].names] = node  # match the visit simple statement line to overwrite it
 
-    # def leave_Call(self, node):
-    #     if self.python_module.code_for_node(node.func) in self.function_def or node.func.value in self.classes:
-    #             dad = self.get_metadata(cst.metadata.ScopeProvider,node.func)
-    #             if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
-    #                 if hasattr(dad, "_name_prefix"):
-    #                     print(f"Call:\t\t{node.func.value:<45} called in {dad._name_prefix}") 
-
     def leave_Name(self, node): 
         if node.value in self.classes.keys() | self.assignments.keys() | self.function_def.keys():
             dad = self.get_metadata(cst.metadata.ScopeProvider,node)
             if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
-                if hasattr(dad, "_name_prefix"):
-                    print(f"Name:\t\t{node.value:<45} called in {dad._name_prefix}") 
+                print(f"Name:\t\t{node.value:<45} called in {dad._name_prefix}") 
+                if hasattr(dad.parent, "name"):
+                    name = dad._name_prefix.split(".")[0]
+                    if name not in self.class_dependency_mapping:
+                        self.class_dependency_mapping[name] = {node.value:self.class_dependency_mapping.get(node.value)}
+                    else:
+                        self.class_dependency_mapping[name].update({node.value:self.class_dependency_mapping.get(node.value)})
+                elif hasattr(dad, "name"):
+                    name = dad.name
+                    if dad.name not in self.class_dependency_mapping:
+                        self.class_dependency_mapping[dad.name] = {node.value:self.class_dependency_mapping.get(node.value)}
+                    else:
+                        self.class_dependency_mapping[dad.name].update( {node.value:self.class_dependency_mapping.get(node.value)}) 
 
     def leave_Dict(self, node):
         dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -79,7 +92,12 @@ class ClassFinder(CSTVisitor):
             name = dad.targets[0].target.value
             if name in self.assignments:
                 for k in node.elements:
-                    if k.value.value in self.classes: 
+                    if k.value.value in self.classes:
+
+                        if name not in self.class_dependency_mapping:
+                            self.class_dependency_mapping[name] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
+                        else:
+                            self.class_dependency_mapping[name].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
                         print(f"Dict:\t\t{k.value.value:<45} called in {name}")  
 
     # Decorator: handle in leave_FunctionDef and leave_ClassDef instead
@@ -87,8 +105,15 @@ class ClassFinder(CSTVisitor):
         if hasattr(node.decorator, "args"):
             for k in node.decorator.args:
                 if k.value.value in self.assignments:
-                    print(f"Decorator:\t{k.value.value:<45} called in {self.get_metadata(cst.metadata.ParentNodeProvider, node).name.value}")
+                    dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+                    print(f"Decorator:\t{k.value.value:<45} called in {dad.name.value}")
+                    if dad.name.value not in self.class_dependency_mapping:
+                        self.class_dependency_mapping[dad.name.value] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
+                    else:
+                        self.class_dependency_mapping[dad.name.value].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
 
+    def leave_Module(self, node):
+        self.global_node = {**self.assignments, **self.classes, **self.function_def}
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def __init__(self, old_name, new_name):
         super().__init__()
@@ -164,23 +189,28 @@ class DiffConverterTransformer(CSTTransformer):
             if len(super_class) > 0:
                 super_class = super_class[0]
                 parent_package = self.transformers_mapping.get(super_class, None)
-                if parent_package:
-                    if parent_package not in self.visited_module:
-                        old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
-                        new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
-                        # We need to find all the classes, to copy everything, if they are used
-                        class_finder = find_classes_in_file(
-                            self.transformers_imports[parent_package], old_name, new_name
-                        )
-                        self.visited_module[parent_package] = class_finder
-                        self.functions_to_insert = class_finder.function_def
-                    self.class_mapping[self.python_module.code_for_node(node)] = self.visited_module[
-                        parent_package
-                    ].classes[class_name]
+                if parent_package and parent_package not in self.visited_module:
+                    old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
+                    new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
+                    # We need to find all the classes, to copy everything, if they are used
+                    class_finder = find_classes_in_file(
+                        self.transformers_imports[parent_package], old_name, new_name
+                    )
+                    self.visited_module[parent_package] = class_finder
+
+                    # I don't know what this is
+                    self.class_mapping[self.python_module.code_for_node(node)] = class_finder.classes[class_name]
+
                 if self.visited_module[parent_package]:
-                    if class_name in self.visited_module[parent_package].class_dependency_mapping:
-                        # that's were we get all the nodes we need to write.
-                        pass
+                    class_finder = self.visited_module[parent_package]
+                    list_dependencies = class_finder.class_dependency_mapping[class_name]
+                    for dependency in list_dependencies:
+                        # TODO the dependencies needs to be properly handled
+                        node = class_finder.global_node.get(dependency, None)
+                        if node is not None and node not in self.new_body:
+                            self.new_body += [node]
+                    # finally add the code of the current class
+                    self.new_body += [class_finder.classes[class_name]]
 
 
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
@@ -194,9 +224,7 @@ class DiffConverterTransformer(CSTTransformer):
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
             if re.search(r"transformers\.models\..*\.[modeling|configuration]_.*", full_statement):
-                # TODO use remove from parent. `return RemoveFromParent()`
-                return updated_node.with_changes(body=[])
-
+                return cst.RemoveFromParent()
         return updated_node
 
     def leave_ClassDef(self, original_node: cst.Assign, updated_node):
@@ -205,6 +233,7 @@ class DiffConverterTransformer(CSTTransformer):
             if base_name in self.transformers_mapping:
                 super_classes = self.visited_module[self.transformers_mapping[base_name]].classes
                 replacement_class = super_classes[updated_node.name.value]
+                dependencies = self.visited_module[self.transformers_mapping[base_name]].class_dependency_mapping
                 # Copy methods from original node to replacement node, preserving decorators
                 updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
                 replacement_methods = {
@@ -260,8 +289,8 @@ class DiffConverterTransformer(CSTTransformer):
         new_body = self.new_body
         for visiter in self.visited_module.values():
             new_body += list(visiter.imports.values())
-            new_body += list(visiter.assignments.values())
-            new_body += list(visiter.function_def.values())
+        #     new_body += list(visiter.assignments.values())
+        #     new_body += list(visiter.function_def.values())
 
         return node.with_changes(body=[*new_body, *node.body])
 
@@ -348,13 +377,11 @@ def convert_file(diff_file):
     transformers = DiffConverterTransformer(module)
     new_mod = module.visit(transformers)
     ruffed_code = fix_ruff(new_mod.code)
-    exit(0)
-    with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-        f.write(ruffed_code)
 
-    # ruffed_code = fix_ruff(new_mod.config_code)
     # with open(diff_file.replace("diff_", "modeling_"), "w") as f:
     #     f.write(ruffed_code)
+    with open(diff_file.replace("diff_", "modeling_draft_"), "w") as f:
+        f.write(ruffed_code)
 
 
 if __name__ == "__main__":
