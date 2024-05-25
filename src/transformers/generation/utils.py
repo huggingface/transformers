@@ -1388,9 +1388,7 @@ class GenerationMixin:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
-                # `self.dtype` (which calls `ModuleUtilsMixin.dtype()`) is not compileable, so we fall back to
-                # `self.config.torch_dtype`. Compiling `generate` after calling `model.to(some_dtype)` will fail
-                cache_dtype = self.dtype if not is_torchdynamo_compiling() else self.config.torch_dtype
+                cache_dtype = self.dtype
             self._cache = cache_cls(
                 config=self.config,
                 max_batch_size=max_batch_size,
@@ -1689,7 +1687,7 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                    generation_config.cache_implementation, batch_size, generation_config.max_length, device=device
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
