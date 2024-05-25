@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -1099,6 +1100,14 @@ class MistralForCausalLM(MistralPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+
+
+        # crop the attention_mask to sliding window size during decode phase if using SlidingWindowCache
+        if (
+            isinstance(past_key_values, SlidingWindowCache)
+            and attention_mask.shape[1] > past_key_values.max_cache_len
+        ):
+            attention_mask = attention_mask[:, -past_key_values.max_cache_len :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
