@@ -400,6 +400,10 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
+        """
+        Based on LlamaModelTest.test_eager_matches_sdpa_generate which also
+        overwrites the common test as the test is flaky on tiny models.
+        """
         max_new_tokens = 30
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-1b")
