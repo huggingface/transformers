@@ -368,7 +368,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             " instructions."
         )
         raise
-    
+
     # check if we have bf16 weights
     is_type_bf16 = flatten_dict(jax.tree_util.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
     if any(is_type_bf16):
@@ -452,9 +452,9 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         # are used within the main model classes such as `CLIPModel`. Specifically, they now use
         # `CLIPTextModel._from_config(...)`, for example, to accommodate the `attn_implementation` config.
         if pt_model.__class__.__name__ == "CLIPModel":
-            if flax_key.startswith("text_model."): 
+            if flax_key.startswith("text_model."):
                 flax_key = "text_model." + flax_key
-            elif flax_key.startswith("vision_model."): 
+            elif flax_key.startswith("vision_model."):
                 flax_key = "vision_model." + flax_key
 
         if flax_key in pt_model_dict:
