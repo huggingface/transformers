@@ -447,6 +447,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         if flax_key in special_pt_names:
             flax_key = special_pt_names[flax_key]
 
+        # Refer to https://github.com/huggingface/transformers/pull/30390
+        # To support SDPA in CLIP, we had to replace how `CLIPTextTransformer` and `CLIPVisionTransformeer`
+        # are used within the main model classes such as `CLIPModel`. Specifically, they now use
+        # `CLIPTextModel._from_config(...)`, for example, to accommodate the `attn_implementation` config.
         if pt_model.__class__.__name__ == "CLIPModel":
             if flax_key.startswith("text_model."): 
                 flax_key = "text_model." + flax_key
