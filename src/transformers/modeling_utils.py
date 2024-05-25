@@ -3393,7 +3393,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         if resolved_archive_file is not None:
                             is_sharded = True
 
-                    if resolved_archive_file is not None:
+                    if not local_files_only and resolved_archive_file is not None:
                         if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
                             # If the PyTorch file was found, check if there is a safetensors file on the repository
                             # If there is no safetensors file on the repositories, start an auto conversion

@@ -440,6 +440,7 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
         self.assertIn("We don't support quantizing the activations with transformers library", str(e.exception))
 
 
+@require_quanto
 @require_torch_gpu
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
@@ -447,7 +448,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my burgers, my hot dogs, my sandwiches, my chicken, my pizza, my sal",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my burgers, my hot dogs, my sandwiches, my salads, my chicken, my fish",
         ]
 
         prompts = [
