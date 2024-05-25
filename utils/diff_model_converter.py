@@ -61,25 +61,33 @@ class ClassFinder(CSTVisitor):
 
     def leave_Call(self, node):
         if self.python_module.code_for_node(node.func) in self.function_def or node.func.value in self.classes:
-            caller = self.get_metadata(cst.metadata.ScopeProvider,node).parent.name
-            if caller in self.class_dependency_mapping:
-                if node.func.value not in self.class_dependency_mapping[caller] :
-                    self.class_dependency_mapping[caller] += [node.func.value]
-            else:
-                self.class_dependency_mapping[caller] = [node.func.value]
-        elif m.matches(node, m.Call(m.Subscript(value=m.Name()))):
-            caller = self.get_metadata(cst.metadata.ScopeProvider,node).parent.name
-            dep = node.func.value.value
-            if dep in self.assignments:
-                if caller in self.class_dependency_mapping:
-                    if dep not in self.class_dependency_mapping[caller] :
-                        self.class_dependency_mapping[caller] += [dep]
-                else:
-                    self.class_dependency_mapping[caller] = [dep]
+                dad = self.get_metadata(cst.metadata.ScopeProvider,node.func)
+                if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
+                    if hasattr(dad, "_name_prefix"):
+                        print(f"Call: {node.func.value:<15} called in {dad._name_prefix:>10}") 
 
     def leave_Name(self, node): 
         if node.value in self.classes.keys() | self.assignments.keys() | self.function_def.keys():
-            pass
+            dad = self.get_metadata(cst.metadata.ScopeProvider,node)
+            if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
+                if hasattr(dad, "_name_prefix"):
+                    print(f"Name: {node.value:<15} called in {dad._name_prefix:>10}, {dad.name}") 
+
+    def leave_Dict(self, node):
+        dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(dad,m.Assign(targets=[m.AssignTarget()])):
+            name = dad.targets[0].target.value
+            if name in self.assignments:
+                for k in node.elements:
+                    if k.value.value in self.classes: 
+                        print(f"Dict: {k.value.value:<15} called in {name:>10}")  
+
+    # Decorator: in leave_FunctionDef and leave_ClassDef
+    def leave_Decorator(self, node):
+        if hasattr(node.decorator, "args"):
+            for k in node.decorator.args:
+                if k.value.value in self.assignments:
+                    print(f"Decorator: {k.value.value} called in {self.get_metadata(cst.metadata.ParentNodeProvider, node).name.value}")
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def __init__(self, old_name, new_name):
@@ -105,9 +113,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         update = self.preserve_case_replace(updated_node.value)
-        if update != original_node.value:
-            print(f"changed: {updated_node.value} -> {update}")
-        return updated_node.with_changes(value=self.preserve_case_replace(updated_node.value))
+        return updated_node.with_changes(value=update)
 
 
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
