@@ -29,16 +29,13 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
-)
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_causal_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
@@ -544,7 +541,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
             logger.warning_once(
                 "GPTNeoXModel is using GPTNeoXSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` "
                 "does not support `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. '
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -555,7 +552,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
                 layer_past=layer_past,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                padding_mask=padding_mask
+                padding_mask=padding_mask,
             )
 
         bsz, q_len, _ = hidden_states.size()
@@ -612,7 +609,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query.device.type == 'cuda' and causal_mask is not None:
+        if query.device.type == "cuda" and causal_mask is not None:
             query = query.contiguous()
             key = key.contiguous()
             value = value.contiguous()
@@ -627,7 +624,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
             value=value,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout.p if self.training else 0.0,
-            is_causal=is_causal
+            is_causal=is_causal,
         )
 
         # Reshape outputs
@@ -783,7 +780,7 @@ class GPTNeoXMLP(nn.Module):
 GPT_NEOX_ATTENTION_CLASSES = {
     "eager": GPTNeoXAttention,
     "flash_attention_2": GPTNeoXFlashAttention2,
-    "sdpa": GPTNeoXSdpaAttention
+    "sdpa": GPTNeoXSdpaAttention,
 }
 
 
@@ -1006,14 +1003,14 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                     attention_mask=attention_mask,
                     input_shape=(batch_size, seq_length),
                     inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length
+                    past_key_values_length=past_length,
                 )
             else:
                 attention_mask = _prepare_4d_causal_attention_mask(
                     attention_mask=attention_mask,
                     input_shape=(batch_size, seq_length),
                     inputs_embeds=inputs_embeds,
-                    past_key_values_length=past_length
+                    past_key_values_length=past_length,
                 )
 
         hidden_states = self.emb_dropout(inputs_embeds)

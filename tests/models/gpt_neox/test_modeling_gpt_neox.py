@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GPTNeoX model."""
 
-import tempfile
 import unittest
 
 from parameterized import parameterized
