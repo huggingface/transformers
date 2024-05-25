@@ -626,7 +626,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
             key=key,
             value=value,
             attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
+            dropout_p=self.attention_dropout.p if self.training else 0.0,
             is_causal=is_causal
         )
 
