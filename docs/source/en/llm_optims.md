@@ -106,7 +106,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 Be mindful that full [`~GenerationMixin.generate`] compilation has severe feature limitations, and is still under development. It can, however, be compiled without graph breaks.
 
 
-Taking advantage of `transformers`' modularity, a [`StaticCache`] object can also be passed to the model's forward pass under the same `past_key_values` argument. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
+If you want to go further down a level, the [`StaticCache`] object can also be passed to the model's forward pass under the same `past_key_values` argument. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
