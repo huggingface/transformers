@@ -149,7 +149,7 @@ class DABDETRConfig(PretrainedConfig):
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
-        decoder_layers=6,
+        num_decoder_layers=6,
         decoder_ffn_dim=2048,
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
@@ -238,7 +238,7 @@ class DABDETRConfig(PretrainedConfig):
         self.encoder_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
+        self.num_decoder_layers = num_decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout

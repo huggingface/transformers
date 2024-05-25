@@ -331,11 +331,11 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
     outputs = model(pixel_values)
-    logits, pred_boxes, auxiliary_outputs = outputs
-    print(logits)  # ['pred_logits'][0, :3, :3])
-    print(pred_boxes)
-    torch.save(logits, 'logits.pth')
-    torch.save(pred_boxes, 'pred_boxes.pth')
+
+    print(outputs.logits)  # ['pred_logits'][0, :3, :3])
+    print(outputs.pred_boxes)
+    # torch.save(logits, 'logits.pth')
+    # torch.save(pred_boxes, 'pred_boxes.pth')
     
     # Serialize data into file:
     # torch.save(outputs, 'tensors.pth')
