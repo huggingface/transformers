@@ -332,3 +332,21 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
             [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_interpolate_pos_encoding(self):
+        processor = Swin2SRImageProcessor.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
+        model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64").to(torch_device)
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        image = image.resize([680, 680])  # size is an unrecognized kwargs in processor
+        inputs = processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        # (680 * 2) + 8 + 8(padding on each side)  = 1376
+        expected_shape = torch.Size((1, 3, 1376, 1376))
+        self.assertEqual(outputs.reconstruction.shape, expected_shape)
