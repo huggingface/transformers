@@ -18,18 +18,18 @@ Basic inference is slow because LLMs have to be called repeatedly to generate th
 This guide will show you how to use the optimization techniques available in Transformers to accelerate LLM inference.
 
 > [!TIP]
-> Hugging Face also provides [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a library dedicated to deploying and serving highly optimized LLMs for inference. It includes more optimization features not included in Transformers, such as continuous batching for increasing throughput and tensor parallelism for multi-GPU inference.
+> Hugging Face also provides [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a library dedicated to deploying and serving highly optimized LLMs for inference. It includes deployment-oriented optimization features not included in Transformers, such as continuous batching for increasing throughput and tensor parallelism for multi-GPU inference.
 
-## Static kv-cache and torch.compile
+## Static kv-cache and `torch.compile`
 
 During decoding, a LLM computes the key-value (kv) values for each input token and since it is autoregressive, it computes the same kv values each time because the generated output becomes part of the input now. This is not very efficient because you're recomputing the same kv values each time.
 
-To optimize this, you can use a kv-cache to store the past keys and values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
+To optimize this, you can use a kv-cache to store the past keys and values instead of recomputing them each time. However, since the kv-cache grows with each generation step and is dynamic, it prevents you from taking advantage of [`torch.compile`](./perf_torch_compile), a powerful optimization tool that fuses PyTorch code into fast and optimized kernels.
 
-The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with torch.compile for up to a 4x speed up.
+The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value which allows you to combine it with `torch.compile` for up to a 4x speed up.
 
 > [!WARNING]
-> Currently, only [Llama](./model_doc/llama2) and a few other models support static kv-cache and torch.compile. Check [this issue](https://github.com/huggingface/transformers/issues/28981) for a live model compatibility list.
+> Currently, only [Llama](./model_doc/llama2) and a few other models support static kv-cache and `torch.compile`. Check [this issue](https://github.com/huggingface/transformers/issues/28981) for a live model compatibility list.
 
 For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 
@@ -37,15 +37,13 @@ For this example, let's load the [Gemma](https://hf.co/google/gemma-2b) model.
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2b", device_map="auto"
-)
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
 ```
 
-There are two ways you can configure the model to use a static kv-cache. For a 7B model on an A100, both methods get a 4x speed up in the forward pass. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware. If you're using the [`~GenerationMixin.generate`] method, the speed up is ~3x. The forward pass (which still gets 4x speed up) is only a part of the whole [`~GenerationMixin.generate`] code.
+There are two ways you can configure the model to use a static kv-cache. For a 7B model on an A100, both methods get a ~4x speed up in the forward pass. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware. If you're using the [`~GenerationMixin.generate`] method, the speed up will be smaller -- the forward pass is only a part of the whole [`~GenerationMixin.generate`] code.
 
 <hfoptions id="static-kv">
-<hfoption id="generation_config">
+<hfoption id="generation_config (basic usage)">
 
 Access the model's `generation_config` attribute and set the `cache_implementation` to "static".
 
@@ -53,7 +51,7 @@ Access the model's `generation_config` attribute and set the `cache_implementati
 model.generation_config.cache_implementation = "static"
 ```
 
-Call torch.compile on the model to compile the forward pass with the static kv-cache.
+Call `torch.compile` on the model to compile the forward pass with the static kv-cache.
 
 ```py
 compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
@@ -67,10 +65,48 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 Under the hood, `generate` will attempt to reuse the same cache object, removing the need for re-compilation at each call. However, if the batch size or the maximum output length increase between calls, the cache will have to be reinitialized, triggering a new compilation.
 
-</hfoption>
-<hfoption id="Static Cache">
+> [!WARNING]
+> For a more advanced usage of the static cache, such as compiling the entire [`~GenerationMixin.generate`] function or manually prefilling the cache, we recommend instantiating and manipulating the cache object outside [`~GenerationMixin.generate`].
 
-A [`StaticCache`] object can be passed to the model's forward pass under the `past_key_values` argument, enabling the use of this object as a static kv-cache. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens. You can also pass the [`StaticCache`] object to [`~GenerationMixin.generate`] and use it across calls, like you would do with a dynamic cache.
+</hfoption>
+<hfoption id="Static Cache (advanced usage)">
+
+A [`StaticCache`] object can be passed to the model's [`~GenerationMixin.generate`] under the `past_key_values` argument. The object will retain the cache contents, so you can pass it to a new [`~GenerationMixin.generate`] call to continue generation, like you would do with a dynamic cache.
+
+> [!TIP]
+> If you want to reuse the [`StaticCache`] object on a new prompt, be sure to reset its contents with the `.reset()` method between calls
+
+```py
+from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
+import torch
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
+
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+
+compiled_generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
+input_text = "The theory of special relativity states "
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+prompt_length = input_ids.input_ids.shape[1]
+model.generation_config.max_new_tokens = 16
+
+past_key_values = StaticCache(
+    config=model.config,
+    max_batch_size=1,
+    max_cache_len=prompt_length+model.generation_config.max_new_tokens,
+    device=model.device,
+    dtype=model.dtype
+)
+outputs = compiled_generate(**input_ids, past_key_values=past_key_values)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2']
+```
+
+Be mindful that full [`~GenerationMixin.generate`] compilation has severe feature limitations, and is still under development. It can, however, be compiled without graph breaks.
+
+
+Taking advantage of `transformers`' modularity, a [`StaticCache`] object can also be passed to the model's forward pass under the same `past_key_values` argument. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -102,11 +138,11 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
     return new_token
 ```
 
-There are a few important things you must do to enable static kv-cache and torch.compile with the `StaticCache` method:
+There are a few important things you must do to enable static kv-cache and `torch.compile` with the `StaticCache` method:
 
 1. Initialize the [`StaticCache`] instance before using the model for inference. There you can configure parameters like the maximum batch size and sequence length.
 
-2. Call torch.compile on the model to compile the forward pass with the static kv-cache.
+2. Call `torch.compile` on the model to compile the forward pass with the static kv-cache.
 
 3. Set `enable_math=True` in the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
 
@@ -141,9 +177,6 @@ text
 ['Simply put, the theory of relativity states that 1) the speed of light is constant, 2) the speed of light is the same for all observers, and 3) the laws of physics are the same for all observers.',
  'My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p']
 ```
-
-> [!TIP]
-> If you want to reuse the [`StaticCache`] object on a new prompt, be sure to reset its contents with the `.reset()` method
 
 </hfoption>
 </hfoptions>
