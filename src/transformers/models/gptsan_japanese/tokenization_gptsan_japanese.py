@@ -353,6 +353,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        **kwargs,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
         if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
@@ -379,6 +380,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             return_offsets_mapping,
             return_length,
             verbose,
+            **kwargs,
         )
 
 

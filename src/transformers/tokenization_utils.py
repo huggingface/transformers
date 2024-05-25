@@ -764,6 +764,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
@@ -820,6 +821,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_length=return_length,
             return_tensors=return_tensors,
             verbose=verbose,
+            split_special_tokens=split_special_tokens,
         )
 
         return BatchEncoding(batch_outputs)
@@ -841,6 +843,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
@@ -870,6 +873,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
+                split_special_tokens=split_special_tokens,
             )
 
             for key, value in outputs.items():
