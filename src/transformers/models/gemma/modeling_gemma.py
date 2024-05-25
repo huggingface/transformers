@@ -15,6 +15,11 @@
 # limitations under the License.
 """ PyTorch Gemma model."""
 
+import json
+import datetime
+
+timing = {}
+
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -864,11 +869,36 @@ class GemmaModel(GemmaPreTrainedModel):
             )
             use_cache = False
 
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 1
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: embed_tokens", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 2
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: past_seen_tokens", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -876,10 +906,43 @@ class GemmaModel(GemmaPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 3
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: cache_position", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 4
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: position_ids", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 5
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: causal_mask", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
 
         # embed positions
         hidden_states = inputs_embeds
@@ -889,6 +952,17 @@ class GemmaModel(GemmaPreTrainedModel):
         # See https://github.com/huggingface/transformers/pull/29402
         normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 6
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: normalizer", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -929,7 +1003,29 @@ class GemmaModel(GemmaPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 7
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: for decoder_layer in self.layers", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         hidden_states = self.norm(hidden_states)
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 8
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: self.norm", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -942,6 +1038,18 @@ class GemmaModel(GemmaPreTrainedModel):
                 if isinstance(next_decoder_cache, DynamicCache)
                 else next_decoder_cache
             )
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 9
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaModel: next_cache", "timing": 0.0}
+        timing[idx]["timing"] += e
+
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -1114,6 +1222,9 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        torch.cuda.synchronize()
+        s = datetime.datetime.now()
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -1127,6 +1238,14 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             return_dict=return_dict,
             cache_position=cache_position,
         )
+
+        torch.cuda.synchronize()
+        t = datetime.datetime.now()
+        e = (t - s).total_seconds()
+        idx = 0
+        if idx not in timing:
+            timing[idx] = {"name": "GemmaForCausalLM: outputs = self.model()", "timing": 0.0}
+        timing[idx]["timing"] += e
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
