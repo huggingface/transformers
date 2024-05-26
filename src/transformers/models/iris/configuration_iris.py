@@ -126,6 +126,7 @@ class IrisConfig(PretrainedConfig):
         "hidden_size": "embed_dim_world_model",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
+        "num_key_value_heads": "num_heads",
     }
 
     def __init__(
@@ -160,7 +161,6 @@ class IrisConfig(PretrainedConfig):
         entropy_weight=0.001,
         initializer_range=0.02,
         use_cache=True,
-        num_key_value_heads=None,
         pad_token_id=1,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -199,7 +199,6 @@ class IrisConfig(PretrainedConfig):
         self.entropy_weight = entropy_weight
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.num_key_value_heads = num_key_value_heads
 
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
