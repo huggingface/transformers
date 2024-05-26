@@ -178,7 +178,6 @@ class IrisLossWithIntermediateLosses:
         self.loss_total = self.loss_total / value
         return self
 
-
 @dataclass
 class IrisTokenizerEncoderOutput:
     z: torch.FloatTensor
@@ -681,6 +680,8 @@ class IrisVgg16(nn.Module):
 
 
 class IrisTokenizer(nn.Module):
+    """A discrete autoencoder based on the implementation of VQGAN but without its discriminator(not to be confused with transformers tokenizer)"""
+
     def __init__(
         self, vocab_size: int, embed_dim: int, encoder: IrisEncoder, decoder: IrisDecoder, with_lpips: bool = True
     ) -> None:
@@ -716,38 +717,6 @@ class IrisTokenizer(nn.Module):
             (outputs.z, outputs.z_quantized, reconstructions),
             all_hidden_states_enc + all_hidden_states_dec if output_hidden_states else None,
             attentions_enc + attentions_dec if output_attentions else None,
-        )
-
-    def compute_loss(
-        self, batch: Batch, output_hidden_states: bool = False, output_attentions: bool = False, **kwargs: Any
-    ) -> IrisLossWithIntermediateLosses:
-        assert self.lpips is not None
-
-        observations = self.preprocess_input(torch.flatten(batch["observations"], end_dim=1).contiguous())
-        outputs, all_hidden_states, all_attentions = self(
-            observations, output_hidden_states, output_attentions, should_preprocess=False, should_postprocess=False
-        )
-
-        # Codebook loss. Notes:
-        # - beta position is different from taming and identical to original VQVAE paper
-        # - VQVAE uses 0.25 by default
-        beta = 1.0
-        commitment_loss = (outputs[0].detach() - outputs[1]).pow(2).mean() + beta * (
-            outputs[0] - outputs[1].detach()
-        ).pow(2).mean()
-
-        reconstruction_loss = torch.abs(observations - outputs[2]).mean()
-        perceptual_loss = torch.mean(self.lpips(observations, outputs[2]))
-
-        return (
-            IrisLossWithIntermediateLosses(
-                commitment_loss=commitment_loss,
-                reconstruction_loss=reconstruction_loss,
-                perceptual_loss=perceptual_loss,
-            ),
-            outputs,
-            all_hidden_states,
-            all_attentions,
         )
 
     def encode(
@@ -1048,39 +1017,6 @@ class IrisWorldModel(nn.Module):
             attentions,
         )
 
-    def compute_loss(
-        self,
-        batch: Batch,
-        tokenizer: IrisTokenizer,
-        output_hidden_states: bool = False,
-        output_attentions: bool = False,
-        **kwargs: Any,
-    ) -> IrisLossWithIntermediateLosses:
-        with torch.no_grad():
-            obs_tokens = tokenizer.encode(batch["observations"], should_preprocess=True)[0].tokens  # (B, L, K)
-
-        act_tokens = batch["actions"].unsqueeze(-1).contiguous()
-
-        tokens = torch.flatten(torch.cat((obs_tokens, act_tokens), dim=2), start_dim=1).contiguous()  # (B, L(K+1))
-
-        outputs, all_hidden_states, all_attentions = self(tokens, output_hidden_states, output_attentions)
-
-        labels_observations, labels_rewards, labels_ends = self.compute_labels_world_model(
-            obs_tokens, batch["rewards"], batch["ends"], batch["mask_padding"]
-        )
-
-        logits_observations = torch.flatten(outputs.logits_observations[:, :-1], end_dim=1).contiguous()
-        loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        loss_rewards = F.cross_entropy((torch.flatten(outputs.logits_rewards, end_dim=1).contiguous()), labels_rewards)
-        loss_ends = F.cross_entropy((torch.flatten(outputs.logits_ends, end_dim=1).contiguous()), labels_ends)
-
-        return (
-            IrisLossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends),
-            outputs,
-            all_hidden_states,
-            all_attentions,
-        )
-
     def compute_labels_world_model(
         self, obs_tokens: torch.Tensor, rewards: torch.Tensor, ends: torch.Tensor, mask_padding: torch.BoolTensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1298,53 +1234,6 @@ class IrisActorCritic(nn.Module):
 
         return IrisActorCriticOutput(logits_actions, means_values), hidden_states, None
 
-    def compute_loss(
-        self,
-        batch: Batch,
-        tokenizer: IrisTokenizer,
-        world_model: IrisWorldModel,
-        imagine_horizon: int,
-        gamma: float,
-        lambda_: float,
-        entropy_weight: float,
-        output_hidden_states: bool = False,
-        output_attentions: bool = False,
-        **kwargs: Any,
-    ) -> IrisLossWithIntermediateLosses:
-        assert not self.use_original_obs
-        outputs, outputs_ac, hidden_states = self.imagine(
-            batch,
-            tokenizer,
-            world_model,
-            horizon=imagine_horizon,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-        )
-
-        with torch.no_grad():
-            lambda_returns = self.compute_lambda_returns(
-                rewards=outputs.rewards,
-                values=outputs.values,
-                ends=outputs.ends,
-                gamma=gamma,
-                lambda_=lambda_,
-            )[:, :-1]
-
-        values = outputs.values[:, :-1]
-
-        d = Categorical(logits=outputs.logits_actions[:, :-1])
-        log_probs = d.log_prob(outputs.actions[:, :-1])
-        loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
-        loss_entropy = -entropy_weight * d.entropy().mean()
-        loss_values = F.mse_loss(values, lambda_returns)
-
-        return (
-            IrisLossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy),
-            outputs_ac,
-            hidden_states,
-            None,
-        )
-
     def imagine(
         self,
         batch: Batch,
@@ -1414,6 +1303,128 @@ class IrisActorCritic(nn.Module):
             hidden_states,
         )
 
+class IrisComponentLosses:
+    """
+    Loss functions for the Iris' components.
+    """
+    def compute_tokenizer_loss(
+        self,
+        component_object: object,
+        batch: Batch,
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
+        **kwargs: Any,
+    ) -> IrisLossWithIntermediateLosses:
+        assert component_object.lpips is not None
+
+        observations = component_object.preprocess_input(torch.flatten(batch["observations"], end_dim=1).contiguous())
+        outputs, all_hidden_states, all_attentions = component_object(
+            observations, output_hidden_states, output_attentions, should_preprocess=False, should_postprocess=False
+        )
+
+        # Codebook loss. Notes:
+        # - beta position is different from taming and identical to original VQVAE paper
+        # - VQVAE uses 0.25 by default
+        beta = 1.0
+        commitment_loss = (outputs[0].detach() - outputs[1]).pow(2).mean() + beta * (
+            outputs[0] - outputs[1].detach()
+        ).pow(2).mean()
+
+        reconstruction_loss = torch.abs(observations - outputs[2]).mean()
+        perceptual_loss = torch.mean(component_object.lpips(observations, outputs[2]))
+
+        return (
+            IrisLossWithIntermediateLosses(
+                commitment_loss=commitment_loss,
+                reconstruction_loss=reconstruction_loss,
+                perceptual_loss=perceptual_loss,
+            ),
+            outputs,
+            all_hidden_states,
+            all_attentions,
+        )
+    
+    def compute_world_model_loss(
+        self,
+        component_object: object,
+        batch: Batch,
+        tokenizer: IrisTokenizer,
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
+        **kwargs: Any,
+    ) -> IrisLossWithIntermediateLosses:
+        with torch.no_grad():
+            obs_tokens = tokenizer.encode(batch["observations"], should_preprocess=True)[0].tokens  # (B, L, K)
+
+        act_tokens = batch["actions"].unsqueeze(-1).contiguous()
+
+        tokens = torch.flatten(torch.cat((obs_tokens, act_tokens), dim=2), start_dim=1).contiguous()  # (B, L(K+1))
+
+        outputs, all_hidden_states, all_attentions = component_object(tokens, output_hidden_states, output_attentions)
+
+        labels_observations, labels_rewards, labels_ends = component_object.compute_labels_world_model(
+            obs_tokens, batch["rewards"], batch["ends"], batch["mask_padding"]
+        )
+
+        logits_observations = torch.flatten(outputs.logits_observations[:, :-1], end_dim=1).contiguous()
+        loss_obs = F.cross_entropy(logits_observations, labels_observations)
+        loss_rewards = F.cross_entropy((torch.flatten(outputs.logits_rewards, end_dim=1).contiguous()), labels_rewards)
+        loss_ends = F.cross_entropy((torch.flatten(outputs.logits_ends, end_dim=1).contiguous()), labels_ends)
+
+        return (
+            IrisLossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends),
+            outputs,
+            all_hidden_states,
+            all_attentions,
+        )
+    
+    def compute_actor_critic_loss(
+        self,
+        component_object: object,
+        batch: Batch,
+        tokenizer: IrisTokenizer,
+        world_model: IrisWorldModel,
+        imagine_horizon: int,
+        gamma: float,
+        lambda_: float,
+        entropy_weight: float,
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
+        **kwargs: Any,
+    ) -> IrisLossWithIntermediateLosses:
+        assert not component_object.use_original_obs
+        outputs, outputs_ac, hidden_states = component_object.imagine(
+            batch,
+            tokenizer,
+            world_model,
+            horizon=imagine_horizon,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+        )
+
+        with torch.no_grad():
+            lambda_returns = component_object.compute_lambda_returns(
+                rewards=outputs.rewards,
+                values=outputs.values,
+                ends=outputs.ends,
+                gamma=gamma,
+                lambda_=lambda_,
+            )[:, :-1]
+
+        values = outputs.values[:, :-1]
+
+        d = Categorical(logits=outputs.logits_actions[:, :-1])
+        log_probs = d.log_prob(outputs.actions[:, :-1])
+        loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
+        loss_entropy = -entropy_weight * d.entropy().mean()
+        loss_values = F.mse_loss(values, lambda_returns)
+
+        return (
+            IrisLossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy),
+            outputs_ac,
+            hidden_states,
+            None,
+        )
 
 class IrisAgent(nn.Module):
     def __init__(self, tokenizer: IrisTokenizer, world_model: IrisWorldModel, actor_critic: IrisActorCritic):
@@ -1500,12 +1511,6 @@ class IrisModel(IrisPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def component_losses(self, component: nn.Module, batch, grad_acc_steps: int, **kwargs_loss: Any):
-        losses, outputs, all_hidden_states, all_attentions = component.compute_loss(batch, **kwargs_loss)
-        losses = losses / grad_acc_steps
-        losses = losses.loss_total
-        return losses, outputs, all_hidden_states, all_attentions
 
     @add_start_docstrings_to_model_forward(IRIS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=IrisOutput, config_class=_CONFIG_FOR_DOC)
@@ -1640,7 +1645,6 @@ class IrisModel(IrisPreTrainedModel):
         )
 
         cfg_tokenizer = {
-            "grad_acc_steps": self.config.grad_acc_steps_tokenizer,
             "should_preprocess": should_preprocess,
             "should_postprocess": should_postprocess,
             "output_hidden_states": output_hidden_states,
@@ -1648,14 +1652,12 @@ class IrisModel(IrisPreTrainedModel):
         }
         cfg_world_model = {
             "tokenizer": self.agent.tokenizer,
-            "grad_acc_steps": self.config.grad_acc_steps_world_model,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
         cfg_actor_critic = {
             "tokenizer": self.agent.tokenizer,
             "world_model": self.agent.world_model,
-            "grad_acc_steps": self.config.grad_acc_steps_actor_critic,
             "imagine_horizon": self.config.imagine_horizon_train_actor_critic,
             "gamma": self.config.gamma,
             "lambda_": self.config.lambda_,
@@ -1686,22 +1688,33 @@ class IrisModel(IrisPreTrainedModel):
             "mask_padding": mask_padding[2],
         }
 
+        component_losses = IrisComponentLosses()
+
         (
             losses_tokenizer,
             tokenizer_outputs,
             all_hidden_states_tokenizer,
             all_attentions_tokenizer,
-        ) = self.component_losses(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
+        ) = component_losses.compute_tokenizer_loss(self.agent.tokenizer,batch_tokenizer, **cfg_tokenizer)
+        losses_tokenizer = losses_tokenizer / self.config.grad_acc_steps_tokenizer
+
         (
             losses_world_model,
             world_model_outputs,
             all_hidden_states_world_model,
             all_attentions_world_model,
-        ) = self.component_losses(self.agent.world_model, batch_world_model, **cfg_world_model)
-        losses_actor_critic, actor_critic_outputs, all_hidden_states_actor_critic, _ = self.component_losses(
-            self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic
-        )
-        losses = torch.stack((losses_tokenizer, losses_world_model, losses_actor_critic))
+        ) = component_losses.compute_world_model_loss(self.agent.world_model, batch_world_model, **cfg_world_model)
+        losses_world_model = losses_world_model / self.config.grad_acc_steps_world_model
+
+        (
+            losses_actor_critic,
+            actor_critic_outputs,
+            all_hidden_states_actor_critic,
+            _,
+        ) = component_losses.compute_actor_critic_loss(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
+        losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
+
+        losses = torch.stack((losses_tokenizer.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total))
 
         all_hidden_states = (
             all_hidden_states_tokenizer + all_hidden_states_world_model + all_hidden_states_actor_critic
