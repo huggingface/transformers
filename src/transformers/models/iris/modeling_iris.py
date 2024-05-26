@@ -695,9 +695,6 @@ class IrisTokenizer(nn.Module):
         self.embedding.weight.data.uniform_(-1.0 / vocab_size, 1.0 / vocab_size)
         self.lpips = IrisLPIPS().eval() if with_lpips else None
 
-    def __repr__(self) -> str:
-        return "tokenizer"
-
     def forward(
         self,
         x: torch.Tensor,
@@ -976,9 +973,6 @@ class IrisWorldModel(nn.Module):
             ),
         )
 
-    def __repr__(self) -> str:
-        return "world_model"
-
     def forward(
         self,
         tokens: torch.LongTensor,
@@ -1151,9 +1145,6 @@ class IrisActorCritic(nn.Module):
 
         self.critic_linear = nn.Linear(512, 1)
         self.actor_linear = nn.Linear(512, act_vocab_size)
-
-    def __repr__(self) -> str:
-        return "actor_critic"
 
     def clear(self) -> None:
         self.hx, self.cx = None, None
