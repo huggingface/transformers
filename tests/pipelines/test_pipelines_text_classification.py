@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+
 import torch
 
 from transformers import (
@@ -29,7 +30,7 @@ from transformers.testing_utils import (
     require_torch_bf16,
     require_torch_fp16,
     slow,
-    torch_device
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -122,7 +123,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
-            device=torch.float16,
+            torch_dtype=torch.float16,
         )
 
         outputs = text_classifier("This is great !")
@@ -134,7 +135,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
-            device=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
         )
 
         outputs = text_classifier("This is great !")
