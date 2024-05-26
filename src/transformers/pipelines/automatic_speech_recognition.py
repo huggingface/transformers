@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 import numpy as np
 import requests
 
+from ..models.auto.processing_auto import AutoProcessor
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
@@ -149,11 +150,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
             [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        feature_extractor ([`SequenceFeatureExtractor`]):
-            The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
+        feature_extractor ([`SequenceFeatureExtractor`]):
+            The feature extractor that will be used by the pipeline to encode waveform for the model.
+        processor ([`AutoProcessor`]):
+            The processor that will be used by the pipeline to preprocess audio before processing.
         decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
@@ -202,8 +205,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
+        processor: Optional[AutoProcessor] = None,
         **kwargs,
     ):
+        self.processor = processor
         # set the model type so we can check we have the right pre- and post-processing parameters
         if model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
@@ -544,6 +549,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
             else:
                 out = {"tokens": tokens}
+
+            if "prompt_ids" in generate_kwargs:
+                if isinstance(out["tokens"], torch.Tensor):
+                    prompt_tensor = torch.tensor(
+                        generate_kwargs["prompt_ids"], dtype=out["tokens"].dtype, device=out["tokens"].device
+                    )
+                    nprompt_token = len(prompt_tensor)
+                    tmp_tokens = out["tokens"][0]
+                    if (tmp_tokens[0:nprompt_token] == prompt_tensor).sum() == nprompt_token:
+                        out["tokens"][0, 0:nprompt_token] = torch.tensor(
+                            [self.tokenizer.unk_token_id] * nprompt_token, dtype=out["tokens"].dtype
+                        )
+
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
