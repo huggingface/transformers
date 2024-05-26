@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperGlue model."""
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -79,7 +80,7 @@ def stack_attention_probs_list(attention_probs: List[torch.Tensor]) -> torch.Ten
 
 
 def batch_attention_probs_list(
-    attention_probs: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]
+    attention_probs: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]],
 ) -> Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]:
     """
     Given a list of attention probabilities, batch them together.
@@ -149,7 +150,7 @@ def stack_hidden_states_list(hidden_states: List[torch.Tensor]) -> torch.Tensor:
 
 
 def batch_hidden_states(
-    hidden_states: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]
+    hidden_states: Union[List[torch.Tensor], List[Tuple[torch.Tensor]]],
 ) -> Union[List[torch.Tensor], List[Tuple[torch.Tensor]]]:
     """
     Given a list of hidden states, batch them together using torch.stack.
