@@ -178,13 +178,6 @@ class IrisLossWithIntermediateLosses:
         self.loss_total = self.loss_total / value
         return self
 
-@dataclass
-class IrisTokenizerEncoderOutput:
-    z: torch.FloatTensor
-    z_quantized: torch.FloatTensor
-    tokens: torch.LongTensor
-
-
 class IrisSlicer(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
         super().__init__()
@@ -706,12 +699,12 @@ class IrisTokenizer(nn.Module):
         outputs, all_hidden_states_enc, attentions_enc = self.encode(
             x, should_preprocess, output_hidden_states, output_attentions
         )
-        decoder_input = outputs.z + (outputs.z_quantized - outputs.z).detach()
+        decoder_input = outputs[0] + (outputs[1] - outputs[0]).detach()
         reconstructions, all_hidden_states_dec, attentions_dec = self.decode(
             decoder_input, should_postprocess, output_hidden_states, output_attentions
         )
         return (
-            (outputs.z, outputs.z_quantized, reconstructions),
+            (outputs[0], outputs[1], reconstructions),
             all_hidden_states_enc + all_hidden_states_dec if output_hidden_states else None,
             attentions_enc + attentions_dec if output_attentions else None,
         )
@@ -722,7 +715,8 @@ class IrisTokenizer(nn.Module):
         should_preprocess: bool = False,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
-    ) -> IrisTokenizerEncoderOutput:
+    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+
         if should_preprocess:
             x = self.preprocess_input(x)
         shape = x.shape  # (..., C, H, W)
@@ -745,7 +739,7 @@ class IrisTokenizer(nn.Module):
         z_q = z_q.reshape(*shape[:-3], *z_q.shape[1:])
         tokens = tokens.reshape(*shape[:-3], -1)
 
-        return IrisTokenizerEncoderOutput(z, z_q, tokens), all_hidden_states, attentions
+        return (z, z_q, tokens), all_hidden_states, attentions
 
     def decode(
         self,
@@ -767,7 +761,7 @@ class IrisTokenizer(nn.Module):
     def encode_decode(
         self, x: torch.Tensor, should_preprocess: bool = False, should_postprocess: bool = False
     ) -> torch.Tensor:
-        z_q = self.encode(x, should_preprocess)[0].z_quantized
+        z_q = self.encode(x, should_preprocess)[0][1]
         return self.decode(z_q, should_postprocess)
 
     def preprocess_input(self, x: torch.Tensor) -> torch.Tensor:
@@ -918,14 +912,6 @@ class IrisSelfAttention(nn.Module):
 
         return (y, att)
 
-@dataclass
-class IrisWorldModelOutput:
-    output_sequence: torch.FloatTensor
-    logits_observations: torch.FloatTensor
-    logits_rewards: torch.FloatTensor
-    logits_ends: torch.FloatTensor
-
-
 class IrisWorldModel(nn.Module):
     def __init__(self, obs_vocab_size: int, act_vocab_size: int, config) -> None:
         super().__init__()
@@ -979,7 +965,8 @@ class IrisWorldModel(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         past_keys_values: Optional[IrisKeysValues] = None,
-    ) -> IrisWorldModelOutput:
+    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+
         num_steps = tokens.size(1)  # (B, T)
         assert num_steps <= self.config.max_tokens
         prev_steps = 0 if past_keys_values is None else past_keys_values.size[2][0]
@@ -1001,7 +988,7 @@ class IrisWorldModel(nn.Module):
         )
 
         return (
-            IrisWorldModelOutput(x, logits_observations, logits_rewards, logits_ends),
+            (x, logits_observations, logits_rewards, logits_ends),
             transformer_hidden_states
             + head_hidden_states_observations
             + head_hidden_states_rewards
@@ -1050,11 +1037,11 @@ class IrisWorldModelImagine:
             num_samples=num_samples, max_tokens=self.world_model.config.max_tokens
         )
         outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)[0]
-        return outputs_wm.output_sequence  # (B, K, E)
+        return outputs_wm[0]  # (B, K, E)
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0].tokens  # (B, C, H, W) -> (B, K)
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][2]  # (B, C, H, W) -> (B, K)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
@@ -1079,18 +1066,18 @@ class IrisWorldModelImagine:
 
         for k in range(num_passes):  # assumption that there is only one action token.
             outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)[0]
-            output_sequence.append(outputs_wm.output_sequence)
+            output_sequence.append(outputs_wm[0])
 
             if k == 0:
                 reward = (
-                    Categorical(logits=outputs_wm.logits_rewards).sample().float().cpu().numpy().reshape(-1) - 1
+                    Categorical(logits=outputs_wm[2]).sample().float().cpu().numpy().reshape(-1) - 1
                 )  # (B,)
                 done = (
-                    Categorical(logits=outputs_wm.logits_ends).sample().cpu().numpy().astype(bool).reshape(-1)
+                    Categorical(logits=outputs_wm[3]).sample().cpu().numpy().astype(bool).reshape(-1)
                 )  # (B,)
 
             if k < self.num_observations_tokens:
-                token = Categorical(logits=outputs_wm.logits_observations).sample()
+                token = Categorical(logits=outputs_wm[1]).sample()
                 obs_tokens.append(token)
 
         output_sequence = torch.cat(output_sequence, dim=1)  # (B, 1 + K, E)
@@ -1108,23 +1095,6 @@ class IrisWorldModelImagine:
 
         rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (B, C, H, W)
         return torch.clamp(rec, 0, 1)
-
-
-@dataclass
-class IrisActorCriticOutput:
-    logits_actions: torch.FloatTensor
-    means_values: torch.FloatTensor
-
-
-@dataclass
-class IrisImagineOutput:
-    observations: torch.ByteTensor
-    actions: torch.LongTensor
-    logits_actions: torch.FloatTensor
-    values: torch.FloatTensor
-    rewards: torch.FloatTensor
-    ends: torch.BoolTensor
-
 
 class IrisActorCritic(nn.Module):
     def __init__(self, act_vocab_size, use_original_obs: bool = False) -> None:
@@ -1194,7 +1164,8 @@ class IrisActorCritic(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         mask_padding: Optional[torch.BoolTensor] = None,
-    ) -> IrisActorCriticOutput:
+    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor],None]:
+
         assert inputs.ndim == 4 and inputs.shape[1:] == (3, 64, 64)
         assert 0 <= inputs.min() <= 1 and 0 <= inputs.max() <= 1
         assert mask_padding is None or (
@@ -1223,7 +1194,7 @@ class IrisActorCritic(nn.Module):
         logits_actions = self.actor_linear(self.hx).unsqueeze(1).contiguous()
         means_values = self.critic_linear(self.hx).unsqueeze(1).contiguous()
 
-        return IrisActorCriticOutput(logits_actions, means_values), hidden_states, None
+        return (logits_actions, means_values), hidden_states, None
 
     def imagine(
         self,
@@ -1234,7 +1205,8 @@ class IrisActorCritic(nn.Module):
         show_pbar: bool = False,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
-    ) -> IrisImagineOutput:
+    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+
         assert not self.use_original_obs
         initial_observations = batch["observations"]
         mask_padding = batch["mask_padding"]
@@ -1270,25 +1242,25 @@ class IrisActorCritic(nn.Module):
             all_observations.append(obs)
 
             outputs_ac, hidden_states, _ = self(obs, output_hidden_states, output_attentions)
-            action_token = Categorical(logits=outputs_ac.logits_actions).sample()
+            action_token = Categorical(logits=outputs_ac[0]).sample()
             obs, reward, done, _ = wm_imagine.step(action_token, should_predict_next_obs=(k < horizon - 1))
 
             all_actions.append(action_token)
-            all_logits_actions.append(outputs_ac.logits_actions)
-            all_values.append(outputs_ac.means_values)
+            all_logits_actions.append(outputs_ac[0])
+            all_values.append(outputs_ac[1])
             all_rewards.append(torch.tensor(reward).reshape(-1, 1))
             all_ends.append(torch.tensor(done).reshape(-1, 1))
 
         self.clear()
 
         return (
-            IrisImagineOutput(
-                observations=torch.stack(all_observations, dim=1).mul(255).byte(),  # (B, T, C, H, W) in [0, 255]
-                actions=torch.cat(all_actions, dim=1),  # (B, T)
-                logits_actions=torch.cat(all_logits_actions, dim=1),  # (B, T, #actions)
-                values=torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (B, T)
-                rewards=torch.cat(all_rewards, dim=1).to(device),  # (B, T)
-                ends=torch.cat(all_ends, dim=1).to(device),  # (B, T)
+            (
+            torch.stack(all_observations, dim=1).mul(255).byte(),  # (B, T, C, H, W) in [0, 255]
+            torch.cat(all_actions, dim=1),  # (B, T)
+            torch.cat(all_logits_actions, dim=1),  # (B, T, #actions)
+            torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (B, T)
+            torch.cat(all_rewards, dim=1).to(device),  # (B, T)
+            torch.cat(all_ends, dim=1).to(device),  # (B, T)
             ),
             outputs_ac,
             hidden_states,
@@ -1345,7 +1317,7 @@ class IrisComponentLosses:
         **kwargs: Any,
     ) -> IrisLossWithIntermediateLosses:
         with torch.no_grad():
-            obs_tokens = tokenizer.encode(batch["observations"], should_preprocess=True)[0].tokens  # (B, L, K)
+            obs_tokens = tokenizer.encode(batch["observations"], should_preprocess=True)[0][2]  # (B, L, K)
 
         act_tokens = batch["actions"].unsqueeze(-1).contiguous()
 
@@ -1357,13 +1329,17 @@ class IrisComponentLosses:
             obs_tokens, batch["rewards"], batch["ends"], batch["mask_padding"]
         )
 
-        logits_observations = torch.flatten(outputs.logits_observations[:, :-1], end_dim=1).contiguous()
+        logits_observations = torch.flatten(outputs[1][:, :-1], end_dim=1).contiguous()
         loss_obs = F.cross_entropy(logits_observations, labels_observations)
-        loss_rewards = F.cross_entropy((torch.flatten(outputs.logits_rewards, end_dim=1).contiguous()), labels_rewards)
-        loss_ends = F.cross_entropy((torch.flatten(outputs.logits_ends, end_dim=1).contiguous()), labels_ends)
+        loss_rewards = F.cross_entropy((torch.flatten(outputs[2], end_dim=1).contiguous()), labels_rewards)
+        loss_ends = F.cross_entropy((torch.flatten(outputs[3], end_dim=1).contiguous()), labels_ends)
 
         return (
-            IrisLossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends),
+            IrisLossWithIntermediateLosses(
+                loss_obs=loss_obs,
+                loss_rewards=loss_rewards,
+                loss_ends=loss_ends
+            ),
             outputs,
             all_hidden_states,
             all_attentions,
@@ -1395,23 +1371,27 @@ class IrisComponentLosses:
 
         with torch.no_grad():
             lambda_returns = component_object.compute_lambda_returns(
-                rewards=outputs.rewards,
-                values=outputs.values,
-                ends=outputs.ends,
+                rewards=outputs[4],
+                values=outputs[3],
+                ends=outputs[5],
                 gamma=gamma,
                 lambda_=lambda_,
             )[:, :-1]
 
-        values = outputs.values[:, :-1]
+        values = outputs[3][:, :-1]
 
-        d = Categorical(logits=outputs.logits_actions[:, :-1])
-        log_probs = d.log_prob(outputs.actions[:, :-1])
+        d = Categorical(logits=outputs[2][:, :-1])
+        log_probs = d.log_prob(outputs[1][:, :-1])
         loss_actions = -1 * (log_probs * (lambda_returns - values.detach())).mean()
         loss_entropy = -entropy_weight * d.entropy().mean()
         loss_values = F.mse_loss(values, lambda_returns)
 
         return (
-            IrisLossWithIntermediateLosses(loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy),
+            IrisLossWithIntermediateLosses(
+                loss_actions=loss_actions,
+                loss_values=loss_values,
+                loss_entropy=loss_entropy
+            ),
             outputs_ac,
             hidden_states,
             None,
@@ -1462,7 +1442,7 @@ class IrisAgent(nn.Module):
                 self.tokenizer.encode_decode(obs, should_preprocess=True, should_postprocess=True)[0], 0, 1
             )
         )
-        logits_actions = self.actor_critic(input_ac).logits_actions[:, -1] / temperature
+        logits_actions = self.actor_critic(input_ac)[0][:, -1] / temperature
         act_token = Categorical(logits=logits_actions).sample() if should_sample else logits_actions.argmax(dim=-1)
         return act_token
 
@@ -1728,10 +1708,10 @@ class IrisModel(IrisPreTrainedModel):
                 for v in [
                     tokenizer_outputs[2],
                     losses,
-                    actor_critic_outputs.logits_actions,
-                    world_model_outputs.logits_rewards,
-                    world_model_outputs.logits_ends,
-                    world_model_outputs.logits_observations,
+                    actor_critic_outputs[0],
+                    world_model_outputs[2],
+                    world_model_outputs[3],
+                    world_model_outputs[1],
                     all_hidden_states,
                     all_self_attentions,
                 ]
@@ -1741,10 +1721,10 @@ class IrisModel(IrisPreTrainedModel):
         return IrisOutput(
             reconstructed_img=tokenizer_outputs[2],
             losses=losses,
-            action_preds=actor_critic_outputs.logits_actions,
-            reward_preds=world_model_outputs.logits_rewards,
-            epsiode_end=world_model_outputs.logits_ends,
-            obs_preds=world_model_outputs.logits_observations,
+            action_preds=actor_critic_outputs[0],
+            reward_preds=world_model_outputs[2],
+            epsiode_end=world_model_outputs[3],
+            obs_preds=world_model_outputs[1],
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
