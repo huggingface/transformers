@@ -510,9 +510,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             # Added initial prompt for whisper
             if "prompt_ids" in model_inputs and self.type == "seq2seq_whisper":
-                prompt_ids = model_inputs.pop("prompt_ids")
-                is_first = model_inputs.pop("is_first")
-                prompt_ids = prompt_ids[0]
+                prompt_ids_all = model_inputs.pop("prompt_ids")
+                del model_inputs["is_first"]
+                prompt_ids = prompt_ids_all[0]
                 if prompt_ids.any():
                     generate_kwargs["prompt_ids"] = torch.tensor(prompt_ids, dtype=torch.int64, device=self.model.device.type)#dtype=out["tokens"].dtype, device=out["tokens"].device)
             
