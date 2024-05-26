@@ -72,8 +72,11 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
 
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
+        # Added is_first to add initial prompt
+        if chunk_start_idx == 0:
+            yield {"is_last": is_last, "stride": stride, **processed, "is_first":True}
         if chunk.shape[0] > _stride_left:
-            yield {"is_last": is_last, "stride": stride, **processed}
+            yield {"is_last": is_last, "stride": stride, **processed, "is_first":False}
         if is_last:
             break
 
@@ -293,9 +296,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return_language=None,
         generate_kwargs=None,
         max_new_tokens=None,
+        initial_prompt=None
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
+
+        #  For whisper model, if initial_prompt is provided consider for preprocessing input
+        if initial_prompt is not None:
+            if self.type == "seq2seq_whisper":
+                preprocess_params["initial_prompt"] = initial_prompt
+        
         if chunk_length_s is not None:
             if self.type == "seq2seq" and not ignore_warning:
                 logger.warning(
@@ -347,7 +357,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         return preprocess_params, forward_params, postprocess_params
 
-    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
+    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, initial_prompt=None):
+        
+        prompt_ids = np.array([])
+        if initial_prompt is not None:
+            if self.type == "seq2seq_whisper":
+                prompt_ids = self.tokenizer.get_prompt_ids(initial_prompt)        
+        
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -428,10 +444,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
+            # Added prompt_ids (initial prompt ids for whisper)
             for item in chunk_iter(
                 inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
             ):
-                yield item
+                yield {**item, **{"prompt_ids":prompt_ids}}
         else:
             if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:
                 processed = self.feature_extractor(
@@ -486,6 +503,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
 
+            # Added initial prompt for whisper
+            if "prompt_ids" in model_inputs and self.type == "seq2seq_whisper":
+                prompt_ids = model_inputs.pop("prompt_ids")
+                is_first = model_inputs.pop("is_first")
+                prompt_ids = prompt_ids[0]
+                if prompt_ids.any():
+                    generate_kwargs["prompt_ids"] = torch.tensor(prompt_ids, dtype=torch.int64, device=self.model.device.type)#dtype=out["tokens"].dtype, device=out["tokens"].device)
+            
             # custom processing for Whisper timestamps and word-level timestamps
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = return_timestamps
@@ -501,6 +526,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     else:
                         generate_kwargs["num_frames"] = num_frames
 
+            # Need to check here why generate is using initial prompt for every chunks for whisper!
             tokens = self.model.generate(
                 inputs=inputs,
                 attention_mask=attention_mask,
@@ -571,7 +597,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         if stride and self.type == "seq2seq":
             items = _find_longest_common_sequence(final_items, self.tokenizer)
-        elif self.type == "seq2seq_whisper":
+        elif self.type == "seq2seq_whisper":            
             time_precision = self.feature_extractor.chunk_length / self.model.config.max_source_positions
             # Send the chunking back to seconds, it's easier to handle in whisper
             sampling_rate = self.feature_extractor.sampling_rate
