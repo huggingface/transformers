@@ -603,7 +603,7 @@ class IrisLPIPS(nn.Module):
 
 class IrisScalingLayer(nn.Module):
     def __init__(self) -> None:
-        super(IrisScalingLayer, self).__init__()
+        super().__init__()
         self.register_buffer("shift", torch.Tensor([-0.030, -0.088, -0.188])[None, :, None, None])
         self.register_buffer("scale", torch.Tensor([0.458, 0.448, 0.450])[None, :, None, None])
 
@@ -614,7 +614,7 @@ class IrisNetLinLayer(nn.Module):
     """A single linear layer which does a 1x1 conv"""
 
     def __init__(self, chn_in: int, chn_out: int = 1, use_dropout: bool = False) -> None:
-        super(IrisNetLinLayer, self).__init__()
+        super().__init__()
         layers = (
             [
                 nn.Dropout(),
@@ -630,7 +630,7 @@ class IrisNetLinLayer(nn.Module):
 
 class IrisVgg16(nn.Module):
     def __init__(self, requires_grad: bool = False) -> None:
-        super(IrisVgg16, self).__init__()
+        super().__init__()
         vgg_pretrained_features = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
