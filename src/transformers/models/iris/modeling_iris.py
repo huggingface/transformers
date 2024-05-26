@@ -54,6 +54,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "ruffy369/iris-breakout"
 _CONFIG_FOR_DOC = "IrisConfig"
 
+
 @dataclass
 class IrisOutput(ModelOutput):
     """
@@ -107,9 +108,7 @@ class IrisPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(
-                mean=0.0, std=self.config.initializer_range
-            )
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -174,6 +173,7 @@ class IrisLossWithIntermediateLosses:
         self.loss_total = self.loss_total / value
         return self
 
+
 class IrisSlicer(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor) -> None:
         super().__init__()
@@ -204,7 +204,9 @@ class IrisHead(nn.Module):
         self, x: torch.Tensor, output_hidden_states: bool = False, num_steps: int = None, prev_steps: int = None
     ) -> torch.Tensor:
         hidden_states = () if output_hidden_states else None
-        x_sliced = x[:, self.slicer.compute_slice(num_steps, prev_steps)]  # x is (batch_size, num_timesteps, tokens_per_frame)
+        x_sliced = x[
+            :, self.slicer.compute_slice(num_steps, prev_steps)
+        ]  # x is (batch_size, num_timesteps, tokens_per_frame)
         # Add the hidden state to the tuple after Relu activation
         x_sliced_hidden = self.head_module[1](self.head_module[0](x_sliced))
         hidden_states = hidden_states + (x_sliced_hidden,) if output_hidden_states else None
@@ -253,7 +255,10 @@ class IrisEncoder(nn.Module):
             for _ in range(self.config.num_res_blocks):
                 block.append(
                     IrisResnetBlock(
-                        in_channels=block_in, out_channels=block_out, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+                        in_channels=block_in,
+                        out_channels=block_out,
+                        timestep_embedding_channels=timestep_embedding_channels,
+                        dropout=config.dropout,
                     )
                 )
                 block_in = block_out
@@ -270,11 +275,17 @@ class IrisEncoder(nn.Module):
         # middle
         self.mid = nn.Module()
         self.mid.block_1 = IrisResnetBlock(
-            in_channels=block_in, out_channels=block_in, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+            in_channels=block_in,
+            out_channels=block_in,
+            timestep_embedding_channels=timestep_embedding_channels,
+            dropout=config.dropout,
         )
         self.mid.attn_1 = IrisAttnBlock(block_in)
         self.mid.block_2 = IrisResnetBlock(
-            in_channels=block_in, out_channels=block_in, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+            in_channels=block_in,
+            out_channels=block_in,
+            timestep_embedding_channels=timestep_embedding_channels,
+            dropout=config.dropout,
         )
 
         # end
@@ -346,11 +357,17 @@ class IrisDecoder(nn.Module):
         # middle
         self.mid = nn.Module()
         self.mid.block_1 = IrisResnetBlock(
-            in_channels=block_in, out_channels=block_in, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+            in_channels=block_in,
+            out_channels=block_in,
+            timestep_embedding_channels=timestep_embedding_channels,
+            dropout=config.dropout,
         )
         self.mid.attn_1 = IrisAttnBlock(block_in)
         self.mid.block_2 = IrisResnetBlock(
-            in_channels=block_in, out_channels=block_in, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+            in_channels=block_in,
+            out_channels=block_in,
+            timestep_embedding_channels=timestep_embedding_channels,
+            dropout=config.dropout,
         )
 
         # upsampling
@@ -362,7 +379,10 @@ class IrisDecoder(nn.Module):
             for i_block in range(config.num_res_blocks + 1):
                 block.append(
                     IrisResnetBlock(
-                        in_channels=block_in, out_channels=block_out, timestep_embedding_channels=timestep_embedding_channels, dropout=config.dropout
+                        in_channels=block_in,
+                        out_channels=block_out,
+                        timestep_embedding_channels=timestep_embedding_channels,
+                        dropout=config.dropout,
                     )
                 )
                 block_in = block_out
@@ -429,6 +449,7 @@ class IrisDecoder(nn.Module):
         h = self.conv_out(h)
 
         return h, hidden_states, attentions
+
 
 def Normalize(in_channels: int) -> nn.Module:
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
@@ -542,7 +563,9 @@ class IrisAttnBlock(nn.Module):
         q = q.reshape(batch_size, num_channels, height * width)
         q = q.permute(0, 2, 1)  # batch_size,height * width,num_channels
         k = k.reshape(batch_size, num_channels, height * width)  # batch_size,num_channels,height * width
-        w_ = torch.bmm(q, k)  # batch_size,height * width,height * width    width[batch_size,i,j]=sum_c q[batch_size,i,num_channels]k[batch_size,num_channels,j]
+        w_ = torch.bmm(
+            q, k
+        )  # batch_size,height * width,height * width    width[batch_size,i,j]=sum_c q[batch_size,i,num_channels]k[batch_size,num_channels,j]
         w_ = w_ * (int(num_channels) ** (-0.5))
         # attention weights
         w_ = torch.nn.functional.softmax(w_, dim=2)
@@ -551,7 +574,9 @@ class IrisAttnBlock(nn.Module):
         # attend to values
         v = v.reshape(batch_size, num_channels, height * width)
         w_ = w_.permute(0, 2, 1)  # batch_size,height * width,height * width (first height * width of k, second of q)
-        h_ = torch.bmm(v, w_)  # batch_size, num_channels,height * width (height * width of q) h_[batch_size,num_channels,j] = sum_i v[batch_size,num_channels,i] w_[batch_size,i,j]
+        h_ = torch.bmm(
+            v, w_
+        )  # batch_size, num_channels,height * width (height * width of q) h_[batch_size,num_channels,j] = sum_i v[batch_size,num_channels,i] w_[batch_size,i,j]
         h_ = h_.reshape(batch_size, num_channels, height, width)
 
         h_ = self.proj_out(h_)
@@ -580,7 +605,7 @@ class IrisLPIPS(nn.Module):
 
     def spatial_average(self, x: torch.Tensor, keepdim: bool = True) -> torch.Tensor:
         return x.mean([2, 3], keepdim=keepdim)
-    
+
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         in0_input, in1_input = (self.scaling_layer(input), self.scaling_layer(target))
         outs0, outs1 = self.net(in0_input), self.net(in1_input)
@@ -596,6 +621,7 @@ class IrisLPIPS(nn.Module):
             val += res[i]
         return val
 
+
 class IrisScalingLayer(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -604,6 +630,7 @@ class IrisScalingLayer(nn.Module):
 
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         return (inp - self.shift) / self.scale
+
 
 class IrisNetLinLayer(nn.Module):
     """A single linear layer which does a 1x1 conv"""
@@ -698,7 +725,6 @@ class IrisTokenizer(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
     ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-
         if should_preprocess:
             x = self.preprocess_input(x)
         shape = x.shape  # (..., num_channels, height, width)
@@ -714,7 +740,12 @@ class IrisTokenizer(nn.Module):
         )
 
         tokens = dist_to_embeddings.argmin(dim=-1)
-        z_q = self.embedding(tokens).view(batch_size, height, width, num_tokens_per_frame).permute(0, 3, 1, 2).contiguous()
+        z_q = (
+            self.embedding(tokens)
+            .view(batch_size, height, width, num_tokens_per_frame)
+            .permute(0, 3, 1, 2)
+            .contiguous()
+        )
 
         # Reshape to original
         z = z.reshape(*shape[:-3], *z.shape[1:])
@@ -754,33 +785,41 @@ class IrisTokenizer(nn.Module):
         """y is supposed to be channels first and in [-1, 1]"""
         return y.add(1).div(2)
 
+
 class IrisKeysValues:
-    def __init__(
-        self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device
-    ) -> None:
-        self._keys_values = StaticCache(config=IrisConfig(), max_batch_size=num_samples, max_cache_len=max_tokens, device=device) 
+    def __init__(self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device) -> None:
+        self._keys_values = StaticCache(
+            config=IrisConfig(), max_batch_size=num_samples, max_cache_len=max_tokens, device=device
+        )
         self._size = []
         self.num_layers = num_layers
         self.reset()
-        
+
     def __getitem__(self, key: int) -> StaticCache:
-        return self._keys_values.key_cache[key][:, :, : self._size[key], :],self._keys_values.value_cache[key][:, :, : self._size[key], :]
+        return self._keys_values.key_cache[key][:, :, : self._size[key], :], self._keys_values.value_cache[key][
+            :, :, : self._size[key], :
+        ]
 
     def __len__(self):
         return len(self._keys_values.key_cache)
 
     @property
     def size(self):
-        return self._keys_values.max_batch_size, self._keys_values.num_key_value_heads, self._size, self._keys_values.head_dim
-        
+        return (
+            self._keys_values.max_batch_size,
+            self._keys_values.num_key_value_heads,
+            self._size,
+            self._keys_values.head_dim,
+        )
 
     def reset(self) -> None:
         self._keys_values.reset()
-        self._size = [0]*self.num_layers
-    
+        self._size = [0] * self.num_layers
+
     def update(self, k: torch.Tensor, v: torch.Tensor, layer_num: int) -> None:
-        
-        self._keys_values.key_cache[layer_num],self._keys_values.value_cache[layer_num] = self._keys_values.update(k,v,layer_num,cache_kwargs={"cache_position": torch.arange(k.shape[2])})
+        self._keys_values.key_cache[layer_num], self._keys_values.value_cache[layer_num] = self._keys_values.update(
+            k, v, layer_num, cache_kwargs={"cache_position": torch.arange(k.shape[2])}
+        )
         if self._size[layer_num] != k.size(2):
             self._size[layer_num] += k.size(2)
 
@@ -811,7 +850,7 @@ class IrisTransformer(nn.Module):
         x = self.drop(sequences)
         hidden_states = hidden_states + (x,) if output_hidden_states else None
         for i, block in enumerate(self.blocks):
-            x, attention = block(x, None if past_keys_values is None else past_keys_values,i)
+            x, attention = block(x, None if past_keys_values is None else past_keys_values, i)
             # Add attention weights (shape: (batch_size, num_heads, target_sequence_length, source_sequence_length))
             attentions = attentions + (attention,) if output_attentions else None
             # Add hidden state to the tuple
@@ -821,6 +860,7 @@ class IrisTransformer(nn.Module):
         hidden_states = hidden_states + (x,) if output_hidden_states else None
 
         return x, hidden_states, attentions
+
 
 class IrisBlock(nn.Module):
     def __init__(self, config) -> None:
@@ -835,11 +875,14 @@ class IrisBlock(nn.Module):
             nn.Dropout(config.resid_pdrop),
         )
 
-    def forward(self, x: torch.Tensor, past_keys_values: Optional[IrisKeysValues] = None, layer_num: int = None) -> torch.Tensor:
-        x_attn, attentions = self.attn(self.ln1(x), past_keys_values,layer_num)
+    def forward(
+        self, x: torch.Tensor, past_keys_values: Optional[IrisKeysValues] = None, layer_num: int = None
+    ) -> torch.Tensor:
+        x_attn, attentions = self.attn(self.ln1(x), past_keys_values, layer_num)
         x = x + x_attn
         x = x + self.mlp(self.ln2(x))
         return x, attentions
+
 
 class IrisSelfAttention(nn.Module):
     def __init__(self, config) -> None:
@@ -868,22 +911,37 @@ class IrisSelfAttention(nn.Module):
 
         if kv_cache is not None:
             num_samples, num_heads, max_tokens, embed_dim = kv_cache.size
-            assert num_heads == self.num_heads and num_samples == batch_size and embed_dim * num_heads == num_z_channels
+            assert (
+                num_heads == self.num_heads and num_samples == batch_size and embed_dim * num_heads == num_z_channels
+            )
         else:
             max_tokens = 0
         max_tokens = max_tokens[layer_num] if kv_cache is not None else max_tokens
 
-        query = self.query(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
-        key = self.key(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
-        value = self.value(x).view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads).transpose(1, 2)  # (batch_size, num_heads, num_timesteps, embed_dim)
+        query = (
+            self.query(x)
+            .view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads)
+            .transpose(1, 2)
+        )  # (batch_size, num_heads, num_timesteps, embed_dim)
+        key = (
+            self.key(x)
+            .view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads)
+            .transpose(1, 2)
+        )  # (batch_size, num_heads, num_timesteps, embed_dim)
+        value = (
+            self.value(x)
+            .view(batch_size, num_timesteps, self.num_heads, num_z_channels // self.num_heads)
+            .transpose(1, 2)
+        )  # (batch_size, num_heads, num_timesteps, embed_dim)
 
         if kv_cache is not None:
             kv_cache.update(key, value, layer_num)
             key, value = kv_cache[layer_num]
 
-
         att = (query @ key.transpose(-2, -1)) * (1.0 / math.sqrt(key.size(-1)))
-        att = att.masked_fill(self.mask[max_tokens : max_tokens + num_timesteps, : max_tokens + num_timesteps] == 0, float("-inf"))
+        att = att.masked_fill(
+            self.mask[max_tokens : max_tokens + num_timesteps, : max_tokens + num_timesteps] == 0, float("-inf")
+        )
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ value
@@ -893,6 +951,7 @@ class IrisSelfAttention(nn.Module):
         y = self.resid_drop(self.proj(y))
 
         return (y, att)
+
 
 class IrisWorldModel(nn.Module):
     def __init__(self, obs_vocab_size: int, act_vocab_size: int, config) -> None:
@@ -913,7 +972,10 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_masks=[act_tokens_pattern, obs_tokens_pattern],
             embedding_tables=nn.ModuleList(
-                [nn.Embedding(act_vocab_size, config.embed_dim_world_model), nn.Embedding(obs_vocab_size, config.embed_dim_world_model)]
+                [
+                    nn.Embedding(act_vocab_size, config.embed_dim_world_model),
+                    nn.Embedding(obs_vocab_size, config.embed_dim_world_model),
+                ]
             ),
         )
 
@@ -921,7 +983,9 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=all_but_last_obs_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, obs_vocab_size)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim_world_model, obs_vocab_size),
             ),
         )
 
@@ -929,7 +993,9 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=act_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, 3)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim_world_model, 3),
             ),
         )
 
@@ -937,7 +1003,9 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=act_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, 2)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model),
+                nn.ReLU(),
+                nn.Linear(config.embed_dim_world_model, 2),
             ),
         )
 
@@ -948,7 +1016,6 @@ class IrisWorldModel(nn.Module):
         output_attentions: bool = False,
         past_keys_values: Optional[IrisKeysValues] = None,
     ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-
         num_steps = tokens.size(1)  # (B, T)
         assert num_steps <= self.config.max_tokens
         prev_steps = 0 if past_keys_values is None else past_keys_values.size[2][0]
@@ -994,7 +1061,6 @@ class IrisWorldModel(nn.Module):
 
 
 class IrisWorldModelImagine:
-    
     def __init__(
         self,
         tokenizer: torch.nn.Module,
@@ -1023,7 +1089,9 @@ class IrisWorldModelImagine:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][2]  # (batch_size, num_channels, height, width) -> (batch_size, num_tokens_per_frame)
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][
+            2
+        ]  # (batch_size, num_channels, height, width) -> (batch_size, num_tokens_per_frame)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
@@ -1077,6 +1145,7 @@ class IrisWorldModelImagine:
 
         rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (batch_size, num_channels, height, width)
         return torch.clamp(rec, 0, 1)
+
 
 class IrisActorCritic(nn.Module):
     def __init__(self, act_vocab_size, use_original_obs: bool = False) -> None:
@@ -1146,8 +1215,7 @@ class IrisActorCritic(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         mask_padding: Optional[torch.BoolTensor] = None,
-    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor],None]:
-
+    ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], None]:
         assert inputs.ndim == 4 and inputs.shape[1:] == (3, 64, 64)
         assert 0 <= inputs.min() <= 1 and 0 <= inputs.max() <= 1
         assert mask_padding is None or (
@@ -1188,7 +1256,6 @@ class IrisActorCritic(nn.Module):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
     ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-
         assert not self.use_original_obs
         initial_observations = batch["observations"]
         mask_padding = batch["mask_padding"]
@@ -1237,21 +1304,25 @@ class IrisActorCritic(nn.Module):
 
         return (
             (
-            torch.stack(all_observations, dim=1).mul(255).byte(),  # (batch_size, num_timesteps, num_channels, height, width) in [0, 255]
-            torch.cat(all_actions, dim=1),  # (batch_size, num_timesteps)
-            torch.cat(all_logits_actions, dim=1),  # (batch_size, num_timesteps, #actions)
-            torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (batch_size, num_timesteps)
-            torch.cat(all_rewards, dim=1).to(device),  # (batch_size, num_timesteps)
-            torch.cat(all_ends, dim=1).to(device),  # (batch_size, num_timesteps)
+                torch.stack(all_observations, dim=1)
+                .mul(255)
+                .byte(),  # (batch_size, num_timesteps, num_channels, height, width) in [0, 255]
+                torch.cat(all_actions, dim=1),  # (batch_size, num_timesteps)
+                torch.cat(all_logits_actions, dim=1),  # (batch_size, num_timesteps, #actions)
+                torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (batch_size, num_timesteps)
+                torch.cat(all_rewards, dim=1).to(device),  # (batch_size, num_timesteps)
+                torch.cat(all_ends, dim=1).to(device),  # (batch_size, num_timesteps)
             ),
             outputs_ac,
             hidden_states,
         )
 
+
 class IrisComponentLosses:
     """
     Loss functions for the Iris' components.
     """
+
     def compute_tokenizer_loss(
         self,
         component_object: object,
@@ -1288,7 +1359,7 @@ class IrisComponentLosses:
             all_hidden_states,
             all_attentions,
         )
-    
+
     def compute_world_model_loss(
         self,
         component_object: object,
@@ -1317,16 +1388,12 @@ class IrisComponentLosses:
         loss_ends = F.cross_entropy((torch.flatten(outputs[3], end_dim=1).contiguous()), labels_ends)
 
         return (
-            IrisLossWithIntermediateLosses(
-                loss_obs=loss_obs,
-                loss_rewards=loss_rewards,
-                loss_ends=loss_ends
-            ),
+            IrisLossWithIntermediateLosses(loss_obs=loss_obs, loss_rewards=loss_rewards, loss_ends=loss_ends),
             outputs,
             all_hidden_states,
             all_attentions,
         )
-    
+
     def compute_actor_critic_loss(
         self,
         component_object: object,
@@ -1370,14 +1437,13 @@ class IrisComponentLosses:
 
         return (
             IrisLossWithIntermediateLosses(
-                loss_actions=loss_actions,
-                loss_values=loss_values,
-                loss_entropy=loss_entropy
+                loss_actions=loss_actions, loss_values=loss_values, loss_entropy=loss_entropy
             ),
             outputs_ac,
             hidden_states,
             None,
         )
+
 
 class IrisAgent(nn.Module):
     def __init__(self, tokenizer: IrisTokenizer, world_model: IrisWorldModel, actor_critic: IrisActorCritic):
@@ -1648,7 +1714,7 @@ class IrisModel(IrisPreTrainedModel):
             tokenizer_outputs,
             all_hidden_states_tokenizer,
             all_attentions_tokenizer,
-        ) = component_losses.compute_tokenizer_loss(self.agent.tokenizer,batch_tokenizer, **cfg_tokenizer)
+        ) = component_losses.compute_tokenizer_loss(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
         losses_tokenizer = losses_tokenizer / self.config.grad_acc_steps_tokenizer
 
         (
@@ -1667,7 +1733,9 @@ class IrisModel(IrisPreTrainedModel):
         ) = component_losses.compute_actor_critic_loss(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
         losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
 
-        losses = torch.stack((losses_tokenizer.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total))
+        losses = torch.stack(
+            (losses_tokenizer.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total)
+        )
 
         all_hidden_states = (
             all_hidden_states_tokenizer + all_hidden_states_world_model + all_hidden_states_actor_critic

@@ -160,7 +160,7 @@ class IrisConfig(PretrainedConfig):
         entropy_weight=0.001,
         initializer_range=0.02,
         use_cache=True,
-        num_key_value_heads = None,
+        num_key_value_heads=None,
         pad_token_id=1,
         bos_token_id=50256,
         eos_token_id=50256,
