@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperGlue model."""
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -271,7 +270,6 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
 
-
     def forward(
         self,
         input: torch.Tensor,
@@ -312,7 +310,7 @@ class SuperGlueMultiHeadAttention(nn.Module):
         self.num_heads = config.num_heads
         self.head_dim = feature_dim // self.num_heads
         self.merge = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
-        self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
+        self.proj = nn.ModuleList([nn.Conv1d(feature_dim, feature_dim, kernel_size=1) for _ in range(3)])
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, output_attentions: bool = False
