@@ -205,41 +205,41 @@ def read_image(path, device, resize, rotation, resize_float):
 
 
 def prepare_imgs_as_original():
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
     im1 = read_image(url, "cuda", [640, 480], 0, False)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
     im2 = read_image(url, "cuda", [640, 480], 0, False)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
     im3 = read_image(url, "cuda", [640, 480], 0, False)
     return [im1, im2, im3, im2]
 
 
 def prepare_imgs_with_cv2_grayscale():
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
     im1 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
     im2 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
     im3 = cv2.imread(url, cv2.IMREAD_GRAYSCALE)[None]
     return [im1, im2, im3, im2]
 
 
 def prepare_imgs_with_cv2_rgb():
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
     im1 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
     im2 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
     im3 = cv2.cvtColor(cv2.imread(url, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
     return [im1, im2, im3, im2]
 
 
 def prepare_imgs_for_image_processor():
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg"
     im1 = Image.open(url)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg"
     im2 = Image.open(url)
-    url = "tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg"
+    url = "tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg"
     im3 = Image.open(url)
     return [im1, im2, im3, im2]
 

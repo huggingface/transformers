@@ -282,9 +282,9 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_imgs():
-    image1 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg")
-    image2 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg")
-    image3 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg")
+    image1 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg")
+    image2 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg")
+    image3 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg")
     return [[image1, image2], [image1, image3]]
 
 
