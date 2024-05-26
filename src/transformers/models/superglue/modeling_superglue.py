@@ -22,11 +22,7 @@ from torch import nn
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 from ..auto import AutoModelForKeypointDetection
 
 
@@ -56,8 +52,8 @@ def concat_attentions_tuples_pair(
         if attention_prob_0.size() != attention_prob_1.size():
             max_dim2 = max(attention_prob_0.shape[2], attention_prob_1.shape[2])
             max_dim3 = max(attention_prob_0.shape[2], attention_prob_1.shape[2])
-            new_attention_prob = torch.zeros(2, attention_prob_0.shape[1], max_dim2, max_dim3).to(
-                attention_prob_0.device
+            new_attention_prob = torch.zeros(
+                2, attention_prob_0.shape[1], max_dim2, max_dim3, device=attention_prob_0.device
             )
             new_attention_prob[0, :, : attention_prob_0.shape[2], : attention_prob_0.shape[3]] = attention_prob_0
             new_attention_prob[1, :, : attention_prob_1.shape[2], : attention_prob_1.shape[3]] = attention_prob_1
@@ -76,11 +72,11 @@ def stack_attention_probs_list(attention_probs: List[torch.Tensor]) -> torch.Ten
     if all_attention_probs_shape_the_same:
         stacked_attention_probs = torch.stack(attention_probs, dim=0)
     else:
-        max_dim2 = max([attention_prob.shape[2] for attention_prob in attention_probs])
-        max_dim3 = max([attention_prob.shape[3] for attention_prob in attention_probs])
+        max_dim2 = max(attention_prob.shape[2] for attention_prob in attention_probs)
+        max_dim3 = max(attention_prob.shape[3] for attention_prob in attention_probs)
         stacked_attention_probs = torch.zeros(
-            len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3
-        ).to(attention_probs[0].device)
+            len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3, device=attention_probs[0].device
+        )
         for i, attention_prob in enumerate(attention_probs):
             stacked_attention_probs[i, :, :, : attention_prob.shape[2], : attention_prob.shape[3]] = attention_prob
     return stacked_attention_probs
@@ -133,7 +129,7 @@ def concat_hidden_states_tuples_pair(
     for hidden_state_0, hidden_state_1 in zip(hidden_states_0, hidden_states_1):
         if hidden_state_0.shape != hidden_state_1.shape:
             max_num_keypoints = max(hidden_state_0.shape[2], hidden_state_1.shape[2])
-            new_hidden_state = torch.zeros(2, hidden_state_0.shape[1], max_num_keypoints).to(hidden_state_0.device)
+            new_hidden_state = torch.zeros(2, hidden_state_0.shape[1], max_num_keypoints, device=hidden_state_0.device)
             new_hidden_state[0, :, : hidden_state_0.shape[2]] = hidden_state_0
             new_hidden_state[1, :, : hidden_state_1.shape[2]] = hidden_state_1
             hidden_states = hidden_states + (new_hidden_state,)
@@ -163,7 +159,8 @@ def stack_hidden_states_list(hidden_states: List[torch.Tensor]) -> torch.Tensor:
             len(hidden_states),
             2,
             hidden_states[0].shape[1],
-            max([hidden_state.shape[2] for hidden_state in hidden_states]),
+            max(hidden_state.shape[2] for hidden_state in hidden_states),
+            device=hidden_states[0].device,
         )
         for i, hidden_state in enumerate(hidden_states):
             stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
@@ -216,36 +213,49 @@ def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int):
 
 
 def log_sinkhorn_iterations(
-    Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch.Tensor, iterations: int
+    log_cost_matrix: torch.Tensor,
+    log_source_distribution: torch.Tensor,
+    log_target_distribution: torch.Tensor,
+    num_iterations: int,
 ) -> torch.Tensor:
     """Perform Sinkhorn Normalization in Log-space for stability"""
-    u, v = torch.zeros_like(log_mu), torch.zeros_like(log_nu)
-    for _ in range(iterations):
-        u = log_mu - torch.logsumexp(Z + v.unsqueeze(1), dim=2)
-        v = log_nu - torch.logsumexp(Z + u.unsqueeze(2), dim=1)
-    return Z + u.unsqueeze(2) + v.unsqueeze(1)
+    log_u_scaling = torch.zeros_like(log_source_distribution)
+    log_v_scaling = torch.zeros_like(log_target_distribution)
+    for _ in range(num_iterations):
+        log_u_scaling = log_source_distribution - torch.logsumexp(log_cost_matrix + log_v_scaling.unsqueeze(1), dim=2)
+        log_v_scaling = log_target_distribution - torch.logsumexp(log_cost_matrix + log_u_scaling.unsqueeze(2), dim=1)
+    return log_cost_matrix + log_u_scaling.unsqueeze(2) + log_v_scaling.unsqueeze(1)
 
 
-def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iterations: int) -> torch.Tensor:
+def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterations: int) -> torch.Tensor:
     """Perform Differentiable Optimal Transport in Log-space for stability"""
-    b, m, n = scores.shape
-    one = scores.new_tensor(1)
-    ms, ns = (m * one).to(scores), (n * one).to(scores)
+    batch_size, num_rows, num_columns = scores.shape
+    one_tensor = scores.new_tensor(1)
+    num_rows_tensor, num_columns_tensor = (num_rows * one_tensor).to(scores), (num_columns * one_tensor).to(scores)
 
-    bins0 = alpha.expand(b, m, 1)
-    bins1 = alpha.expand(b, 1, n)
-    alpha = alpha.expand(b, 1, 1)
+    source_reg_param = reg_param.expand(batch_size, num_rows, 1)
+    target_reg_param = reg_param.expand(batch_size, 1, num_columns)
+    reg_param = reg_param.expand(batch_size, 1, 1)
 
-    couplings = torch.cat([torch.cat([scores, bins0], -1), torch.cat([bins1, alpha], -1)], 1)
+    couplings = torch.cat([torch.cat([scores, source_reg_param], -1), torch.cat([target_reg_param, reg_param], -1)], 1)
 
-    norm = -(ms + ns).log()
-    log_mu = torch.cat([norm.expand(m), ns.log()[None] + norm])
-    log_nu = torch.cat([norm.expand(n), ms.log()[None] + norm])
-    log_mu, log_nu = log_mu[None].expand(b, -1), log_nu[None].expand(b, -1)
+    log_normalization = -(num_rows_tensor + num_columns_tensor).log()
+    log_source_distribution = torch.cat(
+        [log_normalization.expand(num_rows), num_columns_tensor.log()[None] + log_normalization]
+    )
+    log_target_distribution = torch.cat(
+        [log_normalization.expand(num_columns), num_rows_tensor.log()[None] + log_normalization]
+    )
+    log_source_distribution, log_target_distribution = (
+        log_source_distribution[None].expand(batch_size, -1),
+        log_target_distribution[None].expand(batch_size, -1),
+    )
 
-    Z = log_sinkhorn_iterations(couplings, log_mu, log_nu, iterations=iterations)
-    Z = Z - norm  # multiply probabilities by M+N
-    return Z
+    log_optimal_transport_matrix = log_sinkhorn_iterations(
+        couplings, log_source_distribution, log_target_distribution, num_iterations=iterations
+    )
+    log_optimal_transport_matrix = log_optimal_transport_matrix - log_normalization  # multiply probabilities by M+N
+    return log_optimal_transport_matrix
 
 
 def arange_like(x, dim: int):
@@ -317,14 +327,11 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
 
 
 class SuperGlueKeypointEncoder(nn.Module):
-    def __init__(
-        self,
-        config: SuperGlueConfig,
-    ):
+    def __init__(self, config: SuperGlueConfig):
         super().__init__()
-        self.layer_sizes = config.keypoint_encoder_sizes
-        self.feature_dim = config.descriptor_dim
-        self.encoder = SuperGlueMultiLayerPerceptron(config, [3] + self.layer_sizes + [self.feature_dim])
+        layer_sizes = config.keypoint_encoder_sizes
+        feature_dim = config.descriptor_dim
+        self.encoder = SuperGlueMultiLayerPerceptron(config, [3] + layer_sizes + [feature_dim])
 
     def forward(
         self,
@@ -341,10 +348,10 @@ class SuperGlueKeypointEncoder(nn.Module):
 class SuperGlueMultiHeadAttention(nn.Module):
     def __init__(self, config: SuperGlueConfig):
         super().__init__()
-        self.feature_dim = config.descriptor_dim
+        feature_dim = config.descriptor_dim
         self.num_heads = config.num_heads
-        self.dim = self.feature_dim // self.num_heads
-        self.merge = nn.Conv1d(self.feature_dim, self.feature_dim, kernel_size=1)
+        self.head_dim = feature_dim // self.num_heads
+        self.merge = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
     def forward(
@@ -352,10 +359,11 @@ class SuperGlueMultiHeadAttention(nn.Module):
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         batch_dim = query.size(0)
         query, key, value = [
-            layer(x).view(batch_dim, self.dim, self.num_heads, -1) for layer, x in zip(self.proj, (query, key, value))
+            layer(x).view(batch_dim, self.head_dim, self.num_heads, -1)
+            for layer, x in zip(self.proj, (query, key, value))
         ]
         x, attention_probs = attention(query, key, value)
-        output = self.merge(x.contiguous().view(batch_dim, self.dim * self.num_heads, -1))
+        output = self.merge(x.contiguous().view(batch_dim, self.head_dim * self.num_heads, -1))
 
         output = (output, attention_probs) if output_attentions else (output,)
 
@@ -363,17 +371,13 @@ class SuperGlueMultiHeadAttention(nn.Module):
 
 
 class SuperGlueAttentionalPropagation(nn.Module):
-    def __init__(
-        self,
-        config: SuperGlueConfig,
-    ):
+    def __init__(self, config: SuperGlueConfig):
         super().__init__()
-        self.descriptor_dim = config.descriptor_dim
-        self.num_heads = config.num_heads
+        descriptor_dim = config.descriptor_dim
         self.attention = SuperGlueMultiHeadAttention(config)
         self.mlp = SuperGlueMultiLayerPerceptron(
             config,
-            [self.descriptor_dim * 2, self.descriptor_dim * 2, self.descriptor_dim],
+            [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim],
         )
         nn.init.constant_(self.mlp.layers[-1].bias, 0.0)
 
@@ -398,23 +402,11 @@ class SuperGlueAttentionalPropagation(nn.Module):
 
 
 class SuperGlueAttentionalGNN(nn.Module):
-    def __init__(
-        self,
-        config: SuperGlueConfig,
-    ):
+    def __init__(self, config: SuperGlueConfig):
         super().__init__()
         self.descriptor_dim = config.descriptor_dim
-        self.num_heads = config.num_heads
         self.layers_types = config.gnn_layers_types
-        self.num_layers = len(self.layers_types)
-        self.layers = nn.ModuleList(
-            [
-                SuperGlueAttentionalPropagation(
-                    config,
-                )
-                for _ in range(self.num_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([SuperGlueAttentionalPropagation(config) for _ in range(len(self.layers_types))])
 
     def forward(
         self,
@@ -437,8 +429,8 @@ class SuperGlueAttentionalGNN(nn.Module):
                 new_hidden_state = torch.cat([descriptors_0, descriptors_1])
             all_hidden_states = all_hidden_states + (new_hidden_state,)
 
-        for gnn_layer, type in zip(self.layers, self.layers_types):
-            if type == "cross":
+        for gnn_layer, layer_type in zip(self.layers, self.layers_types):
+            if layer_type == "cross":
                 source_0, source_1 = descriptors_1, descriptors_0
             else:  # if type == 'self':
                 source_0, source_1 = descriptors_0, descriptors_1
@@ -466,10 +458,7 @@ class SuperGlueAttentionalGNN(nn.Module):
 
 
 class SuperGlueFinalProjection(nn.Module):
-    def __init__(
-        self,
-        config: SuperGlueConfig,
-    ):
+    def __init__(self, config: SuperGlueConfig):
         super().__init__()
         self.descriptor_dim = config.descriptor_dim
         self.final_proj = nn.Conv1d(self.descriptor_dim, self.descriptor_dim, kernel_size=1, bias=True)
@@ -677,9 +666,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     ) -> Union[Tuple, KeypointMatchingOutput]:
         loss = None
         if labels is not None:
-            raise ValueError(
-                f"SuperGlue is not trainable, no labels should be provided. Therefore, labels should be None but were {type(labels)}"
-            )
+            raise ValueError("SuperGlue is not trainable, no labels should be provided.")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
