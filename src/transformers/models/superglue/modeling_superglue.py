@@ -449,7 +449,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(SuperGlueMultiLayerPerceptron):
+        elif isinstance(module, SuperGlueMultiLayerPerceptron):
             nn.init.constant_(module.layers[-1].bias, 0.0)
 
 
