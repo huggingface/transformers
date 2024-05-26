@@ -14,17 +14,14 @@
 # limitations under the License.
 """PyTorch Iris model."""
 
-import hashlib
 import math
-import os
 import sys
 from collections import OrderedDict, namedtuple
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import requests
 import torch
 import torch.utils.checkpoint
 from PIL import Image
@@ -56,8 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "ruffy369/iris-breakout"
 _CONFIG_FOR_DOC = "IrisConfig"
-
-
 
 @dataclass
 class IrisOutput(ModelOutput):
@@ -545,9 +540,9 @@ class IrisAttnBlock(nn.Module):
         # compute attention
         batch_size, num_channels, height, width = q.shape
         q = q.reshape(batch_size, num_channels, height * width)
-        q = q.permute(0, 2, 1)  # batch_size,hw,num_channels
-        k = k.reshape(batch_size, num_channels, height * width)  # batch_size,num_channels,hw
-        w_ = torch.bmm(q, k)  # batch_size,hw,hw    width[batch_size,i,j]=sum_c q[batch_size,i,num_channels]k[batch_size,num_channels,j]
+        q = q.permute(0, 2, 1)  # batch_size,height * width,num_channels
+        k = k.reshape(batch_size, num_channels, height * width)  # batch_size,num_channels,height * width
+        w_ = torch.bmm(q, k)  # batch_size,height * width,height * width    width[batch_size,i,j]=sum_c q[batch_size,i,num_channels]k[batch_size,num_channels,j]
         w_ = w_ * (int(num_channels) ** (-0.5))
         # attention weights
         w_ = torch.nn.functional.softmax(w_, dim=2)
@@ -555,8 +550,8 @@ class IrisAttnBlock(nn.Module):
 
         # attend to values
         v = v.reshape(batch_size, num_channels, height * width)
-        w_ = w_.permute(0, 2, 1)  # batch_size,hw,hw (first hw of k, second of q)
-        h_ = torch.bmm(v, w_)  # batch_size, num_channels,hw (hw of q) h_[batch_size,num_channels,j] = sum_i v[batch_size,num_channels,i] w_[batch_size,i,j]
+        w_ = w_.permute(0, 2, 1)  # batch_size,height * width,height * width (first height * width of k, second of q)
+        h_ = torch.bmm(v, w_)  # batch_size, num_channels,height * width (height * width of q) h_[batch_size,num_channels,j] = sum_i v[batch_size,num_channels,i] w_[batch_size,i,j]
         h_ = h_.reshape(batch_size, num_channels, height, width)
 
         h_ = self.proj_out(h_)
@@ -615,16 +610,8 @@ class IrisNetLinLayer(nn.Module):
 
     def __init__(self, chn_in: int, chn_out: int = 1, use_dropout: bool = False) -> None:
         super().__init__()
-        layers = (
-            [
-                nn.Dropout(),
-            ]
-            if (use_dropout)
-            else []
-        )
-        layers += [
-            nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False),
-        ]
+        layers = [nn.Dropout()] if (use_dropout) else []
+        layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False)]
         self.model = nn.Sequential(*layers)
 
 
@@ -714,7 +701,7 @@ class IrisTokenizer(nn.Module):
 
         if should_preprocess:
             x = self.preprocess_input(x)
-        shape = x.shape  # (..., C, H, W)
+        shape = x.shape  # (..., num_channels, height, width)
         x = x.view(-1, *shape[-3:])
         z, all_hidden_states, attentions = self.encoder(x, output_hidden_states, output_attentions)
         z = self.pre_quant_conv(z)
@@ -1036,7 +1023,7 @@ class IrisWorldModelImagine:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][2]  # (B, C, H, W) -> (B, K)
+        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][2]  # (batch_size, num_channels, height, width) -> (batch_size, num_tokens_per_frame)
         _, num_observations_tokens = obs_tokens.shape
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
@@ -1057,7 +1044,7 @@ class IrisWorldModelImagine:
             _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
-        token = token.reshape(-1, 1).to(self.device)  # (B, 1)
+        token = token.reshape(-1, 1).to(self.device)  # (batch_size, 1)
 
         for k in range(num_passes):  # assumption that there is only one action token.
             outputs_wm = self.world_model(token, past_keys_values=self.keys_values_wm)[0]
@@ -1066,29 +1053,29 @@ class IrisWorldModelImagine:
             if k == 0:
                 reward = (
                     Categorical(logits=outputs_wm[2]).sample().float().cpu().numpy().reshape(-1) - 1
-                )  # (B,)
+                )  # (batch_size,)
                 done = (
                     Categorical(logits=outputs_wm[3]).sample().cpu().numpy().astype(bool).reshape(-1)
-                )  # (B,)
+                )  # (batch_size,)
 
             if k < self.num_observations_tokens:
                 token = Categorical(logits=outputs_wm[1]).sample()
                 obs_tokens.append(token)
 
-        output_sequence = torch.cat(output_sequence, dim=1)  # (B, 1 + K, E)
-        self.obs_tokens = torch.cat(obs_tokens, dim=1)  # (B, K)
+        output_sequence = torch.cat(output_sequence, dim=1)  # (batch_size, 1 + num_tokens_per_frame, embed_dim)
+        self.obs_tokens = torch.cat(obs_tokens, dim=1)  # (batch_size, num_tokens_per_frame)
 
         obs = self.decode_obs_tokens() if should_predict_next_obs else None
         return obs, reward, done, None
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
-        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)  # (B, K, E)
+        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)  # (batch_size, num_tokens_per_frame, embed_dim)
         h = int(np.sqrt(self.num_observations_tokens))
         z = embedded_tokens.permute(0, 2, 1)
         z = z.view(z.shape[0], z.shape[1], h, z.shape[2] // h).contiguous()
 
-        rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (B, C, H, W)
+        rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (batch_size, num_channels, height, width)
         return torch.clamp(rec, 0, 1)
 
 class IrisActorCritic(nn.Module):
@@ -1250,12 +1237,12 @@ class IrisActorCritic(nn.Module):
 
         return (
             (
-            torch.stack(all_observations, dim=1).mul(255).byte(),  # (B, T, C, H, W) in [0, 255]
-            torch.cat(all_actions, dim=1),  # (B, T)
-            torch.cat(all_logits_actions, dim=1),  # (B, T, #actions)
-            torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (B, T)
-            torch.cat(all_rewards, dim=1).to(device),  # (B, T)
-            torch.cat(all_ends, dim=1).to(device),  # (B, T)
+            torch.stack(all_observations, dim=1).mul(255).byte(),  # (batch_size, num_timesteps, num_channels, height, width) in [0, 255]
+            torch.cat(all_actions, dim=1),  # (batch_size, num_timesteps)
+            torch.cat(all_logits_actions, dim=1),  # (batch_size, num_timesteps, #actions)
+            torch.cat(all_values, dim=1).squeeze(2).contiguous(),  # (batch_size, num_timesteps)
+            torch.cat(all_rewards, dim=1).to(device),  # (batch_size, num_timesteps)
+            torch.cat(all_ends, dim=1).to(device),  # (batch_size, num_timesteps)
             ),
             outputs_ac,
             hidden_states,
