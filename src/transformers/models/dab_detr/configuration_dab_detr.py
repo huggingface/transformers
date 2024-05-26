@@ -181,7 +181,6 @@ class DABDETRConfig(PretrainedConfig):
         query_dim=4,
         bbox_embed_diff_each_layer=False,
         random_refpoints_xy=False,
-        # TODOD set to 10K but pretrained somehow 20
         temperatureH=20,
         temperatureW=20,
         # todo simple querty dim

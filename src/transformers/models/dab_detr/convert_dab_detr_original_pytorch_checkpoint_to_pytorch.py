@@ -325,15 +325,27 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict) 
     model.eval()
     # model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
-    outputs = model(pixel_values)
+    outputs = model(pixel_values, return_dict=False, output_attentions=True, output_hidden_states=True)
 
-    print(outputs.logits)  # ['pred_logits'][0, :3, :3])
-    print(outputs.pred_boxes)
+    """
+    output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    
+    """
+
+    logits = outputs[-2]
+    pred_boxes = outputs[-1]
+
+    print(logits)
+    print(pred_boxes)
+
+    #print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
+    #print(outputs.pred_boxes.shape)
     # torch.save(logits, 'logits.pth')
     # torch.save(pred_boxes, 'pred_boxes.pth')
     
