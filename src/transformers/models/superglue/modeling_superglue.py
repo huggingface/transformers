@@ -260,7 +260,6 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         self,
         config: SuperGlueConfig,
         channels: List[int],
-        do_batch_norm: bool = True,
     ):
         super().__init__()
         num_layers = len(channels)
@@ -268,8 +267,7 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
         for i in range(1, num_layers):
             layers.append(nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
             if i < (num_layers - 1):
-                if do_batch_norm:
-                    layers.append(nn.BatchNorm1d(channels[i]))
+                layers.append(nn.BatchNorm1d(channels[i]))
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
         nn.init.constant_(self.layers[-1].bias, 0.0)
