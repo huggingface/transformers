@@ -33,6 +33,7 @@ from torch.distributions.categorical import Categorical
 from torch.nn import functional as F
 from tqdm import tqdm
 
+from ...activations import ACT2FN
 from ...cache_utils import StaticCache
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -327,7 +328,7 @@ class IrisEncoder(nn.Module):
 
         # end
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = ACT2FN["swish"](h)
         h = self.conv_out(h)
 
         return h, hidden_states, attentions
@@ -429,16 +430,10 @@ class IrisDecoder(nn.Module):
 
         # end
         h = self.norm_out(h)
-        h = nonlinearity(h)
+        h = ACT2FN["swish"](h)
         h = self.conv_out(h)
 
         return h, hidden_states, attentions
-
-
-def nonlinearity(x: torch.Tensor) -> torch.Tensor:
-    # swish
-    return x * torch.sigmoid(x)
-
 
 def Normalize(in_channels: int) -> nn.Module:
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
@@ -508,14 +503,14 @@ class IrisResnetBlock(nn.Module):
     def forward(self, x: torch.Tensor, timestep_embedding: torch.Tensor) -> torch.Tensor:
         h = x
         h = self.norm1(h)
-        h = nonlinearity(h)
+        h = ACT2FN["swish"](h)
         h = self.conv1(h)
 
         if timestep_embedding is not None:
-            h = h + self.temb_proj(nonlinearity(timestep_embedding))[:, :, None, None]
+            h = h + self.temb_proj(ACT2FN["swish"](timestep_embedding))[:, :, None, None]
 
         h = self.norm2(h)
-        h = nonlinearity(h)
+        h = ACT2FN["swish"](h)
         h = self.dropout(h)
         h = self.conv2(h)
 
