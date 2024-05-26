@@ -285,7 +285,7 @@ def prepare_imgs():
     image1 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_78916675_4568141288.jpg")
     image2 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_19481797_2295892421.jpg")
     image3 = Image.open("./tests/fixtures/tests_samples/image_matching/london_bridge_49190386_5209386933.jpg")
-    return [image1, image2, image1, image3]
+    return [[image1, image2], [image1, image3]]
 
 
 @require_torch
@@ -314,8 +314,8 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         expected_max_number_keypoints = max(
             [expected_number_keypoints_image0, expected_number_keypoints_image1, expected_number_keypoints_image2]
         )
-        expected_matches_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
-        expected_matching_scores_shape = torch.Size((len(images) // 2, 2, expected_max_number_keypoints))
+        expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+        expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
         # Check output shapes
         self.assertEqual(outputs.matches.shape, expected_matches_shape)

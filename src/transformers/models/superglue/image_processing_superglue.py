@@ -179,7 +179,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images,
+        image_pairs,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -194,8 +194,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+            image_pairs (`ImageInput`):
+                Image pairs to preprocess. Expects either a list of 2 images or a list of 2 images list with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -239,20 +239,21 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        if not isinstance(images, list) or len(images) < 2:
+        if not isinstance(image_pairs, list) or len(image_pairs) < 2:
             raise ValueError(
                 "Input images must be a list containing at least 2 images because SuperGlue takes pairs of images."
             )
-        elif len(images) == 2:
+        elif len(image_pairs) == 2 and not isinstance(image_pairs[0], list):
+            images = image_pairs
             batch_size = 1
         else:
-            for pair in images:
+            for pair in image_pairs:
                 if not isinstance(pair, (list, tuple)) or len(pair) != 2:
                     raise ValueError(
                         "Input images must be a list of pairs of images because SuperGlue takes pairs of images."
                     )
-            batch_size = len(images)
-            images = [image for pair in images for image in pair]
+            batch_size = len(image_pairs)
+            images = [image for pair in image_pairs for image in pair]
 
         images = make_list_of_images(images)
 
@@ -310,8 +311,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             channels, height, width = images[0].shape
         else:
             height, width, channels = images[0].shape
-        images = np.array(images).reshape(batch_size, 2, channels, height, width)
+        image_pairs = np.array(images).reshape(batch_size, 2, channels, height, width)
 
-        data = {"pixel_values": images}
+        data = {"pixel_values": image_pairs}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
