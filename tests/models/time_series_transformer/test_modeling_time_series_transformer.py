@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch TimeSeriesTransformer model. """
+"""Testing suite for the PyTorch TimeSeriesTransformer model."""
 
 import inspect
 import tempfile
@@ -104,6 +104,7 @@ class TimeSeriesTransformerModelTester:
             num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
+            scaling="std",  # we need std to get non-zero `loc`
         )
 
     def prepare_time_series_transformer_inputs_dict(self, config):

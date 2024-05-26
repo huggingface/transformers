@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow CLIP model. """
-
+"""Testing suite for the TensorFlow CLIP model."""
 
 from __future__ import annotations
 
@@ -39,7 +38,6 @@ if is_tf_available():
 
     from transformers import TFCLIPModel, TFCLIPTextModel, TFCLIPVisionModel, TFSharedEmbeddings
     from transformers.modeling_tf_utils import keras
-    from transformers.models.clip.modeling_tf_clip import TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -257,9 +255,9 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = TFCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -423,9 +421,9 @@ class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = TFCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -607,9 +605,9 @@ class TFCLIPModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/clip-vit-base-patch32"
+        model = TFCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     @slow

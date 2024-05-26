@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LXMERT model."""
-
+"""PyTorch LXMERT model."""
 
 import math
 import os
@@ -42,10 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
-
-LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "unc-nlp/lxmert-base-uncased",
-]
 
 
 class GeLU(nn.Module):

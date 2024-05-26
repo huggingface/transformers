@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNext model. """
-
+"""Testing suite for the PyTorch ConvNext model."""
 
 import unittest
 
@@ -31,7 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
-    from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -257,9 +255,9 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/convnext-tiny-224"
+        model = ConvNextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

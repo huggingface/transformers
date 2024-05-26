@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
+"""PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -26,11 +26,6 @@ from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...utils.backbone_utils import load_backbone
 from .configuration_upernet import UperNetConfig
 
-
-UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openmmlab/upernet-convnext-tiny",
-    # See all UperNet models at https://huggingface.co/models?filter=upernet
-]
 
 # General docstring
 _CONFIG_FOR_DOC = "UperNetConfig"
@@ -298,6 +293,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     config_class = UperNetConfig
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, UperNetPreTrainedModel):

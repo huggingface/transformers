@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import json
 import os
 import re
@@ -30,19 +29,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai-community/openai-gpt": "https://huggingface.co/openai-community/openai-gpt/resolve/main/vocab.json"
-    },
-    "merges_file": {
-        "openai-community/openai-gpt": "https://huggingface.co/openai-community/openai-gpt/resolve/main/merges.txt"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai-community/openai-gpt": 512,
 }
 
 
@@ -268,8 +254,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):

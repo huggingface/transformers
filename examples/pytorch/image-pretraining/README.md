@@ -56,7 +56,7 @@ Alternatively, one can decide to further pre-train an already pre-trained (or fi
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
@@ -106,7 +106,7 @@ Next, we can run the script by providing the path to this custom configuration (
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
@@ -172,7 +172,7 @@ python run_mae.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \

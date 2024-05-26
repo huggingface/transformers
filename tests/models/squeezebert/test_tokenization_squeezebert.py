@@ -25,6 +25,7 @@ class SqueezeBertTokenizationTest(BertTokenizationTest):
     tokenizer_class = SqueezeBertTokenizer
     rust_tokenizer_class = SqueezeBertTokenizerFast
     test_rust_tokenizer = True
+    from_pretrained_id = "squeezebert/squeezebert-uncased"
 
     def get_rust_tokenizer(self, **kwargs):
         return SqueezeBertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)

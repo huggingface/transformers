@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPT Neo model."""
-
+"""PyTorch GPT Neo model."""
 
 import os
 from typing import Optional, Tuple, Union
@@ -67,10 +66,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
 
-GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-neo-1.3B",
-    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
-]
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 

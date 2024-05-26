@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisualBERT model. """
+"""Testing suite for the PyTorch VisualBERT model."""
 
 import copy
 import unittest
@@ -36,7 +36,6 @@ if is_torch_available():
         VisualBertForVisualReasoning,
         VisualBertModel,
     )
-    from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class VisualBertModelTester:
@@ -551,9 +550,9 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VisualBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uclanlp/visualbert-vqa"
+        model = VisualBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

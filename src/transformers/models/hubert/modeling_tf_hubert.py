@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Hubert model."""
+"""TensorFlow Hubert model."""
 
 from __future__ import annotations
 
@@ -45,10 +45,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "HubertConfig"
 
-TF_HUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/hubert-base-ls960",
-    # See all Hubert models at https://huggingface.co/models?filter=hubert
-]
 
 LARGE_NEGATIVE = -1e8
 

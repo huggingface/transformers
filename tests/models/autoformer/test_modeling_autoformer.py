@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Autoformer model. """
+"""Testing suite for the PyTorch Autoformer model."""
 
 import inspect
 import tempfile
@@ -107,6 +107,7 @@ class AutoformerModelTester:
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
             moving_average=self.moving_average,
+            scaling="std",  # we need std to get non-zero `loc`
         )
 
     def prepare_autoformer_inputs_dict(self, config):

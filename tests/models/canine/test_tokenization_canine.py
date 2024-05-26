@@ -28,6 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "nielsr/canine-s"
     tokenizer_class = CanineTokenizer
     test_rust_tokenizer = False
 
@@ -97,7 +98,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -113,7 +114,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
 
                 additional_special_tokens = tokenizer.additional_special_tokens
 
@@ -317,10 +318,6 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # CanineModel does not support the get_input_embeddings nor the get_vocab method
     def test_torch_encode_plus_sent_to_model(self):
-        pass
-
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
         pass
 
     # tokenizer does not have vocabulary

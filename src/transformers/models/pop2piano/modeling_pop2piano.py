@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Pop2Piano model."""
-
+"""PyTorch Pop2Piano model."""
 
 import copy
 import math
@@ -63,11 +62,6 @@ except Exception:
 
 _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "sweetcocoa/pop2piano"
-
-POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sweetcocoa/pop2piano",
-    # See all Pop2Piano models at https://huggingface.co/models?filter=pop2piano
-]
 
 
 POP2PIANO_INPUTS_DOCSTRING = r"""
@@ -589,7 +583,7 @@ class Pop2PianoBlock(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 

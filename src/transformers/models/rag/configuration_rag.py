@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RAG model configuration"""
-
+"""RAG model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
@@ -111,6 +110,7 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         use_cache=True,
         forced_eos_token_id=None,
+        dataset_revision=None,
         **kwargs,
     ):
         super().__init__(
@@ -156,6 +156,7 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
 
         self.output_retrieved = output_retrieved
 

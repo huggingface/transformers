@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Table Transformer model. """
-
+"""Testing suite for the PyTorch Table Transformer model."""
 
 import inspect
 import math
@@ -209,6 +208,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    zero_init_hidden_state = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -258,6 +258,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Table Transformer does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
@@ -455,6 +459,9 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -470,6 +477,11 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                     self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
 

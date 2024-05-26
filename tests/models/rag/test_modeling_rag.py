@@ -730,6 +730,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow
@@ -905,7 +906,7 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -944,7 +945,10 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+            "facebook/rag-sequence-nq",
+            index_name="exact",
+            use_dummy_dataset=True,
+            dataset_revision="b24a417",
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -993,7 +997,9 @@ class RagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
+        )
         rag_token = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever).to(
             torch_device
         )
@@ -1063,6 +1069,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow

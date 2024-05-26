@@ -26,6 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/layoutlm-base-uncased"
     tokenizer_class = LayoutLMTokenizer
     rust_tokenizer_class = LayoutLMTokenizerFast
     test_rust_tokenizer = True
@@ -57,14 +58,14 @@ class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return LayoutLMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 

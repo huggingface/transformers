@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MEGA configuration"""
+"""MEGA configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,10 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mnaylor/mega-base-wikitext": "https://huggingface.co/mnaylor/mega-base-wikitext/resolve/main/config.json",
-}
 
 
 class MegaConfig(PretrainedConfig):

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the Tensorflow ResNet model. """
-
+"""Testing suite for the Tensorflow ResNet model."""
 
 from __future__ import annotations
 
@@ -35,7 +34,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFResNetForImageClassification, TFResNetModel
-    from transformers.models.resnet.modeling_tf_resnet import TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -214,9 +212,9 @@ class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFResNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/resnet-50"
+        model = TFResNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -230,15 +228,11 @@ def prepare_img():
 class TFResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFResNetForImageClassification.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFResNetForImageClassification.from_pretrained("microsoft/resnet-50")
 
         image_processor = self.default_image_processor
         image = prepare_img()

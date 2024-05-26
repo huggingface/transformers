@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CPMAnt model. """
+"""Testing suite for the PyTorch CPMAnt model."""
 
 import unittest
 
@@ -57,7 +57,7 @@ class CpmAntModelTester:
         prompt_length=8,
         prompt_types=8,
         segment_types=8,
-        init_std=1.0,
+        init_std=0.02,
         return_dict=True,
     ):
         self.parent = parent

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VITS model. """
+"""Testing suite for the PyTorch VITS model."""
 
 import copy
 import os
@@ -214,6 +214,10 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip("VITS is not deterministic")
     def test_determinism(self):
+        pass
+
+    @unittest.skip("VITS is not deterministic")
+    def test_batching_equivalence(self):
         pass
 
     @is_flaky(

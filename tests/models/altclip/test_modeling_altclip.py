@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch AltCLIP model. """
-
+"""Testing suite for the PyTorch AltCLIP model."""
 
 import inspect
 import os
@@ -43,7 +42,6 @@ if is_torch_available():
     import torch.nn as nn
 
     from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
-    from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -365,9 +363,9 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AltCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "BAAI/AltCLIP"
+        model = AltCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class AltCLIPModelTester:
@@ -380,6 +378,7 @@ class AltCLIPModelTester:
         self.parent = parent
         self.text_model_tester = AltCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AltCLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -559,9 +558,9 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AltCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "BAAI/AltCLIP"
+        model = AltCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_vision

@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" PyTorch CLVP model."""
-
+"""PyTorch CLVP model."""
 
 import copy
 import math
@@ -54,11 +53,6 @@ from .configuration_clvp import (
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
-
-CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/clvp_dev",
-    # See all Clvp models at https://huggingface.co/models?filter=clvp
-]
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss

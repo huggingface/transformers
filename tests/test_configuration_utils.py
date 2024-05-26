@@ -20,6 +20,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import warnings
 from pathlib import Path
 
 from huggingface_hub import HfFolder, delete_repo
@@ -248,12 +249,6 @@ class ConfigTestUtils(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = BertConfig.from_pretrained(
-            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/config.json"
-        )
-
     def test_local_versioning(self):
         configuration = AutoConfig.from_pretrained("google-bert/bert-base-cased")
         configuration.configuration_files = ["config.4.0.0.json"]
@@ -312,3 +307,10 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertTrue(config._has_non_default_generation_parameters())
         config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
         self.assertFalse(config._has_non_default_generation_parameters())
+
+    def test_loading_config_do_not_raise_future_warnings(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/31002."""
+        # Loading config should not raise a FutureWarning. It was the case before.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            PretrainedConfig.from_pretrained("bert-base-uncased")

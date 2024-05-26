@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DINOv2 model configuration"""
+"""DINOv2 model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,10 +26,6 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 logger = logging.get_logger(__name__)
-
-DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/dinov2-base": "https://huggingface.co/facebook/dinov2-base/resolve/main/config.json",
-}
 
 
 class Dinov2Config(BackboneConfigMixin, PretrainedConfig):

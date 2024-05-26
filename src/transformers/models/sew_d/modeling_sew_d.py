@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SEW model."""
+"""PyTorch SEW model."""
 
 import math
 import warnings
@@ -54,19 +54,6 @@ _CTC_EXPECTED_LOSS = 0.21
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 3.16
-
-SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "asapp/sew-d-tiny-100k",
-    "asapp/sew-d-small-100k",
-    "asapp/sew-d-mid-100k",
-    "asapp/sew-d-mid-k127-100k",
-    "asapp/sew-d-base-100k",
-    "asapp/sew-d-base-plus-100k",
-    "asapp/sew-d-mid-400k",
-    "asapp/sew-d-mid-k127-400k",
-    "asapp/sew-d-base-plus-400k",
-    # See all SEW models at https://huggingface.co/models?filter=sew-d
-]
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -1370,7 +1357,7 @@ class SEWDModel(SEWDPreTrainedModel):
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.encoder = SEWDEncoder(config)
 

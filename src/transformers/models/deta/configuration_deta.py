@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DETA model configuration"""
-
+"""DETA model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,10 +20,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-DETA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ut/deta": "https://huggingface.co/ut/deta/resolve/main/config.json",
-}
 
 
 class DetaConfig(PretrainedConfig):

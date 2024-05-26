@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM-ProphetNet model configuration"""
-
+"""XLM-ProphetNet model configuration"""
 
 from typing import Callable, Optional, Union
 
@@ -22,12 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/xprophetnet-large-wiki100-cased": (
-        "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/config.json"
-    ),
-}
 
 
 class XLMProphetNetConfig(PretrainedConfig):

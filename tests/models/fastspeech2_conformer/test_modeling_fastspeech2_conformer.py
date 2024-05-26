@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FastSpeech2Conformer model."""
+"""Testing suite for the PyTorch FastSpeech2Conformer model."""
 
 import inspect
 import tempfile
@@ -345,6 +345,13 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
         pass
 
 
@@ -760,6 +767,13 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer predicts durations in linear domain during inference"
+        "Even small differences on hidden states lead to different durations, due to `torch.round`"
+    )
+    def test_batching_equivalence(self):
         pass
 
 

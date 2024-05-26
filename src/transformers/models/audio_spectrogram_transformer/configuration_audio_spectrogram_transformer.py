@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Audio Spectogram Transformer (AST) model configuration"""
-
+"""Audio Spectogram Transformer (AST) model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MIT/ast-finetuned-audioset-10-10-0.4593": (
-        "https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593/resolve/main/config.json"
-    ),
-}
 
 
 class ASTConfig(PretrainedConfig):

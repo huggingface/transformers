@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 GPT-J model."""
+"""TF 2.0 GPT-J model."""
 
 from __future__ import annotations
 
@@ -54,11 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-
-GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-j-6B",
-    # See all GPT-J models at https://huggingface.co/models?filter=gptj
-]
 
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> tf.Tensor:

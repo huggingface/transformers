@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Graphormer model configuration"""
+"""Graphormer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # pcqm4mv1 now deprecated
-    "graphormer-base": "https://huggingface.co/clefourrier/graphormer-base-pcqm4mv2/resolve/main/config.json",
-    # See all Graphormer models at https://huggingface.co/models?filter=graphormer
-}
 
 
 class GraphormerConfig(PretrainedConfig):

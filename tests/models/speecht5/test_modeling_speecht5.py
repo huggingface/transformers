@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SpeechT5 model. """
+"""Testing suite for the PyTorch SpeechT5 model."""
 
 import copy
 import inspect
@@ -22,6 +22,7 @@ import unittest
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
     is_torch_available,
+    require_deterministic_for_xpu,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -916,6 +917,10 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
+    @unittest.skip("skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    def test_batching_equivalence(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1067,6 +1072,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "Shape mismatch between generate_speech and generate methods.",
         )
 
+    @require_deterministic_for_xpu
     def test_one_to_many_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1436,6 +1442,10 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
     def test_determinism(self):
+        pass
+
+    @unittest.skip("skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    def test_batching_equivalence(self):
         pass
 
     def test_attention_outputs(self):

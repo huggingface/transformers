@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Depth Anything model. """
-
+"""Testing suite for the PyTorch Depth Anything model."""
 
 import unittest
 
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import DepthAnythingForDepthEstimation
-    from transformers.models.depth_anything.modeling_depth_anything import DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -205,9 +203,9 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "LiheYoung/depth-anything-small-hf"
+        model = DepthAnythingForDepthEstimation.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

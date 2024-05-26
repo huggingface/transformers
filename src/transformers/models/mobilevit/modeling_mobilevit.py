@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViT model."""
-
+"""PyTorch MobileViT model."""
 
 import math
 from typing import Dict, Optional, Set, Tuple, Union
@@ -57,17 +56,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -652,6 +640,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 @require_sentencepiece
 class XLMProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "microsoft/xprophetnet-large-wiki100-cased"
     tokenizer_class = XLMProphetNetTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

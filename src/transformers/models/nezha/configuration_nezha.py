@@ -1,11 +1,6 @@
 from ... import PretrainedConfig
 
 
-NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sijunhe/nezha-cn-base": "https://huggingface.co/sijunhe/nezha-cn-base/resolve/main/config.json",
-}
-
-
 class NezhaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`NezhaModel`]. It is used to instantiate an Nezha
@@ -64,7 +59,6 @@ class NezhaConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    pretrained_config_archive_map = NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "nezha"
 
     def __init__(

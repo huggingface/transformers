@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OpenAI GPT-2 configuration"""
+"""OpenAI GPT-2 configuration"""
+
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
@@ -24,14 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai-community/gpt2": "https://huggingface.co/openai-community/gpt2/resolve/main/config.json",
-    "openai-community/gpt2-medium": "https://huggingface.co/openai-community/gpt2-medium/resolve/main/config.json",
-    "openai-community/gpt2-large": "https://huggingface.co/openai-community/gpt2-large/resolve/main/config.json",
-    "openai-community/gpt2-xl": "https://huggingface.co/openai-community/gpt2-xl/resolve/main/config.json",
-    "distilbert/distilgpt2": "https://huggingface.co/distilbert/distilgpt2/resolve/main/config.json",
-}
 
 
 class GPT2Config(PretrainedConfig):

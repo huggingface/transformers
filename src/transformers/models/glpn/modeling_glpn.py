@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GLPN model."""
-
+"""PyTorch GLPN model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -45,11 +44,6 @@ _CONFIG_FOR_DOC = "GLPNConfig"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 15, 20]
-
-GLPN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vinvino02/glpn-kitti",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -428,6 +422,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
     config_class = GLPNConfig
     base_model_prefix = "glpn"
     main_input_name = "pixel_values"
+    _no_split_modules = []
 
     # Copied from transformers.models.segformer.modeling_segformer.SegformerPreTrainedModel._init_weights
     def _init_weights(self, module):

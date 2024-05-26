@@ -883,7 +883,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -920,7 +920,7 @@ else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
     try:
@@ -967,7 +967,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
 }
 
 try:
@@ -995,7 +995,7 @@ else:
     _import_structure["modeling_flax_gpt2"] = ["FlaxGPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
 
     try:
         if not is_torch_available():
@@ -1033,7 +1033,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
     "tokenization_gpt2": ["GPT2Tokenizer"],
 }
 
@@ -1054,7 +1054,7 @@ else:
     _import_structure["modeling_gpt2"] = ["GPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
     from .tokenization_gpt2 import GPT2Tokenizer
 
     try:
@@ -1085,7 +1085,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
-    "configuration_gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2OnnxConfig"],
+    "configuration_gpt2": ["GPT2Config", "GPT2OnnxConfig"],
 }
 
 try:
@@ -1097,7 +1097,7 @@ else:
     _import_structure["modeling_gpt2"] = ["GPT2Model"]
 
 if TYPE_CHECKING:
-    from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2OnnxConfig
+    from .configuration_gpt2 import GPT2Config, GPT2OnnxConfig
 
     try:
         if not is_torch_available():
@@ -1135,7 +1135,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1171,7 +1171,7 @@ else:
     _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_vision_available():
@@ -1217,7 +1217,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1245,7 +1245,7 @@ else:
     _import_structure["modeling_flax_vit"] = ["FlaxViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_torch_available():
@@ -1283,7 +1283,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available, is_vision_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1303,7 +1303,7 @@ else:
     _import_structure["modeling_vit"] = ["ViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_vision_available():
@@ -1333,7 +1333,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule, is_torch_available
 
 _import_structure = {
-    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "configuration_vit": ["ViTConfig"],
 }
 
 try:
@@ -1345,7 +1345,7 @@ else:
     _import_structure["modeling_vit"] = ["ViTModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .configuration_vit import ViTConfig
 
     try:
         if not is_torch_available():

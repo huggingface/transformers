@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TVP model configuration"""
+"""TVP model configuration"""
 
 import copy
 
@@ -22,11 +22,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-
-TVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/tvp-base": "https://huggingface.co/Intel/tvp-base/resolve/main/config.json",
-}
 
 
 class TvpConfig(PretrainedConfig):

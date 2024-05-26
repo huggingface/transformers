@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BEiT model. """
-
+"""Testing suite for the PyTorch BEiT model."""
 
 import unittest
 
@@ -42,7 +41,6 @@ if is_torch_available():
         BeitModel,
     )
     from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
-    from transformers.models.beit.modeling_beit import BEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -385,9 +383,9 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = BeitModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/beit-base-patch16-224"
+        model = BeitModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

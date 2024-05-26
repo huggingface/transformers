@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Data2VecVision model. """
-
+"""Testing suite for the PyTorch Data2VecVision model."""
 
 import unittest
 
@@ -36,7 +35,6 @@ if is_torch_available():
         Data2VecVisionModel,
     )
     from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
-    from transformers.models.data2vec.modeling_data2vec_vision import DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -298,9 +296,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/data2vec-vision-base-ft1k"
+        model = Data2VecVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

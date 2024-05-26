@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Data2Vec Vision model."""
-
+"""TF 2.0 Data2Vec Vision model."""
 
 from __future__ import annotations
 
@@ -64,11 +63,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/data2vec-vision-base-ft1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "remote control, remote"
-
-TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/data2vec-vision-base-ft1k",
-    # See all Data2VecVision models at https://huggingface.co/models?filter=data2vec-vision
-]
 
 
 @dataclass

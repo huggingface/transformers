@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch EfficientFormer model. """
-
+"""Testing suite for the PyTorch EfficientFormer model."""
 
 import unittest
 import warnings
@@ -39,9 +38,6 @@ if is_torch_available():
     from transformers.models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         MODEL_MAPPING_NAMES,
-    )
-    from transformers.models.efficientformer.modeling_efficientformer import (
-        EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -371,9 +367,9 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientFormerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "snap-research/efficientformer-l1-300"
+        model = EfficientFormerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

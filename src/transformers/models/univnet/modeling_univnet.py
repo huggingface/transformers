@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UnivNetModel model."""
+"""PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -31,11 +31,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "UnivNetConfig"
 
 _CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
-
-UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dg845/univnet-dev",
-    # See all UnivNet models at https://huggingface.co/models?filter=univnet
-]
 
 
 @dataclass

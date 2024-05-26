@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow SegFormer model."""
-
+"""TensorFlow SegFormer model."""
 
 from __future__ import annotations
 
@@ -54,11 +53,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/segformer-b0-finetuned-ade-512-512",
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-]
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->Segformer

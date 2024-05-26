@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Autoformer model configuration"""
+"""Autoformer model configuration"""
 
 from typing import List, Optional
 
@@ -21,10 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/autoformer-tourism-monthly": "https://huggingface.co/huggingface/autoformer-tourism-monthly/resolve/main/config.json",
-}
 
 
 class AutoformerConfig(PretrainedConfig):

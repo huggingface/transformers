@@ -44,7 +44,6 @@ if is_torch_available():
         MegaForTokenClassification,
         MegaModel,
     )
-    from transformers.models.mega.modeling_mega import MEGA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MegaModelTester:
@@ -672,9 +671,9 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MEGA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MegaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "mnaylor/mega-base-wikitext"
+        model = MegaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):

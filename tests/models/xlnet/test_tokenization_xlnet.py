@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "xlnet/xlnet-base-cased"
     tokenizer_class = XLNetTokenizer
     rust_tokenizer_class = XLNetTokenizerFast
     test_rust_tokenizer = True
@@ -153,7 +154,7 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["▁he", "ll", "o"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["▁he", "ll", "o"])
 
     def test_tokenizer_no_lower(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, do_lower_case=False)

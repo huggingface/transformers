@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DepthAnything model configuration"""
+"""DepthAnything model configuration"""
 
 import copy
 
@@ -22,10 +22,6 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "LiheYoung/depth-anything-small-hf": "https://huggingface.co/LiheYoung/depth-anything-small-hf/resolve/main/config.json",
-}
 
 
 class DepthAnythingConfig(PretrainedConfig):

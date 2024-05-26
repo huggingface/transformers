@@ -959,7 +959,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 "do_train": True,
                 "do_eval": True,
                 "optim": "adafactor",
-                "evaluation_strategy": "steps",
+                "eval_strategy": "steps",
                 "eval_steps": 1,
                 "save_strategy": "steps",
                 "save_steps": 1,

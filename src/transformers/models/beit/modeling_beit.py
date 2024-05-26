@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BEiT model."""
-
+"""PyTorch BEiT model."""
 
 import collections.abc
 import math
@@ -59,11 +58,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "microsoft/beit-base-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/beit-base-patch16-224",
-    # See all BEiT models at https://huggingface.co/models?filter=beit
-]
 
 
 @dataclass
@@ -565,6 +559,7 @@ class BeitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "beit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["BeitLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

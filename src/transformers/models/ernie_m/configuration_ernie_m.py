@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ErnieM model configuration"""
+"""ErnieM model configuration"""
 # Adapted from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/configuration.py)
 
 from __future__ import annotations
@@ -20,12 +20,6 @@ from __future__ import annotations
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
-
-
-ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/config.json",
-    "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",
-}
 
 
 class ErnieMConfig(PretrainedConfig):

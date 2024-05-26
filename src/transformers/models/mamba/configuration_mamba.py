@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MAMBA configuration"""
+"""MAMBA configuration"""
+
 import math
 
 from ...configuration_utils import PretrainedConfig
@@ -20,10 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "state-spaces/mamba-2.8b": "https://huggingface.co/state-spaces/mamba-2.8b/resolve/main/config.json",
-}
 
 
 class MambaConfig(PretrainedConfig):
@@ -54,7 +51,7 @@ class MambaConfig(PretrainedConfig):
             The id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 0):
             The id of the end of sentence token in the vocabulary.
-        expand (`int`, *optional*, defaults to 2): Expanding factor used to determin the intermediate size.
+        expand (`int`, *optional*, defaults to 2): Expanding factor used to determine the intermediate size.
         conv_kernel (`int`, *optional*, defaults to 4): Size of the convolution kernel.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to use bias in ["in_proj", "out_proj"] of the mixer block
@@ -67,7 +64,7 @@ class MambaConfig(PretrainedConfig):
         residual_in_fp32 (`bool`, *optional*, defaults to `True`):
             Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
         time_step_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_scale (`float`, *optional*, defaults to 1.0):
             Scale used used to scale `dt_proj.bias`.
         time_step_min (`float`, *optional*, defaults to 0.001):

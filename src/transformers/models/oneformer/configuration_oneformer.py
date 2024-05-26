@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """OneFormer model configuration"""
+
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -21,13 +22,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/oneformer_ade20k_swin_tiny": (
-        "https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny/blob/main/config.json"
-    ),
-    # See all OneFormer models at https://huggingface.co/models?filter=oneformer
-}
 
 
 class OneFormerConfig(PretrainedConfig):

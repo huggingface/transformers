@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FocalNet model. """
+"""Testing suite for the PyTorch FocalNet model."""
 
 import collections
 import unittest
@@ -37,7 +37,6 @@ if is_torch_available():
         FocalNetForMaskedImageModeling,
         FocalNetModel,
     )
-    from transformers.models.focalnet.modeling_focalnet import FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -387,9 +386,9 @@ class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FocalNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/focalnet-tiny"
+        model = FocalNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

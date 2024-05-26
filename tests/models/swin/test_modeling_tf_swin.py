@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TF 2.0 Swin model. """
-
+"""Testing suite for the TF 2.0 Swin model."""
 
 from __future__ import annotations
 
@@ -36,7 +35,6 @@ if is_tf_available():
 
     from transformers.modeling_tf_utils import keras
     from transformers.models.swin.modeling_tf_swin import (
-        TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFSwinForImageClassification,
         TFSwinForMaskedImageModeling,
         TFSwinModel,
@@ -374,9 +372,9 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/swin-tiny-patch4-window7-224"
+        model = TFSwinModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_vision

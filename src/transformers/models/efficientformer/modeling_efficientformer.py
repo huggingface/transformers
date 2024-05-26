@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch EfficientFormer model."""
+"""PyTorch EfficientFormer model."""
 
 import itertools
 from dataclasses import dataclass
@@ -48,12 +48,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 448]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
-
-
-EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "snap-research/efficientformer-l1-300",
-    # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
-]
 
 
 class EfficientFormerPatchEmbeddings(nn.Module):
@@ -558,6 +552,7 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
     def __init__(self, config: EfficientFormerConfig):
         super().__init__(config)
         self.config = config
+        _no_split_modules = ["EfficientFormerMeta4D"]
 
         self.patch_embed = EfficientFormerConvStem(config, config.hidden_sizes[0])
         self.encoder = EfficientFormerEncoder(config)

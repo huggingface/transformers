@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OPT model."""
+"""PyTorch OPT model."""
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -59,17 +60,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-
-OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/opt-125m",
-    "facebook/opt-350m",
-    "facebook/opt-1.3b",
-    "facebook/opt-2.7b",
-    "facebook/opt-6.7b",
-    "facebook/opt-13b",
-    "facebook/opt-30b",
-    # See all OPT models at https://huggingface.co/models?filter=opt
-]
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data

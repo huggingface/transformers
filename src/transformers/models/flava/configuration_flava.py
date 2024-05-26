@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FLAVA model configurations"""
+"""FLAVA model configurations"""
 
 import os
 from typing import Any, Dict, Union
@@ -22,10 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/flava-full": "https://huggingface.co/facebook/flava-full/resolve/main/config.json",
-}
 
 
 class FlavaImageConfig(PretrainedConfig):

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLVP model configuration"""
-
+"""CLVP model configuration"""
 
 import os
 from typing import TYPE_CHECKING, Union
@@ -27,10 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/clvp_dev": "https://huggingface.co/susnato/clvp_dev/resolve/main/config.json",
-}
 
 
 class ClvpEncoderConfig(PretrainedConfig):

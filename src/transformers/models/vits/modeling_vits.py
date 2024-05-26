@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch VITS model."""
+"""PyTorch VITS model."""
 
 import math
 from dataclasses import dataclass
@@ -40,13 +40,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "VitsConfig"
-
-
-VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/mms-tts-eng",
-    # See all VITS models at https://huggingface.co/models?filter=vits
-    # and all MMS models at https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts
-]
 
 
 @dataclass

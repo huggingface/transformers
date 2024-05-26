@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow LayoutLMv3 model. """
+"""Testing suite for the TensorFlow LayoutLMv3 model."""
 
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -468,9 +467,9 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFLayoutLMv3Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/layoutlmv3-base"
+        model = TFLayoutLMv3Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

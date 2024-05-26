@@ -30,6 +30,7 @@ python utils/check_repo.py
 
 It has no auto-fix mode.
 """
+
 import inspect
 import os
 import re
@@ -86,6 +87,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "RecurrentGemmaModel",  # Building part of bigger (tested) model.
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
@@ -294,6 +296,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BarkCoarseModel",
     "BarkFineModel",
     "BarkSemanticModel",
+    "MusicgenMelodyModel",
     "MusicgenModel",
     "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
@@ -995,6 +998,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinConfig",
     "MaskFormerSwinModel",
     "NatBackbone",
+    "PvtV2Backbone",
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",

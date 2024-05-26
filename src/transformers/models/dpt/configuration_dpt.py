@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DPT model configuration"""
+"""DPT model configuration"""
 
 import copy
 
@@ -23,11 +23,6 @@ from ..bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
-
-DPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Intel/dpt-large": "https://huggingface.co/Intel/dpt-large/resolve/main/config.json",
-    # See all DPT models at https://huggingface.co/models?filter=dpt
-}
 
 
 class DPTConfig(PretrainedConfig):

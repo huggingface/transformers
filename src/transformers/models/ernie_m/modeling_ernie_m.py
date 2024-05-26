@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ErnieM model."""
-
+"""PyTorch ErnieM model."""
 
 import math
 from typing import List, Optional, Tuple, Union
@@ -43,12 +42,6 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "susnato/ernie-m-base_pytorch"
 _CONFIG_FOR_DOC = "ErnieMConfig"
 _TOKENIZER_FOR_DOC = "ErnieMTokenizer"
-
-ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "susnato/ernie-m-base_pytorch",
-    "susnato/ernie-m-large_pytorch",
-    # See all ErnieM models at https://huggingface.co/models?filter=ernie_m
-]
 
 
 # Adapted from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings

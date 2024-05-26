@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""  GPTSAN-japanese model configuration"""
+"""GPTSAN-japanese model configuration"""
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tanreinama/GPTSAN-2.8B-spout_is_uniform": (
-        "https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform/resolve/main/config.json"
-    ),
-}
 
 
 class GPTSanJapaneseConfig(PretrainedConfig):

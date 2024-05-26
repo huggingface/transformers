@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow EfficientFormer model."""
+"""TensorFlow EfficientFormer model."""
 
 import itertools
 from dataclasses import dataclass
@@ -57,12 +57,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 49, 448]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "snap-research/efficientformer-l1-300"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"
-
-
-TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "snap-research/efficientformer-l1-300",
-    # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
-]
 
 
 class TFEfficientFormerPatchEmbeddings(keras.layers.Layer):

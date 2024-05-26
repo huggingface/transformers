@@ -45,7 +45,6 @@ if is_torch_available():
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
-        SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -576,7 +575,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     is_encoder_decoder = True
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
-    model_split_percents = [0.8, 0.9]
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -670,9 +669,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SwitchTransformersModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/switch-base-8"
+        model = SwitchTransformersModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
@@ -721,10 +720,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             # We check the state of decoder_attentions and cross_attentions just from the last step
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
-    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
-    def test_disk_offload(self):
-        pass
 
 
 class SwitchTransformersEncoderOnlyModelTester:
@@ -1054,7 +1049,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
         hf_logits = hf_logits[0, 0, :30]
 
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        torch.testing.assert_close(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
     @unittest.skip(
         "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViTMatte model."""
+"""PyTorch ViTMatte model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -29,12 +29,6 @@ from ...utils import (
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
-
-
-VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "hustvl/vitmatte-small-composition-1k",
-    # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
-]
 
 
 # General docstring
@@ -78,6 +72,7 @@ class VitMattePreTrainedModel(PreTrainedModel):
     config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ErnieM model. """
+"""Testing suite for the PyTorch ErnieM model."""
 
 import unittest
 
@@ -28,6 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "susnato/ernie-m-base_pytorch"
     tokenizer_class = ErnieMTokenizer
     test_seq2seq = False
     test_sentencepiece = True

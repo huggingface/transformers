@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Dilated Neighborhood Attention Transformer model."""
-
+"""PyTorch Dilated Neighborhood Attention Transformer model."""
 
 import math
 from dataclasses import dataclass
@@ -67,11 +66,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 7, 7, 512]
 _IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-
-DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "shi-labs/dinat-mini-in1k-224",
-    # See all Dinat models at https://huggingface.co/models?filter=dinat
-]
 
 # drop_path and DinatDropPath are from the timm library.
 

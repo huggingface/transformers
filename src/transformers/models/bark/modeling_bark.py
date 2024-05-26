@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BARK model."""
+"""PyTorch BARK model."""
+
 import math
 from typing import Dict, Optional, Tuple, Union
 
@@ -62,12 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "suno/bark-small"
 _CONFIG_FOR_DOC = "BarkConfig"
-
-BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "suno/bark-small",
-    "suno/bark",
-    # See all Bark models at https://huggingface.co/models?filter=bark
-]
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -1071,7 +1066,7 @@ class BarkCoarseModel(BarkCausalModel):
                     x_coarse_history[n, :] += codebook_size * n
 
             # flatten x_coarse_history
-            x_coarse_history = torch.transpose(x_coarse_history, 0, 1).view(-1)
+            x_coarse_history = torch.transpose(x_coarse_history, 0, 1).reshape(-1)
 
             x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
 
@@ -1881,6 +1876,7 @@ class BarkModel(BarkPreTrainedModel):
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         hard_check_only: bool = False,
+        check_device_map: bool = False,
     ):
         """
         `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
@@ -1901,7 +1897,7 @@ class BarkModel(BarkPreTrainedModel):
         can initialize the correct attention module
         """
         config = super()._check_and_enable_flash_attn_2(
-            config, torch_dtype, device_map, hard_check_only=hard_check_only
+            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
         )
 
         config.semantic_config._attn_implementation = config._attn_implementation

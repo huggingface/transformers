@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViT Hybrid model. """
-
+"""Testing suite for the PyTorch ViT Hybrid model."""
 
 import unittest
 
 from transformers import ViTHybridConfig
-from transformers.testing_utils import require_accelerate, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_accelerate, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -31,7 +30,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTHybridForImageClassification, ViTHybridImageProcessor, ViTHybridModel
-    from transformers.models.vit_hybrid.modeling_vit_hybrid import VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -59,6 +57,7 @@ class ViTHybridModelTester:
         initializer_range=0.02,
         backbone_featmap_shape=[1, 16, 4, 4],
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -78,6 +77,7 @@ class ViTHybridModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.backbone_featmap_shape = backbone_featmap_shape
+        self.attn_implementation = attn_implementation
 
         # in ViT hybrid, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         # the number of patches is based on the feature map of the backbone, which by default uses an output stride
@@ -123,6 +123,7 @@ class ViTHybridModelTester:
             backbone_featmap_shape=self.backbone_featmap_shape,
             backbone_config=backbone_config,
             backbone=None,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -217,9 +218,13 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTHybridModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/vit-hybrid-base-bit-384"
+        model = ViTHybridModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats
@@ -234,16 +239,14 @@ class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            ViTHybridImageProcessor.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+            ViTHybridImageProcessor.from_pretrained("google/vit-hybrid-base-bit-384")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ViTHybridForImageClassification.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(
-            torch_device
-        )
+        model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

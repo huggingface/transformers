@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Speech2Text2 model."""
-
+"""PyTorch Speech2Text2 model."""
 
 import copy
 import math
@@ -35,12 +34,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2Text2Config"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-wav2vec2-large-en-de"
-
-
-SPEECH_TO_TEXT_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/s2t-wav2vec2-large-en-de",
-    # See all Speech2Text2 models at https://huggingface.co/models?filter=speech2text2
-]
 
 
 # Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Speech2Text2

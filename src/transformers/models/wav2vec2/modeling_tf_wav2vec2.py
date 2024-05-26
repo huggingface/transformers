@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Wav2Vec2 model."""
-
+"""TensorFlow Wav2Vec2 model."""
 
 from __future__ import annotations
 
@@ -52,13 +51,6 @@ _HIDDEN_STATES_START_POSITION = 2
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
-TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-]
 
 LARGE_NEGATIVE = -1e8
 

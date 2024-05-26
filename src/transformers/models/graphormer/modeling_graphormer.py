@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Graphormer model."""
+"""PyTorch Graphormer model."""
 
 import math
 from typing import Iterable, Iterator, List, Optional, Tuple, Union
@@ -35,13 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "graphormer-base-pcqm4mv1"
 _CONFIG_FOR_DOC = "GraphormerConfig"
-
-
-GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "clefourrier/graphormer-base-pcqm4mv1",
-    "clefourrier/graphormer-base-pcqm4mv2",
-    # See all Graphormer models at https://huggingface.co/models?filter=graphormer
-]
 
 
 def quant_noise(module: nn.Module, p: float, block_size: int):

@@ -78,6 +78,7 @@ ACT2FN = {
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
     "quick_gelu": quick_gelu,
+    "gelu_pytorch_tanh": partial(nn.gelu, approximate=True),
 }
 
 
@@ -590,9 +591,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
-                file exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -644,7 +645,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> model = FlaxBertModel.from_pretrained("./pt_model/pytorch_model.bin", from_pt=True, config=config)
         ```"""
         from_pt = kwargs.pop("from_pt", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)

@@ -19,15 +19,21 @@ from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
     BitsAndBytesConfig,
+    EetqConfig,
     GPTQConfig,
+    HqqConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
+    QuantoConfig,
 )
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
+from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
+from .quantizer_hqq import HqqHfQuantizer
+from .quantizer_quanto import QuantoHfQuantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -36,14 +42,20 @@ AUTO_QUANTIZER_MAPPING = {
     "bitsandbytes_8bit": Bnb8BitHfQuantizer,
     "gptq": GptqHfQuantizer,
     "aqlm": AqlmHfQuantizer,
+    "quanto": QuantoHfQuantizer,
+    "eetq": EetqHfQuantizer,
+    "hqq": HqqHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "awq": AwqConfig,
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
+    "eetq": EetqConfig,
     "gptq": GPTQConfig,
     "aqlm": AqlmConfig,
+    "quanto": QuantoConfig,
+    "hqq": HqqConfig,
 }
 
 

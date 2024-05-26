@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTSMixer model."""
+"""PyTorch PatchTSMixer model."""
 
 import math
 from dataclasses import dataclass
@@ -37,12 +37,6 @@ from .configuration_patchtsmixer import PatchTSMixerConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSMixerConfig"
-
-
-PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtsmixer-etth1-pretrain",
-    # See all PatchTSMixer models at https://huggingface.co/models?filter=patchtsmixer
-]
 
 
 PATCHTSMIXER_START_DOCSTRING = r"""

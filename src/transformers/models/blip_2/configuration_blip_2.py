@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BLIP-2 model configuration"""
+"""BLIP-2 model configuration"""
 
 import os
 from typing import Union
@@ -24,10 +24,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "salesforce/blip2-opt-2.7b": "https://huggingface.co/salesforce/blip2-opt-2.7b/resolve/main/config.json",
-}
 
 
 class Blip2VisionConfig(PretrainedConfig):

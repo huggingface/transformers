@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch WavLM model."""
+"""PyTorch WavLM model."""
 
 import math
 import warnings
@@ -69,13 +69,6 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 # Speaker Verification docstring
 _XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
-
-WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/wavlm-base",
-    "microsoft/wavlm-base-plus",
-    "microsoft/wavlm-large",
-    # See all WavLM models at https://huggingface.co/models?filter=wavlm
-]
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -731,7 +724,7 @@ class WavLMEncoder(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -814,7 +807,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
-                layer_outputs = (None, None)
+                layer_outputs = (None, None, None)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
@@ -1111,7 +1104,7 @@ class WavLMModel(WavLMPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = WavLMEncoderStableLayerNorm(config)

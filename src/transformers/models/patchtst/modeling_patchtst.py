@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PatchTST model."""
+"""PyTorch PatchTST model."""
 
 import math
 from dataclasses import dataclass
@@ -32,11 +32,6 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST

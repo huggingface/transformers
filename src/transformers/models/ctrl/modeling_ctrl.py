@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CTRL model."""
+"""PyTorch CTRL model."""
 
 from typing import Optional, Tuple, Union
 
@@ -32,11 +32,6 @@ from .configuration_ctrl import CTRLConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CTRLConfig"
-
-CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/ctrl"
-    # See all CTRL models at https://huggingface.co/models?filter=ctrl
-]
 
 
 def angle_defn(pos, i, d_model_size):
@@ -726,7 +721,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
         >>> round(loss.item(), 2)
-        0.35
+        0.93
         ```
 
         Example of multi-label classification:

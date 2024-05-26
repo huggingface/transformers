@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VitMatte model configuration"""
+"""VitMatte model configuration"""
 
 import copy
 from typing import List
@@ -23,10 +23,6 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/vitmatte-small-composition-1k": "https://huggingface.co/hustvl/vitmatte-small-composition-1k/resolve/main/config.json",
-}
 
 
 class VitMatteConfig(PretrainedConfig):

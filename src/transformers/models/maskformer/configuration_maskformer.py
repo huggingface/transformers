@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MaskFormer model configuration"""
+"""MaskFormer model configuration"""
+
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -21,13 +22,6 @@ from ..auto import CONFIG_MAPPING
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 
-
-MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/maskformer-swin-base-ade": (
-        "https://huggingface.co/facebook/maskformer-swin-base-ade/blob/main/config.json"
-    )
-    # See all MaskFormer models at https://huggingface.co/models?filter=maskformer
-}
 
 logger = logging.get_logger(__name__)
 

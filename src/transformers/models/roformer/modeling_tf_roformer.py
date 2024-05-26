@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 RoFormer model."""
-
+"""TF 2.0 RoFormer model."""
 
 from __future__ import annotations
 
@@ -63,16 +62,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
-
-TF_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "junnyu/roformer_chinese_small",
-    "junnyu/roformer_chinese_base",
-    "junnyu/roformer_chinese_char_small",
-    "junnyu/roformer_chinese_char_base",
-    "junnyu/roformer_small_discriminator",
-    "junnyu/roformer_small_generator",
-    # See all RoFormer models at https://huggingface.co/models?filter=roformer
-]
 
 
 class TFRoFormerSinusoidalPositionalEmbedding(keras.layers.Layer):

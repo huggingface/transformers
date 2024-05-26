@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNextV2 model."""
-
+"""PyTorch ConvNextV2 model."""
 
 from typing import Optional, Tuple, Union
 
@@ -53,11 +52,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnextv2-tiny-1k-224",
-    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
-]
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -303,6 +297,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
+    _no_split_modules = ["ConvNextV2Layer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

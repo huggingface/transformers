@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TVLT feature extraction. """
+"""Testing suite for the TVLT feature extraction."""
 
 import itertools
 import random
@@ -176,7 +176,7 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         feature_extractor = TvltFeatureExtractor()
         audio_values = feature_extractor(input_speech, return_tensors="pt").audio_values
 
-        self.assertEquals(audio_values.shape, (1, 1, 192, 128))
+        self.assertEqual(audio_values.shape, (1, 1, 192, 128))
 
         expected_slice = torch.tensor([[-0.3032, -0.2708], [-0.4434, -0.4007]])
         self.assertTrue(torch.allclose(audio_values[0, 0, :2, :2], expected_slice, atol=1e-4))

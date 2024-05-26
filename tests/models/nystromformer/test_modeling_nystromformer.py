@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Nystromformer model. """
-
+"""Testing suite for the PyTorch Nystromformer model."""
 
 import unittest
 
@@ -36,7 +35,6 @@ if is_torch_available():
         NystromformerForTokenClassification,
         NystromformerModel,
     )
-    from transformers.models.nystromformer.modeling_nystromformer import NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class NystromformerModelTester:
@@ -284,9 +282,9 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NystromformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uw-madison/nystromformer-512"
+        model = NystromformerModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch

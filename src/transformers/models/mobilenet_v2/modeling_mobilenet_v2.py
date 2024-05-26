@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MobileNetV2 model."""
-
+"""PyTorch MobileNetV2 model."""
 
 from typing import Optional, Union
 
@@ -51,15 +50,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1280, 7, 7]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v2_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mobilenet_v2_1.4_224",
-    "google/mobilenet_v2_1.0_224",
-    "google/mobilenet_v2_0.37_160",
-    "google/mobilenet_v2_0.35_96",
-    # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
-]
 
 
 def _build_tf_to_pytorch_map(model, config, tf_weights=None):
@@ -143,29 +133,29 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_pool.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_pool.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_pool.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_pool.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_pool.normalization.running_var
+        )
 
         prefix = "aspp0/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_aspp.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_aspp.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_aspp.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_aspp.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_aspp.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_aspp.normalization.running_var
+        )
 
         prefix = "concat_projection/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_projection.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_projection.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_projection.normalization.weight
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_mean"
-        ] = model.segmentation_head.conv_projection.normalization.running_mean
-        tf_to_pt_map[
-            prefix + "BatchNorm/moving_variance"
-        ] = model.segmentation_head.conv_projection.normalization.running_var
+        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
+            model.segmentation_head.conv_projection.normalization.running_mean
+        )
+        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
+            model.segmentation_head.conv_projection.normalization.running_var
+        )
 
         prefix = "logits/semantic/"
         tf_to_pt_map[ema(prefix + "weights")] = model.segmentation_head.classifier.convolution.weight
@@ -459,6 +449,7 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilenet_v2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
         """Initialize the weights"""

@@ -15,7 +15,6 @@
 
 from argparse import ArgumentParser
 
-from .add_new_model import AddNewModelCommand
 from .add_new_model_like import AddNewModelLikeCommand
 from .convert import ConvertCommand
 from .download import DownloadCommand
@@ -38,7 +37,6 @@ def main():
     RunCommand.register_subcommand(commands_parser)
     ServeCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
-    AddNewModelCommand.register_subcommand(commands_parser)
     AddNewModelLikeCommand.register_subcommand(commands_parser)
     LfsCommands.register_subcommand(commands_parser)
     PTtoTFCommand.register_subcommand(commands_parser)

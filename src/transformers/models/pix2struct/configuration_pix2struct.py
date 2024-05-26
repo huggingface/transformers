@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pix2Struct model configuration"""
+"""Pix2Struct model configuration"""
 
 import os
 from typing import Union
@@ -22,12 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pix2struct-textcaps-base": (
-        "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json"
-    ),
-}
 
 
 class Pix2StructTextConfig(PretrainedConfig):
