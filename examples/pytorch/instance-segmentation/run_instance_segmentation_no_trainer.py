@@ -15,45 +15,38 @@
 
 """Finetuning 🤗 Transformers model for instance segmentation leveraging the Trainer API."""
 
-import logging
-import os
-import json
-import sys
-import math
 import argparse
-from dataclasses import dataclass, field
+import json
+import logging
+import math
+import os
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Mapping, Optional
-from torch.utils.data import DataLoader
-from tqdm import tqdm
+from pathlib import Path
+from typing import Any, Mapping
 
 import albumentations as A
+import datasets
 import numpy as np
 import torch
-import datasets
-from datasets import load_dataset
-from torchmetrics.detection.mean_ap import MeanAveragePrecision
-
 from accelerate import Accelerator
-from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-import transformers
+from datasets import load_dataset
 from huggingface_hub import HfApi
-from pathlib import Path
+from torch.utils.data import DataLoader
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from tqdm import tqdm
+
+import transformers
 from transformers import (
-    HfArgumentParser,
     Mask2FormerForUniversalSegmentation,
     Mask2FormerImageProcessor,
     MaskFormerForInstanceSegmentation,
     MaskFormerImageProcessor,
-    Trainer,
-    TrainingArguments,
     SchedulerType,
     get_scheduler,
 )
 from transformers.image_processing_utils import BatchFeature
-from transformers.trainer import EvalPrediction
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -327,13 +320,10 @@ class Evaluator:
         self.metric = self.get_metric()
 
 
-def evaluation_loop(
-    model, image_processor, accelerator: Accelerator, dataloader, id2label
-):
-    
+def evaluation_loop(model, image_processor, accelerator: Accelerator, dataloader, id2label):
     metric = MeanAveragePrecision(iou_type="segm", class_metrics=True)
 
-    for batch in tqdm(dataloader, total=len(dataloader), disable=not accelerator.is_local_main_process)):
+    for batch in tqdm(dataloader, total=len(dataloader), disable=not accelerator.is_local_main_process):
         with torch.no_grad():
             outputs = model(**batch)
 
@@ -384,10 +374,10 @@ def evaluation_loop(
                     "scores": torch.tensor([]),
                 }
             post_processed_predictions.append(post_processed_image_prediction)
-        
+
         # Update metric for batch targets and predictions
         metric.update(post_processed_predictions, post_processed_targets)
-        
+
     # Compute metrics
     metrics = metric.compute()
 
@@ -419,7 +409,7 @@ def setup_logging(accelerator: Accelerator) -> None:
 
 def handle_repository_creation(accelerator: Accelerator, args: argparse.Namespace):
     """Create a repository for the model and dataset if `args.push_to_hub` is set."""
-    
+
     repo_id = None
     if accelerator.is_main_process:
         if args.push_to_hub:
@@ -786,4 +776,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
