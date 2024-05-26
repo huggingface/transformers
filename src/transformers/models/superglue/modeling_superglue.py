@@ -64,21 +64,18 @@ def concat_attentions_tuples_pair(
 
 
 def stack_attention_probs_list(attention_probs: List[torch.Tensor]) -> torch.Tensor:
-    all_attention_probs_shape_the_same = True
-    first_attention_prob_shape = attention_probs[0].shape
-    for attention_prob in attention_probs[1:]:
-        if attention_prob.shape != first_attention_prob_shape:
-            all_attention_probs_shape_the_same = False
-    if all_attention_probs_shape_the_same:
-        stacked_attention_probs = torch.stack(attention_probs, dim=0)
-    else:
-        max_dim2 = max(attention_prob.shape[2] for attention_prob in attention_probs)
-        max_dim3 = max(attention_prob.shape[3] for attention_prob in attention_probs)
-        stacked_attention_probs = torch.zeros(
-            len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3, device=attention_probs[0].device
-        )
-        for i, attention_prob in enumerate(attention_probs):
-            stacked_attention_probs[i, :, :, : attention_prob.shape[2], : attention_prob.shape[3]] = attention_prob
+    current_shape = attention_probs[0].shape
+    all_same_shape = all(attention_prob.shape == current_shape for attention_prob in attention_probs)
+    if all_same_shape:
+        return torch.stack(attention_probs, dim=0)
+
+    max_dim2 = max(attention_prob.shape[2] for attention_prob in attention_probs)
+    max_dim3 = max(attention_prob.shape[3] for attention_prob in attention_probs)
+    stacked_attention_probs = torch.zeros(
+        len(attention_probs), 2, attention_probs[0].shape[1], max_dim2, max_dim3, device=attention_probs[0].device
+    )
+    for i, attention_prob in enumerate(attention_probs):
+        stacked_attention_probs[i, :, :, : attention_prob.shape[2], : attention_prob.shape[3]] = attention_prob
     return stacked_attention_probs
 
 
@@ -134,23 +131,21 @@ def stack_hidden_states_list(hidden_states: List[torch.Tensor]) -> torch.Tensor:
     If the hidden states have different shapes, the smaller ones will be padded with zeros:
     (batch_size * 2, hidden_state_size, max(num_keypoints_0, num_keypoints_1))
     """
-    all_hidden_state_shape_the_same = True
-    first_attention_prob_shape = hidden_states[0].shape
-    for attention_prob in hidden_states[1:]:
-        if attention_prob.shape != first_attention_prob_shape:
-            all_hidden_state_shape_the_same = False
-    if all_hidden_state_shape_the_same:
-        stacked_hidden_state = torch.stack(hidden_states, dim=0)
-    else:
-        stacked_hidden_state = torch.zeros(
-            len(hidden_states),
-            2,
-            hidden_states[0].shape[1],
-            max(hidden_state.shape[2] for hidden_state in hidden_states),
-            device=hidden_states[0].device,
-        )
-        for i, hidden_state in enumerate(hidden_states):
-            stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
+    current_shape = hidden_states[0].shape
+    all_same_shape = all(hidden_state.shape == current_shape for hidden_state in hidden_states)
+    if all_same_shape:
+        return torch.stack(hidden_states, dim=0)
+
+    max_num_keypoints = max(hidden_state.shape[2] for hidden_state in hidden_states)
+    stacked_hidden_state = torch.zeros(
+        len(hidden_states),
+        2,
+        hidden_states[0].shape[1],
+        max_num_keypoints,
+        device=hidden_states[0].device,
+    )
+    for i, hidden_state in enumerate(hidden_states):
+        stacked_hidden_state[i, :, :, : hidden_state.shape[2]] = hidden_state
     return stacked_hidden_state
 
 
