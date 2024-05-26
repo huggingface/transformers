@@ -400,8 +400,8 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
-        Based on LlamaModelTest.test_eager_matches_sdpa_generate which also
-        overwrites the common test as the test is flaky on tiny models.
+        Based on tests.models.llama.test_modeling_llama.LlamaModelTest.test_eager_matches_sdpa_generate
+        which also overwrites the common test as the test is flaky on tiny models.
         """
         max_new_tokens = 30
 

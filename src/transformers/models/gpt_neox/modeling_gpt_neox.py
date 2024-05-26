@@ -525,7 +525,8 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
     to adapt to the SDPA API.
     """
 
-    # Adapted from GPTNeoXAttention.forward and following other sdpa implementations such as LlamaSdpaAttention.forward
+    # Adapted from GPTNeoXAttention.forward and following other sdpa implementations
+    # such as transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
         self,
         hidden_states: torch.FloatTensor,
