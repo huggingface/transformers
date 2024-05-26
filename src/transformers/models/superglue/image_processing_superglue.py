@@ -23,6 +23,7 @@ from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
+    PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -101,6 +102,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
             `True`. Can be overriden by `size` in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
             the `preprocess` method.
@@ -115,6 +118,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         **kwargs,
@@ -125,6 +129,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
 
@@ -132,6 +137,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -144,6 +150,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary of the form `{"height": int, "width": int}`, specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                Resampling filter to use when resizing the image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the output image. If not provided, it will be inferred from the input
                 image. Can be one of:
@@ -163,6 +171,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         return resize(
             image,
             size=(size["height"], size["width"]),
+            resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
@@ -173,6 +182,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         images,
         do_resize: bool = None,
         size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -194,6 +204,9 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
                 `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
+            resample (`int`, *optional*, defaults to `self.resample`):
+                Resampling filter to use if resizing the image. This can be one of `PILImageResampling`, filters. Only
+                has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -219,11 +232,27 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         """
 
         do_resize = do_resize if do_resize is not None else self.do_resize
+        resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        if not isinstance(images, list) or len(images) < 2:
+            raise ValueError(
+                "Input images must be a list containing at least 2 images because SuperGlue takes pairs of images."
+            )
+        elif len(images) == 2:
+            batch_size = 1
+        else:
+            for pair in images:
+                if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                    raise ValueError(
+                        "Input images must be a list of pairs of images because SuperGlue takes pairs of images."
+                    )
+            batch_size = len(images)
+            images = [image for pair in images for image in pair]
 
         images = make_list_of_images(images)
 
@@ -253,7 +282,10 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            images = [self.resize(image=image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
             images = [
@@ -274,15 +306,11 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        batch_size = len(images)
-
-        if batch_size % 2 != 0:
-            raise ValueError(
-                "SuperGlue takes pairs of images, but the number of images provided in impair, so the last image will be doubled."
-            )
-
-        channels, height, width = images[0].shape
-        images = np.array(images).reshape(-1, 2, channels, height, width)
+        if data_format == ChannelDimension.FIRST:
+            channels, height, width = images[0].shape
+        else:
+            height, width, channels = images[0].shape
+        images = np.array(images).reshape(batch_size, 2, channels, height, width)
 
         data = {"pixel_values": images}
 
