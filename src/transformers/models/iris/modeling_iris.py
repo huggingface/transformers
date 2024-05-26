@@ -206,9 +206,10 @@ class IrisSlicer(nn.Module):
         raise NotImplementedError
 
 
-class IrisHead(IrisSlicer):
+class IrisHead(nn.Module):
     def __init__(self, max_blocks: int, block_mask: torch.Tensor, head_module: nn.Module) -> None:
-        super().__init__(max_blocks, block_mask)
+        super().__init__()
+        self.slicer = IrisSlicer(max_blocks, block_mask)
         assert isinstance(head_module, nn.Module)
         self.head_module = head_module
 
@@ -216,7 +217,7 @@ class IrisHead(IrisSlicer):
         self, x: torch.Tensor, output_hidden_states: bool = False, num_steps: int = None, prev_steps: int = None
     ) -> torch.Tensor:
         hidden_states = () if output_hidden_states else None
-        x_sliced = x[:, self.compute_slice(num_steps, prev_steps)]  # x is (batch_size, num_timesteps, tokens_per_frame)
+        x_sliced = x[:, self.slicer.compute_slice(num_steps, prev_steps)]  # x is (batch_size, num_timesteps, tokens_per_frame)
         # Add the hidden state to the tuple after Relu activation
         x_sliced_hidden = self.head_module[1](self.head_module[0](x_sliced))
         hidden_states = hidden_states + (x_sliced_hidden,) if output_hidden_states else None
