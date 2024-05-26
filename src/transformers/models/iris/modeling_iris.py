@@ -787,9 +787,11 @@ class IrisTokenizer(nn.Module):
 
 
 class IrisKeysValues:
-    def __init__(self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device) -> None:
+    def __init__(
+        self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device, config: object
+    ) -> None:
         self._keys_values = StaticCache(
-            config=IrisConfig(), max_batch_size=num_samples, max_cache_len=max_tokens, device=device
+            config=config, max_batch_size=num_samples, max_cache_len=max_tokens, device=device
         )
         self._size = []
         self.num_layers = num_layers
@@ -832,9 +834,9 @@ class IrisTransformer(nn.Module):
         self.blocks = nn.ModuleList([IrisBlock(config) for _ in range(config.num_layers)])
         self.ln_f = nn.LayerNorm(config.embed_dim_world_model)
 
-    def generate_empty_keys_values(self, num_samples: int, max_tokens: int) -> IrisKeysValues:
+    def generate_empty_keys_values(self, num_samples: int, max_tokens: int, config: object) -> IrisKeysValues:
         device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
-        return IrisKeysValues(num_samples, max_tokens, self.config.num_layers, device)
+        return IrisKeysValues(num_samples, max_tokens, self.config.num_layers, device, config)
 
     def forward(
         self,
@@ -1078,17 +1080,19 @@ class IrisWorldModelImagine:
         return self._num_observations_tokens
 
     @torch.no_grad()
-    def refresh_keys_values_with_initial_obs_tokens(self, obs_tokens: torch.LongTensor) -> torch.FloatTensor:
+    def refresh_keys_values_with_initial_obs_tokens(
+        self, obs_tokens: torch.LongTensor, config: object
+    ) -> torch.FloatTensor:
         num_samples, num_observations_tokens = obs_tokens.shape
         assert num_observations_tokens == self.num_observations_tokens
         self.keys_values_wm = self.world_model.transformer.generate_empty_keys_values(
-            num_samples=num_samples, max_tokens=self.world_model.config.max_tokens
+            num_samples=num_samples, max_tokens=self.world_model.config.max_tokens, config=config
         )
         outputs_wm = self.world_model(obs_tokens, past_keys_values=self.keys_values_wm)[0]
         return outputs_wm[0]  # (B, K, E)
 
     @torch.no_grad()
-    def reset_from_initial_observations(self, observations: torch.FloatTensor) -> torch.FloatTensor:
+    def reset_from_initial_observations(self, observations: torch.FloatTensor, config) -> torch.FloatTensor:
         obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][
             2
         ]  # (batch_size, num_channels, height, width) -> (batch_size, num_tokens_per_frame)
@@ -1096,20 +1100,25 @@ class IrisWorldModelImagine:
         if self.num_observations_tokens is None:
             self._num_observations_tokens = num_observations_tokens
 
-        _ = self.refresh_keys_values_with_initial_obs_tokens(obs_tokens)
+        _ = self.refresh_keys_values_with_initial_obs_tokens(obs_tokens, config)
         self.obs_tokens = obs_tokens
 
         return self.decode_obs_tokens()
 
     @torch.no_grad()
-    def step(self, action: Union[int, np.ndarray, torch.LongTensor], should_predict_next_obs: bool = True) -> None:
+    def step(
+        self,
+        action: Union[int, np.ndarray, torch.LongTensor],
+        should_predict_next_obs: bool = True,
+        config: object = None,
+    ) -> None:
         assert self.keys_values_wm is not None and self.num_observations_tokens is not None
         num_passes = 1 + self.num_observations_tokens if should_predict_next_obs else 1
 
         output_sequence, obs_tokens = [], []
 
         if self.keys_values_wm.size[2][0] + num_passes > self.world_model.config.max_tokens:
-            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens)
+            _ = self.refresh_keys_values_with_initial_obs_tokens(self.obs_tokens, config)
 
         token = action.clone().detach() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.long)
         token = token.reshape(-1, 1).to(self.device)  # (batch_size, 1)
@@ -1255,6 +1264,7 @@ class IrisActorCritic(nn.Module):
         show_pbar: bool = False,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
+        config: object = None,
     ) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         assert not self.use_original_obs
         initial_observations = batch["observations"]
@@ -1286,13 +1296,15 @@ class IrisActorCritic(nn.Module):
             n=initial_observations.size(0), burnin_observations=burnin_observations, mask_padding=mask_padding[:, :-1]
         )
 
-        obs = wm_imagine.reset_from_initial_observations(initial_observations[:, -1])
+        obs = wm_imagine.reset_from_initial_observations(initial_observations[:, -1], config)
         for k in tqdm(range(horizon), disable=not show_pbar, desc="Imagination", file=sys.stdout):
             all_observations.append(obs)
 
             outputs_ac, hidden_states, _ = self(obs, output_hidden_states, output_attentions)
             action_token = Categorical(logits=outputs_ac[0]).sample()
-            obs, reward, done, _ = wm_imagine.step(action_token, should_predict_next_obs=(k < horizon - 1))
+            obs, reward, done, _ = wm_imagine.step(
+                action_token, should_predict_next_obs=(k < horizon - 1), config=config
+            )
 
             all_actions.append(action_token)
             all_logits_actions.append(outputs_ac[0])
@@ -1325,16 +1337,16 @@ class IrisComponentLosses:
 
     def compute_tokenizer_loss(
         self,
-        component_object: object,
+        tokenizer: IrisTokenizer,
         batch: Batch,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         **kwargs: Any,
     ) -> IrisLossWithIntermediateLosses:
-        assert component_object.lpips is not None
+        assert tokenizer.lpips is not None
 
-        observations = component_object.preprocess_input(torch.flatten(batch["observations"], end_dim=1).contiguous())
-        outputs, all_hidden_states, all_attentions = component_object(
+        observations = tokenizer.preprocess_input(torch.flatten(batch["observations"], end_dim=1).contiguous())
+        outputs, all_hidden_states, all_attentions = tokenizer(
             observations, output_hidden_states, output_attentions, should_preprocess=False, should_postprocess=False
         )
 
@@ -1347,7 +1359,7 @@ class IrisComponentLosses:
         ).pow(2).mean()
 
         reconstruction_loss = torch.abs(observations - outputs[2]).mean()
-        perceptual_loss = torch.mean(component_object.lpips(observations, outputs[2]))
+        perceptual_loss = torch.mean(tokenizer.lpips(observations, outputs[2]))
 
         return (
             IrisLossWithIntermediateLosses(
@@ -1362,7 +1374,7 @@ class IrisComponentLosses:
 
     def compute_world_model_loss(
         self,
-        component_object: object,
+        world_model: IrisWorldModel,
         batch: Batch,
         tokenizer: IrisTokenizer,
         output_hidden_states: bool = False,
@@ -1376,9 +1388,9 @@ class IrisComponentLosses:
 
         tokens = torch.flatten(torch.cat((obs_tokens, act_tokens), dim=2), start_dim=1).contiguous()  # (B, L(K+1))
 
-        outputs, all_hidden_states, all_attentions = component_object(tokens, output_hidden_states, output_attentions)
+        outputs, all_hidden_states, all_attentions = world_model(tokens, output_hidden_states, output_attentions)
 
-        labels_observations, labels_rewards, labels_ends = component_object.compute_labels_world_model(
+        labels_observations, labels_rewards, labels_ends = world_model.compute_labels_world_model(
             obs_tokens, batch["rewards"], batch["ends"], batch["mask_padding"]
         )
 
@@ -1396,7 +1408,8 @@ class IrisComponentLosses:
 
     def compute_actor_critic_loss(
         self,
-        component_object: object,
+        actor_critic: IrisActorCritic,
+        config: IrisConfig,
         batch: Batch,
         tokenizer: IrisTokenizer,
         world_model: IrisWorldModel,
@@ -1408,18 +1421,19 @@ class IrisComponentLosses:
         output_attentions: bool = False,
         **kwargs: Any,
     ) -> IrisLossWithIntermediateLosses:
-        assert not component_object.use_original_obs
-        outputs, outputs_ac, hidden_states = component_object.imagine(
+        assert not actor_critic.use_original_obs
+        outputs, outputs_ac, hidden_states = actor_critic.imagine(
             batch,
             tokenizer,
             world_model,
             horizon=imagine_horizon,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            config=config,
         )
 
         with torch.no_grad():
-            lambda_returns = component_object.compute_lambda_returns(
+            lambda_returns = actor_critic.compute_lambda_returns(
                 rewards=outputs[4],
                 values=outputs[3],
                 ends=outputs[5],
@@ -1730,7 +1744,9 @@ class IrisModel(IrisPreTrainedModel):
             actor_critic_outputs,
             all_hidden_states_actor_critic,
             _,
-        ) = component_losses.compute_actor_critic_loss(self.agent.actor_critic, batch_actor_critic, **cfg_actor_critic)
+        ) = component_losses.compute_actor_critic_loss(
+            self.agent.actor_critic, self.config, batch_actor_critic, **cfg_actor_critic
+        )
         losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
 
         losses = torch.stack(
