@@ -165,15 +165,6 @@ def batch_hidden_states(
     return [stack_hidden_states_list(element) for element in list_of_tuples]
 
 
-def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Applied attention mechanism to query, key and value."""
-    dim = query.shape[1]
-    scores = torch.einsum("bdhn,bdhm->bhnm", query, key) / dim**0.5
-    prob = torch.nn.functional.softmax(scores, dim=-1)
-    output = torch.einsum("bhnm,bdhm->bdhn", prob, value)
-    return output, prob
-
-
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int):
     """Normalize keypoints locations based on image image_shape"""
     one = keypoints.new_tensor(1)
@@ -333,8 +324,11 @@ class SuperGlueMultiHeadAttention(nn.Module):
             layer(x).view(batch_dim, self.head_dim, self.num_heads, -1)
             for layer, x in zip(self.proj, (query, key, value))
         ]
-        x, attention_probs = attention(query, key, value)
-        output = self.merge(x.contiguous().view(batch_dim, self.head_dim * self.num_heads, -1))
+        query_dim = query.shape[1]
+        scores = torch.einsum("bdhn,bdhm->bhnm", query, key) / query_dim**0.5
+        attention_probs = torch.nn.functional.softmax(scores, dim=-1)
+        output = torch.einsum("bhnm,bdhm->bdhn", attention_probs, value)
+        output = self.merge(output.contiguous().view(batch_dim, self.head_dim * self.num_heads, -1))
 
         output = (output, attention_probs) if output_attentions else (output,)
 
