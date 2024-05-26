@@ -221,7 +221,7 @@ class WhisperGenerationMixin:
             else:
                 # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
-                num_frames = np.repeat(num_frames, repeat_time)
+                num_frames = np.repeat(num_frames.cpu() if torch.is_tensor(num_frames) else num_frames, repeat_time)
 
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.

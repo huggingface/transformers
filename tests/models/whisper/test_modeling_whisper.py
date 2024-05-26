@@ -1543,6 +1543,43 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
+
+    def test_custom_4d_attention_mask(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
+        # for models with un-certain ops like dropout in training mode
+        model = model.eval()
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self._get_custom_4d_mask_test_data()
+
+        logits = model.forward(decoder_input_ids=input_ids, input_features=input_dict["input_features"], decoder_position_ids=position_ids).logits
+        # logits.shape == torch.Size([3, 4, ...])
+
+        logits_shared_prefix = model(
+            decoder_input_ids=input_ids_shared_prefix,
+            input_features=input_dict["input_features"],
+            attention_mask=mask_shared_prefix,
+            decoder_position_ids=position_ids_shared_prefix,
+        )[0]
+        # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+        out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+        out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+        # comparing greedily-chosen tokens:
+        assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
+
+        # comparing softmax-normalized logits:
+        normalized_0 = torch.nn.functional.softmax(out_last_tokens)
+        normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
+        torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
@@ -2871,6 +2908,53 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
+
+    @slow
+    def test_compile_static_cache(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model.to(torch_device)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor(input_speech, return_tensors="pt", sampling_rate=16_000).input_features
+        input_features = input_features.to(torch_device)
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
+                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
+                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
+                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
+            ]
+        )
+        EXPECTED_TRANSCRIPT = [
+            " Mr. Quilter is the apostle of the middle classes, and we are glad to",
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can",
+        ]
+        # fmt: on
+        
+        # dynamic cache
+        generated_ids = model.generate(input_features, max_length=20).to("cpu")
+        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        # static cache
+        generated_ids = model.generate(input_features, max_length=20, cache_implementation="static").to("cpu")
+        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        # torch.compile + static
+        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
+        generated_ids = model.generate(input_features, max_length=20, cache_implementation="static").to("cpu")
+        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):

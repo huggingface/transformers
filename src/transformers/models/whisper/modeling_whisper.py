@@ -1363,13 +1363,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 if not isinstance(past_key_values[0], Cache):
                     # tuple of tuple of tensors
                     return_legacy_cache = True
-                    if len(past_key_values[0]) != 4 and encoder_hidden_states is not None:
-                        raise ValueError(
-                            "Expect `past_key_values` to contain tuples of 4 tensors when `encoder_hidden_states` are passed"
-                        )
-
                     cross_attn_kv_cache = None
-                    if encoder_hidden_states is not None:
+                    if encoder_hidden_states is not None and len(past_key_values[0]) == 4:
                         cross_attn_kv_cache = DynamicCache.from_legacy_cache(tuple(past_key_value[2:] for past_key_value in past_key_values))
 
                     past_key_values = (
@@ -1468,14 +1463,15 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if isinstance(next_cache, tuple) and encoder_hidden_states is None:
-            assert next_cache[1] is None
+        if isinstance(next_cache, tuple) and next_cache[1] is None:
             next_cache = next_cache[0]
 
         if return_legacy_cache:
-            if encoder_hidden_states is None:
+            if isinstance(next_cache, Cache):
+                # only one cache for decoding
                 next_cache = next_cache.to_legacy_cache()
             else:
+                # two caches scenario
                 next_cache = tuple(
                     self_attn_kv + cross_attn_kv for self_attn_kv, cross_attn_kv in 
                     zip(next_cache[0].to_legacy_cache(), next_cache[1].to_legacy_cache())
@@ -1927,9 +1923,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
 
         return {
+            "decoder_input_ids": decoder_input_ids.contiguous(),
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids.contiguous(),
             "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
@@ -2191,11 +2187,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
-        
         return {
+            "input_ids": input_ids.contiguous(),
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
-            "input_ids": input_ids.contiguous(),
             "use_cache": use_cache,
             "attention_mask": attention_mask,
             "cache_position": cache_position,

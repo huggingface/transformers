@@ -1365,7 +1365,7 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
+    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, cache_name = '_cache') -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache.
@@ -1373,38 +1373,36 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
-        need_new_cache = (
-            not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size != max_batch_size
-        )
-        if cache_implementation == "sliding_window":
-            need_new_cache = need_new_cache or (
-                self._cache.sliding_window_size < self._cache.model_sliding_window_size
-                and max_cache_len > self._cache.max_cache_len
-            )
-        elif cache_implementation == "static":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
-        elif cache_implementation == "one_shot":
-            # for one-shot cache, we should reset it everytime so that we don't reuse
-            # the key value states for the last generation
-            need_new_cache = True
+        need_new_cache = not hasattr(self, cache_name)
+
+        if not need_new_cache:
+            current_cache: Cache = getattr(self, cache_name)
+            need_new_cache = not isinstance(current_cache, cache_cls) or current_cache.max_batch_size != max_batch_size
+            if cache_implementation == "sliding_window":
+                need_new_cache = need_new_cache or (
+                    current_cache.sliding_window_size < current_cache.model_sliding_window_size
+                    and max_cache_len > current_cache.max_cache_len
+                )
+            elif cache_implementation == "static":
+                need_new_cache = need_new_cache or current_cache.max_cache_len < max_cache_len
+            elif cache_implementation == "one_shot":
+                need_new_cache = need_new_cache or current_cache.max_cache_len != max_cache_len
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._cache = cache_cls(
+            setattr(self, cache_name, cache_cls(
                 config=self.config,
                 max_batch_size=max_batch_size,
                 max_cache_len=max_cache_len,
                 device=self.device,
                 dtype=cache_dtype,
-            )
+            ))
         else:
-            self._cache.reset()
-        return self._cache
+            current_cache.reset()
+        return getattr(self, cache_name)
 
     def _get_decoder_start_token_id(
         self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
@@ -1696,7 +1694,8 @@ class GenerationMixin:
                     # manually set another cache for cross attention
                     encoder_outputs = model_kwargs["encoder_outputs"][0]
                     model_kwargs["past_key_values"] = (
-                        model_kwargs["past_key_values"], self._get_cache("one_shot", encoder_outputs.shape[0], encoder_outputs.shape[1])
+                        model_kwargs["past_key_values"],
+                        self._get_cache("one_shot", encoder_outputs.shape[0],  encoder_outputs.shape[1], '_cross_attn_cache')
                     )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
