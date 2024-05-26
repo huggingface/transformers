@@ -245,21 +245,8 @@ class IrisEmbedder(nn.Module):
         return output
 
 
-@dataclass
-class IrisEncoderDecoderConfig:
-    resolution: int
-    in_channels: int
-    z_channels: int
-    ch: int
-    ch_mult: List[int]
-    num_res_blocks: int
-    attn_resolutions: List[int]
-    out_ch: int
-    dropout: float
-
-
 class IrisEncoder(nn.Module):
-    def __init__(self, config: IrisEncoderDecoderConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.config = config
         self.num_resolutions = len(config.ch_mult)
@@ -356,7 +343,7 @@ class IrisEncoder(nn.Module):
 
 
 class IrisDecoder(nn.Module):
-    def __init__(self, config: IrisEncoderDecoderConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.config = config
         timestep_embedding_channels = 0
@@ -880,26 +867,6 @@ class IrisTokenizer(nn.Module):
         """y is supposed to be channels first and in [-1, 1]"""
         return y.add(1).div(2)
 
-
-@dataclass
-class IrisTransformerConfig:
-    tokens_per_block: int
-    max_blocks: int
-    attention: str
-
-    num_layers: int
-    num_heads: int
-    embed_dim: int
-
-    embed_pdrop: float
-    resid_pdrop: float
-    attn_pdrop: float
-
-    @property
-    def max_tokens(self):
-        return self.tokens_per_block * self.max_blocks
-
-
 class IrisKeysValues:
     def __init__(
         self, num_samples: int, max_tokens: int, num_layers: int, device: torch.device
@@ -932,7 +899,7 @@ class IrisKeysValues:
 
 
 class IrisTransformer(nn.Module):
-    def __init__(self, config: IrisTransformerConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.config = config
         self.drop = nn.Dropout(config.embed_pdrop)
@@ -969,7 +936,7 @@ class IrisTransformer(nn.Module):
         return x, hidden_states, attentions
 
 class IrisBlock(nn.Module):
-    def __init__(self, config: IrisTransformerConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         self.ln1 = nn.LayerNorm(config.embed_dim)
         self.ln2 = nn.LayerNorm(config.embed_dim)
@@ -988,7 +955,7 @@ class IrisBlock(nn.Module):
         return x, attentions
 
 class IrisSelfAttention(nn.Module):
-    def __init__(self, config: IrisTransformerConfig) -> None:
+    def __init__(self, config) -> None:
         super().__init__()
         assert config.embed_dim % config.num_heads == 0
         assert config.attention in ("causal", "block_causal")
@@ -1049,7 +1016,7 @@ class IrisWorldModelOutput:
 
 
 class IrisWorldModel(nn.Module):
-    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config: IrisTransformerConfig) -> None:
+    def __init__(self, obs_vocab_size: int, act_vocab_size: int, config) -> None:
         super().__init__()
         self.obs_vocab_size, self.act_vocab_size = obs_vocab_size, act_vocab_size
         self.config = config
@@ -1567,40 +1534,18 @@ class IrisModel(IrisPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        config_enc_dec = IrisEncoderDecoderConfig(
-            self.config.resolution,
-            self.config.in_channels,
-            self.config.z_channels,
-            self.config.ch,
-            self.config.ch_mult,
-            self.config.num_res_blocks,
-            self.config.attn_resolutions,
-            self.config.out_ch,
-            self.config.dropout,
-        )
-        encoder = IrisEncoder(config_enc_dec)
-        decoder = IrisDecoder(config_enc_dec)
+        encoder = IrisEncoder(config)
+        decoder = IrisDecoder(config)
         tokenizer = IrisTokenizer(
             self.config.vocab_size,
             self.config.embed_dim_tokenizer,
             encoder,
             decoder,
         )
-        transformer_config = IrisTransformerConfig(
-            self.config.tokens_per_block,
-            self.config.max_blocks,
-            self.config.attention,
-            self.config.num_layers,
-            self.config.num_heads,
-            self.config.embed_dim_world_model,
-            self.config.embed_pdrop,
-            self.config.resid_pdrop,
-            self.config.attn_pdrop,
-        )
         world_model = IrisWorldModel(
             obs_vocab_size=tokenizer.vocab_size,
             act_vocab_size=self.config.num_actions,
-            config=transformer_config,
+            config=config,
         )
         actor_critic = IrisActorCritic(
             act_vocab_size=self.config.num_actions,
