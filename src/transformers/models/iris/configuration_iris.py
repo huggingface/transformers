@@ -51,7 +51,7 @@ class IrisConfig(PretrainedConfig):
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of Resnet Blocks in Encoder and Decoder of Tokenizer.
         attn_resolutions (`list`, *optional*, defaults to `[8, 16]`):
-            Resolution for Attention Block for Encoder and Decoder of Tokenizer.
+            The resolutions at which an attention layer is used for Encoder and Decoder of Tokenizer.
         out_ch (`int`, *optional*, defaults to 3):
             Number of out channels for Decoder.
         dropout (`float`, *optional*, defaults to 0.0):

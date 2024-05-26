@@ -47,7 +47,6 @@ from .configuration_iris import IrisConfig
 
 
 if is_torchvision_available():
-    import torchvision
     from torchvision import models
 
 Batch = Dict[str, torch.Tensor]
@@ -583,38 +582,37 @@ class IrisLPIPS(nn.Module):
     def __init__(self, use_dropout: bool = True):
         super().__init__()
         self.scaling_layer = IrisScalingLayer()
-        self.chns = [64, 128, 256, 512, 512]  # vg16 features
-        self.net = IrisVgg16(pretrained=True, requires_grad=False)
+        self.chns = [64, 128, 256, 512, 512]  # vgg16 features
+        self.net = IrisVgg16(requires_grad=False)
         self.lin0 = IrisNetLinLayer(self.chns[0], use_dropout=use_dropout)
         self.lin1 = IrisNetLinLayer(self.chns[1], use_dropout=use_dropout)
         self.lin2 = IrisNetLinLayer(self.chns[2], use_dropout=use_dropout)
         self.lin3 = IrisNetLinLayer(self.chns[3], use_dropout=use_dropout)
         self.lin4 = IrisNetLinLayer(self.chns[4], use_dropout=use_dropout)
-        self.load_from_pretrained()
         for param in self.parameters():
             param.requires_grad = False
 
-    def load_from_pretrained(self) -> None:
-        ckpt = get_ckpt_path(
-            name="vgg_lpips", root=Path.home() / ".cache/iris/tokenizer_pretrained_vgg"
-        )  # Download VGG if necessary
-        self.load_state_dict(torch.load(ckpt, map_location=torch.device("cpu")), strict=False)
+    def normalize_tensor(self, x: torch.Tensor, eps: float = 1e-10) -> torch.Tensor:
+        norm_factor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True))
+        return x / (norm_factor + eps)
 
+    def spatial_average(self, x: torch.Tensor, keepdim: bool = True) -> torch.Tensor:
+        return x.mean([2, 3], keepdim=keepdim)
+    
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         in0_input, in1_input = (self.scaling_layer(input), self.scaling_layer(target))
         outs0, outs1 = self.net(in0_input), self.net(in1_input)
         feats0, feats1, diffs = {}, {}, {}
         lins = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
         for kk in range(len(self.chns)):
-            feats0[kk], feats1[kk] = normalize_tensor(outs0[kk]), normalize_tensor(outs1[kk])
+            feats0[kk], feats1[kk] = self.normalize_tensor(outs0[kk]), self.normalize_tensor(outs1[kk])
             diffs[kk] = (feats0[kk] - feats1[kk]) ** 2
 
-        res = [spatial_average(lins[kk].model(diffs[kk]), keepdim=True) for kk in range(len(self.chns))]
+        res = [self.spatial_average(lins[kk].model(diffs[kk]), keepdim=True) for kk in range(len(self.chns))]
         val = res[0]
         for i in range(1, len(self.chns)):
             val += res[i]
         return val
-
 
 class IrisScalingLayer(nn.Module):
     def __init__(self) -> None:
@@ -624,7 +622,6 @@ class IrisScalingLayer(nn.Module):
 
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         return (inp - self.shift) / self.scale
-
 
 class IrisNetLinLayer(nn.Module):
     """A single linear layer which does a 1x1 conv"""
@@ -644,10 +641,10 @@ class IrisNetLinLayer(nn.Module):
         self.model = nn.Sequential(*layers)
 
 
-class IrisVgg16(torch.nn.Module):
-    def __init__(self, requires_grad: bool = False, pretrained: bool = True) -> None:
+class IrisVgg16(nn.Module):
+    def __init__(self, requires_grad: bool = False) -> None:
         super(IrisVgg16, self).__init__()
-        vgg_pretrained_features = models.vgg16(pretrained=pretrained).features
+        vgg_pretrained_features = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
         self.slice3 = torch.nn.Sequential()
@@ -681,58 +678,6 @@ class IrisVgg16(torch.nn.Module):
         h_relu5_3 = h
         vgg_outputs = namedtuple("VggOutputs", ["relu1_2", "relu2_2", "relu3_3", "relu4_3", "relu5_3"])
         return vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
-
-
-def normalize_tensor(x: torch.Tensor, eps: float = 1e-10) -> torch.Tensor:
-    norm_factor = torch.sqrt(torch.sum(x**2, dim=1, keepdim=True))
-    return x / (norm_factor + eps)
-
-
-def spatial_average(x: torch.Tensor, keepdim: bool = True) -> torch.Tensor:
-    return x.mean([2, 3], keepdim=keepdim)
-
-
-# ********************************************************************
-# *************** Utilities to download pretrained vgg ***************
-# ********************************************************************
-
-
-URL_MAP = {"vgg_lpips": "https://heibox.uni-heidelberg.de/f/607503859c864bc1b30b/?dl=1"}
-
-
-CKPT_MAP = {"vgg_lpips": "vgg.pth"}
-
-
-MD5_MAP = {"vgg_lpips": "d507d7349b931f0638a25a48a722f98a"}
-
-
-def download(url: str, local_path: str, chunk_size: int = 1024) -> None:
-    os.makedirs(os.path.split(local_path)[0], exist_ok=True)
-    with requests.get(url, stream=True) as r:
-        total_size = int(r.headers.get("content-length", 0))
-        with tqdm(total=total_size, unit="B", unit_scale=True) as pbar:
-            with open(local_path, "wb") as f:
-                for data in r.iter_content(chunk_size=chunk_size):
-                    if data:
-                        f.write(data)
-                        pbar.update(chunk_size)
-
-
-def md5_hash(path: str) -> str:
-    with open(path, "rb") as f:
-        content = f.read()
-    return hashlib.md5(content).hexdigest()
-
-
-def get_ckpt_path(name: str, root: str, check: bool = False) -> str:
-    assert name in URL_MAP
-    path = os.path.join(root, CKPT_MAP[name])
-    if not os.path.exists(path) or (check and not md5_hash(path) == MD5_MAP[name]):
-        print("Downloading {} model from {} to {}".format(name, URL_MAP[name], path))
-        download(URL_MAP[name], path)
-        md5 = md5_hash(path)
-        assert md5 == MD5_MAP[name], md5
-    return path
 
 
 class IrisTokenizer(nn.Module):
@@ -904,7 +849,7 @@ class IrisTransformer(nn.Module):
         self.config = config
         self.drop = nn.Dropout(config.embed_pdrop)
         self.blocks = nn.ModuleList([IrisBlock(config) for _ in range(config.num_layers)])
-        self.ln_f = nn.LayerNorm(config.embed_dim)
+        self.ln_f = nn.LayerNorm(config.embed_dim_world_model)
 
     def generate_empty_keys_values(self, num_samples: int, max_tokens: int) -> IrisKeysValues:
         device = self.ln_f.weight.device  # Assumption that all submodules are on the same device
@@ -938,13 +883,13 @@ class IrisTransformer(nn.Module):
 class IrisBlock(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        self.ln1 = nn.LayerNorm(config.embed_dim)
-        self.ln2 = nn.LayerNorm(config.embed_dim)
+        self.ln1 = nn.LayerNorm(config.embed_dim_world_model)
+        self.ln2 = nn.LayerNorm(config.embed_dim_world_model)
         self.attn = IrisSelfAttention(config)
         self.mlp = nn.Sequential(
-            nn.Linear(config.embed_dim, 4 * config.embed_dim),
+            nn.Linear(config.embed_dim_world_model, 4 * config.embed_dim_world_model),
             nn.GELU(),
-            nn.Linear(4 * config.embed_dim, config.embed_dim),
+            nn.Linear(4 * config.embed_dim_world_model, config.embed_dim_world_model),
             nn.Dropout(config.resid_pdrop),
         )
 
@@ -957,15 +902,15 @@ class IrisBlock(nn.Module):
 class IrisSelfAttention(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        assert config.embed_dim % config.num_heads == 0
+        assert config.embed_dim_world_model % config.num_heads == 0
         assert config.attention in ("causal", "block_causal")
         self.num_heads = config.num_heads
-        self.key = nn.Linear(config.embed_dim, config.embed_dim)
-        self.query = nn.Linear(config.embed_dim, config.embed_dim)
-        self.value = nn.Linear(config.embed_dim, config.embed_dim)
+        self.key = nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model)
+        self.query = nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model)
+        self.value = nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model)
         self.attn_drop = nn.Dropout(config.attn_pdrop)
         self.resid_drop = nn.Dropout(config.resid_pdrop)
-        self.proj = nn.Linear(config.embed_dim, config.embed_dim)
+        self.proj = nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model)
 
         causal_mask = torch.tril(torch.ones(config.max_tokens, config.max_tokens))
         block_causal_mask = torch.max(
@@ -1028,13 +973,13 @@ class IrisWorldModel(nn.Module):
         act_tokens_pattern[-1] = 1
         obs_tokens_pattern = 1 - act_tokens_pattern
 
-        self.pos_emb = nn.Embedding(config.max_tokens, config.embed_dim)
+        self.pos_emb = nn.Embedding(config.max_tokens, config.embed_dim_world_model)
 
         self.embedder = IrisEmbedder(
             max_blocks=config.max_blocks,
             block_masks=[act_tokens_pattern, obs_tokens_pattern],
             embedding_tables=nn.ModuleList(
-                [nn.Embedding(act_vocab_size, config.embed_dim), nn.Embedding(obs_vocab_size, config.embed_dim)]
+                [nn.Embedding(act_vocab_size, config.embed_dim_world_model), nn.Embedding(obs_vocab_size, config.embed_dim_world_model)]
             ),
         )
 
@@ -1042,7 +987,7 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=all_but_last_obs_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim, config.embed_dim), nn.ReLU(), nn.Linear(config.embed_dim, obs_vocab_size)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, obs_vocab_size)
             ),
         )
 
@@ -1050,7 +995,7 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=act_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim, config.embed_dim), nn.ReLU(), nn.Linear(config.embed_dim, 3)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, 3)
             ),
         )
 
@@ -1058,7 +1003,7 @@ class IrisWorldModel(nn.Module):
             max_blocks=config.max_blocks,
             block_mask=act_tokens_pattern,
             head_module=nn.Sequential(
-                nn.Linear(config.embed_dim, config.embed_dim), nn.ReLU(), nn.Linear(config.embed_dim, 2)
+                nn.Linear(config.embed_dim_world_model, config.embed_dim_world_model), nn.ReLU(), nn.Linear(config.embed_dim_world_model, 2)
             ),
         )
 
