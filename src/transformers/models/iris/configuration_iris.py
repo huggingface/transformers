@@ -92,11 +92,6 @@ class IrisConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. If it is not specified, will default to
-            `num_attention_heads`.
         pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 50256):
