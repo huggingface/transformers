@@ -75,9 +75,9 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         stride = (chunk_len, _stride_left, _stride_right)
         # Added is_first to add initial prompt
         if chunk_start_idx == 0:
-            yield {"is_last": is_last, "stride": stride, **processed, "is_first":True}
+            yield {"is_last": is_last, "stride": stride, **processed, "is_first": True}
         if chunk.shape[0] > _stride_left:
-            yield {"is_last": is_last, "stride": stride, **processed, "is_first":False}
+            yield {"is_last": is_last, "stride": stride, **processed, "is_first": False}
         if is_last:
             break
 
@@ -301,7 +301,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return_language=None,
         generate_kwargs=None,
         max_new_tokens=None,
-        initial_prompt=None
+        initial_prompt=None,
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
@@ -363,7 +363,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return preprocess_params, forward_params, postprocess_params
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, initial_prompt=None):
-
         prompt_ids = np.array([])
         if initial_prompt is not None:
             if self.type == "seq2seq_whisper":
@@ -453,7 +452,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             for item in chunk_iter(
                 inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
             ):
-                yield {**item, **{"prompt_ids":prompt_ids}}
+                yield {**item, **{"prompt_ids": prompt_ids}}
         else:
             if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:
                 processed = self.feature_extractor(
@@ -514,7 +513,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 del model_inputs["is_first"]
                 prompt_ids = prompt_ids_all[0]
                 if prompt_ids.any():
-                    generate_kwargs["prompt_ids"] = torch.tensor(prompt_ids, dtype=torch.int64, device=self.model.device.type)#dtype=out["tokens"].dtype, device=out["tokens"].device)
+                    generate_kwargs["prompt_ids"] = torch.tensor(
+                        prompt_ids, dtype=torch.int64, device=self.model.device.type
+                    )  # dtype=out["tokens"].dtype, device=out["tokens"].device)
 
             # custom processing for Whisper timestamps and word-level timestamps
             if return_timestamps and self.type == "seq2seq_whisper":
