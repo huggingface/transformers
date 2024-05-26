@@ -123,6 +123,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
+            device=torch_device,
             torch_dtype=torch.float16,
         )
 
@@ -135,6 +136,7 @@ class TextClassificationPipelineTests(unittest.TestCase):
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
+            device=torch_device,
             torch_dtype=torch.bfloat16,
         )
 
