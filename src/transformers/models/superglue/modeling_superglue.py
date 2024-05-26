@@ -270,7 +270,7 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
                 layers.append(nn.BatchNorm1d(channels[i]))
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
-        nn.init.constant_(self.layers[-1].bias, 0.0)
+
 
     def forward(
         self,
@@ -342,7 +342,6 @@ class SuperGlueAttentionalPropagation(nn.Module):
             config,
             [descriptor_dim * 2, descriptor_dim * 2, descriptor_dim],
         )
-        nn.init.constant_(self.mlp.layers[-1].bias, 0.0)
 
     def forward(
         self,
@@ -452,6 +451,8 @@ class SuperGluePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(SuperGlueMultiLayerPerceptron):
+            nn.init.constant_(module.layers[-1].bias, 0.0)
 
 
 SUPERGLUE_START_DOCSTRING = r"""
