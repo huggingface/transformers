@@ -173,42 +173,100 @@ def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     wrapper.visit(class_finder)
     return class_finder
 
+class SuperTransformer(cst.CSTTransformer):
+    METADATA_DEPENDENCIES = (ParentNodeProvider,)
+
+    def __init__(self, python_module, original_methods, updated_methods):
+        self.python_module = python_module
+        self.original_methods = original_methods
+        self.updated_methods = updated_methods
+
+    def update_body(self, existing_body, new_statements):
+        """
+        Helper method to update the body by removing duplicates before adding new statements.
+        """
+        de_duplicated_new_body = []
+        existing_nodes = {
+            self.python_module.code_for_node(node).strip() for node in new_statements if isinstance(node, cst.CSTNode)
+        }
+        for stmt in existing_body:
+            if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
+                de_duplicated_new_body.append(stmt)
+                existing_nodes.add(stmt)
+            else:
+                print(f"\n{30*'#'}found duplicate{self.python_module.code_for_node(stmt)}{30*'#'}")
+        return de_duplicated_new_body
+
+    def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
+        new_body = []
+        for expr in node.body:
+            if m.matches(
+                expr,
+                m.SimpleStatementLine(
+                    body=[m.Expr(value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name))))]
+                ),
+            ):
+                # Replace the SimpleStatementLine containing super().__init__() with the new body from func_to_body_mapping
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+            elif m.matches(
+                expr,
+                m.SimpleStatementLine(
+                    body=[
+                        m.Return(
+                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
+                        )
+                    ]
+                ),
+            ):
+                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
+            else:
+                new_body.append(expr)
+        return node.with_changes(body=new_body)
+
+
+    def leave_FunctionDef(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
+        if updated_node.name.value in self.updated_methods:
+            name = updated_node.name.value 
+            new_body = self.replace_super_calls(updated_node.body, name)
+            return updated_node.with_changes(body=new_body)
+        return updated_node
+    
+    def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
+        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
+            func_def = self.get_metadata(ParentNodeProvider, original_node)
+            if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_methods:
+                updated_return_value = updated_node.value.with_changes(
+                    args=[
+                        cst.Arg(
+                            value=cst.Call(func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))])
+                        )
+                    ]
+                )
+                return updated_node.with_changes(value=updated_return_value)
+        return updated_node
+
+
 def replace_call_to_super(class_finder:ClassFinder, updated_node:cst.ClassDef, class_name:str):
-    replacement_node = class_finder.classes[class_name]
-    # Copy methods from original node to replacement node, preserving decorators
-    updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
-    replacement_methods = {
-        f.name.value: f for f in replacement_node.body.body if m.matches(f, m.FunctionDef())
+    original_node = class_finder.classes[class_name]
+    original_methods = {
+        f.name.value: f for f in original_node.body.body if m.matches(f, m.FunctionDef())
     }
 
-    for name, func in updated_methods.items():
-        if name in replacement_methods:
+    # Copy methods from original node to replacement node, preserving decorators
+    updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
+    end_meth = []
+    for name, func in original_methods.items():
+        if name in updated_methods:
             # Replace the method in the replacement class, preserving decorators
-            replacement_func = replacement_methods[name].with_changes(
-                decorators=replacement_methods[name].decorators,  # TODO a union or set might be better
-                body=func.body,
-            )
-            replacement_methods[name] = replacement_func
+            func = func.with_changes(body=updated_methods[name].body)
+        end_meth.append(func)
 
-    # Rebuild the class body with updated methods
-    new_body = [
-        replacement_methods.get(f.name.value, f) if m.matches(f, m.FunctionDef()) else f
-        for f in replacement_node.body.body
-    ]
-
-    new_replacement_class = replacement_node.with_changes(body=cst.IndentedBlock(body=new_body))
-
-    temp_module = cst.Module(body=[replacement_node])
+    result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
+    temp_module = cst.Module(body=[result_node])
     new_module = MetadataWrapper(temp_module)
-    # Ensure calls to `super()` in `__init__` are preserved
-    new_replacement_class = new_module.visit(
-        SuperTransformer(
-            temp_module,
-            {f.name.value: f for f in replacement_node.body.body if m.matches(f, m.FunctionDef())},
-        )
-    ).body[0]
+    new_replacement_class = new_module.visit(SuperTransformer(temp_module, original_methods, updated_methods)).body[0] # get the indented block
 
-    return new_replacement_class
+    return original_node.with_changes(body=new_replacement_class.body)
 
 class DiffConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,ScopeProvider,PositionProvider)
@@ -292,8 +350,6 @@ class DiffConverterTransformer(CSTTransformer):
                     if dependency not in self.class_mapping:
                         self.new_body.append(node)
                         self.class_mapping[dependency] = node
-
-                updated_node  = class_finder.classes[class_name]
             updated_node = replace_call_to_super(class_finder, updated_node, class_name)
 
         self.class_mapping[class_name] = updated_node
@@ -324,75 +380,6 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 
-class SuperTransformer(cst.CSTTransformer):
-    METADATA_DEPENDENCIES = (ParentNodeProvider,)
-
-    def __init__(self, python_module, original_methods):
-        self.original_methods = original_methods
-        self.python_module = python_module
-
-    def leave_FunctionDef(self, original_node: cst.Call, updated_node: cst.Call) -> cst.CSTNode:
-        if updated_node.name.value in self.original_methods:
-            updated_body = cst.ensure_type(updated_node.body, cst.IndentedBlock)
-            new_body = self.replace_super_calls(updated_body, updated_node.name.value)
-            return updated_node.with_changes(body=new_body)
-        return updated_node
-
-    def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
-        new_body = []
-        for expr in node.body:
-            if m.matches(
-                expr,
-                m.SimpleStatementLine(
-                    body=[m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))]
-                ),
-            ):
-                # Replace the SimpleStatementLine containing super().__init__() with the new body from func_to_body_mapping
-                new_body.extend(self.original_methods[func_name].body.body)
-            elif m.matches(
-                expr,
-                m.SimpleStatementLine(
-                    body=[
-                        m.Return(
-                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
-                        )
-                    ]
-                ),
-            ):
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
-            else:
-                new_body.append(expr)
-        return node.with_changes(body=new_body)
-
-    def update_body(self, existing_body, new_statements):
-        """
-        Helper method to update the body by removing duplicates before adding new statements.
-        """
-        de_duplicated_new_body = []
-        existing_nodes = {
-            self.python_module.code_for_node(node).strip() for node in new_statements if isinstance(node, cst.CSTNode)
-        }
-        for stmt in existing_body:
-            if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
-                de_duplicated_new_body.append(stmt)
-                existing_nodes.add(stmt)
-            else:
-                print(f"\n{30*'#'}found duplicate{self.python_module.code_for_node(stmt)}{30*'#'}")
-        return de_duplicated_new_body
-
-    def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
-        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
-            func_def = self.get_metadata(ParentNodeProvider, updated_node)
-            if isinstance(func_def, cst.FunctionDef) and func_def.name.value in self.original_methods:
-                updated_return_value = updated_node.value.with_changes(
-                    args=[
-                        cst.Arg(
-                            value=cst.Call(func=cst.Name("super"), args=[cst.Arg(value=cst.Name(func_def.name.value))])
-                        )
-                    ]
-                )
-                return updated_node.with_changes(value=updated_return_value)
-        return updated_node
 
 
 

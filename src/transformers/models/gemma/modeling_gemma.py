@@ -61,6 +61,7 @@ import torch.utils.checkpoint
 
 logger = logging.get_logger(__name__)
 
+
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -809,12 +810,6 @@ GEMMA_INPUTS_DOCSTRING = r"""
     GEMMA_START_DOCSTRING,
 )
 class GemmaModel(GemmaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`GemmaDecoderLayer`]
-
-    Args:
-        config: GemmaConfig
-    """
 
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
@@ -851,13 +846,6 @@ class GemmaModel(GemmaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -871,6 +859,16 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        hidden_states = inputs_embeds
+        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
+        hidden_states = hidden_states * normalizer
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         return_legacy_cache = False
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
@@ -1034,7 +1032,6 @@ _CONFIG_FOR_DOC = "GemmaConfig"
 
 
 class GemmaForCausalLM(GemmaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1093,16 +1090,16 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, GemmaForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("meta-gemma/Gemma-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-gemma/Gemma-2-7b-hf")
+        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        "What is your favorite condiment?"
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1125,14 +1122,8 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
-        else:
-            logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
         logits = logits.float()
-
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
