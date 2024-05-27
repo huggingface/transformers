@@ -409,9 +409,9 @@ def convert_file(diff_file):
     with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         f.write(ruffed_code)
 
-    if hasattr(transformers, "config_bod"):
-        config_module = cst.Module(body = [*transformers.config_body])
-        with open(diff_file.replace("diff_", "config_"), "w") as f:
+    if hasattr(transformers, "config_body"):
+        config_module = cst.Module(body = [*transformers.config_body], header=new_mod.header)
+        with open(diff_file.replace("diff_", "configuration_"), "w") as f:
             ruffed_code = fix_ruff(config_module.code)
             f.write(ruffed_code)
 
