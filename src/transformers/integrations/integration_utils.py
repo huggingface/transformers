@@ -695,7 +695,16 @@ class WandbCallback(TrainerCallback):
     A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        trainer: Optional["Trainer"] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        dataset: Optional["Dataset"] = None,
+        num_samples: int = 10,
+        freq: int = 1,
+        ignore_tokens: Optional[list] = None,
+    ):
         has_wandb = is_wandb_available()
         if not has_wandb:
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
@@ -704,6 +713,48 @@ class WandbCallback(TrainerCallback):
 
             self._wandb = wandb
         self._initialized = False
+
+        # Setup for evals if user requests it
+        if os.getenv("WANDB_LOG_EVALS"):
+            if trainer is not None:
+                self.trainer = trainer
+
+            if tokenizer is None:
+                tokenizer = self.trainer.tokenizer
+            self.tokenizer = tokenizer
+
+            if dataset is None:
+                dataset = self.trainer.eval_dataset
+
+            try:
+                sampled_dataset = dataset.select(range(num_samples))
+            except IndexError as e:
+                print(f"WARNING: Could not get those indices: {e=}")
+                sampled_dataset = dataset
+
+            self.sample_dataset = sampled_dataset
+            self.freq = freq
+
+            if ignore_tokens is None:
+                ignore_tokens = [-100]
+
+            padding_token_id = self.tokenizer.pad_token_id
+
+            def replace_ignored_tokens(a):
+                if isinstance(a, np.ndarray):
+                    mask = np.isin(a, ignore_tokens)
+                elif isinstance(a, torch.Tensor):
+                    mask = torch.isin(a, torch.tensor(ignore_tokens, dtype=a.dtype))
+                else:
+                    raise TypeError(f"Unsupported type replace token type {type(a)}")
+
+                a[mask] = padding_token_id
+                return a
+
+            self._replace_ignored_tokens_func = replace_ignored_tokens
+
+            self._collected_eval_rows = []
+
         # log model
         if os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"}):
             DeprecationWarning(
@@ -932,6 +983,36 @@ class WandbCallback(TrainerCallback):
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._wandb.log(metrics)
+
+    def on_evaluate(self, args, state, control, **kwargs):
+        if os.getenv("WANDB_LOG_EVALS"):
+            eval_loop_output = self.trainer.eval_loop_output
+
+            inputs = eval_loop_output.inputs
+            decoded_inputs = self.tokenizer.batch_decode(inputs, skip_special_tokens=True)
+
+            preds = eval_loop_output.predictions
+            outputs = preds.argmax(axis=-1)
+            decoded_outputs = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+            expected = eval_loop_output.label_ids
+            expected = self._replace_ignored_tokens_func(expected)
+            decoded_expected = self.tokenizer.batch_decode(expected, skip_special_tokens=True)
+
+            # un-batch and log rows
+            for dec_inp, dec_out, dec_exp in zip(decoded_inputs, decoded_outputs, decoded_expected):
+                row = {
+                    "decoded_inputs": dec_inp,
+                    "decoded_outputs": dec_out,
+                    "decoded_expected": dec_exp,
+                }
+                self._collected_eval_rows.append(row)
+
+            table = self._wandb.Table(columns=list(row.keys()))
+            for row in self._collected_eval_rows:
+                table.add_data(*row.values())
+
+            self._wandb.log({"evaluation_table": table})
 
 
 class CometCallback(TrainerCallback):
