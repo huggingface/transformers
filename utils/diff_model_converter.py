@@ -225,11 +225,11 @@ class DiffConverterTransformer(CSTTransformer):
         self.inserted_functions = set()
         self.new_body = []
 
-    def visit_functionDef(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+    def leave_FunctionDef(self, original_node, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
         if m.matches(parent_node, m.Module()):
             self.new_body.append(node) 
-
+        return node
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         if m.matches(node.module, m.Attribute()):
@@ -284,23 +284,23 @@ class DiffConverterTransformer(CSTTransformer):
             else: 
                 class_finder = self.visited_module[super_file_name]
 
-            # extract nested dependencies from the base class
-            if self.visited_module[super_file_name]:
-                class_finder = self.visited_module[super_file_name]
-                list_dependencies = {dep:class_finder.class_start_line.get(dep,1000)for dep in class_finder.class_dependency_mapping[class_name]}
-                for dependency, _ in sorted(list_dependencies.items(), key=lambda x:x[1]):
-                    node = class_finder.global_nodes.get(dependency, None)
-                    # make sure the class is not re-defined by the diff file 
-                    if node is not None and node not in self.new_body:
-                        if dependency not in self.class_mapping:
-                            self.new_body.append(node)
-                            self.class_mapping[dependency] = node
+            list_dependencies = {dep:class_finder.class_start_line.get(dep,1000)for dep in class_finder.class_dependency_mapping[class_name]}
+            for dependency, _ in sorted(list_dependencies.items(), key=lambda x:x[1]):
+                node = class_finder.global_nodes.get(dependency, None)
+                # make sure the class is not re-defined by the diff file 
+                if node is not None and node not in self.new_body:
+                    if dependency not in self.class_mapping:
+                        self.new_body.append(node)
+                        self.class_mapping[dependency] = node
 
                 updated_node  = class_finder.classes[class_name]
-
             updated_node = replace_call_to_super(class_finder, updated_node, class_name)
+
         self.class_mapping[class_name] = updated_node
-        self.new_body.append(updated_node)
+        if "Config" in class_name:
+            self.config_body = [updated_node]
+        else:
+            self.new_body.append(updated_node)
         return updated_node
 
     def leave_If(self, original_node, node):
@@ -319,6 +319,7 @@ class DiffConverterTransformer(CSTTransformer):
         new_body = []
         for visiter in self.visited_module.values():
             new_body += list(visiter.imports.values())
+            self.config_body = list(visiter.imports.values()) + self.config_body 
         return node.with_changes(body=[*new_body, *self.new_body])
 
 
@@ -395,7 +396,6 @@ class SuperTransformer(cst.CSTTransformer):
 
 
 
-
 def convert_file(diff_file):
     # Parse the Python file
     with open(diff_file, "r") as file:
@@ -408,8 +408,12 @@ def convert_file(diff_file):
 
     with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         f.write(ruffed_code)
-    # with open(diff_file.replace("diff_", "modeling_draft_"), "w") as f:
-    #     f.write(ruffed_code)
+
+    if hasattr(transformers, "config_bod"):
+        config_module = cst.Module(body = [*transformers.config_body])
+        with open(diff_file.replace("diff_", "config_"), "w") as f:
+            ruffed_code = fix_ruff(config_module.code)
+            f.write(ruffed_code)
 
 
 if __name__ == "__main__":
