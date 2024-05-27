@@ -243,7 +243,15 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
+
         # add backbone attributes
+        if not hasattr(self.backbone.config, "hidden_size"):
+            raise ValueError("The backbone should have a hidden_size attribute")
+        if not hasattr(self.backbone.config, "image_size"):
+            raise ValueError("The backbone should have an image_size attribute")
+        if not hasattr(self.backbone.config, "patch_size"):
+            raise ValueError("The backbone should have a patch_size attribute")
+
         config.backbone_hidden_size = self.backbone.config.hidden_size
         config.image_size = self.backbone.config.image_size
         config.patch_size = self.backbone.config.patch_size

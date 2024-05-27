@@ -135,6 +135,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
 
     batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
 
+    # calculate indices for coordinates
     index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (width + 2)
     index += (width + 2) * (height + 2) * np.arange(0, batch_size * num_keypoints).reshape(-1, num_keypoints)
     index = index.astype(int).reshape(-1, 1)
@@ -146,6 +147,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     ix1_ = batch_heatmaps_pad[index - 1]
     iy1_ = batch_heatmaps_pad[index - 2 - width]
 
+    # calculate refined coordinates using Newton's method
     dx = 0.5 * (ix1 - ix1_)
     dy = 0.5 * (iy1 - iy1_)
     derivative = np.concatenate([dx, dy], axis=1)
