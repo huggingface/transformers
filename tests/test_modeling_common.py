@@ -4413,6 +4413,8 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            # for models with un-certain ops like dropout in training mode
+            model = model.eval()
 
             (
                 input_ids,
