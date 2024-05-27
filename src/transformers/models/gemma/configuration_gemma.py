@@ -15,7 +15,6 @@
 # limitations under the License.
 
 
-
 from ...utils import (
     is_flash_attn_2_available,
 )
@@ -32,6 +31,7 @@ if is_flash_attn_2_available():
 
 class GemmaConfig(PreTrainedConfig):
     model_type = "gemma"
+
     def __init__(
         self,
         vocab_size=256000,

@@ -44,6 +44,7 @@ logger = logging.get_logger(__name__)
 
 class GemmaConfig(PreTrainedConfig):
     model_type = "gemma"
+
     def __init__(
         self,
         vocab_size=256000,
