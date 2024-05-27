@@ -195,12 +195,12 @@ if is_torch_available():
             return attention_mask
 
     class TestOffline(unittest.TestCase):
-
         def test_offline(self):
-
             # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from transformers.utils import hub
             from huggingface_hub import constants
+
+            from transformers.utils import hub
+
             offlfine_env = hub._is_offline_mode
             hub_cache_env = constants.HF_HUB_CACHE
             hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
@@ -217,8 +217,9 @@ if is_torch_available():
                     hub.TRANSFORMERS_CACHE = tmpdir
                     # First offline load should fail
                     try:
-                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main",
-                                                                        use_auth_token=None)
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
+                        )
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
@@ -231,8 +232,9 @@ if is_torch_available():
 
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main",
-                                                                    use_auth_token=None)
+                    AutoModelForImageClassification.from_pretrained(
+                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None
+                    )
             finally:
                 # Tear down: reset env as it was before calling this test
                 hub._is_offline_mode = offlfine_env
@@ -243,8 +245,10 @@ if is_torch_available():
 
         def test_local_files_only(self):
             # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from transformers.utils import hub
             from huggingface_hub import constants
+
+            from transformers.utils import hub
+
             hub_cache_env = constants.HF_HUB_CACHE
             hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
             default_cache = constants.default_cache_path
@@ -257,8 +261,9 @@ if is_torch_available():
                     constants.default_cache_path = tmpdir
                     hub.TRANSFORMERS_CACHE = tmpdir
                     try:
-                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main",
-                                                                        use_auth_token=None, local_files_only=True)
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                        )
                     except OSError:
                         LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
                     else:
@@ -270,8 +275,9 @@ if is_torch_available():
 
                     LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
 
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main",
-                                                                    use_auth_token=None, local_files_only=True)
+                    AutoModelForImageClassification.from_pretrained(
+                        TINY_IMAGE_CLASSIF, revision="main", use_auth_token=None, local_files_only=True
+                    )
             finally:
                 # Tear down: reset env as it was before calling this test
                 constants.HF_HUB_CACHE = hub_cache_env
