@@ -17,7 +17,6 @@
 URL: https://github.com/facebookresearch/hiera
 """
 
-
 import argparse
 import json
 import math
