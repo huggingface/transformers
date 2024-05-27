@@ -965,7 +965,7 @@ class WhisperGenerationMixin:
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
         def split_by_batch_index(values, key, batch_idx):
-            if key == "scores":
+            if key in ["scores", "encoder_attentions"]:
                 return [v[batch_idx].cpu() for v in values]
             elif key == "past_key_values":
                 # we don't save `past_key_values` as this is too costly
