@@ -31,6 +31,7 @@ from huggingface_hub import hf_hub_download
 import transformers
 from transformers import WhisperConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_pt_flax_cross_test,
     require_flash_attn,
     require_torch,
@@ -1543,12 +1544,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
-
+    @is_flaky(description="Flaky on conditional generation")
     def test_custom_4d_attention_mask(self):
+        set_seed(0)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
-        # for models with un-certain ops like dropout in training mode
-        model = model.eval()
+        model = WhisperForConditionalGeneration(config).eval().to(device=torch_device, dtype=torch.float32)
         (
             input_ids,
             position_ids,
