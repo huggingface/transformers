@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import PreTrainedConfig
+from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
@@ -42,7 +42,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GemmaConfig(PreTrainedConfig):
+class GemmaConfig(PretrainedConfig):
     model_type = "gemma"
 
     def __init__(
