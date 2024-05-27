@@ -17,6 +17,7 @@
 
 import argparse
 import json
+import sys
 import logging
 import math
 import os
@@ -297,41 +298,18 @@ def nested_cpu(tensors):
         return tensors
 
 
-@dataclass
-class ModelOutput:
-    class_queries_logits: torch.Tensor
-    masks_queries_logits: torch.Tensor
-
-
-class Evaluator:
-    def __init__(
-        self, image_processor: Mask2FormerImageProcessor, id2label: Mapping[int, str], threshold: float = 0.0
-    ):
-        self.image_processor = image_processor
-        self.id2label = id2label
-        self.threshold = threshold
-        self.metric = self.get_metric()
-
-    def get_metric(self):
-        metric = MeanAveragePrecision(iou_type="segm", class_metrics=True)
-        return metric
-
-    def reset_metric(self):
-        self.metric = self.get_metric()
-
-
 def evaluation_loop(model, image_processor, accelerator: Accelerator, dataloader, id2label):
     metric = MeanAveragePrecision(iou_type="segm", class_metrics=True)
 
-    for batch in tqdm(dataloader, total=len(dataloader), disable=not accelerator.is_local_main_process):
+    for inputs in tqdm(dataloader, total=len(dataloader), disable=not accelerator.is_local_main_process):
         with torch.no_grad():
-            outputs = model(**batch)
+            outputs = model(**inputs)
 
-        batch = accelerator.gather_for_metrics(batch)
+        inputs = accelerator.gather_for_metrics(inputs)
+        inputs = nested_cpu(inputs)
+
         outputs = accelerator.gather_for_metrics(outputs)
-
-        batch = batch.cpu()
-        outputs = outputs.cpu()
+        outputs = nested_cpu(outputs)
 
         # For metric computation we need to provide:
         #  - targets in a form of list of dictionaries with keys "masks", "labels"
@@ -342,7 +320,7 @@ def evaluation_loop(model, image_processor, accelerator: Accelerator, dataloader
         target_sizes = []
 
         # Collect targets
-        for masks, labels in zip(batch.mask_labels, batch.class_labels):
+        for masks, labels in zip(inputs["mask_labels"], inputs["class_labels"]):
             post_processed_targets.append(
                 {
                     "masks": masks.to(dtype=torch.bool),
@@ -398,10 +376,16 @@ def evaluation_loop(model, image_processor, accelerator: Accelerator, dataloader
 def setup_logging(accelerator: Accelerator) -> None:
     """Setup logging according to `training_args`."""
 
-    logger.info(accelerator.state, main_process_only=False)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
+        logger.setLevel(logging.INFO)
     else:
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
@@ -460,6 +444,9 @@ def main():
     # Create repository if push ot hub is specified
     repo_id = handle_repository_creation(accelerator, args)
 
+    if args.push_to_hub:
+        api = HfApi()
+
     # ------------------------------------------------------------------------------------------------
     # Load dataset, prepare splits
     # ------------------------------------------------------------------------------------------------
@@ -490,7 +477,7 @@ def main():
         label2id=label2id,
         id2label=id2label,
         ignore_mismatched_sizes=True,
-        token=args.token,
+        token=args.hub_token,
     )
 
     image_processor = image_processor_class.from_pretrained(
@@ -499,7 +486,7 @@ def main():
         size={"height": args.image_height, "width": args.image_width},
         do_reduce_labels=args.do_reduce_labels,
         reduce_labels=args.do_reduce_labels,  # TODO: remove in the future
-        token=args.token,
+        token=args.hub_token,
     )
 
     # ------------------------------------------------------------------------------------------------
@@ -688,7 +675,6 @@ def main():
                         )
                         if accelerator.is_main_process:
                             image_processor.save_pretrained(args.output_dir)
-                            api = HfApi()
                             api.upload_folder(
                                 repo_id=repo_id,
                                 commit_message=f"Training in progress epoch {epoch}",
