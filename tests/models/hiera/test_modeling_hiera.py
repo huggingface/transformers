@@ -15,8 +15,6 @@
 """Testing suite for the PyTorch Hiera model."""
 
 import math
-import os
-import tempfile
 import unittest
 from typing import Dict, List, Tuple
 
@@ -33,8 +31,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    CONFIG_NAME,
-    GENERATION_CONFIG_NAME,
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -49,7 +45,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
     from torch import nn
-    from torch.nn import functional as F
 
     from transformers import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
 
@@ -64,14 +59,15 @@ class HieraModelTester:
         self,
         parent,
         batch_size=13,
-        input_size=[224, 224],
+        image_size=[64, 64],
         mlp_ratio=1.0,
         num_channels=3,
         depths=[1, 1, 1, 1],
         patch_stride=[4, 4],
+        patch_size=[7, 7],
+        patch_padding=[3, 3],
         masked_unit_size=[8, 8],
-        initial_num_heads=1,
-        num_head_multiplier=2.0,
+        num_heads=[1, 1, 1, 1],
         embed_dim_multiplier=2.0,
         is_training=True,
         use_labels=True,
@@ -86,14 +82,15 @@ class HieraModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.input_size = input_size
+        self.image_size = image_size
         self.mlp_ratio = mlp_ratio
         self.num_channels = num_channels
         self.depths = depths
         self.patch_stride = patch_stride
+        self.patch_size = patch_size
+        self.patch_padding = patch_padding
         self.masked_unit_size = masked_unit_size
-        self.initial_num_heads = initial_num_heads
-        self.num_head_multiplier = num_head_multiplier
+        self.num_heads = num_heads
         self.embed_dim_multiplier = embed_dim_multiplier
         self.is_training = is_training
         self.use_labels = use_labels
@@ -107,7 +104,7 @@ class HieraModelTester:
         self.type_sequence_label_size = type_sequence_label_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.input_size[0], self.input_size[1]])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
 
         labels = None
         if self.use_labels:
@@ -117,24 +114,18 @@ class HieraModelTester:
 
         return config, pixel_values, labels
 
-    def get_noise_for_mae(self):
-        mask_spatial_shape = [
-            i // s // ms for i, s, ms in zip(self.input_size, self.patch_stride, self.masked_unit_size)
-        ]
-        num_windows = math.prod(mask_spatial_shape)
-        return floats_tensor([self.batch_size, num_windows])
-
     def get_config(self):
         return HieraConfig(
             embed_dim=self.embed_dim,
-            input_size=self.input_size,
+            image_size=self.image_size,
             patch_stride=self.patch_stride,
+            patch_size=self.patch_size,
+            patch_padding=self.patch_padding,
             masked_unit_size=self.masked_unit_size,
             mlp_ratio=self.mlp_ratio,
             num_channels=self.num_channels,
             depths=self.depths,
-            initial_num_heads=self.initial_num_heads,
-            num_head_multiplier=self.num_head_multiplier,
+            num_heads=self.num_heads,
             embed_dim_multiplier=self.embed_dim_multiplier,
             hidden_act=self.hidden_act,
             decoder_hidden_size=self.decoder_hidden_size,
@@ -149,7 +140,7 @@ class HieraModelTester:
         model.eval()
         result = model(pixel_values)
 
-        tokens_spatial_shape = [i // s for i, s in zip(self.input_size, config.patch_stride)]
+        tokens_spatial_shape = [i // s for i, s in zip(self.image_size, config.patch_stride)]
         expected_seq_len = math.prod(tokens_spatial_shape) // math.prod(config.query_stride) ** (config.num_query_pool)
         expected_dim = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
 
@@ -191,10 +182,9 @@ class HieraModelTester:
         model = HieraForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
-        noise = self.get_noise_for_mae()
-        result = model(pixel_values, noise=noise)
+        result = model(pixel_values)
         pred_stride = config.patch_stride[-1] * (config.query_stride[-1] ** config.num_query_pool)
-        num_patches = self.input_size[0] // pred_stride
+        num_patches = self.image_size[0] // pred_stride
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, num_patches**2, self.num_channels * pred_stride**2)
         )
@@ -205,8 +195,8 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.input_size[0], self.input_size[0]])
-        result = model(pixel_values, noise=noise)
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size[0], self.image_size[0]])
+        result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches**2, pred_stride**2))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -223,7 +213,7 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.input_size[0], self.input_size[0]])
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size[0], self.image_size[0]])
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
@@ -314,7 +304,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-4:]),
-                [self.model_tester.initial_num_heads, num_windows, mask_unit_area, seq_len // num_windows],
+                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
             )
             out_len = len(outputs)
 
@@ -337,7 +327,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(self_attentions[0].shape[-4:]),
-                [self.model_tester.initial_num_heads, num_windows, mask_unit_area, seq_len // num_windows],
+                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
             )
 
     def test_hidden_states_output(self):
@@ -386,7 +376,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        image_size = self.model_tester.input_size
+        image_size = self.model_tester.image_size
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
@@ -397,101 +387,6 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    def test_batching_equivalence(self):
-        """
-        Tests that the model supports batching and that the output is the nearly the same for the same input in
-        different batch sizes.
-        (Why "nearly the same" not "exactly the same"? Batching uses different matmul shapes, which often leads to
-        different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
-        """
-
-        def get_tensor_equivalence_function(batched_input):
-            # models operating on continuous spaces have higher abs difference than LMs
-            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
-            if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
-                )
-            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
-
-        def recursive_check(batched_object, single_row_object, model_name, key):
-            if isinstance(batched_object, (list, tuple)):
-                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            elif isinstance(batched_object, dict):
-                for batched_object_value, single_row_object_value in zip(
-                    batched_object.values(), single_row_object.values()
-                ):
-                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
-            # do not compare returned loss (0-dim tensor) / codebook ids (int) / caching objects
-            elif batched_object is None or not isinstance(batched_object, torch.Tensor):
-                return
-            elif batched_object.dim() == 0:
-                return
-            else:
-                # indexing the first element does not always work
-                # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
-                batched_row = batched_object[slice_ids]
-                self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
-                )
-                self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
-                )
-                self.assertTrue(
-                    (equivalence(batched_row, single_row_object)) <= 1e-03,
-                    msg=(
-                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
-                        f"Difference={equivalence(batched_row, single_row_object)}."
-                    ),
-                )
-
-        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
-        equivalence = get_tensor_equivalence_function(batched_input)
-
-        for model_class in self.all_model_classes:
-            config.output_hidden_states = True
-
-            model_name = model_class.__name__
-            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
-                config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
-            if model_name == "HieraForPreTraining":
-                batched_input["noise"] = self.model_tester.get_noise_for_mae()
-            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
-            model = model_class(config).to(torch_device).eval()
-
-            batch_size = self.model_tester.batch_size
-            single_row_input = {}
-            for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
-                    # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
-                    single_batch_shape = value.shape[0] // batch_size
-                    single_row_input[key] = value[:single_batch_shape]
-                else:
-                    single_row_input[key] = value
-
-            with torch.no_grad():
-                model_batched_output = model(**batched_input_prepared)
-                model_row_output = model(**single_row_input)
-
-            if isinstance(model_batched_output, torch.Tensor):
-                model_batched_output = {"model_output": model_batched_output}
-                model_row_output = {"model_output": model_row_output}
-
-            for key in model_batched_output:
-                # DETR starts from zero-init queries to decoder, leading to cos_similarity = `nan`
-                if hasattr(self, "zero_init_hidden_state") and "decoder_hidden_states" in key:
-                    model_batched_output[key] = model_batched_output[key][1:]
-                    model_row_output[key] = model_row_output[key][1:]
-                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -523,7 +418,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.max(torch.abs(tuple_object.float() - dict_object.float()))}. Tuple has `nan`:"
                                 f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
                                 f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
                             ),
@@ -537,8 +432,6 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model.eval()
 
             additional_kwargs = {}
-            if model_class.__name__ == "HieraForPreTraining":
-                additional_kwargs["noise"] = self.model_tester.get_noise_for_mae()
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -574,75 +467,6 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 additional_kwargs["output_hidden_states"] = True
                 check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
-
-    def test_determinism(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_determinism(first, second):
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                if model_class.__name__ == "HieraForPreTraining":
-                    inputs_dict["noise"] = self.model_tester.get_noise_for_mae()
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_determinism(tensor1, tensor2)
-            else:
-                check_determinism(first, second)
-
-    def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                if model_class.__name__ == "HieraForPreTraining":
-                    inputs_dict["noise"] = self.model_tester.get_noise_for_mae()
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                # the config file (and the generation config file, if it can generate) should be saved
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-                self.assertEqual(
-                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
-                )
-
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
-            else:
-                check_save_load(first, second)
 
     @unittest.skip(reason="Hiera Transformer does not use feedforward chunking")
     def test_feed_forward_chunking(self):
@@ -728,6 +552,29 @@ class HieraModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model = HieraModel.from_pretrained("EduardoPacheco/hiera-tiny-224").to(torch_device)
+
+        image_processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224", size=448, crop_size=448)
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 196, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[1.8522, 0.1532, 0.3849], [2.7352, -0.1941, 0.1848], [1.5859, -0.0773, 0.0168]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_for_pretraining(self):
