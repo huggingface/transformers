@@ -103,7 +103,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2']
 ```
 
-Be mindful that full [`~GenerationMixin.generate`] compilation has severe feature limitations, and is still under development. It can, however, be compiled without graph breaks.
+Be mindful that full [`~GenerationMixin.generate`] compilation has severe feature limitations, and is still under development. For instance, all parameterization has to be done through `generation_config`. It can, however, be compiled without graph breaks.
 
 
 If you want to go further down a level, the [`StaticCache`] object can also be passed to the model's forward pass under the same `past_key_values` argument. Using this strategy, you can write your own function to decode the next token given the current token and position and cache position of previously generated tokens.
