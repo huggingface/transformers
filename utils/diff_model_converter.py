@@ -53,9 +53,7 @@ class ClassFinder(CSTVisitor):
             name = self.python_module.code_for_node(k)
             self.class_dependency_mapping.update(
                 {
-                    node.name.value: {
-                        name: self.class_dependency_mapping.get(name) , **self.class_dependency_mapping.get(node.name.value, {})
-                    }
+                    node.name.value: set(self.class_dependency_mapping.get(name, {name})) | self.class_dependency_mapping.get(node.name.value, set())
                 }
             )
 
@@ -86,11 +84,19 @@ class ClassFinder(CSTVisitor):
             if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
                 print(f"Name:\t\t{node.value:<45} called in {dad._name_prefix}") 
                 name = dad._name_prefix.split(".")[0]
-                dep = {node.value:self.class_dependency_mapping.get(name)}
-                if name not in self.class_dependency_mapping:
-                    self.class_dependency_mapping[name] = dep
-                else:
-                    self.class_dependency_mapping[name].update(dep)
+                dep = set(self.class_dependency_mapping.get(node.value,set()))
+                dep |= set(self.class_dependency_mapping.get(name,{})) |  set({node.value})
+                self.class_dependency_mapping[name] = dep
+
+    def leave_Arg(self, node):    
+        if m.matches(node.value, m.Name()):
+            dad = self.get_metadata(ParentNodeProvider,node)
+            if m.matches(dad, m.ClassDef()) and dad.bases:
+                print(f"Arg:\t\t{node.value.value:<45} called in {dad.name.value}") 
+                name = dad.name.value
+                dep = set(self.class_dependency_mapping.get(node.value.value,set()))
+                dep |= set(self.class_dependency_mapping.get(name,{})) |  set({node.value.value})
+                self.class_dependency_mapping[name] = dep 
 
     def leave_Dict(self, node):
         dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -99,10 +105,9 @@ class ClassFinder(CSTVisitor):
             if name in self.assignments:
                 for k in node.elements:
                     if k.value.value in self.classes:
-                        if name not in self.class_dependency_mapping:
-                            self.class_dependency_mapping[name] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
-                        else:
-                            self.class_dependency_mapping[name].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
+                        dep = set(self.class_dependency_mapping.get(k.value.value,set()))
+                        dep |= self.class_dependency_mapping.get(name,set()) |  set({k.value.value})
+                        self.class_dependency_mapping[name] = dep
                         print(f"Dict:\t\t{k.value.value:<45} called in {name}")  
 
     # Decorator: handle in leave_FunctionDef and leave_ClassDef instead
@@ -116,12 +121,10 @@ class ClassFinder(CSTVisitor):
                         name = scope._name_prefix.split(".")[0]
                     else:
                         name = dad.name.value
-
                     print(f"Decorator:\t{k.value.value:<45} called in {name}")
-                    if dad.name.value not in self.class_dependency_mapping:
-                        self.class_dependency_mapping[name] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
-                    else:
-                        self.class_dependency_mapping[name].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
+                    dep = set(self.class_dependency_mapping.get(k.value.value,set()))
+                    dep |= self.class_dependency_mapping.get(name,set()) |  set({k.value.value})
+                    self.class_dependency_mapping[name] = dep
 
     def leave_Module(self, node):
         self.global_nodes = {**self.assignments, **self.classes, **self.function_def}
@@ -403,10 +406,10 @@ def convert_file(diff_file):
     new_mod = wrapper.visit(transformers)
     ruffed_code = fix_ruff(new_mod.code)
 
-    # with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-    #     f.write(ruffed_code)
-    with open(diff_file.replace("diff_", "modeling_draft_"), "w") as f:
+    with open(diff_file.replace("diff_", "modeling_"), "w") as f:
         f.write(ruffed_code)
+    # with open(diff_file.replace("diff_", "modeling_draft_"), "w") as f:
+    #     f.write(ruffed_code)
 
 
 if __name__ == "__main__":
