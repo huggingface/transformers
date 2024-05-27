@@ -1,17 +1,21 @@
 import copy
+import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+from packaging import version
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_quanto_available, logging
 
 
 if is_quanto_available():
-    from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
+    quanto_version = version.parse(importlib.metadata.version("quanto"))
+    if quanto_version < version.parse("0.2.0"):
+        from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
@@ -488,6 +492,13 @@ class QuantoQuantizedCache(QuantizedCache):
 
     def __init__(self, cache_config: CacheConfig) -> None:
         super().__init__(cache_config)
+        quanto_version = version.parse(importlib.metadata.version("quanto"))
+        if quanto_version < version.parse("0.2.0"):
+            raise ImportError(
+                f"You need quanto package version to be greater or equal than 0.2.0. Detected version {quanto_version}. "
+                f"Please upgrade quanto with `pip install -U quanto`"
+            )
+
         if self.nbits not in [2, 4]:
             raise ValueError(f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}")
 
