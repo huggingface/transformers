@@ -22,7 +22,7 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union, Callable, get_type_hints, ForwardRef, _eval_type
 
 import numpy as np
 
@@ -67,6 +67,33 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
 }
+
+
+def expand_typed_dict_annotations(td_class, globalns=None, localns=None):
+    """Utility to expand TypedDict annotations."""
+    annotations = td_class.__annotations__
+    resolved_annotations = {}
+    for key, value in annotations.items():
+        if isinstance(value, str):
+            value = ForwardRef(value)
+        resolved_annotations[key] = _eval_type(value, globalns, localns)
+    return resolved_annotations
+
+
+def add_expanded_type_hints(**new_hints):
+    def decorator(func: Callable) -> Callable:
+        globalns = globals()
+        localns = locals()
+        expanded_hints = {}
+        for key, hint in new_hints.items():
+            if isinstance(hint, type) and hasattr(hint, '__annotations__'):
+                expanded_hints.update(expand_typed_dict_annotations(hint, globalns, localns))
+            else:
+                expanded_hints[key] = hint
+
+        func.__annotations__.update(expanded_hints)
+        return func
+    return decorator
 
 
 class TextKwargs(TypedDict, total=False):

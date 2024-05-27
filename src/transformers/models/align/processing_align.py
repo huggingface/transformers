@@ -18,10 +18,53 @@ Image/Text processor class for ALIGN
 
 
 from typing import List, Union
-
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, ImagesKwargs, CommonKwargs, add_expanded_type_hints
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import is_torch_available, is_vision_available
+
+# TODO fix forward referencing of costly modules to import as below
+import PIL
+import torch
+
+
+class AlignProcessorKwargs(ProcessingKwargs):
+    __total__ = False
+    text_kwargs: TextKwargs = {
+        "add_special_tokens": True,
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+        "stride": 0,
+        "is_split_into_words": False,
+        "pad_to_multiple_of": None,
+        "return_token_type_ids": None,
+        "return_attention_mask": None,
+        "return_overflowing_tokens": False,
+        "return_special_tokens_mask": False,
+        "return_offsets_mapping": False,
+        "return_length": False,
+        "verbose": True,
+    }
+
+    images_kwargs: ImagesKwargs = {
+        "do_resize": None,
+        "size": None,
+        "crop_size": None,
+        "resample": None,
+        "do_rescale": None,
+        "rescale_factor": None,
+        "do_normalize": None,
+        "image_mean": None,
+        "image_std": None,
+        "do_center_crop": None,
+        "data_format": "channels_first",
+        "input_data_format": None,
+    }
+
+    common_kwargs: CommonKwargs = {
+        "return_tensors": None
+    }
 
 
 class AlignProcessor(ProcessorMixin):
@@ -44,55 +87,20 @@ class AlignProcessor(ProcessorMixin):
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
+        self.base_kwargs = AlignProcessorKwargs()
         super().__init__(image_processor, tokenizer)
-        self.processing_kwargs: ProcessingKwargs = {
-            "common_kwargs": {"return_tensors": None},
-            "text_kwargs": {
-                "text_pair": None,
-                "text_target": None,
-                "text_pair_target": None,
-                "add_special_tokens": True,
-                "padding": "max_length",
-                "truncation": True,
-                "max_length": 64,
-                "stride": 0,
-                "is_split_into_words": False,
-                "pad_to_multiple_of": None,
-                "return_token_type_ids": None,
-                "return_attention_mask": None,
-                "return_overflowing_tokens": False,
-                "return_special_tokens_mask": False,
-                "return_offsets_mapping": False,
-                "return_length": False,
-                "verbose": True,
-            },
-            "images_kwargs": {
-                "do_crop_margin": None,
-                "do_resize": None,
-                "size": None,
-                "resample": None,
-                "do_thumbnail": None,
-                "do_align_long_axis": None,
-                "do_pad": None,
-                "do_rescale": None,
-                "rescale_factor": None,
-                "do_normalize": None,
-                "image_mean": None,
-                "image_std": None,
-                "data_format": "channels_first",
-                "input_data_format": None,
-            },
-            "audio_kwargs": {},
-            "videos_kwargs": {},
-        }
 
+    @add_expanded_type_hints(text_kwargs=TextKwargs, images_kwargs=ImagesKwargs, common_kwargs=CommonKwargs,)
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
         audio=None,
         videos=None,
-        **kwargs,
+        text_kwargs: TextKwargs = None,
+        images_kwargs: ImagesKwargs = None,
+        common_kwargs: CommonKwargs = None,
+        **kwargs: AlignProcessorKwargs
     ) -> BatchEncoding:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
@@ -128,24 +136,28 @@ class AlignProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
+        text_kwargs = kwargs.pop('text_kwargs', {})
+        images_kwargs = kwargs.pop('images_kwargs', {})
+        common_kwargs = kwargs.pop('common_kwargs', {})
+
+        for key, value in kwargs.items():
+            if key in AlignProcessorKwargs.text_kwargs:
+                text_kwargs[key] = value
+            elif key in AlignProcessorKwargs.images_kwargs:
+                images_kwargs[key] = value
+            else:
+                # remaining kwargs go to the "common" key
+                common_kwargs[key] = value
+        common_kwargs = {**AlignProcessorKwargs.common_kwargs, **common_kwargs}
+        text_kwargs = {**AlignProcessorKwargs.text_kwargs, **text_kwargs, **common_kwargs}
+        images_kwargs = {**AlignProcessorKwargs.images_kwargs, **images_kwargs, **common_kwargs}
         if text is not None:
-            text_kwargs = {
-                **self.processing_kwargs["text_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
             encoding = self.tokenizer(text, **text_kwargs)
 
         if images is not None:
-            images_kwargs = {
-                **self.processing_kwargs["images_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
             image_features = self.image_processor(images, **images_kwargs)
 
         # BC for explicit return_tensors
-        common_kwargs = {**self.processing_kwargs["common_kwargs"], **kwargs}
         if "return_tensors" in common_kwargs:
             return_tensors = common_kwargs.pop("return_tensors", None)
 
