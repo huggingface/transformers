@@ -737,9 +737,18 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
+            if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
+                current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
+                batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
+                seek_num_frames = torch.tensor([seek_num_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+                time_offset = torch.tensor([time_offset[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+                seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+                max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+                decoder_input_ids = torch.tensor([decoder_input_ids[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1)
+
             # 6.9 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
-                prev_i = batch_idx_map[i]
+                prev_i = batch_idx_map[i] 
 
                 if should_skip[i]:
                     seek[prev_i] += seek_num_frames[prev_i]
@@ -777,7 +786,7 @@ class WhisperGenerationMixin:
         if is_shortform: 
             # add decoder_input_ids tokens:
 
-            sequences = torch.cat([decoder_input_ids, sequences], dim=-1)
+            sequences = torch.cat([decoder_input_ids.to(sequences.device), sequences], dim=-1)
             # add eos token:
             if generation_config.max_new_tokens is None:
                 sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
@@ -831,12 +840,23 @@ class WhisperGenerationMixin:
         should_skip = [False for _ in range(cur_bsz)]
         fallback_index_map = list(range(cur_bsz))
 
+        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1: 
+            seek_sequence_list = [None for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
+            seek_outputs_list = [None for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
+            needs_fallback = [False for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
+            should_skip = [False for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
+            fallback_index_map = list(range(cur_bsz * generation_config.num_return_sequences))
+
         if generation_config.no_speech_threshold is not None:
             self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs)
 
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
             generation_config.temperature = temperature if generation_config.do_sample else 1.0
+            # The following lines are commented for compatibility with the "test_beam_search_generate", but 
+            # in the official whisper repo, num_beams is set to 1 when temperature is 0...
+            # if generation_config.do_sample:
+            #     generation_config.num_beams = 1
 
             generate_kwargs = copy.copy(kwargs)
             for key in ["do_sample", "temperature", "num_beams"]:
@@ -876,7 +896,10 @@ class WhisperGenerationMixin:
 
             for i, seek_sequence in enumerate(seek_sequences):
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                prev_i = batch_idx_map[fallback_index_map[i]]
+                if generation_config.num_return_sequences is not None: 
+                    prev_i = batch_idx_map[fallback_index_map[i // generation_config.num_return_sequences ]]
+                else: 
+                    prev_i = batch_idx_map[fallback_index_map[i]]
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
 
                 # remove eos token id
@@ -908,12 +931,18 @@ class WhisperGenerationMixin:
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
                 is_low_temperature = temperature is None or temperature < 0.5
-                do_condition_on_prev_tokens[fallback_index_map[i]] = (
-                    generation_config.condition_on_prev_tokens and is_low_temperature
-                )
+
+                if generation_config.num_return_sequences is not None: 
+                    do_condition_on_prev_tokens[fallback_index_map[i] // generation_config.num_return_sequences] = (
+                        generation_config.condition_on_prev_tokens and is_low_temperature
+                    )
+                else: 
+                    do_condition_on_prev_tokens[fallback_index_map[i]] = (
+                        generation_config.condition_on_prev_tokens and is_low_temperature
+                    )
 
                 if needs_fallback[i]:
-                    new_fallback_index_map.append(fallback_index_map[i])
+                    new_fallback_index_map.append([i])
                     new_segment_input.append(segment_input[i])
                     new_decoder_input_ids.append(decoder_input_ids[i])
                     if "decoder_attention_mask" in kwargs:
