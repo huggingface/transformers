@@ -13,15 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-"""Finetuning 🤗 Transformers model for instance segmentation leveraging the Trainer API."""
+"""Finetuning 🤗 Transformers model for instance segmentation with Accelerate 🚀."""
 
 import argparse
 import json
-import sys
 import logging
 import math
 import os
-from dataclasses import dataclass
+import sys
 from functools import partial
 from pathlib import Path
 from typing import Any, Mapping
@@ -55,8 +54,8 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
-require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
+check_min_version("4.42.0.dev0")
+require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
 
 supported_models = {
@@ -72,7 +71,7 @@ supported_models = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model for object detection task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model for instance segmentation task")
 
     parser.add_argument(
         "--model_type",
@@ -85,30 +84,24 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to a pretrained model or model identifier from huggingface.co/models.",
-        default="facebook/detr-resnet-50",
+        default="facebook/mask2former-swin-tiny-coco-instance",
     )
     parser.add_argument(
         "--dataset_name",
         type=str,
         help="Name of the dataset on the hub.",
-        default="cppe-5",
-    )
-    parser.add_argument(
-        "--train_val_split",
-        type=float,
-        default=0.15,
-        help="Fraction of the dataset to be used for validation.",
+        default="qubvel-hf/ade20k-mini",
     )
     parser.add_argument(
         "--image_height",
         type=int,
-        default=512,
+        default=384,
         help="The height of the images to feed the model.",
     )
     parser.add_argument(
         "--image_width",
         type=int,
-        default=512,
+        default=384,
         help="The width of the images to feed the model.",
     )
     parser.add_argument(
@@ -381,7 +374,7 @@ def setup_logging(accelerator: Accelerator) -> None:
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    
+
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()

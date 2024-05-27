@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.40.0.dev0")
+check_min_version("4.42.0.dev0")
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
 
@@ -73,21 +73,18 @@ class Arguments:
     """
 
     model_type: str = field(
-        default="maskformer",
+        default="mask2former",
         metadata={"help": "Model type to use for instance segmentation. Choose from 'mask2former', 'maskformer'."},
     )
     model_name_or_path: str = field(
-        default="facebook/detr-resnet-50",
+        default="facebook/mask2former-swin-tiny-coco-instance",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
     dataset_name: str = field(
-        default="cppe-5",
+        default="qubvel-hf/ade20k-mini",
         metadata={
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
         },
-    )
-    train_val_split: Optional[float] = field(
-        default=0.15, metadata={"help": "Percent to split off of train for validation."}
     )
     image_height: Optional[int] = field(default=512, metadata={"help": "Image height after resizing."})
     image_width: Optional[int] = field(default=512, metadata={"help": "Image width after resizing."})
