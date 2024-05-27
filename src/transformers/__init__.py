@@ -283,14 +283,14 @@ _import_structure = {
         "ClvpTokenizer",
     ],
     "models.code_llama": [],
+    "models.codegen": [
+        "CodeGenConfig",
+        "CodeGenTokenizer",
+    ],
     "models.cogvlm": [
         "CogvlmConfig",
         "CogvlmProcessor",
         "CogvlmVisionConfig",
-    ],
-    "models.codegen": [
-        "CodeGenConfig",
-        "CodeGenTokenizer",
     ],
     "models.cohere": ["CohereConfig"],
     "models.conditional_detr": ["ConditionalDetrConfig"],
