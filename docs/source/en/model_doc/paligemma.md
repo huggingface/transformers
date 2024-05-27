@@ -48,7 +48,13 @@ print(processor.decode(output[0], skip_special_tokens=True)[len(prompt):])
 ```
 
 - PaliGemma is not meant for conversational use, and it works best when fine-tuning to a specific use case. Some downstream tasks on which PaliGemma can be fine-tuned include image captioning, visual question answering (VQA), object detection, referring expression segmentation and document understanding.
-- One can use `PaliGemmaProcessor` to prepare all data for the model.
+- One can use `PaliGemmaProcessor` to prepare images, text and optional labels for the model. When fine-tuning a PaliGemma model, the `suffix` argument can be passed to the processor which creates the `labels` for the model:
+
+```python
+prompt = "What is on the flower?"
+answer = "a bee"
+inputs = processor(text=prompt, images=raw_image, suffix=answer, return_tensors="pt")
+```
 
 ## Resources
 
