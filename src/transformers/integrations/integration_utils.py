@@ -692,7 +692,7 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
 
 class WandbCallback(TrainerCallback):
     """
-    A [`TrainerCallback`] that logs metrics, media, model checkpoints to [Weight and Biases](https://www.wandb.com/).
+    A [`TrainerCallback`] that logs metrics, media, evals, and model checkpoints to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(
