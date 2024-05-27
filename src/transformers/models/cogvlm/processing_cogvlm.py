@@ -49,7 +49,7 @@ class CogvlmProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = "LlamaTokenizer"
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, image_size: int, patch_size: int):
         super().__init__(image_processor, tokenizer)
@@ -82,6 +82,8 @@ class CogvlmProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        if images is None and text is None:
+            raise ValueError("You have to specify either images or text.")
 
         input_ids = [self.tokenizer.bos_token_id]
         token_type_ids = [LANGUAGE_TOKEN_TYPE]
@@ -118,12 +120,12 @@ class CogvlmProcessor(ProcessorMixin):
             token_type_ids += [LANGUAGE_TOKEN_TYPE] * len(text_ids)
 
         data = {}
-        data["input_ids"] = [input_ids]
+        data["input_ids"] = [input_ids] if return_tensors is not None else input_ids
         if return_token_type_ids:
-            data["token_type_ids"] = [token_type_ids]
+            data["token_type_ids"] = [token_type_ids] if return_tensors is not None else token_type_ids
         if return_attention_mask:
             attention_mask = [1] * len(input_ids)
-            data["attention_mask"] = [attention_mask]
+            data["attention_mask"] = [attention_mask] if return_tensors is not None else attention_mask
 
         result = BatchFeature(data=data, tensor_type=return_tensors)
 

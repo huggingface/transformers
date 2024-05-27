@@ -29,7 +29,7 @@ if is_vision_available():
         AutoProcessor,
         CLIPImageProcessor,
         CogvlmProcessor,
-        LlamaTokenizer,
+        LlamaTokenizerFast,
         PreTrainedTokenizerFast,
     )
 
@@ -41,7 +41,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = CLIPImageProcessor()
-        tokenizer = LlamaTokenizer.from_pretrained("stas/tiny-random-llama-2")
+        tokenizer = LlamaTokenizerFast.from_pretrained("stas/tiny-random-llama-2")
 
         processor = CogvlmProcessor(image_processor, tokenizer, image_size=10, patch_size=2)
 
