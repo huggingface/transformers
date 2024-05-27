@@ -20,7 +20,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 import albumentations as A
 import numpy as np
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.40.0.dev0")
-require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
+require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
 
 supported_models = {
@@ -179,8 +179,23 @@ def nested_cpu(tensors):
 
 
 class Evaluator:
+    """
+    Compute mean average mAP, mAR and their variants for the object detection task.
+
+    Args:
+        evaluation_results (EvalPrediction): Predictions and targets from evaluation.
+        threshold (float, optional): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
+        id2label (Optional[dict], optional): Mapping from class id to class name. Defaults to None.
+
+    Returns:
+        Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
+    """
+
     def __init__(
-        self, image_processor: Mask2FormerImageProcessor, id2label: Mapping[int, str], threshold: float = 0.0
+        self,
+        image_processor: Union[MaskFormerImageProcessor, Mask2FormerImageProcessor],
+        id2label: Mapping[int, str],
+        threshold: float = 0.0,
     ):
         self.image_processor = image_processor
         self.id2label = id2label
@@ -192,44 +207,31 @@ class Evaluator:
         return metric
 
     def reset_metric(self):
-        self.metric = self.get_metric()
+        self.metric.reset()
 
-    @torch.no_grad()
-    def __call__(self, evaluation_results: EvalPrediction, compute_result: bool = False) -> Mapping[str, float]:
-        """
-        Compute mean average mAP, mAR and their variants for the object detection task.
-
-        Args:
-            evaluation_results (EvalPrediction): Predictions and targets from evaluation.
-            threshold (float, optional): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
-            id2label (Optional[dict], optional): Mapping from class id to class name. Defaults to None.
-
-        Returns:
-            Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
-        """
-
-        prediction_batch = nested_cpu(evaluation_results.predictions)
-        target_batch = nested_cpu(evaluation_results.label_ids)
-
-        # For metric computation we need to provide:
-        #  - targets in a form of list of dictionaries with keys "masks", "labels"
-        #  - predictions in a form of list of dictionaries with keys "masks", "labels", "scores"
-
+    def postprocess_target_batch(self, target_batch) -> List[Dict[str, torch.Tensor]]:
+        """Collect targets in a form of list of dictionaries with keys "masks", "labels"."""
+        batch_masks = target_batch[0]
+        batch_labels = target_batch[1]
         post_processed_targets = []
-        post_processed_predictions = []
-        target_sizes = []
-
-        # Collect targets
-        for masks, labels in zip(target_batch[0], target_batch[1]):
+        for masks, labels in zip(batch_masks, batch_labels):
             post_processed_targets.append(
                 {
                     "masks": masks.to(dtype=torch.bool),
                     "labels": labels,
                 }
             )
-            target_sizes.append(masks.shape[-2:])
+        return post_processed_targets
 
-        # Collect predictions
+    def get_target_sizes(self, post_processed_targets) -> List[List[int]]:
+        target_sizes = []
+        for target in post_processed_targets:
+            target_sizes.append(target["masks"].shape[-2:])
+        return target_sizes
+
+    def postprocess_prediction_batch(self, prediction_batch, target_sizes) -> List[Dict[str, torch.Tensor]]:
+        """Collect predictions in a form of list of dictionaries with keys "masks", "labels", "scores"."""
+
         model_output = ModelOutput(class_queries_logits=prediction_batch[0], masks_queries_logits=prediction_batch[1])
         post_processed_output = self.image_processor.post_process_instance_segmentation(
             model_output,
@@ -237,6 +239,8 @@ class Evaluator:
             target_sizes=target_sizes,
             return_binary_maps=True,
         )
+
+        post_processed_predictions = []
         for image_predictions, target_size in zip(post_processed_output, target_sizes):
             if image_predictions["segments_info"]:
                 post_processed_image_prediction = {
@@ -252,6 +256,21 @@ class Evaluator:
                     "scores": torch.tensor([]),
                 }
             post_processed_predictions.append(post_processed_image_prediction)
+
+        return post_processed_predictions
+
+    @torch.no_grad()
+    def __call__(self, evaluation_results: EvalPrediction, compute_result: bool = False) -> Mapping[str, float]:
+        
+        prediction_batch = nested_cpu(evaluation_results.predictions)
+        target_batch = nested_cpu(evaluation_results.label_ids)
+
+        # For metric computation we need to provide:
+        #  - targets in a form of list of dictionaries with keys "masks", "labels"
+        #  - predictions in a form of list of dictionaries with keys "masks", "labels", "scores"
+        post_processed_targets = self.postprocess_target_batch(target_batch)
+        target_sizes = self.get_target_sizes(post_processed_targets)
+        post_processed_predictions = self.postprocess_prediction_batch(prediction_batch, target_sizes)
 
         # Compute metrics
         self.metric.update(post_processed_predictions, post_processed_targets)
@@ -443,8 +462,7 @@ def main():
 
     # Final evaluation
     if training_args.do_eval:
-        eval_dataset = dataset["test"] if "test" in dataset else dataset["validation"]
-        metrics = trainer.evaluate(eval_dataset=eval_dataset, metric_key_prefix="test")
+        metrics = trainer.evaluate(eval_dataset=dataset["validation"], metric_key_prefix="test")
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
 
