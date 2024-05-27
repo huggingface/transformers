@@ -190,6 +190,40 @@ class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size * 2, *expected_output_image_shape)
         )
 
-    @unittest.skip(reason="ViTPoseImageProcessor does not support 4 channels for now")
     def test_call_numpy_4_channels(self):
-        pass
+        # Test that can process images which have an arbitrary number of channels
+        # Initialize image_processing
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+        # Test not batched input
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]]
+        encoded_images = image_processor(
+            image_inputs[0],
+            boxes=boxes,
+            return_tensors="pt",
+            input_data_format="channels_first",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (len(boxes[0]), *expected_output_image_shape))
+
+        # Test batched
+        boxes = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * self.image_processor_tester.batch_size
+        encoded_images = image_processor(
+            image_inputs,
+            boxes=boxes,
+            return_tensors="pt",
+            input_data_format="channels_first",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape),
+            (self.image_processor_tester.batch_size * len(boxes[0]), *expected_output_image_shape),
+        )
