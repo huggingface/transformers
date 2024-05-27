@@ -7,7 +7,7 @@ import libcst as cst
 from check_copies import fix_ruff
 from libcst import ClassDef, CSTTransformer, CSTVisitor
 from libcst import matchers as m
-from libcst.metadata import MetadataWrapper, ParentNodeProvider, ScopeProvider
+from libcst.metadata import MetadataWrapper, ParentNodeProvider, ScopeProvider, PositionProvider
 
 
 
@@ -24,7 +24,19 @@ def get_module_source_from_name(module_name: str) -> str:
 
 
 class ClassFinder(CSTVisitor):
-    METADATA_DEPENDENCIES = (ParentNodeProvider,ScopeProvider)
+    """A visitor class which analyses a module, creating a mapping of dependencies between classes and functions.
+    For example if the visited code has 
+    ```python3
+    def init_value(): return 1
+
+    class LlamaModel(PreTrainedModel):
+        def __init__(self):
+            super().__init__(self)
+            self.value = init_value()
+    ```
+    then the `class_dependency_mapping` should be: `{"LlamaModel":{"PreTrainedModel":{},"init_value":{}}, "init_value":{}}
+    """
+    METADATA_DEPENDENCIES = (ParentNodeProvider,ScopeProvider,PositionProvider)
 
     def __init__(self, python_module):
         self.python_module = python_module
@@ -37,7 +49,7 @@ class ClassFinder(CSTVisitor):
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.classes[node.name.value] = node
-        for k in node.bases:
+        for k in node.bases: # deal with inheritance
             name = self.python_module.code_for_node(k)
             self.class_dependency_mapping.update(
                 {
@@ -73,18 +85,12 @@ class ClassFinder(CSTVisitor):
             dad = self.get_metadata(cst.metadata.ScopeProvider,node)
             if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
                 print(f"Name:\t\t{node.value:<45} called in {dad._name_prefix}") 
-                if hasattr(dad.parent, "name"):
-                    name = dad._name_prefix.split(".")[0]
-                    if name not in self.class_dependency_mapping:
-                        self.class_dependency_mapping[name] = {node.value:self.class_dependency_mapping.get(node.value)}
-                    else:
-                        self.class_dependency_mapping[name].update({node.value:self.class_dependency_mapping.get(node.value)})
-                elif hasattr(dad, "name"):
-                    name = dad.name
-                    if dad.name not in self.class_dependency_mapping:
-                        self.class_dependency_mapping[dad.name] = {node.value:self.class_dependency_mapping.get(node.value)}
-                    else:
-                        self.class_dependency_mapping[dad.name].update( {node.value:self.class_dependency_mapping.get(node.value)}) 
+                name = dad._name_prefix.split(".")[0]
+                dep = {node.value:self.class_dependency_mapping.get(name)}
+                if name not in self.class_dependency_mapping:
+                    self.class_dependency_mapping[name] = dep
+                else:
+                    self.class_dependency_mapping[name].update(dep)
 
     def leave_Dict(self, node):
         dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
@@ -93,7 +99,6 @@ class ClassFinder(CSTVisitor):
             if name in self.assignments:
                 for k in node.elements:
                     if k.value.value in self.classes:
-
                         if name not in self.class_dependency_mapping:
                             self.class_dependency_mapping[name] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
                         else:
@@ -106,15 +111,28 @@ class ClassFinder(CSTVisitor):
             for k in node.decorator.args:
                 if k.value.value in self.assignments:
                     dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-                    print(f"Decorator:\t{k.value.value:<45} called in {dad.name.value}")
-                    if dad.name.value not in self.class_dependency_mapping:
-                        self.class_dependency_mapping[dad.name.value] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
+                    scope = self.get_metadata(cst.metadata.ScopeProvider, node)
+                    if scope._name_prefix != "":
+                        name = scope._name_prefix.split(".")[0]
                     else:
-                        self.class_dependency_mapping[dad.name.value].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
+                        name = dad.name.value
+
+                    print(f"Decorator:\t{k.value.value:<45} called in {name}")
+                    if dad.name.value not in self.class_dependency_mapping:
+                        self.class_dependency_mapping[name] = {k.value.value:self.class_dependency_mapping.get(k.value.value)}
+                    else:
+                        self.class_dependency_mapping[name].update( {k.value.value:self.class_dependency_mapping.get(k.value.value)}) 
 
     def leave_Module(self, node):
-        self.global_node = {**self.assignments, **self.classes, **self.function_def}
+        self.global_nodes = {**self.assignments, **self.classes, **self.function_def}
+        # now sort the class dependency_mapping based on the position of the nodes
+        self.class_start_line = {}
+        for id, node in self.global_nodes.items():
+            self.class_start_line[id] = self.get_metadata(cst.metadata.PositionProvider,node).start.line 
+
+
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
+    """A transformer that replaces `old_name` with `new_name` in comments, string and any references"""
     def __init__(self, old_name, new_name):
         super().__init__()
         self.new_name = new_name
@@ -142,6 +160,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
 
 def find_classes_in_file(module, old_id="llama", new_id="gemma"):
+    """Helper function to rename and then parse a source file using the ClassFinder"""
     transformer = ReplaceNameTransformer(old_id, new_id)
     new_module = module.visit(transformer)
 
@@ -151,13 +170,51 @@ def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     wrapper.visit(class_finder)
     return class_finder
 
+def replace_call_to_super(class_finder:ClassFinder, updated_node:cst.ClassDef, class_name:str):
+    replacement_node = class_finder.classes[class_name]
+    # Copy methods from original node to replacement node, preserving decorators
+    updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
+    replacement_methods = {
+        f.name.value: f for f in replacement_node.body.body if m.matches(f, m.FunctionDef())
+    }
+
+    for name, func in updated_methods.items():
+        if name in replacement_methods:
+            # Replace the method in the replacement class, preserving decorators
+            replacement_func = replacement_methods[name].with_changes(
+                decorators=replacement_methods[name].decorators,  # TODO a union or set might be better
+                body=func.body,
+            )
+            replacement_methods[name] = replacement_func
+
+    # Rebuild the class body with updated methods
+    new_body = [
+        replacement_methods.get(f.name.value, f) if m.matches(f, m.FunctionDef()) else f
+        for f in replacement_node.body.body
+    ]
+
+    new_replacement_class = replacement_node.with_changes(body=cst.IndentedBlock(body=new_body))
+
+    temp_module = cst.Module(body=[replacement_node])
+    new_module = MetadataWrapper(temp_module)
+    # Ensure calls to `super()` in `__init__` are preserved
+    new_replacement_class = new_module.visit(
+        SuperTransformer(
+            temp_module,
+            {f.name.value: f for f in replacement_node.body.body if m.matches(f, m.FunctionDef())},
+        )
+    ).body[0]
+
+    return new_replacement_class
 
 class DiffConverterTransformer(CSTTransformer):
+    METADATA_DEPENDENCIES = (ParentNodeProvider,ScopeProvider,PositionProvider)
+
     def __init__(self, python_module):
         super().__init__()
         self.python_module = python_module
         self.transformers_imports = {}
-        self.transformers_mapping = {}
+        self.imported_mapping = {}
         self.class_mapping = {}
         self.visited_module = {}
         self.python_module = python_module
@@ -165,134 +222,101 @@ class DiffConverterTransformer(CSTTransformer):
         self.inserted_functions = set()
         self.new_body = []
 
+    def visit_functionDef(self, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            self.new_body.append(node) 
+
+
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         if m.matches(node.module, m.Attribute()):
-            full_statement = self.python_module.code_for_node(node.module)
+            import_statement = self.python_module.code_for_node(node.module)
             for imported_ in node.names:
-                if re.search(r"transformers\.models\..*\.modeling_.*", full_statement):
-                    if full_statement not in self.transformers_imports:
-                        source_code = get_module_source_from_name(full_statement)
+                if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement):
+                    if import_statement not in self.transformers_imports:
+                        source_code = get_module_source_from_name(import_statement)
                         tree = cst.parse_module(source_code)
-                        self.transformers_imports[full_statement] = tree
-                    self.transformers_mapping[self.python_module.code_for_node(imported_.name)] = full_statement
-                if re.search(r"transformers\.models\..*\.configuration_.*", full_statement):
-                    if full_statement not in self.transformers_imports:
-                        source_code = get_module_source_from_name(full_statement)
-                        tree = cst.parse_module(source_code)
-                        self.transformers_imports[full_statement] = tree
-                    self.transformers_mapping[self.python_module.code_for_node(imported_.name)] = full_statement
-
-    def visit_ClassDef(self, node: cst.Assign) -> None:
-        if m.matches(node.name, m.Name()):
-            super_class = [k.value.value for k in node.bases if k.value.value in self.transformers_mapping]
-            class_name = node.name.value
-            if len(super_class) > 0:
-                super_class = super_class[0]
-                parent_package = self.transformers_mapping.get(super_class, None)
-                if parent_package and parent_package not in self.visited_module:
-                    old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
-                    new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
-                    # We need to find all the classes, to copy everything, if they are used
-                    class_finder = find_classes_in_file(
-                        self.transformers_imports[parent_package], old_name, new_name
-                    )
-                    self.visited_module[parent_package] = class_finder
-
-                    # I don't know what this is
-                    self.class_mapping[self.python_module.code_for_node(node)] = class_finder.classes[class_name]
-
-                if self.visited_module[parent_package]:
-                    class_finder = self.visited_module[parent_package]
-                    list_dependencies = class_finder.class_dependency_mapping[class_name]
-                    for dependency in list_dependencies:
-                        # TODO the dependencies needs to be properly handled
-                        node = class_finder.global_node.get(dependency, None)
-                        if node is not None and node not in self.new_body:
-                            self.new_body += [node]
-                    # finally add the code of the current class
-                    self.new_body += [class_finder.classes[class_name]]
-
+                        self.transformers_imports[import_statement] = tree
+                    imported_class = self.python_module.code_for_node(imported_.name) 
+                    self.imported_mapping[imported_class] = import_statement
 
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
         match updated_node:
-            # note: this is just a plain copy & paste of the pattern as seen in the CST
+
             case cst.SimpleStatementLine(body=[cst.Assign(targets=[_], value=_)]):
                 assign = self.python_module.code_for_node(original_node.body[0])
                 node = original_node.body[0]
                 if m.matches(node.value, m.Name()) and assign in self.class_mapping:
                     return self.class_mapping[assign]
+
+        # remove all relative imports made in the diff file
+        full_statement = self.python_module.code_for_node(updated_node.body[0])
         if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
-            if re.search(r"transformers\.models\..*\.[modeling|configuration]_.*", full_statement):
+            if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", full_statement):
                 return cst.RemoveFromParent()
+
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
+        if m.matches(parent_node, m.Module()):
+            self.new_body.append(updated_node) 
         return updated_node
 
-    def leave_ClassDef(self, original_node: cst.Assign, updated_node):
-        for base in original_node.bases:
-            base_name = self.python_module.code_for_node(base)
-            if base_name in self.transformers_mapping:
-                super_classes = self.visited_module[self.transformers_mapping[base_name]].classes
-                replacement_class = super_classes[updated_node.name.value]
-                dependencies = self.visited_module[self.transformers_mapping[base_name]].class_dependency_mapping
-                # Copy methods from original node to replacement node, preserving decorators
-                updated_methods = {f.name.value: f for f in updated_node.body.body if m.matches(f, m.FunctionDef())}
-                replacement_methods = {
-                    f.name.value: f for f in replacement_class.body.body if m.matches(f, m.FunctionDef())
-                }
+    def leave_ClassDef(self, original_node, updated_node):
+        class_name = original_node.name.value
+        bases = [k.value.value for k in original_node.bases if k.value.value in self.imported_mapping]
 
-                for name, func in updated_methods.items():
-                    if name in replacement_methods:
-                        # Replace the method in the replacement class, preserving decorators
-                        replacement_func = replacement_methods[name].with_changes(
-                            decorators=replacement_methods[name].decorators,  # TODO a union or set might be better
-                            body=func.body,
-                        )
-                        replacement_methods[name] = replacement_func
+        for super_class in bases:
+            old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
+            if super_class not in self.imported_mapping:
+                raise ImportError(f"{super_class} was not imported using `from transformers.models.{old_name}.modeling_{old_name} import {super_class}")
 
-                # Rebuild the class body with updated methods
-                new_body = [
-                    replacement_methods.get(f.name.value, f) if m.matches(f, m.FunctionDef()) else f
-                    for f in replacement_class.body.body
-                ]
+            super_file_name = self.imported_mapping[super_class] # we need to get the parsed tree
+            new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
+            if super_file_name not in self.visited_module: # only extract classes once
+                class_finder = find_classes_in_file(
+                    self.transformers_imports[super_file_name], old_name, new_name
+                )
+                self.visited_module[super_file_name] = class_finder
+                self.class_mapping[class_name] = class_finder.classes[class_name]
+            else: 
+                class_finder = self.visited_module[super_file_name]
 
-                new_replacement_class = replacement_class.with_changes(body=cst.IndentedBlock(body=new_body))
+            # extract nested dependencies from the base class
+            if self.visited_module[super_file_name]:
+                class_finder = self.visited_module[super_file_name]
+                list_dependencies = {dep:class_finder.class_start_line.get(dep,1000)for dep in class_finder.class_dependency_mapping[class_name]}
+                for dependency, _ in sorted(list_dependencies.items(), key=lambda x:x[1]):
+                    node = class_finder.global_nodes.get(dependency, None)
+                    # make sure the class is not re-defined by the diff file 
+                    if node is not None and node not in self.new_body:
+                        if dependency not in self.class_mapping:
+                            self.new_body.append(node)
+                            self.class_mapping[dependency] = node
 
-                temp_module = cst.Module(body=[new_replacement_class])
-                new_module = MetadataWrapper(temp_module)
-                # Ensure calls to `super()` in `__init__` are preserved
-                new_replacement_class = new_module.visit(
-                    SuperTransformer(
-                        temp_module,
-                        {f.name.value: f for f in replacement_class.body.body if m.matches(f, m.FunctionDef())},
-                    )
-                ).body[0]
+                updated_node  = class_finder.classes[class_name]
 
-                return new_replacement_class
-
-        return updated_node
-
-    def leave_Call(self, original_node, updated_node):
-        func_name = None
-        if m.matches(original_node.func, m.Name()):
-            func_name = original_node.func.value
-        elif m.matches(original_node.func, m.Attribute()):
-            func_name = original_node.func.attr.value
-
-        if func_name and func_name in self.functions_to_insert and func_name not in self.inserted_functions:
-            self.new_body.append(self.functions_to_insert[func_name])
-            self.inserted_functions.add(func_name)
-
+            updated_node = replace_call_to_super(class_finder, updated_node, class_name)
+        self.class_mapping[class_name] = updated_node
         self.new_body.append(updated_node)
         return updated_node
+
+    def leave_If(self, original_node, node):
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
+        if m.matches(parent_node, m.Module()):
+            self.new_body.append(node)
+        return node
+
+    def leave_Expr(self, original_node: cst.Expr, node: cst.Expr) -> cst.Expr:
+        parent_node = self.get_metadata(cst.metadata.ScopeProvider, original_node)
+        if m.matches(parent_node, m.Module()):
+            self.new_body.append(node)
+        return node
     
     def leave_Module(self, original_node: cst.Assign, node):
-        new_body = self.new_body
+        new_body = []
         for visiter in self.visited_module.values():
             new_body += list(visiter.imports.values())
-        #     new_body += list(visiter.assignments.values())
-        #     new_body += list(visiter.function_def.values())
-
-        return node.with_changes(body=[*new_body, *node.body])
+        return node.with_changes(body=[*new_body, *self.new_body])
 
 
 
@@ -374,8 +398,9 @@ def convert_file(diff_file):
     with open(diff_file, "r") as file:
         code = file.read()
     module = cst.parse_module(code)
+    wrapper = MetadataWrapper(module)
     transformers = DiffConverterTransformer(module)
-    new_mod = module.visit(transformers)
+    new_mod = wrapper.visit(transformers)
     ruffed_code = fix_ruff(new_mod.code)
 
     # with open(diff_file.replace("diff_", "modeling_"), "w") as f:
