@@ -4230,7 +4230,7 @@ class Trainer:
             progress of the commit if `blocking=True`.
         """
         model_name = kwargs.pop("model_name", None)
-        
+
         # If one passes `gguf_config`, will create a GGUF converted model using
         # `https://huggingface.co/spaces/ggml-org/gguf-my-repo` Space.
         gguf_config = kwargs.pop("gguf_config", None)
@@ -4285,23 +4285,23 @@ class Trainer:
 
         if gguf_config is not None:
             if not is_gradio_client_available():
-                raise ValueError("You need `gradio_client` installed in order to convert the trained model into GGUF format")
-            
+                raise ValueError(
+                    "You need `gradio_client` installed in order to convert the trained model into GGUF format"
+                )
             from gradio_client import Client
+            from huggingface_hub.utils import get_token_to_send
 
             client = Client("ybelkada/gguf-my-repo")
 
-            result = client.predict(
+            _ = client.predict(
                 model_id=self.hub_model_id,
                 q_method=gguf_config["q_method"],
-                private_repo=False,
+                private_repo=self.args.hub_private_repo,
+                token=get_token_to_send(token),
                 api_name="/predict",
             )
 
-            import pdb; pdb.set_trace()
-
         return upload_results
-
 
     #
     # Deprecated code
