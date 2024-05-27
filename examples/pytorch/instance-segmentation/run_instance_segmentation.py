@@ -177,15 +177,7 @@ def nested_cpu(tensors):
 
 class Evaluator:
     """
-    Compute mean average mAP, mAR and their variants for the object detection task.
-
-    Args:
-        evaluation_results (EvalPrediction): Predictions and targets from evaluation.
-        threshold (float, optional): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
-        id2label (Optional[dict], optional): Mapping from class id to class name. Defaults to None.
-
-    Returns:
-        Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
+    Compute metrics for the instance segmentation task.
     """
 
     def __init__(
@@ -194,6 +186,15 @@ class Evaluator:
         id2label: Mapping[int, str],
         threshold: float = 0.0,
     ):
+        """
+        Initialize evaluator with image processor, id2label mapping and threshold for filtering predictions.
+            
+        Args:
+            image_processor (Union[MaskFormerImageProcessor, Mask2FormerImageProcessor]): Image processor for 
+                `post_process_instance_segmentation` method.
+            id2label (Mapping[int, str]): Mapping from class id to class name.
+            threshold (float): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
+        """
         self.image_processor = image_processor
         self.id2label = id2label
         self.threshold = threshold
@@ -258,7 +259,16 @@ class Evaluator:
 
     @torch.no_grad()
     def __call__(self, evaluation_results: EvalPrediction, compute_result: bool = False) -> Mapping[str, float]:
+        """
+        Update metrics with current evaluation results and return metrics if `compute_result` is True.
         
+        Args:
+            evaluation_results (EvalPrediction): Predictions and targets from evaluation.
+            compute_result (bool): Whether to compute and return metrics.
+
+        Returns:
+            Mapping[str, float]: Metrics in a form of dictionary {<metric_name>: <metric_value>}
+        """
         prediction_batch = nested_cpu(evaluation_results.predictions)
         target_batch = nested_cpu(evaluation_results.label_ids)
 
