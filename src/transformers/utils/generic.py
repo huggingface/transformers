@@ -721,6 +721,19 @@ def add_model_info_to_auto_map(auto_map, repo_id):
     return auto_map
 
 
+def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
+    """
+    Adds the information of the repo_id to a given custom pipeline.
+    """
+    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
+    for task in custom_pipeline.keys():
+        if "impl" in custom_pipeline[task]:
+            module = custom_pipeline[task]["impl"]
+            if "--" not in module:
+                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
+    return custom_pipeline
+
+
 def infer_framework(model_class):
     """
     Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant

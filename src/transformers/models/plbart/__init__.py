@@ -22,7 +22,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"]}
+_import_structure = {"configuration_plbart": ["PLBartConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -39,7 +39,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_plbart"] = [
-        "PLBART_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PLBartForCausalLM",
         "PLBartForConditionalGeneration",
         "PLBartForSequenceClassification",
@@ -49,7 +48,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
+    from .configuration_plbart import PLBartConfig
 
     try:
         if not is_sentencepiece_available():
@@ -66,7 +65,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_plbart import (
-            PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,
             PLBartForCausalLM,
             PLBartForConditionalGeneration,
             PLBartForSequenceClassification,

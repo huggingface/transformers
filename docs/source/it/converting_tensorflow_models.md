@@ -13,12 +13,12 @@ rendered properly in your Markdown viewer.
 
 # Convertire checkpoint di Tensorflow
 
-È disponibile un'interfaccia a linea di comando per convertire gli originali checkpoint di Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM 
+È disponibile un'interfaccia a linea di comando per convertire gli originali checkpoint di Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM
 in modelli che possono essere caricati utilizzando i metodi `from_pretrained` della libreria.
 
 <Tip>
 
-A partire dalla versione 2.3.0 lo script di conversione è parte di transformers CLI (**transformers-cli**), disponibile in ogni installazione 
+A partire dalla versione 2.3.0 lo script di conversione è parte di transformers CLI (**transformers-cli**), disponibile in ogni installazione
 di transformers >=2.3.0.
 
 La seguente documentazione riflette il formato dei comandi di **transformers-cli convert**.
@@ -27,19 +27,19 @@ La seguente documentazione riflette il formato dei comandi di **transformers-cli
 
 ## BERT
 
-Puoi convertire qualunque checkpoint Tensorflow di BERT (in particolare 
-[i modeli pre-allenati rilasciati da Google](https://github.com/google-research/bert#pre-trained-models)) 
-in un file di salvataggio Pytorch utilizzando lo script 
+Puoi convertire qualunque checkpoint Tensorflow di BERT (in particolare
+[i modeli pre-allenati rilasciati da Google](https://github.com/google-research/bert#pre-trained-models))
+in un file di salvataggio Pytorch utilizzando lo script
 [convert_bert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py).
 
-Questo CLI prende come input un checkpoint di Tensorflow (tre files che iniziano con `bert_model.ckpt`) ed il relativo 
+Questo CLI prende come input un checkpoint di Tensorflow (tre files che iniziano con `bert_model.ckpt`) ed il relativo
 file di configurazione (`bert_config.json`), crea un modello Pytorch per questa configurazione, carica i pesi dal
-checkpoint di Tensorflow nel modello di Pytorch e salva il modello che ne risulta in un file di salvataggio standard di Pytorch che 
+checkpoint di Tensorflow nel modello di Pytorch e salva il modello che ne risulta in un file di salvataggio standard di Pytorch che
 può essere importato utilizzando `from_pretrained()` (vedi l'esempio nel
 [quicktour](quicktour) , [run_glue.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_glue.py) ).
 
-Devi soltanto lanciare questo script di conversione **una volta** per ottenere un modello Pytorch. Dopodichè, potrai tralasciare 
-il checkpoint di Tensorflow (i tre files che iniziano con `bert_model.ckpt`), ma assicurati di tenere il file di configurazione 
+Devi soltanto lanciare questo script di conversione **una volta** per ottenere un modello Pytorch. Dopodichè, potrai tralasciare
+il checkpoint di Tensorflow (i tre files che iniziano con `bert_model.ckpt`), ma assicurati di tenere il file di configurazione
 (`bert_config.json`) ed il file di vocabolario (`vocab.txt`) in quanto queste componenti sono necessarie anche per il modello di Pytorch.
 
 Per lanciare questo specifico script di conversione avrai bisogno di un'installazione di Tensorflow e di Pytorch
@@ -59,11 +59,11 @@ Puoi scaricare i modelli pre-allenati di Google per la conversione [qua](https:/
 
 ## ALBERT
 
-Per il modello ALBERT, converti checkpoint di Tensoflow in Pytorch utilizzando lo script 
+Per il modello ALBERT, converti checkpoint di Tensoflow in Pytorch utilizzando lo script
 [convert_albert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py).
 
-Il CLI prende come input un checkpoint di Tensorflow (tre files che iniziano con `model.ckpt-best`) e i relativi file di 
-configurazione (`albert_config.json`), dopodichè crea e salva un modello Pytorch. Per lanciare questa conversione 
+Il CLI prende come input un checkpoint di Tensorflow (tre files che iniziano con `model.ckpt-best`) e i relativi file di
+configurazione (`albert_config.json`), dopodichè crea e salva un modello Pytorch. Per lanciare questa conversione
 avrai bisogno di un'installazione di Tensorflow e di Pytorch.
 
 Ecco un esempio del procedimento di conversione di un modello `ALBERT Base` pre-allenato:
@@ -97,7 +97,7 @@ Ecco un esempio del processo di conversione di un modello OpenAI GPT-2 pre-allen
 
 ```bash
 export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/openai-community/gpt2/pretrained/weights
-transformers-cli convert --model_type openai-community/gpt2 \
+transformers-cli convert --model_type gpt2 \
   --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
   --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
   [--config OPENAI_GPT2_CONFIG] \

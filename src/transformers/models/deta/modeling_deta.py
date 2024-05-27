@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DETA model."""
-
+"""PyTorch DETA model."""
 
 import copy
 import math
@@ -150,9 +149,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DetaConfig"
 _CHECKPOINT_FOR_DOC = "jozhang97/deta-swin-large-o365"
-
-
-from ..deprecated._archive_maps import DETA_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -1033,25 +1029,6 @@ class DetaDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
-class DetaClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
 
 
 class DetaPreTrainedModel(PreTrainedModel):

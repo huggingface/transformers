@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
+"""PyTorch ProphetNet model, ported from ProphetNet repo(fairsequery_states version)."""
 
 import copy
 import math
@@ -42,9 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ProphenetConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/prophetnet-large-uncased"
-
-
-from ..deprecated._archive_maps import PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 PROPHETNET_START_DOCSTRING = r"""

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BARK model."""
+"""PyTorch BARK model."""
+
 import math
 from typing import Dict, Optional, Tuple, Union
 
@@ -62,9 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "suno/bark-small"
 _CONFIG_FOR_DOC = "BarkConfig"
-
-
-from ..deprecated._archive_maps import BARK_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data

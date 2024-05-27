@@ -15,6 +15,7 @@
 """
 Fast tokenizer class for Nougat.
 """
+
 import re
 from functools import partial
 from multiprocessing import Pool

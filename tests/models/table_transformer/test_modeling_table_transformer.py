@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Table Transformer model. """
-
+"""Testing suite for the PyTorch Table Transformer model."""
 
 import inspect
 import math
@@ -259,6 +258,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Table Transformer does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")

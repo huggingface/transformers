@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Falcon model. """
-
+"""Testing suite for the PyTorch Falcon model."""
 
 import tempfile
 import unittest
@@ -603,6 +602,25 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     @slow
+    @require_bitsandbytes
+    def test_lm_generate_falcon_11b(self):
+        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
+        model = FalconForCausalLM.from_pretrained(
+            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
+        )
+        model.eval()
+        inputs = tokenizer(
+            "Two roads diverged in a yellow wood,", return_tensors="pt", return_token_type_ids=False
+        ).to(torch_device)
+
+        EXPECTED_OUTPUT = "Two roads diverged in a yellow wood,\nAnd sorry I could not travel both\n"
+
+        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=9)
+        output_str = tokenizer.batch_decode(output_ids)[0]
+
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
+
+    @slow
     def test_lm_generation_big_models(self):
         # The big models are way too big for the CI, so we use tiny random models that resemble their
         # architectures but with much smaller and fewer layers
@@ -647,7 +665,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             "tiiuae/falcon-7b",
-            device_map="auto",
+            device_map={"": torch_device},
             load_in_4bit=True,
         )
 

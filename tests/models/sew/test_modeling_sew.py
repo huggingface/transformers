@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Hubert model. """
-
+"""Testing suite for the PyTorch Hubert model."""
 
 import math
 import unittest
@@ -354,6 +353,18 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

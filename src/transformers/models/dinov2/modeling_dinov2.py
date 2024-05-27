@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DINOv2 model."""
-
+"""PyTorch DINOv2 model."""
 
 import collections.abc
 import math
@@ -56,9 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-small-imagenet1k-1-layer"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class Dinov2Embeddings(nn.Module):
@@ -481,6 +477,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Dinov2SwiGLUFFN"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
