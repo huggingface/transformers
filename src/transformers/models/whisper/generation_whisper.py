@@ -991,7 +991,22 @@ class WhisperGenerationMixin:
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
-        def split_by_batch_index(values, key, batch_idx):
+        def split_by_batch_index(values, key, batch_idx, generation_config):
+            
+            if generation_config.num_return_sequences is not None: 
+                if key in ['scores', "encoder_attentions", 'encoder_hidden_states']: 
+                    return [v[batch_idx // generation_config.num_return_sequences].cpu() for v in values]
+                if key == 'logits': 
+                    return [v[batch_idx].cpu() for v in values]
+                if key in ["decoder_attentions", "decoder_hidden_states"]:
+                    return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
+
+                if key == "cross_attentions": 
+                    if isinstance(values[batch_idx // generation_config.num_return_sequences], tuple): 
+                        return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
+                    else: 
+                        [v[batch_idx // generation_config.num_return_sequences].cpu() for v in values]    
+
             if key in ["scores", "encoder_attentions"]:
                 return [v[batch_idx].cpu() for v in values]
             elif key == "past_key_values":
@@ -1004,7 +1019,7 @@ class WhisperGenerationMixin:
         sequence_tokens = seek_outputs["sequences"]
 
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
+            {k: split_by_batch_index(v, k, i, generation_config) for k, v in seek_outputs.items()}
             for i in range(sequence_tokens.shape[0])
         ]
 
