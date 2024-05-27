@@ -791,7 +791,7 @@ class WhisperGenerationMixin:
             if generation_config.return_dict_in_generate:
                 if return_token_timestamps:
                     seek_outputs_short_form['token_timestamps'] = outputs['token_timestamps']
-                return GenerateEncoderDecoderOutput(seek_outputs_short_form)
+                return seek_outputs_short_form
 
             else: 
                 return outputs
@@ -837,8 +837,6 @@ class WhisperGenerationMixin:
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
             generation_config.temperature = temperature if generation_config.do_sample else 1.0
-            if generation_config.do_sample:
-                generation_config.num_beams = 1
 
             generate_kwargs = copy.copy(kwargs)
             for key in ["do_sample", "temperature", "num_beams"]:
