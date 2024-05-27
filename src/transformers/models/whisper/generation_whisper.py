@@ -572,16 +572,16 @@ class WhisperGenerationMixin:
         #             [prompt_ids[None].repeat(decoder_input_ids.shape[0], 1), decoder_input_ids], dim=-1
         #         )
 
-        #     max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
-        #     if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
-        #         raise ValueError(
-        #             f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-        #             f"is {max_new_tokens}. Thus, the combined length of "
-        #             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
-        #             f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
-        #             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-        #             f"so that their combined length is less than {self.config.max_target_positions}."
-        #         )
+        # max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
+        # if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
+        #     raise ValueError(
+        #         f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+        #         f"is {max_new_tokens}. Thus, the combined length of "
+        #         f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+        #         f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+        #         "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+        #         f"so that their combined length is less than {self.config.max_target_positions}."
+        #     )
 
         #     outputs = super().generate(
         #         input_features,
@@ -687,6 +687,17 @@ class WhisperGenerationMixin:
                 suppress_tokens=suppress_tokens,
                 kwargs=kwargs,
             )
+
+            max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
+            if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
+                raise ValueError(
+                    f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+                    f"is {max_new_tokens}. Thus, the combined length of "
+                    f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+                    f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+                    "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+                    f"so that their combined length is less than {self.config.max_target_positions}."
+                )
 
 
             # 6.6 set max new tokens or max length
@@ -1000,7 +1011,6 @@ class WhisperGenerationMixin:
                     return [v[batch_idx].cpu() for v in values]
                 if key in ["decoder_attentions", "decoder_hidden_states"]:
                     return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-
                 if key == "cross_attentions": 
                     if isinstance(values[batch_idx // generation_config.num_return_sequences], tuple): 
                         return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
