@@ -16,16 +16,19 @@
 Image/Text processor class for ALIGN
 """
 
-
 from typing import List, Union
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, ImagesKwargs, CommonKwargs, add_expanded_type_hints
-from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import is_torch_available, is_vision_available
 
 # TODO fix forward referencing of costly modules to import as below
-import PIL
-import torch
+from ...image_utils import ImageInput
+from ...processing_utils import (
+    CommonKwargs,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    add_expanded_type_hints,
+)
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class AlignProcessorKwargs(ProcessingKwargs):
@@ -62,9 +65,7 @@ class AlignProcessorKwargs(ProcessingKwargs):
         "input_data_format": None,
     }
 
-    common_kwargs: CommonKwargs = {
-        "return_tensors": None
-    }
+    common_kwargs: CommonKwargs = {"return_tensors": None}
 
 
 class AlignProcessor(ProcessorMixin):
@@ -90,7 +91,11 @@ class AlignProcessor(ProcessorMixin):
         self.base_kwargs = AlignProcessorKwargs()
         super().__init__(image_processor, tokenizer)
 
-    @add_expanded_type_hints(text_kwargs=TextKwargs, images_kwargs=ImagesKwargs, common_kwargs=CommonKwargs,)
+    @add_expanded_type_hints(
+        text_kwargs=TextKwargs,
+        images_kwargs=ImagesKwargs,
+        common_kwargs=CommonKwargs,
+    )
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
@@ -100,7 +105,7 @@ class AlignProcessor(ProcessorMixin):
         text_kwargs: TextKwargs = None,
         images_kwargs: ImagesKwargs = None,
         common_kwargs: CommonKwargs = None,
-        **kwargs: AlignProcessorKwargs
+        **kwargs: AlignProcessorKwargs,
     ) -> BatchEncoding:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
@@ -136,9 +141,9 @@ class AlignProcessor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
-        text_kwargs = kwargs.pop('text_kwargs', {})
-        images_kwargs = kwargs.pop('images_kwargs', {})
-        common_kwargs = kwargs.pop('common_kwargs', {})
+        text_kwargs = kwargs.pop("text_kwargs", {})
+        images_kwargs = kwargs.pop("images_kwargs", {})
+        common_kwargs = kwargs.pop("common_kwargs", {})
 
         for key, value in kwargs.items():
             if key in AlignProcessorKwargs.text_kwargs:

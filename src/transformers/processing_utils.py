@@ -22,7 +22,7 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union, Callable, get_type_hints, ForwardRef, _eval_type
+from typing import Any, Callable, Dict, ForwardRef, List, Optional, Tuple, TypedDict, Union, _eval_type
 
 import numpy as np
 
@@ -86,13 +86,14 @@ def add_expanded_type_hints(**new_hints):
         localns = locals()
         expanded_hints = {}
         for key, hint in new_hints.items():
-            if isinstance(hint, type) and hasattr(hint, '__annotations__'):
+            if isinstance(hint, type) and hasattr(hint, "__annotations__"):
                 expanded_hints.update(expand_typed_dict_annotations(hint, globalns, localns))
             else:
                 expanded_hints[key] = hint
 
         func.__annotations__.update(expanded_hints)
         return func
+
     return decorator
 
 
