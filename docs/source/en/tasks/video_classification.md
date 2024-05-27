@@ -104,6 +104,31 @@ UCF101_subset/
         ...
 ```
 
+You can then count the number of total videos.
+
+```py 
+>>> import pathlib
+>>> dataset_root_path = "UCF101_subset"
+>>> dataset_root_path = pathlib.Path(dataset_root_path)
+```
+
+```py 
+>>> video_count_train = len(list(dataset_root_path.glob("train/*/*.avi")))
+>>> video_count_val = len(list(dataset_root_path.glob("val/*/*.avi")))
+>>> video_count_test = len(list(dataset_root_path.glob("test/*/*.avi")))
+>>> video_total = video_count_train + video_count_val + video_count_test
+>>> print(f"Total videos: {video_total}")
+```
+
+```py 
+>>> all_video_file_paths = (
+...     list(dataset_root_path.glob("train/*/*.avi"))
+...     + list(dataset_root_path.glob("val/*/*.avi"))
+...     + list(dataset_root_path.glob("test/*/*.avi"))
+...  )
+>>> all_video_file_paths[:5]
+```
+
 The (`sorted`) video paths appear like so:
 
 ```bash

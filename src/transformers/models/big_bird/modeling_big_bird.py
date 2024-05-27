@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BigBird model."""
-
+"""PyTorch BigBird model."""
 
 import math
 import os
@@ -53,9 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
-
-
-from ..deprecated._archive_maps import BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 _TRIVIA_QA_MAPPING = {
@@ -922,11 +918,9 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
                 :, :, :, :to_block_size
             ]  # 1st key block (global)
-            attention_probs[
-                :, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :
-            ] = second_last_attn_weights[
-                :, :, :, to_block_size : 4 * to_block_size
-            ]  # last three blocks (global + sliding)
+            attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
+                second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
+            )  # last three blocks (global + sliding)
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
                 # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
@@ -1704,6 +1698,9 @@ class BigBirdLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -2263,6 +2260,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=BigBirdForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -2375,6 +2373,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2516,6 +2515,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

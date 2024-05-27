@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CANINE model. """
-
+"""Testing suite for the PyTorch CANINE model."""
 
 import unittest
 from typing import List, Tuple
@@ -500,6 +499,10 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")
     def test_inputs_embeds(self):
         # ViT does not use inputs_embeds
+        pass
+
+    @unittest.skip(reason="Canine Tower does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip("CANINE does not have a get_input_embeddings() method.")

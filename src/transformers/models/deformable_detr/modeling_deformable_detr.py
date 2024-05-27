@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Deformable DETR model."""
-
+"""PyTorch Deformable DETR model."""
 
 import copy
 import math
@@ -88,9 +87,24 @@ def load_cuda_kernels():
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
+
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+
+if is_timm_available():
+    from timm import create_model
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "DeformableDetrConfig"
+_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -139,21 +153,6 @@ class MultiScaleDeformableAttentionFunction(Function):
         )
 
         return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
-
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
-
-if is_timm_available():
-    from timm import create_model
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "DeformableDetrConfig"
-_CHECKPOINT_FOR_DOC = "sensetime/deformable-detr"
-
-
-from ..deprecated._archive_maps import DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -420,17 +419,23 @@ class DeformableDetrConvEncoder(nn.Module):
 
         self.config = config
 
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
-            kwargs = {}
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (2, 3, 4) if config.num_feature_levels > 1 else (4,))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
-                kwargs["output_stride"] = 16
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
+                out_indices=out_indices,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:
@@ -1060,25 +1065,6 @@ class DeformableDetrDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
-class DeformableDetrClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
 class DeformableDetrPreTrainedModel(PreTrainedModel):
     config_class = DeformableDetrConfig
     base_model_prefix = "model"
@@ -1629,8 +1615,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = meshgrid(
-                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(0, height - 1, height, dtype=enc_output.dtype, device=enc_output.device),
+                torch.linspace(0, width - 1, width, dtype=enc_output.dtype, device=enc_output.device),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)

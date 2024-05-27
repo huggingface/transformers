@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Whisper."""
+
 import json
 import os
 import warnings
@@ -815,13 +816,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that ignores role information and just concatenates messages with EOS tokens.
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
@@ -903,11 +897,15 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     right_stride_start = None
 
     all_special_ids = set(tokenizer.all_special_ids)
+    prompt_token_id = tokenizer.convert_tokens_to_ids("<|startofprev|>")
+    decoder_start_token_id = tokenizer.convert_tokens_to_ids("<|startoftranscript|>")
     # - iterate over all outputs
     for chunk_id, output in enumerate(model_outputs):
         # We can drop everything to Python list, it's going to make
         # our lives easier
         token_ids = output["tokens"][0].tolist()
+        # (possibly) remove the prompt from the token ids
+        token_ids = tokenizer._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
         if return_timestamps == "word":
             token_timestamps = output["token_timestamps"][0].tolist()
 

@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Table Transformer model configuration"""
+"""Table Transformer model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -25,9 +26,6 @@ from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-
-from ..deprecated._archive_maps import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP  # noqa: F401, E402
 
 
 class TableTransformerConfig(PretrainedConfig):
@@ -193,7 +191,16 @@ class TableTransformerConfig(PretrainedConfig):
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-        if not use_timm_backbone:
+        # We default to values which were previously hard-coded in the model. This enables configurability of the config
+        # while keeping the default behavior the same.
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {}
+            if dilation:
+                backbone_kwargs["output_stride"] = 16
+            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+            backbone_kwargs["in_chans"] = num_channels
+        # Backwards compatibility
+        elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -201,8 +208,9 @@ class TableTransformerConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            backbone = None
             # set timm attributes to None
-            dilation, backbone, use_pretrained_backbone = None, None, None
+            dilation = None
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config

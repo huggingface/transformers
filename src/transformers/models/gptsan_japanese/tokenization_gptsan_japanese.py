@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for GPTSANJapanese."""
+
 import collections
 import json
 import os
@@ -246,13 +247,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
         information.
         """
-        logger.warning_once(
-            "No chat template is set for this tokenizer, falling back to a default class-level template. "
-            "This is very error-prone, because models are often trained with templates different from the class "
-            "default! Default chat templates are a legacy feature and will be removed in Transformers v4.43, at which "
-            "point any code depending on them will stop working. We recommend setting a valid chat template before "
-            "then to ensure that this model continues working without issues."
-        )
         return (
             "{% for message in messages %}"
             "{% if not loop.first %}{{ bos_token}}{% endif %}"
@@ -359,6 +353,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        **kwargs,
     ) -> BatchEncoding:
         # This tokenizer converts input text pairs into Prefix input and subsequent input
         if isinstance(batch_text_or_text_pairs[0], tuple) or isinstance(tuple(batch_text_or_text_pairs[0]), list):
@@ -385,6 +380,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             return_offsets_mapping,
             return_length,
             verbose,
+            **kwargs,
         )
 
 

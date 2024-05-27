@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+"""Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
 
 import functools
 import json
@@ -28,7 +28,6 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import evaluate
-import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
 
@@ -51,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.41.0.dev0")
+check_min_version("4.42.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -252,12 +251,6 @@ class DataTrainingArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
@@ -411,15 +404,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if data_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if data_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        data_args.token = data_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -712,10 +696,14 @@ def main():
         logger.info(f"Data preprocessing finished. Files cached at {vectorized_datasets.cache_files}")
         return
 
-    def compute_metrics(pred):
-        pred_logits = pred.predictions
-        pred_ids = np.argmax(pred_logits, axis=-1)
+    # For languages like Chinese with large vocabulary size, we need to discard logits
+    # and only keep the argmax, otherwise we run out of memory during evaluation.
+    def preprocess_logits_for_metrics(logits, labels):
+        pred_ids = torch.argmax(logits, dim=-1)
+        return pred_ids, labels
 
+    def compute_metrics(pred):
+        pred_ids = pred.predictions[0]
         pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
 
         pred_str = tokenizer.batch_decode(pred_ids)
@@ -762,6 +750,7 @@ def main():
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
         tokenizer=processor,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     # 8. Finally, we can start training

@@ -1246,6 +1246,14 @@ class AcceleratorConfig:
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`.
               sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch.
                 The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`.
+        non_blocking (`bool`, *optional*, defaults to `False`):
+            Whether to use non-blocking CUDA calls to help minimize synchronization during
+            distributed training with prepared `DataLoader` inputs being moved to device.
+            Best if used with `pin_memory=True` in the `TrainingArguments`.
+        use_configured_state (`bool*, *optional*, defaults to `False`):
+            Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined
+            before calling `TrainingArguments`. If `True`, an `Accelerator` or `PartialState`
+            must be initialized. May lead to issues using sweeps or hyperparameter tuning.
 
     """
 
@@ -1284,6 +1292,17 @@ class AcceleratorConfig:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+
+    non_blocking: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
+            "distributed training with prepared `DataLoader` inputs being moved to device. "
+            "Best if used with `pin_memory=True` in the `TrainingArguments`. Requires accelerate "
+            "v0.30.0."
+        },
+    )
+
     gradient_accumulation_kwargs: Optional[Dict] = field(
         default=None,
         metadata={
@@ -1295,6 +1314,13 @@ class AcceleratorConfig:
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `True`. "
             "  sync_each_batch (`bool`): Whether to synchronize the gradients at each data batch. "
             "    The [`accelerate.utils.GradientAccumulationPlugin`] default is `False`."
+        },
+    )
+    use_configured_state: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether or not to use a pre-configured `AcceleratorState` or `PartialState` defined before calling `TrainingArguments`."
+            "If `True`, an `Accelerator` or `PartialState` must be initialized. May lead to issues using sweeps or hyperparameter tuning."
         },
     )
 
@@ -1315,6 +1341,9 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
+
+    def pop(self, key, default=None):
+        return self.__dict__.pop(key, default)
 
 
 class LayerWiseDummyOptimizer(torch.optim.Optimizer):

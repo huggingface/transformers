@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Table Transformer model."""
-
+"""PyTorch Table Transformer model."""
 
 import math
 from dataclasses import dataclass
@@ -59,9 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TableTransformerConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/table-transformer-detection"
-
-
-from ..deprecated._archive_maps import TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -279,17 +275,23 @@ class TableTransformerConvEncoder(nn.Module):
 
         self.config = config
 
+        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
         if config.use_timm_backbone:
+            # We default to values which were previously hard-coded. This enables configurability from the config
+            # using backbone arguments, while keeping the default behavior the same.
             requires_backends(self, ["timm"])
-            kwargs = {}
+            kwargs = getattr(config, "backbone_kwargs", {})
+            kwargs = {} if kwargs is None else kwargs.copy()
+            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
+            num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
-                kwargs["output_stride"] = 16
+                kwargs["output_stride"] = kwargs.get("output_stride", 16)
             backbone = create_model(
                 config.backbone,
                 pretrained=config.use_pretrained_backbone,
                 features_only=True,
-                out_indices=(1, 2, 3, 4),
-                in_chans=config.num_channels,
+                out_indices=out_indices,
+                in_chans=num_channels,
                 **kwargs,
             )
         else:
@@ -458,23 +460,7 @@ class TableTransformerAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
@@ -485,38 +471,8 @@ class TableTransformerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        position_embeddings = kwargs.pop("position_ebmeddings", None)
-        key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if key_value_position_embeddings is not None and spatial_position_embeddings is not None:
-            raise ValueError(
-                "Cannot specify both key_value_position_embeddings and spatial_position_embeddings. Please use just spatial_position_embeddings"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
-        if key_value_position_embeddings is not None:
-            logger.warning_once(
-                "key_value_position_embeddings has been deprecated and will be removed in v4.34. Please use spatial_position_embeddings instead"
-            )
-            spatial_position_embeddings = key_value_position_embeddings
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -779,25 +735,6 @@ class TableTransformerDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrClassificationHead with Detr->TableTransformer
-class TableTransformerClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
 class TableTransformerPreTrainedModel(PreTrainedModel):
     config_class = TableTransformerConfig
     base_model_prefix = "model"
@@ -1036,7 +973,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         Args:
@@ -1074,22 +1010,6 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MPNet model."""
 
-
 import math
 from typing import Optional, Tuple, Union
 
@@ -43,9 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
-
-
-from ..deprecated._archive_maps import MPNET_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
@@ -584,6 +580,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -654,6 +651,9 @@ class MPNetLMHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def _tie_weights(self):
         self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):

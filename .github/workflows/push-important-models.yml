@@ -97,7 +97,7 @@ jobs:
       
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
@@ -119,7 +119,7 @@ jobs:
 
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main 
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
@@ -127,7 +127,7 @@ jobs:
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        if: ${{ failure() || runner.debug == '1'}}
+        if: ${{ runner.debug == '1'}}
         uses: huggingface/tailscale-action@v1
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}

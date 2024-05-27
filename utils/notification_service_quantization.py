@@ -200,7 +200,7 @@ if __name__ == "__main__":
             "job_link": {},
         }
         for quant in quantization_matrix
-        if f"run_tests_quantization_torch_gpu_{quant}" in available_artifacts
+        if f"run_quantization_torch_gpu_{ quant }_test_reports" in available_artifacts
     }
 
     github_actions_jobs = get_jobs(
@@ -217,7 +217,7 @@ if __name__ == "__main__":
                 break
 
     for quant in quantization_results.keys():
-        for artifact_path in available_artifacts[f"run_tests_quantization_torch_gpu_{quant}"].paths:
+        for artifact_path in available_artifacts[f"run_quantization_torch_gpu_{ quant }_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -241,6 +241,13 @@ if __name__ == "__main__":
                         quantization_results[quant]["failures"][artifact_path["gpu"]].append(
                             {"line": line, "trace": stacktraces.pop(0)}
                         )
+
+    job_name = os.getenv("CI_TEST_JOB")
+    if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
+        os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
+
+    with open(f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8") as fp:
+        json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
 
     message = QuantizationMessage(
         title,

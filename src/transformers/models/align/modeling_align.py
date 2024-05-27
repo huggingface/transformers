@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ALIGN model."""
+"""PyTorch ALIGN model."""
 
 import math
 from dataclasses import dataclass
@@ -45,9 +45,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "kakaobrain/align-base"
 _CONFIG_FOR_DOC = "AlignConfig"
-
-
-from ..deprecated._archive_maps import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 ALIGN_START_DOCSTRING = r"""
@@ -883,11 +880,18 @@ class AlignTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText
+ALIGN_TEXT_SELF_ATTENTION_CLASSES = {
+    "eager": AlignTextSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->AlignText,BERT->ALIGN_TEXT
 class AlignTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = AlignTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = ALIGN_TEXT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = AlignTextSelfOutput(config)
         self.pruned_heads = set()
 
@@ -1196,6 +1200,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config_class = AlignTextConfig
+    _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
         super().__init__(config)

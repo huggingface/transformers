@@ -66,3 +66,8 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 
 [[autodoc]] Starcoder2ForSequenceClassification
     - forward
+
+## Starcoder2ForTokenClassification
+
+[[autodoc]] Starcoder2ForTokenClassification
+    - forward

@@ -12,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Bertology: this script shows how you can explore the internals of the models in the library to:
-    - compute the entropy of the head attentions
-    - compute the importance of each head
-    - prune (remove) the low importance head.
-    Some parts of this script are adapted from the code of Michel et al. (http://arxiv.org/abs/1905.10650)
-    which is available at https://github.com/pmichel31415/are-16-heads-really-better-than-1
+"""Bertology: this script shows how you can explore the internals of the models in the library to:
+- compute the entropy of the head attentions
+- compute the importance of each head
+- prune (remove) the low importance head.
+Some parts of this script are adapted from the code of Michel et al. (http://arxiv.org/abs/1905.10650)
+which is available at https://github.com/pmichel31415/are-16-heads-really-better-than-1
 """
+
 import argparse
 import logging
 import os

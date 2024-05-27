@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViLT model. """
+"""Testing suite for the PyTorch ViLT model."""
 
 import unittest
 
@@ -355,6 +355,13 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             hidden states"""
     )
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
+                            hidden states. Cannot test equivalence on logit level"""
+    )
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     def test_attention_outputs(self):
