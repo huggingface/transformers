@@ -25,60 +25,112 @@ from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextI
 from ...utils import TensorType
 
 
+LANGUAGE_TOKEN_TYPE = 0
+VISION_TOKEN_TYPE = 1
+
+
 class CogvlmProcessor(ProcessorMixin):
     r"""
     Constructs a CogVLM processor which wraps a CLIP image processor and a LLaMa tokenizer into a single processor.
 
-    [`CogvlmProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the docstring
+    [`CogvlmProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizer`]. See the docstring
     of [`~CogvlmProcessor.__call__`] and [`~CogvlmProcessor.decode`] for more information.
 
     Args:
         image_processor (`CLIPImageProcessor`):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizer` or `LlamaTokenizerFast`):
-            An instance of ['LlamaTokenizer`] or ['LlamaTokenizerFast`]. The tokenizer is a required input.
+        tokenizer (`AutoTokenizer`):
+            An instance of ['LlamaTokenizer`]. The tokenizer is a required input.
+        image_size (`int`):
+            The image size used by the model.
+        patch_size (`int`):
+            The patch size used by the model.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "LlamaTokenizer"
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, image_size, patch_size):
         super().__init__(image_processor, tokenizer)
+        self.image_size = image_size
+        self.patch_size = patch_size
 
     def __call__(
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        add_special_tokens: bool = False,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = True,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_token_type_ids: bool = True,
+        return_length: bool = False,
+        verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`LlamaTokenizer.__call__`] to prepare text for the model.
+        [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
 
-        if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
-
-        if text is not None:
-            text_features = self.tokenizer(
-                text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
-            )
+        input_ids = [self.tokenizer.bos_token_id]
+        token_type_ids = [LANGUAGE_TOKEN_TYPE]
+        pixel_values = None
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors)
+            num_vision_tokens = (self.image_size // self.patch_size) ** 2 + 2
+            input_ids += [self.tokenizer.pad_token_id] * num_vision_tokens
+            token_type_ids += [VISION_TOKEN_TYPE] * num_vision_tokens
+            pixel_values = self.image_processor(images, return_tensors=return_tensors).pixel_values
 
-        if text is not None and images is not None:
-            return BatchFeature(data=dict(**text_features, **image_features), tensor_type=return_tensors)
-        elif text is not None:
-            return text_features
-        else:
-            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
+        if text is not None:
+            text_encoding = self.tokenizer(
+                text=text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+                # TODO support the following 3 flags
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_token_type_ids=None,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=None,
+                **kwargs,
+            )
+            text_ids = text_encoding.input_ids
+            input_ids += text_ids
+            token_type_ids += [LANGUAGE_TOKEN_TYPE] * len(text_ids)
+
+        data = {}
+        data["input_ids"] = [input_ids]
+        if return_token_type_ids:
+            data["token_type_ids"] = [token_type_ids]
+        if return_attention_mask:
+            attention_mask = [1] * len(input_ids)
+            data["attention_mask"] = [attention_mask]
+
+        result = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if pixel_values is not None:
+            result["pixel_values"] = pixel_values
+
+        return result
 
     def batch_decode(self, *args, **kwargs):
         """

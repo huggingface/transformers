@@ -134,7 +134,10 @@ def convert_cogvlm_checkpoint(
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
     )
-    processor = CogvlmProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    patch_size = original_model.config.vision_config["patch_size"]
+    processor = CogvlmProcessor(
+        image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size
+    )
 
     # original_inputs = gather_inputs(inputs, device=hf_device)
     # original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])

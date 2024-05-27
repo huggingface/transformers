@@ -788,56 +788,30 @@ class CogvlmModel(CogvlmPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if past_key_values is not None:
-            # generate mode with past_key_values. the image features are already mapped
-            # update attention_mask
-            if pixel_values is not None:
-                batch_size = pixel_values.shape[0]
-                vision_mask = torch.full(
-                    size=(batch_size, self.num_vision_tokens), fill_value=1, device=attention_mask.device
-                )
-                attention_mask = torch.cat(
-                    [attention_mask[:, :-1], vision_mask, attention_mask[:, -1].repeat(batch_size, 1)], dim=1
-                )
+            pass  # generate mode with past_key_values. the image features are already mapped
         else:
             # not allow for inputs_embeds, because we want to process image feature
-            # assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
-
-            if pixel_values is not None and input_ids is not None:
+            assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
+            if pixel_values is not None:
                 # multi-modality
+                if token_type_ids is None:
+                    raise ValueError("Multi-modality requires `token_type_ids`!")
                 if len(input_ids) != len(pixel_values):
                     raise ValueError("Make sure to pass as many texts as images")
-
-                # prepend the input_ids and token_type_ids with image tokens
-                batch_size = input_ids.shape[0]
-
-                vision_input_ids = self.vision_input_ids.repeat(batch_size, 1)
-                vision_input_ids = vision_input_ids.to(input_ids.device)
-
-                vision_token_type_ids = self.vision_token_type_ids.repeat(batch_size, 1)
-                vision_token_type_ids = vision_token_type_ids.to(token_type_ids.device)
-
-                input_ids = torch.cat([vision_input_ids, input_ids[:, 1:]], dim=1)
-                token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:, 1:]], dim=1)
-                attention_mask = torch.ones_like(input_ids)
-
                 inputs_embeds = self.embed_tokens(input_ids)
-
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
-
-            else:
-                # TODO verify single-modality
+            else:  # single-modality
                 if token_type_ids is None:
                     token_type_ids = (
                         torch.ones_like(input_ids, dtype=torch.long, device=input_ids.device) * LANGUAGE_TOKEN_TYPE
                     )
-                if (token_type_ids == VISION_TOKEN_TYPE).any():
-                    raise ValueError("Token type ids should not contain the VISION_TOKEN_TYPE")
-                if inputs_embeds is None:
-                    inputs_embeds = self.embed_tokens(input_ids)
+                assert not (
+                    token_type_ids == VISION_TOKEN_TYPE
+                ).any(), f"{(token_type_ids == VISION_TOKEN_TYPE).sum()}"
+                inputs_embeds = self.embed_tokens(input_ids)
 
             if position_ids is None:
                 position_ids = build_position_ids(token_type_ids, attention_mask)
