@@ -35,9 +35,9 @@ class IrisConfig(PretrainedConfig):
         num_actions (`int`, *optional*, defaults to 4):
             The number of actions or size of the output action space for the Atari environment
         vocab_size (`int`, *optional*, defaults to 512):
-            Vocabulary size of Tokenizer and World Model
-        embed_dim_tokenizer (`int`, *optional*, defaults to 512):
-            The embedding dim of Tokenizer
+            Vocabulary size of Discrete Autoencoder and World Model
+        embed_dim_discrete_autoencoder (`int`, *optional*, defaults to 512):
+            The embedding dim of Discrete Autoencoder
         resolution (`int`, *optional*, defaults to 64):
             The resolution of image frame observation passed to encoder
         in_channels (`int`, *optional*, defaults to 3):
@@ -45,13 +45,13 @@ class IrisConfig(PretrainedConfig):
         z_channels (`int`, *optional*, defaults to 512):
             Number of channels for tokens encoded by Encoder which in turn will be the input for Decoder
         ch (`int`, *optional*, defaults to 64):
-            For calculation of number of in channels and out channels in ResnetBlock for Tokenizer
+            For calculation of number of in channels and out channels in ResnetBlock for Discrete Autoencoder
         ch_mult (`list`, *optional*, defaults to `[1, 1, 1, 1, 1]`):
-            len of it is equal to number of resolutions in Encoder and Decoder of Tokenizer and is used for calculation of number of in channels and out channels in ResnetBlock for Tokenizer.
+            len of it is equal to number of resolutions in Encoder and Decoder of Discrete Autoencoder and is used for calculation of number of in channels and out channels in ResnetBlock for Discrete Autoencoder.
         num_res_blocks (`int`, *optional*, defaults to 2):
-            Number of Resnet Blocks in Encoder and Decoder of Tokenizer.
+            Number of Resnet Blocks in Encoder and Decoder of Discrete Autoencoder.
         attn_resolutions (`list`, *optional*, defaults to `[8, 16]`):
-            The resolutions at which an attention layer is used for Encoder and Decoder of Tokenizer.
+            The resolutions at which an attention layer is used for Encoder and Decoder of Discrete Autoencoder.
         out_ch (`int`, *optional*, defaults to 3):
             Number of out channels for Decoder.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -76,8 +76,8 @@ class IrisConfig(PretrainedConfig):
             The dropout probability for attention layers applied to last state in World Model's Transformer
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for attention weights softmax layers in World Model's Transformer
-        grad_acc_steps_tokenizer (`int`, *optional*, defaults to 1):
-            Number of Gradient steps for Tokenizer
+        grad_acc_steps_discrete_autoencoder (`int`, *optional*, defaults to 1):
+            Number of Gradient steps for Discrete Autoencoder
         grad_acc_steps_world_model (`int`, *optional*, defaults to 1):
             Number of Gradient steps for World Model
         grad_acc_steps_actor_critic (`int`, *optional*, defaults to 1):
@@ -128,7 +128,7 @@ class IrisConfig(PretrainedConfig):
         self,
         num_actions=4,
         vocab_size=512,
-        embed_dim_tokenizer=512,
+        embed_dim_discrete_autoencoder=512,
         resolution=64,
         in_channels=3,
         z_channels=512,
@@ -148,7 +148,7 @@ class IrisConfig(PretrainedConfig):
         embed_pdrop=0.1,
         resid_pdrop=0.1,
         attn_pdrop=0.1,
-        grad_acc_steps_tokenizer=1,
+        grad_acc_steps_discrete_autoencoder=1,
         grad_acc_steps_world_model=1,
         grad_acc_steps_actor_critic=1,
         gamma=0.995,
@@ -163,7 +163,7 @@ class IrisConfig(PretrainedConfig):
     ):
         self.num_actions = num_actions
         self.vocab_size = vocab_size
-        self.embed_dim_tokenizer = embed_dim_tokenizer
+        self.embed_dim_discrete_autoencoder = embed_dim_discrete_autoencoder
         self.resolution = resolution
         self.in_channels = in_channels
         self.z_channels = z_channels
@@ -185,7 +185,7 @@ class IrisConfig(PretrainedConfig):
         self.resid_pdrop = resid_pdrop
         self.attn_pdrop = attn_pdrop
         self.sequence_length = self.max_blocks
-        self.grad_acc_steps_tokenizer = grad_acc_steps_tokenizer
+        self.grad_acc_steps_discrete_autoencoder = grad_acc_steps_discrete_autoencoder
         self.grad_acc_steps_world_model = grad_acc_steps_world_model
         self.grad_acc_steps_actor_critic = grad_acc_steps_actor_critic
         self.imagine_horizon_train_actor_critic = self.sequence_length

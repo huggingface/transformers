@@ -16,9 +16,8 @@
 
 import math
 import sys
-from collections import OrderedDict, namedtuple
+from collections import namedtuple
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -62,9 +61,9 @@ class IrisOutput(ModelOutput):
 
     Args:
         reconstructed_img (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Reconstructed image from input frame(only one real image per batch is given as rest are in imagination of the world model) with tokenizer
+            Reconstructed image from input frame(only one real image per batch is given as rest are in imagination of the world model) with discrete_autoencoder
         losses (`[torch.FloatTensor]` of shape `(3,)`):
-            Agent's components' total loss [tokenizer, world model and actor critic].
+            RL Agent's components' total loss [discrete_autoencoder, world model and actor critic].
         action_preds (logits) (`torch.FloatTensor` of shape `(batch_size, 1, num_actions)`):
             Policy action predictions with actor critic
         reward_preds (logits) (`torch.FloatTensor` of shape `(batch_size, sequence_length_world_model, 3)`):
@@ -74,12 +73,12 @@ class IrisOutput(ModelOutput):
         obs_preds (logits) (`torch.FloatTensor` of shape `(batch_size, 320, vocab_size)`):
             Predicted tokens for next frame with world model
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of various shapes as there are three components in agent and the shapes are:
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of various shapes as there are three components in rl_agent and the shapes are:
             `(batch_size, resolution, resolution,resolution), (batch_size, resolution, resolution//2,resolution//2),(batch_size, resolution, resolution//4,resolution//4),
             (batch_size, resolution, resolution//8,resolution//8)(batch_size, resolution, resolution//16,resolution//16)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer)(len of tuple:22) of various shapes as there are three components in agent and the shapes are:
+            Tuple of `torch.FloatTensor` (one for each layer)(len of tuple:22) of various shapes as there are three components in rl_agent and the shapes are:
             `(batch_size, embed_dim, embed_dim),(batch_size,resolution,resolution),(batch_size,attn_resolution,attn_resolution),(batch_size,num_heads,340,340)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
@@ -242,7 +241,7 @@ class IrisEncoder(nn.Module):
         timestep_embedding_channels = 0  # timestep embedding #channels
 
         # downsampling
-        self.conv_in = torch.nn.Conv2d(config.in_channels, config.ch, kernel_size=3, stride=1, padding=1)
+        self.conv_in = nn.Conv2d(config.in_channels, config.ch, kernel_size=3, stride=1, padding=1)
 
         curr_res = config.resolution
         in_ch_mult = (1,) + tuple(config.ch_mult)
@@ -289,8 +288,8 @@ class IrisEncoder(nn.Module):
         )
 
         # end
-        self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in, config.z_channels, kernel_size=3, stride=1, padding=1)
+        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = nn.Conv2d(block_in, config.z_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(
         self, x: torch.Tensor, output_hidden_states: bool = False, output_attentions: bool = False
@@ -302,6 +301,8 @@ class IrisEncoder(nn.Module):
 
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
+
+        hidden_states = hidden_states + (hs[0],) if output_hidden_states else None
 
         for i_level in range(self.num_resolutions):
             for i_block in range(self.config.num_res_blocks):
@@ -315,7 +316,9 @@ class IrisEncoder(nn.Module):
                 # Add the hidden state to the tuple
                 hidden_states = hidden_states + (h,) if output_hidden_states else None
             if i_level != self.num_resolutions - 1:
-                hs.append(self.down[i_level].downsample(hs[-1]))
+                hs_dummy = self.down[i_level].downsample(hs[-1])
+                hs.append(hs_dummy)
+                hidden_states = hidden_states + (hs_dummy,) if output_hidden_states else None
 
         # middle
         h = hs[-1]
@@ -352,7 +355,7 @@ class IrisDecoder(nn.Module):
         curr_res = config.resolution // 2 ** (self.num_resolutions - 1)
 
         # z to block_in
-        self.conv_in = torch.nn.Conv2d(config.z_channels, block_in, kernel_size=3, stride=1, padding=1)
+        self.conv_in = nn.Conv2d(config.z_channels, block_in, kernel_size=3, stride=1, padding=1)
 
         # middle
         self.mid = nn.Module()
@@ -397,8 +400,8 @@ class IrisDecoder(nn.Module):
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
-        self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in, config.out_ch, kernel_size=3, stride=1, padding=1)
+        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = nn.Conv2d(block_in, config.out_ch, kernel_size=3, stride=1, padding=1)
 
     def forward(
         self, z: torch.Tensor, output_hidden_states: bool = False, output_attentions: bool = False
@@ -410,6 +413,7 @@ class IrisDecoder(nn.Module):
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
 
+        hidden_states = hidden_states + (h,) if output_hidden_states else None
         # middle
         h = self.mid.block_1(h, timestep_embedding)
         # Add the hidden state to the tuple
@@ -451,19 +455,15 @@ class IrisDecoder(nn.Module):
         return h, hidden_states, attentions
 
 
-def Normalize(in_channels: int) -> nn.Module:
-    return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-
-
 class IrisUpsample(nn.Module):
     def __init__(self, in_channels: int, with_conv: bool) -> None:
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
+            self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+        x = nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
         if self.with_conv:
             x = self.conv(x)
         return x
@@ -475,15 +475,15 @@ class IrisDownsample(nn.Module):
         self.with_conv = with_conv
         if self.with_conv:
             # no asymmetric padding in torch conv, must do it ourselves
-            self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+            self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.with_conv:
             pad = (0, 1, 0, 1)
-            x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+            x = nn.functional.pad(x, pad, mode="constant", value=0)
             x = self.conv(x)
         else:
-            x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+            x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
         return x
 
 
@@ -503,18 +503,18 @@ class IrisResnetBlock(nn.Module):
         self.out_channels = out_channels
         self.use_conv_shortcut = conv_shortcut
 
-        self.norm1 = Normalize(in_channels)
-        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if timestep_embedding_channels > 0:
-            self.temb_proj = torch.nn.Linear(timestep_embedding_channels, out_channels)
-        self.norm2 = Normalize(out_channels)
-        self.dropout = torch.nn.Dropout(dropout)
-        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            self.temb_proj = nn.Linear(timestep_embedding_channels, out_channels)
+        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
+        self.dropout = nn.Dropout(dropout)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+                self.conv_shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
             else:
-                self.nin_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+                self.nin_shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x: torch.Tensor, timestep_embedding: torch.Tensor) -> torch.Tensor:
         h = x
@@ -544,12 +544,12 @@ class IrisAttnBlock(nn.Module):
         super().__init__()
         self.in_channels = in_channels
 
-        self.norm = Normalize(in_channels)
+        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
         # q:query, k:key, v:value
-        self.q = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.k = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h_ = x
@@ -568,7 +568,7 @@ class IrisAttnBlock(nn.Module):
         )  # batch_size,height * width,height * width    width[batch_size,i,j]=sum_c q[batch_size,i,num_channels]k[batch_size,num_channels,j]
         w_ = w_ * (int(num_channels) ** (-0.5))
         # attention weights
-        w_ = torch.nn.functional.softmax(w_, dim=2)
+        w_ = nn.functional.softmax(w_, dim=2)
         attention_weights = w_
 
         # attend to values
@@ -646,11 +646,11 @@ class IrisVgg16(nn.Module):
     def __init__(self, requires_grad: bool = False) -> None:
         super().__init__()
         vgg_pretrained_features = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features
-        self.slice1 = torch.nn.Sequential()
-        self.slice2 = torch.nn.Sequential()
-        self.slice3 = torch.nn.Sequential()
-        self.slice4 = torch.nn.Sequential()
-        self.slice5 = torch.nn.Sequential()
+        self.slice1 = nn.Sequential()
+        self.slice2 = nn.Sequential()
+        self.slice3 = nn.Sequential()
+        self.slice4 = nn.Sequential()
+        self.slice5 = nn.Sequential()
         self.N_slices = 5
         for x in range(4):
             self.slice1.add_module(str(x), vgg_pretrained_features[x])
@@ -681,8 +681,8 @@ class IrisVgg16(nn.Module):
         return vgg_outputs(h_relu1_2, h_relu2_2, h_relu3_3, h_relu4_3, h_relu5_3)
 
 
-class IrisTokenizer(nn.Module):
-    """A discrete autoencoder based on the implementation of VQGAN but without its discriminator(not to be confused with transformers tokenizer)"""
+class IrisDiscreteAutoEncoder(nn.Module):
+    """A discrete autoencoder based on the implementation of VQGAN but without its discriminator(not to be confused with transformers discrete_autoencoder)"""
 
     def __init__(
         self, vocab_size: int, embed_dim: int, encoder: IrisEncoder, decoder: IrisDecoder, with_lpips: bool = True
@@ -690,9 +690,9 @@ class IrisTokenizer(nn.Module):
         super().__init__()
         self.vocab_size = vocab_size
         self.encoder = encoder
-        self.pre_quant_conv = torch.nn.Conv2d(encoder.config.z_channels, embed_dim, 1)
+        self.pre_quant_conv = nn.Conv2d(encoder.config.z_channels, embed_dim, 1)
         self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.post_quant_conv = torch.nn.Conv2d(embed_dim, decoder.config.z_channels, 1)
+        self.post_quant_conv = nn.Conv2d(embed_dim, decoder.config.z_channels, 1)
         self.decoder = decoder
         self.embedding.weight.data.uniform_(-1.0 / vocab_size, 1.0 / vocab_size)
         self.lpips = IrisLPIPS().eval() if with_lpips else None
@@ -1065,13 +1065,13 @@ class IrisWorldModel(nn.Module):
 class IrisWorldModelImagine:
     def __init__(
         self,
-        tokenizer: torch.nn.Module,
-        world_model: torch.nn.Module,
+        discrete_autoencoder: nn.Module,
+        world_model: nn.Module,
         device: Union[str, torch.device],
     ) -> None:
         self.device = torch.device(device)
         self.world_model = world_model.to(self.device).eval()
-        self.tokenizer = tokenizer.to(self.device).eval()
+        self.discrete_autoencoder = discrete_autoencoder.to(self.device).eval()
 
         self.keys_values_wm, self.obs_tokens, self._num_observations_tokens = None, None, None
 
@@ -1093,7 +1093,7 @@ class IrisWorldModelImagine:
 
     @torch.no_grad()
     def reset_from_initial_observations(self, observations: torch.FloatTensor, config) -> torch.FloatTensor:
-        obs_tokens = self.tokenizer.encode(observations, should_preprocess=True)[0][
+        obs_tokens = self.discrete_autoencoder.encode(observations, should_preprocess=True)[0][
             2
         ]  # (batch_size, num_channels, height, width) -> (batch_size, num_tokens_per_frame)
         _, num_observations_tokens = obs_tokens.shape
@@ -1147,12 +1147,16 @@ class IrisWorldModelImagine:
 
     @torch.no_grad()
     def decode_obs_tokens(self) -> List[Image.Image]:
-        embedded_tokens = self.tokenizer.embedding(self.obs_tokens)  # (batch_size, num_tokens_per_frame, embed_dim)
+        embedded_tokens = self.discrete_autoencoder.embedding(
+            self.obs_tokens
+        )  # (batch_size, num_tokens_per_frame, embed_dim)
         h = int(np.sqrt(self.num_observations_tokens))
         z = embedded_tokens.permute(0, 2, 1)
         z = z.view(z.shape[0], z.shape[1], h, z.shape[2] // h).contiguous()
 
-        rec = self.tokenizer.decode(z, should_postprocess=True)[0]  # (batch_size, num_channels, height, width)
+        rec = self.discrete_autoencoder.decode(z, should_postprocess=True)[
+            0
+        ]  # (batch_size, num_channels, height, width)
         return torch.clamp(rec, 0, 1)
 
 
@@ -1258,7 +1262,7 @@ class IrisActorCritic(nn.Module):
     def imagine(
         self,
         batch: Batch,
-        tokenizer: IrisTokenizer,
+        discrete_autoencoder: IrisDiscreteAutoEncoder,
         world_model: IrisWorldModel,
         horizon: int,
         show_pbar: bool = False,
@@ -1272,7 +1276,7 @@ class IrisActorCritic(nn.Module):
         assert initial_observations.ndim == 5 and initial_observations.shape[2:] == (3, 64, 64)
         assert mask_padding[:, -1].all()
         device = initial_observations.device
-        wm_imagine = IrisWorldModelImagine(tokenizer, world_model, device)
+        wm_imagine = IrisWorldModelImagine(discrete_autoencoder, world_model, device)
 
         all_actions = []
         all_logits_actions = []
@@ -1283,15 +1287,16 @@ class IrisActorCritic(nn.Module):
 
         burnin_observations = (
             torch.clamp(
-                tokenizer.encode_decode(initial_observations[:, :-1], should_preprocess=True, should_postprocess=True)[
-                    0
-                ],
+                discrete_autoencoder.encode_decode(
+                    initial_observations[:, :-1], should_preprocess=True, should_postprocess=True
+                )[0],
                 0,
                 1,
             )
             if initial_observations.size(1) > 1
             else None
         )
+
         self.reset(
             n=initial_observations.size(0), burnin_observations=burnin_observations, mask_padding=mask_padding[:, :-1]
         )
@@ -1335,18 +1340,20 @@ class IrisComponentLosses:
     Loss functions for the Iris' components.
     """
 
-    def compute_tokenizer_loss(
+    def compute_discrete_autoencoder_loss(
         self,
-        tokenizer: IrisTokenizer,
+        discrete_autoencoder: IrisDiscreteAutoEncoder,
         batch: Batch,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         **kwargs: Any,
     ) -> IrisLossWithIntermediateLosses:
-        assert tokenizer.lpips is not None
+        assert discrete_autoencoder.lpips is not None
 
-        observations = tokenizer.preprocess_input(torch.flatten(batch["observations"], end_dim=1).contiguous())
-        outputs, all_hidden_states, all_attentions = tokenizer(
+        observations = discrete_autoencoder.preprocess_input(
+            torch.flatten(batch["observations"], end_dim=1).contiguous()
+        )
+        outputs, all_hidden_states, all_attentions = discrete_autoencoder(
             observations, output_hidden_states, output_attentions, should_preprocess=False, should_postprocess=False
         )
 
@@ -1359,7 +1366,7 @@ class IrisComponentLosses:
         ).pow(2).mean()
 
         reconstruction_loss = torch.abs(observations - outputs[2]).mean()
-        perceptual_loss = torch.mean(tokenizer.lpips(observations, outputs[2]))
+        perceptual_loss = torch.mean(discrete_autoencoder.lpips(observations, outputs[2]))
 
         return (
             IrisLossWithIntermediateLosses(
@@ -1376,13 +1383,13 @@ class IrisComponentLosses:
         self,
         world_model: IrisWorldModel,
         batch: Batch,
-        tokenizer: IrisTokenizer,
+        discrete_autoencoder: IrisDiscreteAutoEncoder,
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         **kwargs: Any,
     ) -> IrisLossWithIntermediateLosses:
         with torch.no_grad():
-            obs_tokens = tokenizer.encode(batch["observations"], should_preprocess=True)[0][2]  # (B, L, K)
+            obs_tokens = discrete_autoencoder.encode(batch["observations"], should_preprocess=True)[0][2]  # (B, L, K)
 
         act_tokens = batch["actions"].unsqueeze(-1).contiguous()
 
@@ -1411,7 +1418,7 @@ class IrisComponentLosses:
         actor_critic: IrisActorCritic,
         config: IrisConfig,
         batch: Batch,
-        tokenizer: IrisTokenizer,
+        discrete_autoencoder: IrisDiscreteAutoEncoder,
         world_model: IrisWorldModel,
         imagine_horizon: int,
         gamma: float,
@@ -1424,7 +1431,7 @@ class IrisComponentLosses:
         assert not actor_critic.use_original_obs
         outputs, outputs_ac, hidden_states = actor_critic.imagine(
             batch,
-            tokenizer,
+            discrete_autoencoder,
             world_model,
             horizon=imagine_horizon,
             output_hidden_states=output_hidden_states,
@@ -1459,49 +1466,21 @@ class IrisComponentLosses:
         )
 
 
-class IrisAgent(nn.Module):
-    def __init__(self, tokenizer: IrisTokenizer, world_model: IrisWorldModel, actor_critic: IrisActorCritic):
+class IrisRlAgent(nn.Module):
+    def __init__(
+        self, discrete_autoencoder: IrisDiscreteAutoEncoder, world_model: IrisWorldModel, actor_critic: IrisActorCritic
+    ):
         super().__init__()
-        self.tokenizer = tokenizer
+        self.discrete_autoencoder = discrete_autoencoder
         self.world_model = world_model
         self.actor_critic = actor_critic
-
-    @property
-    def device(self):
-        return self.actor_critic.conv1.weight.device
-
-    def load(
-        self,
-        path_to_checkpoint: Path,
-        device: torch.device,
-        load_tokenizer: bool = True,
-        load_world_model: bool = True,
-        load_actor_critic: bool = True,
-    ) -> None:
-        agent_state_dict = torch.load(path_to_checkpoint, map_location=device)
-        if load_tokenizer:
-            self.tokenizer.load_state_dict(
-                OrderedDict({k.split(".", 1)[1]: v for k, v in agent_state_dict.items() if k.startswith("tokenizer")})
-            )
-        if load_world_model:
-            self.world_model.load_state_dict(
-                OrderedDict(
-                    {k.split(".", 1)[1]: v for k, v in agent_state_dict.items() if k.startswith("world_model")}
-                )
-            )
-        if load_actor_critic:
-            self.actor_critic.load_state_dict(
-                OrderedDict(
-                    {k.split(".", 1)[1]: v for k, v in agent_state_dict.items() if k.startswith("actor_critic")}
-                )
-            )
 
     def act(self, obs: torch.FloatTensor, should_sample: bool = True, temperature: float = 1.0) -> torch.LongTensor:
         input_ac = (
             obs
             if self.actor_critic.use_original_obs
             else torch.clamp(
-                self.tokenizer.encode_decode(obs, should_preprocess=True, should_postprocess=True)[0], 0, 1
+                self.discrete_autoencoder.encode_decode(obs, should_preprocess=True, should_postprocess=True)[0], 0, 1
             )
         )
         logits_actions = self.actor_critic(input_ac)[0][:, -1] / temperature
@@ -1513,7 +1492,7 @@ class IrisAgent(nn.Module):
 class IrisModel(IrisPreTrainedModel):
     """
 
-    The model,IRIS (Imagination with auto-Regression over an Inner Speech), a data-efficient agent that learns in a world model composed of a
+    The model,IRIS (Imagination with auto-Regression over an Inner Speech), a data-efficient rl_agent that learns in a world model composed of a
     discrete autoencoder and an autoregressive Transformer.It learns behaviors by accurately simulating millions of trajectories
     Refer to the paper for more details: https://arxiv.org/abs/2209.00588
 
@@ -1525,14 +1504,14 @@ class IrisModel(IrisPreTrainedModel):
         self.config = config
         encoder = IrisEncoder(config)
         decoder = IrisDecoder(config)
-        tokenizer = IrisTokenizer(
+        discrete_autoencoder = IrisDiscreteAutoEncoder(
             self.config.vocab_size,
-            self.config.embed_dim_tokenizer,
+            self.config.embed_dim_discrete_autoencoder,
             encoder,
             decoder,
         )
         world_model = IrisWorldModel(
-            obs_vocab_size=tokenizer.vocab_size,
+            obs_vocab_size=discrete_autoencoder.vocab_size,
             act_vocab_size=self.config.num_actions,
             config=config,
         )
@@ -1540,7 +1519,7 @@ class IrisModel(IrisPreTrainedModel):
             act_vocab_size=self.config.num_actions,
             use_original_obs=self.config.use_original_obs_actor_critic,
         )
-        self.agent = IrisAgent(tokenizer, world_model, actor_critic)
+        self.rl_agent = IrisRlAgent(discrete_autoencoder, world_model, actor_critic)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1576,7 +1555,7 @@ class IrisModel(IrisPreTrainedModel):
         >>> model.eval()
 
         >>> batch_size = 1 #here, single batch size is for the sake of example asin original code all the three components have separate batch size
-        >>> sequence_length_tokenizer = 1
+        >>> sequence_length_discrete_autoencoder = 1
         >>> sequence_length_world_model = 20
         >>> sequence_length_actor_critic = 21
         >>> env = gym.make("BreakoutNoFrameskip-v4")
@@ -1589,8 +1568,8 @@ class IrisModel(IrisPreTrainedModel):
 
 
         >>> for b in batch_size:
-        ...     for t in sequence_length_tokenizer:
-        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...     for t in sequence_length_discrete_autoencoder:
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use rl_agent.act with obs from env.reset in training
         ...         obs, reward, done, _ = env.step(act)
         ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
         ...         actions_tok.append(act.tolist())
@@ -1603,7 +1582,7 @@ class IrisModel(IrisPreTrainedModel):
         ...     dones_tok_batch.append(dones_tok)
 
         ...     for t in sequence_length_world_model:
-        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use rl_agent.act with obs from env.reset in training
         ...         obs, reward, done, _ = env.step(act)
         ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
         ...         actions_wm.append(act.tolist())
@@ -1616,7 +1595,7 @@ class IrisModel(IrisPreTrainedModel):
         ...     dones_wm_batch.append(dones_wm)
 
         ...     for t in sequence_length_actor_critic:
-        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use agent.act with obs from env.reset in training
+        ...         act = torch.randint(0,4,(batch_size,1)).cpu().numpy() #use rl_agent.act with obs from env.reset in training
         ...         obs, reward, done, _ = env.step(act)
         ...         obs = torch.FloatTensor(obs).div(255).permute(0,3,1,2).cpu().numpy()
         ...         actions_ac.append(act.tolist())
@@ -1643,7 +1622,7 @@ class IrisModel(IrisPreTrainedModel):
         >>> rewards_ac_batch = torch.tensor(rewards_ac_batch).float().to(device)
         >>> dones_ac_batch = torch.tensor(dones_ac_batch).long().to(device)
 
-        >>> mask_padding_tok = torch.ones(batch_size,sequence_length_tokenizer).bool().to(device)
+        >>> mask_padding_tok = torch.ones(batch_size,sequence_length_discrete_autoencoder).bool().to(device)
         >>> mask_padding_wm = torch.ones(batch_size,sequence_length_world_model).bool().to(device)
         >>> mask_padding_ac = torch.ones(batch_size,sequence_length_actor_critic).bool().to(device)
 
@@ -1677,20 +1656,20 @@ class IrisModel(IrisPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        cfg_tokenizer = {
+        cfg_discrete_autoencoder = {
             "should_preprocess": should_preprocess,
             "should_postprocess": should_postprocess,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
         cfg_world_model = {
-            "tokenizer": self.agent.tokenizer,
+            "discrete_autoencoder": self.rl_agent.discrete_autoencoder,
             "output_hidden_states": output_hidden_states,
             "output_attentions": output_attentions,
         }
         cfg_actor_critic = {
-            "tokenizer": self.agent.tokenizer,
-            "world_model": self.agent.world_model,
+            "discrete_autoencoder": self.rl_agent.discrete_autoencoder,
+            "world_model": self.rl_agent.world_model,
             "imagine_horizon": self.config.imagine_horizon_train_actor_critic,
             "gamma": self.config.gamma,
             "lambda_": self.config.lambda_,
@@ -1699,7 +1678,7 @@ class IrisModel(IrisPreTrainedModel):
             "output_attentions": output_attentions,
         }
 
-        batch_tokenizer = {
+        batch_discrete_autoencoder = {
             "observations": observations[0],
             "actions": actions[0],
             "rewards": rewards[0],
@@ -1724,19 +1703,21 @@ class IrisModel(IrisPreTrainedModel):
         component_losses = IrisComponentLosses()
 
         (
-            losses_tokenizer,
-            tokenizer_outputs,
-            all_hidden_states_tokenizer,
-            all_attentions_tokenizer,
-        ) = component_losses.compute_tokenizer_loss(self.agent.tokenizer, batch_tokenizer, **cfg_tokenizer)
-        losses_tokenizer = losses_tokenizer / self.config.grad_acc_steps_tokenizer
+            losses_discrete_autoencoder,
+            discrete_autoencoder_outputs,
+            all_hidden_states_discrete_autoencoder,
+            all_attentions_discrete_autoencoder,
+        ) = component_losses.compute_discrete_autoencoder_loss(
+            self.rl_agent.discrete_autoencoder, batch_discrete_autoencoder, **cfg_discrete_autoencoder
+        )
+        losses_discrete_autoencoder = losses_discrete_autoencoder / self.config.grad_acc_steps_discrete_autoencoder
 
         (
             losses_world_model,
             world_model_outputs,
             all_hidden_states_world_model,
             all_attentions_world_model,
-        ) = component_losses.compute_world_model_loss(self.agent.world_model, batch_world_model, **cfg_world_model)
+        ) = component_losses.compute_world_model_loss(self.rl_agent.world_model, batch_world_model, **cfg_world_model)
         losses_world_model = losses_world_model / self.config.grad_acc_steps_world_model
 
         (
@@ -1745,20 +1726,22 @@ class IrisModel(IrisPreTrainedModel):
             all_hidden_states_actor_critic,
             _,
         ) = component_losses.compute_actor_critic_loss(
-            self.agent.actor_critic, self.config, batch_actor_critic, **cfg_actor_critic
+            self.rl_agent.actor_critic, self.config, batch_actor_critic, **cfg_actor_critic
         )
         losses_actor_critic = losses_actor_critic / self.config.grad_acc_steps_actor_critic
 
         losses = torch.stack(
-            (losses_tokenizer.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total)
+            (losses_discrete_autoencoder.loss_total, losses_world_model.loss_total, losses_actor_critic.loss_total)
         )
 
         all_hidden_states = (
-            all_hidden_states_tokenizer + all_hidden_states_world_model + all_hidden_states_actor_critic
+            all_hidden_states_discrete_autoencoder + all_hidden_states_world_model + all_hidden_states_actor_critic
             if output_hidden_states
             else None
         )
-        all_self_attentions = all_attentions_tokenizer + all_attentions_world_model if output_attentions else None
+        all_self_attentions = (
+            all_attentions_discrete_autoencoder + all_attentions_world_model if output_attentions else None
+        )
 
         if output_hidden_states:
             for hidden_state in all_hidden_states:
@@ -1772,7 +1755,7 @@ class IrisModel(IrisPreTrainedModel):
             return tuple(
                 v
                 for v in [
-                    tokenizer_outputs[2],
+                    discrete_autoencoder_outputs[2],
                     losses,
                     actor_critic_outputs[0],
                     world_model_outputs[2],
@@ -1785,7 +1768,7 @@ class IrisModel(IrisPreTrainedModel):
             )
 
         return IrisOutput(
-            reconstructed_img=tokenizer_outputs[2],
+            reconstructed_img=discrete_autoencoder_outputs[2],
             losses=losses,
             action_preds=actor_critic_outputs[0],
             reward_preds=world_model_outputs[2],

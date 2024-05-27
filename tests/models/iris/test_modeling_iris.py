@@ -492,7 +492,7 @@ class IrisModelIntegrationTest(unittest.TestCase):
 
         """
 
-        NUM_STEPS = 1  # number of steps of prediction with all the three components i.e., tokenizer, world model & actor critic we will perform
+        NUM_STEPS = 1  # number of steps of prediction with all the three components i.e., discrete autoencoder, world model & actor critic we will perform
         batch_size = 1
         model = IrisModel.from_pretrained("ruffy369/iris-breakout")
         model = model.to(torch_device)
