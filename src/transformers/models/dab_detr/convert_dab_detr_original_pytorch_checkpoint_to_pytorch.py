@@ -114,7 +114,7 @@ for i in range(6):
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
 
-    # q, k, v projections in self/cross-attention in decoder for conditional DETR
+    # q, k, v projections in self/cross-attention in decoder for DAB-DETR
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.sa_qcontent_proj.weight", f"decoder.layers.{i}.sa_qcontent_proj.weight")
     )

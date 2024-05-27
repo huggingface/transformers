@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Microsoft Research Asia and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 IDEA Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -88,6 +87,8 @@ class DABDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
         intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
+        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
+            Intermediate reference points (reference points of each layer of the decoder).
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -131,6 +132,10 @@ class DABDETRModelOutput(Seq2SeqModelOutput):
         intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, sequence_length, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
             Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
             layernorm.
+        reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
+            Intermediate reference points (reference points of each layer of the decoder).
+        outputs_coord (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4 (anchor points))`):
+            The predicted bounding box coordinates for each decoder layer. We only use the last layer for inference.
     """
 
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
@@ -448,14 +453,13 @@ class DABDETRSinePositionEmbedding(nn.Module):
     def forward(self, pixel_values, pixel_mask):
         if pixel_mask is None:
             raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
+        not_mask = ~pixel_mask
+        y_embed = not_mask.cumsum(1, dtype=torch.float32)
+        x_embed = not_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
 
-        # dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device).float()
-        # dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
         dim_tx = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_tx = self.temperatureW ** (2 * (dim_tx // 2) / self.embedding_dim)
         pos_x = x_embed[:, :, :, None] / dim_tx
@@ -468,23 +472,6 @@ class DABDETRSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
-        # if pixel_mask is None:
-        #     raise ValueError("No pixel mask provided")
-        # y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        # x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        # if self.normalize:
-        #     y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
-        #     x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
-
-        # dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        # dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
-
-        # pos_x = x_embed[:, :, :, None] / dim_t
-        # pos_y = y_embed[:, :, :, None] / dim_t
-        # pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        # pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        # pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        # return pos
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding with Detr->DABDETR
@@ -641,14 +628,6 @@ class DABDETRAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # if attention_mask is not None:
-        #     if attention_mask.size() != (batch_size, 1, target_len, source_len):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-        #             f" {attention_mask.size()}"
-        #         )
-        #     attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-        #     attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
         if key_padding_mask is not None:
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
             attn_weights = attn_weights.masked_fill(
@@ -656,7 +635,7 @@ class DABDETRAttention(nn.Module):
                 float('-inf'),
             )
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-        # TODO: attention.py line 381
+        # TODO: attention.py line 381 -- Numerical stability
         attn_weights = nn.functional.softmax(attn_weights - attn_weights.max(dim=-1, keepdim=True)[0], dim=-1)
 
         if output_attentions:
@@ -679,9 +658,6 @@ class DABDETRAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        # attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.v_head_dim)
-        # attn_output = attn_output.transpose(1, 2)
-        # attn_output = attn_output.reshape(batch_size, target_len, self.out_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(target_len, batch_size, self.out_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -1175,7 +1151,6 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training) 
 
-
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
@@ -1496,8 +1471,6 @@ class DABDETRModel(DABDETRPreTrainedModel):
         backbone = DABDETRConvEncoder(config)
         object_queries = build_position_encoding(config)
 
-          
-
         self.query_dim = config.query_dim
         assert config.query_dim in [2, 4]
         assert config.query_scale_type in ['cond_elewise', 'cond_scalar', 'fix_elewise']
@@ -1613,7 +1586,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+            pixel_mask = torch.zeros(((batch_size, height, width)), device=device)
 
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # pixel_values should be of shape (batch_size, num_channels, height, width)
@@ -1626,8 +1599,6 @@ class DABDETRModel(DABDETRPreTrainedModel):
         if mask is None:
             raise ValueError("Backbone does not return downsampled pixel mask")
 
-        # TODO hack
-        mask = torch.zeros_like(mask, device=device)
         flattened_mask = mask.flatten(1)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
@@ -1666,7 +1637,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
             queries = torch.zeros(num_queries, batch_size, self.d_model, device=device)
         else:
             queries = self.patterns.weight[:, None, None, :].repeat(1, self.num_queries, batch_size, 1).flatten(0, 1)  # n_q*n_pat, bs, d_model
-            # todo duoble check decoder num patterns
+            # TODO duoble check decoder num patterns
             reference_position_embeddings = reference_position_embeddings.repeat(self.decoder_num_patterns, 1, 1)  # n_q*n_pat, bs, d_model
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
@@ -1704,7 +1675,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
             outputs_coord = torch.stack(outputs_coords)
 
         if not return_dict:
-            return (outputs_coord,) + (intermediate_hidden_states,) + (reference_points,) # decoder_outputs + encoder_outputs + 
+            return (outputs_coord,) + (intermediate_hidden_states,) + (reference_points,) # TODO do we wanna return those ones? -> decoder_outputs + encoder_outputs
 
         return DABDETRModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
