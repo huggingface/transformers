@@ -12,13 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViTPose backbone model.
+"""PyTorch ViTPose backbone model.
 
 This code is the same as the original Vision Transformer (ViT) with 2 modifications:
 - use of padding=2 in the patch embedding layer
 - addition of a mixture-of-experts MLP layer
 """
-
 
 import collections.abc
 import math

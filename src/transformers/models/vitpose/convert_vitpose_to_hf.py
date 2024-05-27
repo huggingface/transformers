@@ -17,7 +17,6 @@
 URL: https://github.com/vitae-transformer/vitpose
 """
 
-
 import argparse
 from pathlib import Path
 
