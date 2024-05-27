@@ -44,7 +44,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         image_processor = CLIPImageProcessor()
         tokenizer = LlamaTokenizer.from_pretrained("stas/tiny-random-llama-2")
 
-        processor = CogvlmProcessor(image_processor, tokenizer)
+        processor = CogvlmProcessor(image_processor, tokenizer, image_size=10, patch_size=2)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -69,7 +69,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CogvlmProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = CogvlmProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor(), image_size=10, patch_size=2)
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
@@ -89,7 +89,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor, image_size=10, patch_size=2)
 
         image_input = self.prepare_image_inputs()
 
@@ -103,7 +103,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor, image_size=10, patch_size=2)
 
         input_str = "lower newer"
 
@@ -114,19 +114,18 @@ class CogvlmProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
-    # Ignore copy
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor, image_size=10, patch_size=2)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -136,7 +135,7 @@ class CogvlmProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor, image_size=10, patch_size=2)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -145,17 +144,15 @@ class CogvlmProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    # Ignore copy
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CogvlmProcessor(tokenizer=tokenizer, image_processor=image_processor, image_size=10, patch_size=2)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
-        # For now the processor supports only ['input_ids', 'attention_mask', 'pixel_values']
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])

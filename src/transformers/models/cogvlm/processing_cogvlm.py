@@ -51,7 +51,7 @@ class CogvlmProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "LlamaTokenizer"
 
-    def __init__(self, image_processor, tokenizer, image_size, patch_size):
+    def __init__(self, image_processor, tokenizer, image_size: int, patch_size: int):
         super().__init__(image_processor, tokenizer)
         self.image_size = image_size
         self.patch_size = patch_size
