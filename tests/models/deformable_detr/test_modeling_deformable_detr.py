@@ -232,6 +232,12 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         self.model_tester = DeformableDetrModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeformableDetrConfig, has_text_modality=False)
 
+    @unittest.skip(
+        "This starts to fail since 2024/05/24, but earlier commits also fail now and affect many other tests. The error is `an illegal memory access was encountered`."
+    )
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
     def test_config(self):
         # we don't test common_properties and arguments_init as these don't apply for Deformable DETR
         self.config_tester.create_and_test_config_to_json_string()
