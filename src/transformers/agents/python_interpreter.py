@@ -17,7 +17,7 @@
 import ast
 import difflib
 from collections.abc import Mapping
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class InterpretorError(ValueError):
@@ -32,7 +32,6 @@ class InterpretorError(ValueError):
 LIST_SAFE_MODULES = [
     "random",
     "collections",
-    "requests",
     "math",
     "time",
     "queue",
@@ -353,7 +352,12 @@ def evaluate_listcomp(listcomp, state, tools):
     return result
 
 
-def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
+def evaluate_ast(
+    expression: ast.AST,
+    state: Dict[str, Any],
+    tools: Dict[str, Callable],
+    authorized_imports: List[str] = LIST_SAFE_MODULES,
+):
     """
     Evaluate an abstract syntax tree using the content of the variables stored in a state and only evaluating a given
     set of functions.
@@ -369,6 +373,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         tools (`Dict[str, Callable]`):
             The functions that may be called during the evaluation. Any call to another function will fail with an
             `InterpretorError`.
+        authorized_imports (`List[str]`):
+            The list of modules that can be imported by the code. By default, only a few safe modules are allowed.
+            Add more at your own risk!
     """
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
@@ -475,7 +482,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return result
     elif isinstance(expression, ast.Import):
         for alias in expression.names:
-            if alias.name in LIST_SAFE_MODULES:
+            if alias.name in authorized_imports:
                 module = __import__(alias.name)
                 state[alias.asname or alias.name] = module
             else:
@@ -484,7 +491,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.While):
         return evaluate_while(expression, state, tools)
     elif isinstance(expression, ast.ImportFrom):
-        if expression.module in LIST_SAFE_MODULES:
+        if expression.module in authorized_imports:
             module = __import__(expression.module)
             for alias in expression.names:
                 state[alias.asname or alias.name] = getattr(module, alias.name)
@@ -496,7 +503,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
 
 
-def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):
+def evaluate_python_code(
+    code: str, tools: Optional[Dict[str, Callable]] = {}, state=None, authorized_imports: List[str] = LIST_SAFE_MODULES
+):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
@@ -524,7 +533,7 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
     state["print_outputs"] = ""
     for idx, node in enumerate(expression.body):
         try:
-            line_result = evaluate_ast(node, state, tools)
+            line_result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpretorError as e:
             msg = f"You tried to execute the following code:\n{code}\n"
             msg += f"You got these outputs:\n{state['print_outputs']}\n"
