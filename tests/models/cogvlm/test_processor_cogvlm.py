@@ -35,7 +35,6 @@ if is_vision_available():
 
 
 @require_vision
-# Copied from tests.models.blip_2.test_processor_blip_2.Blip2ProcessorTest with Blip2->Cogvlm, BlipImageProcessor->CLIPImageProcessor
 class CogvlmProcessorTest(unittest.TestCase):
     # Ignore copy
     def setUp(self):
@@ -69,7 +68,9 @@ class CogvlmProcessorTest(unittest.TestCase):
         return image_inputs
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CogvlmProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor(), image_size=10, patch_size=2)
+        processor = CogvlmProcessor(
+            tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor(), image_size=10, patch_size=2
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
