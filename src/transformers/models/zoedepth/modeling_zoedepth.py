@@ -656,7 +656,8 @@ class ZoeDepthAttractorLayer(nn.Module):
         batch_size, _, height, width = attractors.shape
         attractors = attractors.view(batch_size, self.n_attractors, 2, height, width)
         # batch_size, num_attractors, 2, height, width
-        attractors_normed = attractors / attractors.sum(dim=2, keepdim=True)
+        # note: original repo had a bug here: https://github.com/isl-org/ZoeDepth/blame/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/layers/attractor.py#L105C9-L106C50
+        # we include the bug to maintain compatibility with the weights
         attractors_normed = attractors[:, :, 0, ...]  # batch_size, batch_size*num_attractors, height, width
 
         bin_centers = nn.functional.interpolate(prev_bin, (height, width), mode="bilinear", align_corners=True)
