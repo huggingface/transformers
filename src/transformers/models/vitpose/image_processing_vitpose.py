@@ -182,7 +182,7 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
         scale (`np.ndarray[2,]`):
             Scale of the bounding box wrt [width, height].
         output_size (`np.ndarray[2,] or `List(2,)`):
-            Size of the destination heatmaps.
+            Size of the destination heatmaps in (height, width) format.
         use_udp (`bool`, *optional*, defaults to `False`):
             Whether to use unbiased data processing.
 
@@ -196,17 +196,17 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
     if len(scale) != 2:
         raise ValueError("Scale needs to consist of a width and height")
     if len(output_size) != 2:
-        raise ValueError("Output size needs to consist of a width and height")
+        raise ValueError("Output size needs to consist of a height and width")
 
     # Recover the scale which is normalized by a factor of 200.
     scale = scale * 200.0
 
     if use_udp:
-        scale_x = scale[0] / (output_size[0] - 1.0)
-        scale_y = scale[1] / (output_size[1] - 1.0)
+        scale_y = scale[1] / (output_size[0] - 1.0)
+        scale_x = scale[0] / (output_size[1] - 1.0)
     else:
-        scale_x = scale[0] / output_size[0]
-        scale_y = scale[1] / output_size[1]
+        scale_y = scale[1] / output_size[0]
+        scale_x = scale[0] / output_size[1]
 
     target_coords = np.ones_like(coords)
     target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
@@ -514,7 +514,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         # Transform back to the image
         for i in range(batch_size):
-            preds[i] = transform_preds(preds[i], center[i], scale[i], [width, height], use_udp=use_udp)
+            preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width], use_udp=use_udp)
 
         return preds, scores
 
