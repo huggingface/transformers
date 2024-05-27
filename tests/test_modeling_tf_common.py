@@ -380,7 +380,9 @@ class TFModelTesterMixin:
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype)
+                for name, tensor in inputs_dict.items()
+                if tf.is_tensor(tensor)
             }
 
             model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
@@ -1689,7 +1691,11 @@ class TFModelTesterMixin:
                 tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 if "labels" not in tf_inputs_dict:
                     return  # This model isn't giving us labels after all, don't try training with it
-                tf_inputs_dict = {key: val for key, val in tf_inputs_dict.items() if "head_mask" not in key}
+                tf_inputs_dict = {
+                    key: val
+                    for key, val in tf_inputs_dict.items()
+                    if "head_mask" not in key and isinstance(val, tf.Tensor)
+                }
                 tf_inputs_dict["extra_unwanted_column"] = list(tf_inputs_dict.values())[0]  # Use a random other tensor
                 input_dataset = Dataset.from_dict(tf_inputs_dict)
                 tf_dataset = model.prepare_tf_dataset(
@@ -1853,8 +1859,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
 
 def random_attention_mask(shape, rng=None, name=None, dtype=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
-    # make sure that at least one token is attended to for each batch
-    attn_mask = tf.concat([attn_mask[:, :-1], tf.ones_like(attn_mask[:, -1:], dtype=dtype)], axis=-1)
+    # Mark the first token as 1 (matches behaviour of PyTorch/Flax function)
+    attn_mask = tf.concat([tf.ones_like(attn_mask[:, :1]), attn_mask[:, 1:]], axis=1)
     return attn_mask
 
 

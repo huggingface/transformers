@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Grounding DINO model."""
+"""PyTorch Grounding DINO model."""
 
 import copy
 import math
@@ -73,7 +73,7 @@ def load_cuda_kernels():
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [

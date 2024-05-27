@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvBERT model."""
-
+"""PyTorch ConvBERT model."""
 
 import math
 import os
@@ -81,72 +80,72 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
         group_dense_name = "dense"
 
     for j in range(config.num_hidden_layers):
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.query.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/query/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.query.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/query/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/key/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/key/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.value.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/value/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.value.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/value/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_out_layer.weight"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.self.conv_out_layer.bias"
-        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.dense.weight"
-        ] = f"electra/encoder/layer_{j}/attention/output/dense/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.LayerNorm.weight"
-        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.dense.bias"
-        ] = f"electra/encoder/layer_{j}/attention/output/dense/bias"
-        param_mapping[
-            f"encoder.layer.{j}.attention.output.LayerNorm.bias"
-        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
-        param_mapping[
-            f"encoder.layer.{j}.intermediate.dense.weight"
-        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.intermediate.dense.bias"
-        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
-        param_mapping[
-            f"encoder.layer.{j}.output.dense.weight"
-        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
-        param_mapping[
-            f"encoder.layer.{j}.output.dense.bias"
-        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
-        param_mapping[
-            f"encoder.layer.{j}.output.LayerNorm.weight"
-        ] = f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
+        param_mapping[f"encoder.layer.{j}.attention.self.query.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/query/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.query.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/query/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/key/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/key/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.value.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/value/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.value.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/value/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.weight"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.self.conv_out_layer.bias"] = (
+            f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.dense.weight"] = (
+            f"electra/encoder/layer_{j}/attention/output/dense/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.weight"] = (
+            f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.dense.bias"] = (
+            f"electra/encoder/layer_{j}/attention/output/dense/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.attention.output.LayerNorm.bias"] = (
+            f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
+        )
+        param_mapping[f"encoder.layer.{j}.intermediate.dense.weight"] = (
+            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.intermediate.dense.bias"] = (
+            f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.output.dense.weight"] = (
+            f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
+        )
+        param_mapping[f"encoder.layer.{j}.output.dense.bias"] = (
+            f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
+        )
+        param_mapping[f"encoder.layer.{j}.output.LayerNorm.weight"] = (
+            f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
+        )
         param_mapping[f"encoder.layer.{j}.output.LayerNorm.bias"] = f"electra/encoder/layer_{j}/output/LayerNorm/beta"
 
     for param in model.named_parameters():

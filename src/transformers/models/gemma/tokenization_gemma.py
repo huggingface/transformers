@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Tokenization classes for Gemma."""
+
 import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple

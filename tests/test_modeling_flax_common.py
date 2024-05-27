@@ -371,7 +371,9 @@ class FlaxModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = pt_model_class.from_pretrained(
+                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
+                    )
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
