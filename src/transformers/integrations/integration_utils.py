@@ -698,9 +698,9 @@ class WandbCallback(TrainerCallback):
     def __init__(
         self,
         *,
-        trainer = None,
-        tokenizer = None,
-        dataset = None,
+        trainer=None,
+        tokenizer=None,
+        dataset=None,
         num_samples: int = 10,
         freq: int = 1,
         ignore_tokens: Optional[list] = None,
