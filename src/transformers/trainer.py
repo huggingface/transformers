@@ -570,6 +570,14 @@ class Trainer:
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
+
+        # Add a reference to the trainer in case callbacks need it
+        def init_callback(cb):
+            cb.trainer = self
+            return cb
+
+        callbacks = [init_callback(cb) for cb in callbacks]
+
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
