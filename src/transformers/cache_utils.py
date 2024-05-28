@@ -2,6 +2,7 @@ import copy
 import importlib.metadata
 import json
 import os
+from math import floor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -18,6 +19,7 @@ if is_quanto_available():
         from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
 
 if is_hqq_available():
+    from hqq.core.quantize import HQQBackend, HQQLinear
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 logger = logging.get_logger(__name__)
@@ -545,7 +547,9 @@ class HQQQuantizedCache(QuantizedCache):
             raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
         self.quantizer = HQQQuantizer
+        #HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key==0 and self.axis_value==0) else HQQBackend.PYTORCH_COMPILE)
 
+    #@torch.compile
     def _quantize(self, tensor, axis):
         qtensor, meta = self.quantizer.quantize(
             tensor,
@@ -556,9 +560,16 @@ class HQQQuantizedCache(QuantizedCache):
             group_size=self.q_group_size,
         )
         meta["compute_dtype"] = self.compute_dtype
-        self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        # self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        qtensor = qtensor.contiguous()
+        for key in meta:
+            if type(meta[key]) == torch.Tensor:
+                meta[key] = (
+                    meta[key].to(self.compute_dtype) if torch.is_floating_point(meta[key]) else meta[key]
+                ).contiguous()
         return qtensor, meta
 
+    #@torch.compile
     def _dequantize(self, qtensor):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
@@ -775,6 +786,10 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+        
+        self.quantizer = HQQQuantizer
+        self._quantized_key_cache: List[torch.Tensor] = [0 for i in range(10)]
+        self._quantized_value_cache: List[torch.Tensor] = [0 for i in range(10)]
 
     def update(
         self,
@@ -827,6 +842,29 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+    
+    def _quantize(self, tensor):
+        qtensor, meta = self.quantizer.quantize(
+            tensor,
+            axis=1,
+            device=self.device,
+            compute_dtype=self.dtype,
+            nbits=2,
+            group_size=64,
+        )
+        meta["compute_dtype"] = self.dtype
+        qtensor = qtensor.contiguous()
+        for key in meta:
+            if type(meta[key]) == torch.Tensor:
+                meta[key] = (
+                    meta[key].to(self.dtype) if torch.is_floating_point(meta[key]) else meta[key]
+                ).contiguous()
+        return qtensor, meta
+
+    def _dequantize(self, qtensor):
+        quant_tensor, meta = qtensor
+        tensor = self.quantizer.dequantize(quant_tensor, meta)
+        return tensor
 
 
 class SlidingWindowCache(Cache):
@@ -948,3 +986,256 @@ class SlidingWindowCache(Cache):
     def reset(self):
         self.key_cache.zero_()
         self.value_cache.zero_()
+
+
+
+class HQQQuantizedCacheStatic(QuantizedCache):
+    """
+    Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
+
+    Parameters:
+        cache_config (`QuantizedCacheConfig`,):
+            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+    """
+
+    def __init__(self, cache_config, config, prefill_length: int, max_cache_len: int, max_batch_size: int=1) -> None:
+        super().__init__(cache_config)
+        if self.nbits not in [1, 2, 3, 4, 8]:
+            raise ValueError(
+                f"`nbits` for `HQQ` backend has to be one of [`1`, `2`, `3`, `4`, `8`] but got {self.nbits}"
+            )
+
+        if self.axis_key not in [0, 1]:
+            raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
+
+        if self.axis_value not in [0, 1]:
+            raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
+
+        self.quantizer = HQQQuantizer
+        self.prefill_length = prefill_length 
+
+        self.max_batch_size = max_batch_size
+        self.max_cache_len = max_cache_len
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
+
+        self._quantized_key_cache, self._quantized_value_cache = [], []
+        self._scales_keys, self._scales_values = [], []
+        self._zeros_keys, self._zeros_values = [], []
+
+        self.pack_shape = 8 // self.nbits
+        self.reshaped_size = (max_batch_size * self.num_key_value_heads * self.head_dim)
+        
+        self.max_quant_cache_len  = (self.reshaped_size * max_cache_len + self.residual_length) // self.q_group_size
+        quant_cache_shape = (self.max_quant_cache_len // self.pack_shape, self.q_group_size)
+        scale_shape = (self.max_quant_cache_len, 1)
+
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
+        cache_shape = (max_batch_size, self.num_key_value_heads, self.residual_length, self.head_dim)
+
+        for _ in range(config.num_hidden_layers):
+            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
+            # breaks when updating the cache.
+            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.compute_dtype, device=self.device)
+            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.compute_dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
+            self.key_cache.append(new_layer_key_cache)
+            self.value_cache.append(new_layer_value_cache)
+
+
+            new_layer_key_cache_quant = torch.zeros(quant_cache_shape, dtype=torch.uint8, device=self.device)
+            new_layer_value_cache_quant = torch.zeros(quant_cache_shape, dtype=torch.uint8, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_key_cache_quant)
+            torch._dynamo.mark_static_address(new_layer_value_cache_quant)
+            self._quantized_key_cache.append(new_layer_key_cache_quant)
+            self._quantized_value_cache.append(new_layer_value_cache_quant)
+
+            new_layer_scale_key = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
+            new_layer_scale_value = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_scale_key)
+            torch._dynamo.mark_static_address(new_layer_scale_value)
+            self._scales_keys.append(new_layer_scale_key)
+            self._scales_values.append(new_layer_scale_value)
+
+            new_layer_zero_key = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
+            new_layer_zero_value = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
+            torch._dynamo.mark_static_address(new_layer_zero_key)
+            torch._dynamo.mark_static_address(new_layer_zero_value)
+            self._zeros_keys.append(new_layer_zero_key)
+            self._zeros_values.append(new_layer_zero_value)
+
+        HQQLinear.set_backend(HQQBackend.PYTORCH_COMPILE)
+
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+
+        quantize_times = max(0, self._seen_tokens - self.prefill_length - 1) // self.residual_length # -1 because we don't add the current token
+        prev_length_1 = self.prefill_length + (quantize_times * self.residual_length)
+        quant_position_1, scale_position_1 = self._get_quant_position(prev_length_1)
+        crop_zeros = 0
+
+        
+        if cache_kwargs["cache_position"].shape[0] > 1:
+            seen_tokens = cache_kwargs["cache_position"].shape[0]
+        else:
+            seen_tokens = cache_kwargs["cache_position"]
+            
+        quantize_times = max(0, seen_tokens - self.prefill_length) // self.residual_length # -1 because we don't add the current token
+        prev_length = self.prefill_length + (quantize_times * self.residual_length)
+        quant_length = (self.reshaped_size * prev_length) // self.q_group_size
+
+        if isinstance(quant_length, int):
+            quant_length = torch.tensor([quant_length], dtype=torch.int, device=self.device)
+        
+        #quant_position, scale_position = self._get_quant_position(prev_length)
+        
+        range = torch.arange(self.max_quant_cache_len, dtype=torch.int, device=self.device)
+        scale_position = range[range < quant_length]
+        #scale_position = torch.cat((prepend, quant_length))
+
+        range = torch.arange(self.max_quant_cache_len // self.pack_shape, dtype=torch.int, device=self.device)
+        quant_position = range[range < (quant_length // self.pack_shape)]
+        #quant_position = torch.cat((prepend, quant_length // self.pack_shape))
+
+        if layer_idx == 0:
+            print(prev_length, prev_length_1, seen_tokens, self._seen_tokens, quant_position.shape, scale_position.shape)
+
+        # slicing = torch.ones(self.sliding_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
+        # cache_position = cache_position.clamp(0, self.sliding_window_size - 1)
+        # to_shift = cache_position >= self.sliding_window_size - 1
+        # indices = (slicing + to_shift[-1].int() - 1) % self.sliding_window_size
+
+
+        if self._seen_tokens - self.prefill_length == 0:
+            self._quantized_key_cache[layer_idx][quant_position], meta_keys = self._quantize(key_states.clone(), axis=self.axis_key)
+            self._quantized_value_cache[layer_idx][quant_position], meta_values = self._quantize(value_states.clone(), axis=self.axis_value)
+            
+            self._scales_keys[layer_idx][scale_position] = meta_keys["scale"]
+            self._scales_values[layer_idx][scale_position] = meta_values["scale"]
+
+            self._zeros_keys[layer_idx][scale_position] = meta_keys["zero"]
+            self._zeros_values[layer_idx][scale_position] = meta_values["zero"]
+            
+            keys_to_return, values_to_return = key_states, value_states
+        else:
+            dequant_key = self._dequantize(
+                self._quantized_key_cache[layer_idx][quant_position],
+                self._scales_keys[layer_idx][scale_position],
+                self._zeros_keys[layer_idx][scale_position],
+                axis=self.axis_key,
+                shape=[self.max_batch_size, self.num_key_value_heads, prev_length, self.head_dim],
+            )
+            dequant_value = self._dequantize(
+                self._quantized_value_cache[layer_idx][quant_position],
+                self._scales_values[layer_idx][scale_position],
+                self._zeros_values[layer_idx][scale_position],
+                axis=self.axis_value,
+                shape=[self.max_batch_size, self.num_key_value_heads, prev_length, self.head_dim],
+            )
+
+            tmp = ((self._seen_tokens - self.prefill_length) % self.residual_length)
+            tmp2 = self.residual_length if tmp == 0 else tmp
+            crop_zeros = self.residual_length - tmp2
+            cache_position = (cache_kwargs["cache_position"] - self.prefill_length) % self.residual_length
+
+            self.key_cache[layer_idx][:, :, cache_position] = key_states
+            self.value_cache[layer_idx][:, :, cache_position] = value_states
+
+            keys_to_return = [dequant_key, self.key_cache[layer_idx]]
+            values_to_return = [dequant_value, self.value_cache[layer_idx]]
+
+            keys_to_return = torch.cat(keys_to_return, dim=-2).contiguous().clone()
+            values_to_return = torch.cat(values_to_return, dim=-2).contiguous().clone()
+
+            if (self._seen_tokens - self.prefill_length) % self.residual_length == 0:
+                quant_position_next, scale_position_next = self._get_quant_position(keys_to_return.shape[-2])
+
+                self._quantized_key_cache[layer_idx][quant_position_next], meta_keys = self._quantize(keys_to_return.clone(), axis=self.axis_key)
+                self._quantized_value_cache[layer_idx][quant_position_next], meta_values = self._quantize(values_to_return.clone(), axis=self.axis_value)
+
+                self._scales_keys[layer_idx][scale_position_next] = meta_keys["scale"]
+                self._scales_values[layer_idx][scale_position_next] = meta_values["scale"]
+
+                self._zeros_keys[layer_idx][scale_position_next] = meta_keys["zero"]
+                self._zeros_values[layer_idx][scale_position_next] = meta_values["zero"]
+
+
+        if crop_zeros != 0:
+            keys_to_return, values_to_return = keys_to_return[:, :, :-crop_zeros], values_to_return[:, :, :-crop_zeros]
+
+        return keys_to_return, values_to_return
+
+
+    def _get_quant_position(self, length):
+        quant_length = (self.reshaped_size * length) // self.q_group_size
+        quant_position = torch.arange(quant_length // self.pack_shape, dtype=torch.int, device=self.device)
+        scale_position = torch.arange(quant_length, dtype=torch.int, device=self.device)  
+        return quant_position, scale_position 
+    
+    def _quantize(self, tensor, axis):
+        qtensor, meta = self.quantizer.quantize(
+            tensor,
+            axis=axis,
+            device=self.device,
+            compute_dtype=self.compute_dtype,
+            nbits=self.nbits,
+            group_size=self.q_group_size,
+        )
+        meta["compute_dtype"] = self.compute_dtype
+        qtensor = qtensor.contiguous()
+        for key in meta:
+            if type(meta[key]) == torch.Tensor:
+                meta[key] = (
+                    meta[key].to(self.compute_dtype) if torch.is_floating_point(meta[key]) else meta[key]
+                ).contiguous()
+        return qtensor, meta
+
+    def _dequantize(self, qtensor, scales, zeros, axis, shape):
+        # prepare meta on-the-fly by changing only scales/zeros
+        meta = {
+            "nbits": self.nbits,
+            "group_size": self.q_group_size,
+            "packing": "2bit_u8" if self.nbits==2 else "4bit_u8",
+            "unpack_view_dtype": "torch.uint8",
+            "view_as_float": False,
+            "scale": scales,
+            "zero": zeros,
+            "axis": axis,
+            "shape": shape,
+        }
+        tensor = self.quantizer.dequantize(qtensor, meta)
+        return tensor
+
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states that were seen by the model."""
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        # TODO: deprecate this function in favor of `cache_position`
+        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states."""
+        return self.max_cache_len
+    
+    def reset(self):
+        """Resets the cache values while preserving the objects"""
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
