@@ -413,18 +413,18 @@ class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
 @unittest.skip("Skipping test class because serialization is not supported yet")
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
