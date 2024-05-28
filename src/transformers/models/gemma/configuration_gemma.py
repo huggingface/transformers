@@ -15,6 +15,7 @@
 # limitations under the License.
 
 
+
 from ...utils import (
     is_flash_attn_2_available,
 )
@@ -29,7 +30,7 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
-class GemmaConfig(PreTrainedConfig):
+class GemmaConfig(PretrainedConfig):
     model_type = "gemma"
 
     def __init__(

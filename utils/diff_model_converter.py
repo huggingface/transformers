@@ -287,6 +287,7 @@ class DiffConverterTransformer(CSTTransformer):
         self.functions_to_insert = {}
         self.inserted_functions = set()
         self.new_body = []
+        self.inserted_deps = []
 
     def leave_FunctionDef(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
@@ -350,13 +351,24 @@ class DiffConverterTransformer(CSTTransformer):
                 dep: class_finder.class_start_line.get(dep, 1000)
                 for dep in class_finder.class_dependency_mapping[class_name]
             }
-            for dependency, _ in sorted(list_dependencies.items(), key=lambda x: x[1]):
+
+            list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1])
+            for dependency, expected_pos in list_dependencies:
                 node = class_finder.global_nodes.get(dependency, None)
                 # make sure the class is not re-defined by the diff file
                 if node is not None and node not in self.new_body:
                     if dependency not in self.class_mapping:
                         self.new_body.append(node)
                         self.class_mapping[dependency] = node
+                    elif dependency not in self.inserted_deps:
+                        # make sure the node is written after it's dependencies
+                        node = self.class_mapping[dependency]
+
+                        self.new_body.remove(node)
+                        self.new_body.append(node)
+                        self.inserted_deps.append(dependency)
+                        # potentially some replacement to do / move the function around
+                        pass
             updated_node = replace_call_to_super(class_finder, updated_node, class_name)
 
         self.class_mapping[class_name] = updated_node
