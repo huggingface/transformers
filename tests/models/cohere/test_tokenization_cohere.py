@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import CohereTokenizerFast
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_jinja, require_read_token, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -37,6 +37,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         "pad_token": "<PAD>",
     }
 
+    @require_read_token
     def setUp(self):
         super().setUp()
         tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
