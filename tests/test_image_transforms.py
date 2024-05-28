@@ -38,7 +38,6 @@ if is_vision_available():
         center_crop,
         center_to_corners_format,
         convert_to_rgb,
-        corners_to_center_format,
         flip_channel_order,
         get_resize_output_image_size,
         id_to_rgb,
@@ -382,17 +381,6 @@ class ImageTransformsTester(unittest.TestCase):
         bbox_center = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
         expected = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
         self.assertTrue(np.allclose(center_to_corners_format(bbox_center), expected))
-
-        # Check that the function and inverse function are inverse of each other
-        self.assertTrue(np.allclose(corners_to_center_format(center_to_corners_format(bbox_center)), bbox_center))
-
-    def test_corners_to_center_format(self):
-        bbox_corners = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
-        expected = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
-        self.assertTrue(np.allclose(corners_to_center_format(bbox_corners), expected))
-
-        # Check that the function and inverse function are inverse of each other
-        self.assertTrue(np.allclose(center_to_corners_format(corners_to_center_format(bbox_corners)), bbox_corners))
 
     def test_rgb_to_id(self):
         # test list input

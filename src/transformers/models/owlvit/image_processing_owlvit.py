@@ -19,10 +19,10 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
-    center_to_corners_format,
     rescale,
     resize,
     to_channel_dimension_format,
@@ -464,20 +464,20 @@ class OwlViTImageProcessor(BaseImageProcessor):
         scores = torch.sigmoid(probs.values)
         labels = probs.indices
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format="absolute_xyxy", image_size=target_sizes
+        )
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
 
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.1,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -491,6 +491,11 @@ class OwlViTImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -504,24 +509,20 @@ class OwlViTImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
         labels = probs.indices
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
+        # Post process boxes
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes
         results = []
         for s, l, b in zip(scores, labels, boxes):
             score = s[s > threshold]
@@ -532,7 +533,14 @@ class OwlViTImageProcessor(BaseImageProcessor):
         return results
 
     # TODO: (Amy) Make compatible with other frameworks
-    def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
+    def post_process_image_guided_detection(
+        self,
+        outputs,
+        threshold: float = 0.0,
+        nms_threshold: float = 0.3,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
+    ):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
@@ -548,6 +556,10 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
                 the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
                 None, predictions will not be unnormalized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -561,11 +573,17 @@ class OwlViTImageProcessor(BaseImageProcessor):
         if target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         probs = torch.max(logits, dim=-1)
         scores = torch.sigmoid(probs.values)
 
-        # Convert to [x0, y0, x1, y1] format
-        target_boxes = center_to_corners_format(target_boxes)
+        # Post process boxes
+        target_boxes = convert_boxes(
+            target_boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
         # Apply non-maximum suppression (NMS)
         if nms_threshold < 1.0:
@@ -577,11 +595,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
                     ious = box_iou(target_boxes[idx][i, :].unsqueeze(0), target_boxes[idx])[0][0]
                     ious[i] = -1.0  # Mask self-IoU.
                     scores[idx][ious > nms_threshold] = 0.0
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(target_boxes.device)
-        target_boxes = target_boxes * scale_fct[:, None, :]
 
         # Compute box display alphas based on prediction scores
         results = []

@@ -21,11 +21,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
-    corners_to_center_format,
     id_to_rgb,
     pad,
     rescale,
@@ -217,17 +216,16 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 
 
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
-    image_height, image_width = image_size
-    norm_annotation = {}
-    for key, value in annotation.items():
-        if key == "boxes":
-            boxes = value
-            boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
-            norm_annotation[key] = boxes
-        else:
-            norm_annotation[key] = value
-    return norm_annotation
+    """Convert annotation boxes from absolute xyxy (pascal voc) to relative xcycwh (yolo) format."""
+    if "boxes" in annotation:
+        annotation = annotation.copy()  # shallow copy
+        annotation["boxes"] = convert_boxes(
+            annotation["boxes"],
+            input_format="absolute_xyxy",
+            output_format="relative_xcycwh",
+            image_size=image_size,
+        )
+    return annotation
 
 
 # Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
@@ -507,7 +505,7 @@ def post_process_panoptic_sample(
         masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
         boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            The predicted bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
             width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
         processed_size (`Tuple[int, int]`):
             The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
@@ -526,11 +524,6 @@ def post_process_panoptic_sample(
 
     cur_scores = scores[keep]
     cur_classes = labels[keep]
-    cur_boxes = center_to_corners_format(boxes[keep])
-
-    if len(cur_boxes) != len(cur_classes):
-        raise ValueError("Not as many boxes as there are classes")
-
     cur_masks = masks[keep]
     cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
     cur_masks = safe_squeeze(cur_masks, 1)
@@ -1523,12 +1516,9 @@ class DetrImageProcessor(BaseImageProcessor):
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
+        boxes = convert_boxes(
+            out_bbox, input_format="relative_xcycwh", output_format="absolute_xyxy", image_size=target_sizes
+        )
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
         return results
@@ -1659,7 +1649,7 @@ class DetrImageProcessor(BaseImageProcessor):
             # default to is_thing_map of COCO panoptic
             is_thing_map = {i: i <= 90 for i in range(201)}
 
-        out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
+        out_logits, raw_masks = outputs.logits, outputs.pred_masks
         if not len(out_logits) == len(raw_masks) == len(target_sizes):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
@@ -1672,9 +1662,7 @@ class DetrImageProcessor(BaseImageProcessor):
                 return tup
             return tuple(tup.cpu().tolist())
 
-        for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
-            out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
-        ):
+        for cur_logits, cur_masks, size, target_size in zip(out_logits, raw_masks, processed_sizes, target_sizes):
             # we filter empty queries and detection below threshold
             cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
             keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
@@ -1682,11 +1670,8 @@ class DetrImageProcessor(BaseImageProcessor):
             cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            if len(cur_boxes) != len(cur_labels):
-                raise ValueError("Not as many boxes as there are classes")
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
@@ -1763,7 +1748,11 @@ class DetrImageProcessor(BaseImageProcessor):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -1777,6 +1766,11 @@ class DetrImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -1789,23 +1783,19 @@ class DetrImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         prob = nn.functional.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
+        # Post process boxes
+        boxes = convert_boxes(
+            out_bbox, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes
         results = []
         for s, l, b in zip(scores, labels, boxes):
             score = s[s > threshold]

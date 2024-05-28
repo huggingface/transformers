@@ -556,65 +556,6 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     raise ValueError(f"Unsupported input type {type(bboxes_center)}")
 
 
-def _corners_to_center_format_torch(bboxes_corners: "torch.Tensor") -> "torch.Tensor":
-    top_left_x, top_left_y, bottom_right_x, bottom_right_y = bboxes_corners.unbind(-1)
-    b = [
-        (top_left_x + bottom_right_x) / 2,  # center x
-        (top_left_y + bottom_right_y) / 2,  # center y
-        (bottom_right_x - top_left_x),  # width
-        (bottom_right_y - top_left_y),  # height
-    ]
-    return torch.stack(b, dim=-1)
-
-
-def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
-    top_left_x, top_left_y, bottom_right_x, bottom_right_y = bboxes_corners.T
-    bboxes_center = np.stack(
-        [
-            (top_left_x + bottom_right_x) / 2,  # center x
-            (top_left_y + bottom_right_y) / 2,  # center y
-            (bottom_right_x - top_left_x),  # width
-            (bottom_right_y - top_left_y),  # height
-        ],
-        axis=-1,
-    )
-    return bboxes_center
-
-
-def _corners_to_center_format_tf(bboxes_corners: "tf.Tensor") -> "tf.Tensor":
-    top_left_x, top_left_y, bottom_right_x, bottom_right_y = tf.unstack(bboxes_corners, axis=-1)
-    bboxes_center = tf.stack(
-        [
-            (top_left_x + bottom_right_x) / 2,  # center x
-            (top_left_y + bottom_right_y) / 2,  # center y
-            (bottom_right_x - top_left_x),  # width
-            (bottom_right_y - top_left_y),  # height
-        ],
-        axis=-1,
-    )
-    return bboxes_center
-
-
-def corners_to_center_format(bboxes_corners: TensorType) -> TensorType:
-    """
-    Converts bounding boxes from corners format to center format.
-
-    corners format: contains the coordinates for the top-left and bottom-right corners of the box
-        (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
-    center format: contains the coordinate for the center of the box and its the width, height dimensions
-        (center_x, center_y, width, height)
-    """
-    # Inverse function accepts different input types so implemented here too
-    if is_torch_tensor(bboxes_corners):
-        return _corners_to_center_format_torch(bboxes_corners)
-    elif isinstance(bboxes_corners, np.ndarray):
-        return _corners_to_center_format_numpy(bboxes_corners)
-    elif is_tf_tensor(bboxes_corners):
-        return _corners_to_center_format_tf(bboxes_corners)
-
-    raise ValueError(f"Unsupported input type {type(bboxes_corners)}")
-
-
 # 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.

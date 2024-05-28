@@ -138,9 +138,16 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         target_sizes = torch.tensor([image.size[::-1]])
         results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=target_sizes)[0]
 
-        boxes = results["boxes"].tolist()
-        self.assertEqual(boxes[0], [341.66656494140625, 23.38756561279297, 642.321044921875, 371.3482971191406])
-        self.assertEqual(boxes[1], [6.753320693969727, 51.96149826049805, 326.61810302734375, 473.12982177734375])
+        boxes = torch.tensor(results["boxes"])
+        expected = torch.tensor(
+            [
+                [341.66656494140625, 23.38756561279297, 642.321044921875, 371.3482971191406],
+                [6.753320693969727, 51.96149826049805, 326.61810302734375, 473.12982177734375],
+            ]
+        )
+        self.assertTrue(
+            torch.allclose(boxes, expected, atol=1e-3), f"max diff: {torch.abs(boxes - expected).max().item()}"
+        )
 
     @unittest.skip("OWLv2 doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):

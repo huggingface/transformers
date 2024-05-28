@@ -22,11 +22,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
-    corners_to_center_format,
     id_to_rgb,
     pad,
     rescale,
@@ -224,17 +223,16 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 
 # Copied from transformers.models.detr.image_processing_detr.normalize_annotation
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
-    image_height, image_width = image_size
-    norm_annotation = {}
-    for key, value in annotation.items():
-        if key == "boxes":
-            boxes = value
-            boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
-            norm_annotation[key] = boxes
-        else:
-            norm_annotation[key] = value
-    return norm_annotation
+    """Convert annotation boxes from absolute xyxy (pascal voc) to relative xcycwh (yolo) format."""
+    if "boxes" in annotation:
+        annotation = annotation.copy()  # shallow copy
+        annotation["boxes"] = convert_boxes(
+            annotation["boxes"],
+            input_format="absolute_xyxy",
+            output_format="relative_xcycwh",
+            image_size=image_size,
+        )
+    return annotation
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -520,7 +518,7 @@ def post_process_panoptic_sample(
         masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
         boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            The predicted bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
             width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
         processed_size (`Tuple[int, int]`):
             The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
@@ -539,11 +537,6 @@ def post_process_panoptic_sample(
 
     cur_scores = scores[keep]
     cur_classes = labels[keep]
-    cur_boxes = center_to_corners_format(boxes[keep])
-
-    if len(cur_boxes) != len(cur_classes):
-        raise ValueError("Not as many boxes as there are classes")
-
     cur_masks = masks[keep]
     cur_masks = resize(cur_masks[:, None], processed_size, resample=PILImageResampling.BILINEAR)
     cur_masks = safe_squeeze(cur_masks, 1)
@@ -1551,13 +1544,11 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        boxes = torch.gather(out_bbox, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format="absolute_xyxy", image_size=target_sizes
+        )
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
 
@@ -1565,7 +1556,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->ConditionalDetr
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        top_k: int = 100,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -1581,6 +1577,10 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             top_k (`int`, *optional*, defaults to 100):
                 Keep only top k bounding boxes before filtering by thresholding.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -1594,26 +1594,25 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         prob = out_logits.sigmoid()
         prob = prob.view(out_logits.shape[0], -1)
         k_value = min(top_k, prob.size(1))
         topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
         scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
+        # Post process boxes
+        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
+        boxes = torch.gather(out_bbox, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
+        # Filter out low confidence boxes
         results = []
         for s, l, b in zip(scores, labels, boxes):
             score = s[s > threshold]

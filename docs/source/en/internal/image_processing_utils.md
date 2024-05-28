@@ -25,10 +25,6 @@ Most of those are only useful if you are studying the code of the image processo
 
 [[autodoc]] image_transforms.center_crop
 
-[[autodoc]] image_transforms.center_to_corners_format
-
-[[autodoc]] image_transforms.corners_to_center_format
-
 [[autodoc]] image_transforms.id_to_rgb
 
 [[autodoc]] image_transforms.normalize
@@ -42,6 +38,10 @@ Most of those are only useful if you are studying the code of the image processo
 [[autodoc]] image_transforms.resize
 
 [[autodoc]] image_transforms.to_pil_image
+
+[[autodoc]] image_transforms.center_to_corners_format
+
+[[autodoc]] image_box_utils.convert_boxes
 
 ## ImageProcessingMixin
 

@@ -18,8 +18,8 @@ Processor class for Grounding DINO.
 
 from typing import List, Optional, Tuple, Union
 
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -170,6 +170,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         box_threshold: float = 0.25,
         text_threshold: float = 0.25,
         target_sizes: Union[TensorType, List[Tuple]] = None,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -187,6 +188,11 @@ class GroundingDinoProcessor(ProcessorMixin):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -199,23 +205,19 @@ class GroundingDinoProcessor(ProcessorMixin):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
+
+        # Post process labels and scores
         probs = torch.sigmoid(logits)  # (batch_size, num_queries, 256)
         scores = torch.max(probs, dim=-1)[0]  # (batch_size, num_queries)
 
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
+        # Post process boxes
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes
         results = []
         for idx, (s, b, p) in enumerate(zip(scores, boxes, probs)):
             score = s[s > box_threshold]

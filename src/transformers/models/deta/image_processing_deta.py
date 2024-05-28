@@ -20,11 +20,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_box_utils import convert_boxes
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
-    corners_to_center_format,
     pad,
     rescale,
     resize,
@@ -216,17 +215,16 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 
 # Copied from transformers.models.detr.image_processing_detr.normalize_annotation
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
-    image_height, image_width = image_size
-    norm_annotation = {}
-    for key, value in annotation.items():
-        if key == "boxes":
-            boxes = value
-            boxes = corners_to_center_format(boxes)
-            boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
-            norm_annotation[key] = boxes
-        else:
-            norm_annotation[key] = value
-    return norm_annotation
+    """Convert annotation boxes from absolute xyxy (pascal voc) to relative xcycwh (yolo) format."""
+    if "boxes" in annotation:
+        annotation = annotation.copy()  # shallow copy
+        annotation["boxes"] = convert_boxes(
+            annotation["boxes"],
+            input_format="absolute_xyxy",
+            output_format="relative_xcycwh",
+            image_size=image_size,
+        )
+    return annotation
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -1159,6 +1157,7 @@ class DetaImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         target_sizes: Union[TensorType, List[Tuple]] = None,
         nms_threshold: float = 0.7,
+        output_bbox_format: Optional[str] = None,
     ):
         """
         Converts the output of [`DetaForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -1174,6 +1173,10 @@ class DetaImageProcessor(BaseImageProcessor):
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             nms_threshold (`float`, *optional*, defaults to 0.7):
                 NMS threshold.
+            output_bbox_format (`str`, *optional*, defaults to None):
+                The format of the output bounding boxes. If left to None, the format will be set to `"absolute_xyxy"`
+                if `target_sizes` is provided, else it will be set to `"relative_xyxy"`. See [`convert_boxes`] for
+                supported formats.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
@@ -1188,27 +1191,23 @@ class DetaImageProcessor(BaseImageProcessor):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-        prob = out_logits.sigmoid()
+        if output_bbox_format is None:
+            output_bbox_format = "absolute_xyxy" if target_sizes is not None else "relative_xyxy"
 
+        # Post process labels and scores
+        prob = out_logits.sigmoid()
         all_scores = prob.view(batch_size, num_queries * num_labels).to(out_logits.device)
         all_indexes = torch.arange(num_queries * num_labels)[None].repeat(batch_size, 1).to(out_logits.device)
-        all_boxes = torch.div(all_indexes, out_logits.shape[2], rounding_mode="floor")
         all_labels = all_indexes % out_logits.shape[2]
 
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, all_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        # Post process boxes
+        all_boxes = torch.div(all_indexes, out_logits.shape[2], rounding_mode="floor")
+        boxes = torch.gather(out_bbox, 1, all_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        boxes = convert_boxes(
+            boxes, input_format="relative_xcycwh", output_format=output_bbox_format, image_size=target_sizes
+        )
 
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            if isinstance(target_sizes, List):
-                img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
+        # Filter out low confidence boxes and apply NMS
         results = []
         for b in range(batch_size):
             box = boxes[b]
