@@ -28,6 +28,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaModel,
+    LlamaForTokenClassification,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -405,4 +406,7 @@ class GemmaForCausalLM(LlamaForCausalLM):
 
 
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
+    pass
+
+class GemmaForTokenClassification(LlamaForTokenClassification):
     pass
