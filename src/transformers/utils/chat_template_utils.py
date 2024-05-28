@@ -34,18 +34,14 @@ returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL
 
 
 def _get_json_schema_type(param_type):
-    if param_type == int:
-        return {"type": "integer"}
-    elif param_type == float:
-        return {"type": "number"}
-    elif param_type == str:
-        return {"type": "string"}
-    elif param_type == bool:
-        return {"type": "boolean"}
-    elif param_type == Any:
-        return {}
-    else:
-        return {"type": "object"}
+    type_mapping = {
+        int: {"type": "integer"},
+        float: {"type": "number"},
+        str: {"type": "string"},
+        bool: {"type": "boolean"},
+        Any: {},
+    }
+    return type_mapping.get(param_type, {"type": "object"})
 
 
 def _parse_type_hint(hint):
