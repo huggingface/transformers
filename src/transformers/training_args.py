@@ -1677,6 +1677,10 @@ class TrainingArguments:
                 )
                 self.accelerator_config.split_batches = self.split_batches
 
+        # Initialize device before we proceed
+        if self.framework == "pt" and is_torch_available():
+            self.device
+
         if self.torchdynamo is not None:
             warnings.warn(
                 "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
