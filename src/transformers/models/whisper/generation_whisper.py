@@ -907,7 +907,7 @@ class WhisperGenerationMixin:
 
             for i, seek_sequence in enumerate(seek_sequences):
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                if generation_config.num_return_sequences is not None: 
+                if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1: 
                     prev_i = batch_idx_map[fallback_index_map[i // generation_config.num_return_sequences ]]
                 else: 
                     prev_i = batch_idx_map[fallback_index_map[i]]
@@ -943,7 +943,7 @@ class WhisperGenerationMixin:
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
                 is_low_temperature = temperature is None or temperature < 0.5
 
-                if generation_config.num_return_sequences is not None: 
+                if generation_config.num_return_sequences is not None and generation_config.num_return_sequences >1: 
                     do_condition_on_prev_tokens[fallback_index_map[i] // generation_config.num_return_sequences] = (
                         generation_config.condition_on_prev_tokens and is_low_temperature
                     )
@@ -953,7 +953,7 @@ class WhisperGenerationMixin:
                     )
 
                 if needs_fallback[i]:
-                    new_fallback_index_map.append([i])
+                    new_fallback_index_map.append(fallback_index_map[i])
                     new_segment_input.append(segment_input[i])
                     new_decoder_input_ids.append(decoder_input_ids[i])
                     if "decoder_attention_mask" in kwargs:
@@ -1004,7 +1004,7 @@ class WhisperGenerationMixin:
 
         def split_by_batch_index(values, key, batch_idx, generation_config):
             
-            if generation_config.num_return_sequences is not None: 
+            if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1: 
                 if key in ['scores', "encoder_attentions", 'encoder_hidden_states']: 
                     return [v[batch_idx // generation_config.num_return_sequences].cpu() for v in values]
                 if key == 'logits': 
