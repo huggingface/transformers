@@ -524,19 +524,11 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            # rescale coordinates
-            width_ratio = 1
-            height_ratio = 1
+            # Rescale coordinates, image is padded to square for inference,
+            # that is why we need to scale boxes to the max size
+            size = torch.max(img_h, img_w)
+            scale_fct = torch.stack([size, size, size, size], dim=1).to(boxes.device)
 
-            if img_w < img_h:
-                width_ratio = img_w / img_h
-            elif img_h < img_w:
-                height_ratio = img_h / img_w
-
-            img_w = img_w / width_ratio
-            img_h = img_h / height_ratio
-
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
