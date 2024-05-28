@@ -47,7 +47,7 @@ from transformers import (
     get_scheduler,
 )
 from transformers.image_processing_utils import BatchFeature
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 

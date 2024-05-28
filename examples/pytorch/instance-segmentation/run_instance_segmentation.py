@@ -41,7 +41,7 @@ from transformers import (
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
@@ -188,9 +188,9 @@ class Evaluator:
     ):
         """
         Initialize evaluator with image processor, id2label mapping and threshold for filtering predictions.
-            
+
         Args:
-            image_processor (Union[MaskFormerImageProcessor, Mask2FormerImageProcessor]): Image processor for 
+            image_processor (Union[MaskFormerImageProcessor, Mask2FormerImageProcessor]): Image processor for
                 `post_process_instance_segmentation` method.
             id2label (Mapping[int, str]): Mapping from class id to class name.
             threshold (float): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
@@ -261,7 +261,7 @@ class Evaluator:
     def __call__(self, evaluation_results: EvalPrediction, compute_result: bool = False) -> Mapping[str, float]:
         """
         Update metrics with current evaluation results and return metrics if `compute_result` is True.
-        
+
         Args:
             evaluation_results (EvalPrediction): Predictions and targets from evaluation.
             compute_result (bool): Whether to compute and return metrics.
