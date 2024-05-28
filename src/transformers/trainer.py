@@ -151,7 +151,6 @@ from .utils import (
     is_bitsandbytes_available,
     is_datasets_available,
     is_galore_torch_available,
-    is_gradio_client_available,
     is_in_notebook,
     is_ipex_available,
     is_lomo_available,
@@ -167,7 +166,7 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.quantization_config import QuantizationMethod
+from .utils.quantization_config import GgufConfig, QuantizationMethod
 
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -4289,10 +4288,9 @@ class Trainer:
         )
 
         if gguf_config is not None:
-            if not is_gradio_client_available():
-                raise ValueError(
-                    "You need `gradio_client` installed in order to convert the trained model into GGUF format"
-                )
+            if not isinstance(gguf_config, GgufConfig):
+                raise ValueError("Please pass an instance of `GgufConfig`")
+
             from gradio_client import Client
             from huggingface_hub.utils import get_token_to_send
 
