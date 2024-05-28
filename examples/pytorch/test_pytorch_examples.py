@@ -61,6 +61,7 @@ if SRC_DIRS is not None:
     import run_generation
     import run_glue
     import run_image_classification
+    import run_instance_segmentation
     import run_mae
     import run_mlm
     import run_ner
@@ -75,7 +76,6 @@ if SRC_DIRS is not None:
     import run_swag
     import run_translation
     import run_wav2vec2_pretraining_no_trainer
-    import run_instance_segmentation
 
 
 logging.basicConfig(level=logging.DEBUG)
