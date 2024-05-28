@@ -2113,7 +2113,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         _ = model.generate(**model_inputs, watermarking_config=watermark_config, do_sample=False, max_length=15)
 
         # We will not check watermarked text, since we check it in `logits_processors` tests
-        # Checking if generated ids are as expected fails in different hardware
+        # Checking if generated ids are as expected fails on different hardware
         args = {
             "bias": 2.0,
             "context_width": 1,
