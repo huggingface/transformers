@@ -14,6 +14,7 @@
 import argparse
 
 import torch
+import re
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -48,14 +49,17 @@ Example for creating the old state dict file with Python:
 """
 
 KEYS_TO_MODIFY_MAPPING = {
-    "model.vision_tower.": "",
-    "model.vision_model.": "vision_tower.vision_model.",
-    "model.layers.": "language_model.model.layers.",
-    "model.mm_projector": "multi_modal_projector",
-    "lm_head": "language_model.lm_head",
-    "model.norm.": "language_model.model.norm.",
-    "model.embed_tokens": "language_model.model.embed_tokens",
-    "model.vision2text": "model.multi_modal_projector"
+    r"model\.vision_model\.encoder\.layers\.(\d+)\.input_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm1",
+    r"model\.vision_model\.encoder\.layers\.(\d+)\.post_attention_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm2",
+    r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.dense": r"vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj",
+    r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.query_key_value": r"vision_tower.vision_model.encoder.layers.\1.self_attn.q_v_k_proj",
+    r"model\.vision_model\.": r"vision_tower.vision_model.",
+    r"model\.layers\.": r"language_model.model.layers.",
+    r"model\.mm_projector": r"multi_modal_projector",
+    r"lm_head": r"language_model.lm_head",
+    r"model\.norm\.": r"language_model.model.norm.",
+    r"model\.embed_tokens": r"language_model.model.embed_tokens",
+    r"model\.vision2text": r"model.multi_modal_projector",
 }
 
 
@@ -64,11 +68,13 @@ def convert_state_dict_to_hf(state_dict):
     for key, value in state_dict.items():
         if key.endswith(".inv_freq"):
             continue
-        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-            if key_to_modify in key:
-                key = key.replace(key_to_modify, new_key)
+        original_key = key
+        for pattern, replacement in KEYS_TO_MODIFY_MAPPING.items():
+            if re.search(pattern, key):
+                key = re.sub(pattern, replacement, key)
 
         new_state_dict[key] = value
+        print(f"Converted {original_key} to {key}")
     return new_state_dict
 
 

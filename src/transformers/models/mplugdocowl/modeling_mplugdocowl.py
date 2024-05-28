@@ -36,6 +36,7 @@ from .configuration_mplugdocowl import MPLUGDocOwlConfig
 from functools import partial
 
 from .language_modeling_mplugdocowl import MPLUGDocOwlForCausalLM
+from .vision_mplugdocowl import MPLUGDocOwlVisionModel
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MPLUGDocOwlConfig"
 
@@ -236,7 +237,8 @@ MPLUGDOCOWL_INPUTS_DOCSTRING = r"""
 class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
     def __init__(self, config: MPLUGDocOwlConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        #self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = MPLUGDocOwlVisionModel(config.vision_config)
 
         self.multi_modal_projector = MPLUGDocOwlMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
