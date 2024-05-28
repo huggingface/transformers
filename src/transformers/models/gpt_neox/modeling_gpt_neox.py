@@ -257,37 +257,6 @@ class GPTNeoXAttention(nn.Module):
             value = torch.cat((past_value, value), dim=-2)
         present = (key, value) if use_cache else None
 
-        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
-        target_dtype = value.dtype
-        if query.dtype != target_dtype:
-            query = query.to(target_dtype)
-        if key.dtype != target_dtype:
-            key = key.to(target_dtype)
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 / bfloat16 just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        input_dtype = query.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.query_key_value.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query = query.to(target_dtype)
-            key = key.to(target_dtype)
-            value = value.to(target_dtype)
-
         return query, key, value, present
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
@@ -373,10 +342,47 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
             hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache
         )
 
+        query_length = query.shape[-2]
+
+        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
+        target_dtype = value.dtype
+        if query.dtype != target_dtype:
+            query = query.to(target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(target_dtype)
+
+        # Permute to get the expected shape for Flash Attention
+        query = query.permute(0, 2, 1, 3)
+        key = key.permute(0, 2, 1, 3)
+        value = value.permute(0, 2, 1, 3)
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 / bfloat16 just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        input_dtype = query.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query_key_value.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
+
         attention_dropout = self.config.attention_dropout if self.training else 0.0
 
         # Compute attention
-        query_length = query.shape[-2]
         attn_weights = self._flash_attention_forward(
             query, key, value, attention_mask, query_length, dropout=attention_dropout, softmax_scale=self.norm_factor
         )
@@ -546,6 +552,13 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
         query, key, value, present = self._attn_projections_and_rope(
             hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache
         )
+
+        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
+        target_dtype = value.dtype
+        if query.dtype != target_dtype:
+            query = query.to(target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(target_dtype)
 
         causal_mask = attention_mask
         if attention_mask is not None:
