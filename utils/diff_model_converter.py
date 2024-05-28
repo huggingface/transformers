@@ -257,10 +257,10 @@ class SuperTransformer(cst.CSTTransformer):
 def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef, class_name: str):
     """
     Given the `class_name`, the `updated_node`'s call to super are unpacked.
-    
-                    |    ```python                          |               |    ```python    
+
+                    |    ```python                          |               |    ```python
                     |    class GemmaModel(LlamaModel):      |               |       class GemmaModel(nn.Module):
-                    |        def __init__(self):            |               |           def __init__(self):      
+                    |        def __init__(self):            |               |           def __init__(self):
     Going from:     |            self.dropout = 0.2         |       to:     |               self.dropout = 0.2
                     |            super().__init__()         |               |               super().__init__(config)
                     |     ```                               |               |               self.padding_idx = config.pad_token_id
