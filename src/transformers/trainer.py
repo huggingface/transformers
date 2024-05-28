@@ -3565,7 +3565,7 @@ class Trainer:
                 When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
                 of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
                 `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
-                loss on `data1` and `metric_for_best_model="eval_data1_loss"` for the loss on `data2`.
+                loss on `data1` and `metric_for_best_model="eval_data2_loss"` for the loss on `data2`.
 
                 </Tip>
 
