@@ -569,39 +569,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=30)
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
-        expected_outputs = [
-            2,
-            450,
-            22910,
-            9565,
-            310,
-            445,
-            1967,
-            338,
-            393,
-            263,
-            767,
-            338,
-            13977,
-            292,
-            22095,
-            373,
-            278,
-            1250,
-            310,
-            263,
-            13328,
-            20134,
-            29963,
-            1550,
-            372,
-            338,
-            19500,
-            1623,
-            263,
-            19587,
-            4272,
-        ]
+        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272]  # fmt: off
 
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
