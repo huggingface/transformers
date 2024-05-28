@@ -2304,6 +2304,8 @@ class Trainer:
                         else:
                             grad_norm = _grad_norm
 
+                    self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
+                    
                     self.optimizer.step()
 
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
