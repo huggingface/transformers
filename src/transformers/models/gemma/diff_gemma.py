@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
@@ -32,7 +31,7 @@ from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
+from transformers.models.llama.configuration_llama import LlamaConfig
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
@@ -162,6 +161,32 @@ class GemmaConfig(PretrainedConfig):
             **kwargs,
         )
 
+# Example where we only want to overwrite the defaults of an init?
+class GemmaConfig(LlamaConfig):
+    def __init__(
+        self,
+        vocab_size=256000,
+        hidden_size=3072,
+        intermediate_size=24576,
+        num_hidden_layers=28,
+        num_attention_heads=16,
+        num_key_value_heads=16,
+        head_dim=256,
+        hidden_act="gelu_pytorch_tanh",
+        hidden_activation=None,
+        max_position_embeddings=8192,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
+        tie_word_embeddings=True,
+        rope_theta=10000.0,
+        attention_bias=False,
+        attention_dropout=0.0,
+    ):
+        super().__init__(self)
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -382,7 +407,7 @@ class GemmaModel(LlamaModel):
             cache_position,
         )
 
-
+# Example where we ony modify the docstring and call super
 class GemmaForCausalLM(LlamaForCausalLM):
     def forward(
         self,
@@ -423,52 +448,18 @@ class GemmaForCausalLM(LlamaForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
-        loss = None
-        if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return super().forward(
+            input_ids,
+            attention_mask,
+            position_ids,
+            past_key_values,
+            inputs_embeds,
+            labels,
+            use_cache,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            cache_position, 
         )
 
 

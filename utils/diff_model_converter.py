@@ -236,6 +236,7 @@ def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     wrapper.visit(class_finder)
     return class_finder
 
+DOCSTRING_NODE = m.SimpleStatementLine(body=[m.Expr(value=m.SimpleString(value=m.MatchIfTrue(lambda value: re.search(r'\"\"\"[\s\S]*\"\"\"',value) is not None)))])
 
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
@@ -255,6 +256,9 @@ class SuperTransformer(cst.CSTTransformer):
         }
         for stmt in existing_body:
             if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
+                if m.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
+                    print("Oh docstring")
+                    continue
                 de_duplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
@@ -263,7 +267,11 @@ class SuperTransformer(cst.CSTTransformer):
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
         new_body = []
+        self.has_docstring = False
         for expr in node.body:
+            if m.matches(node.body[0], DOCSTRING_NODE):
+                self.has_docstring = True
+
             if m.matches(
                 expr,
                 m.SimpleStatementLine(
@@ -295,7 +303,8 @@ class SuperTransformer(cst.CSTTransformer):
         if updated_node.name.value in self.updated_methods:
             name = updated_node.name.value
             new_body = self.replace_super_calls(updated_node.body, name)
-            return updated_node.with_changes(body=new_body)
+            # dont't change the current func's default params
+            return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
@@ -335,6 +344,9 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                                                                             |     ```
     """
     original_node = class_finder.classes[class_name]
+
+    # TODO here is where we merge stuff from super. We can choose to merge the docstring as well!
+    # We could also check the docstring here
     original_methods = {f.name.value: f for f in original_node.body.body if m.matches(f, m.FunctionDef())}
 
     # Copy methods from original node to replacement node, preserving decorators
@@ -343,7 +355,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     for name, func in original_methods.items():
         if name in updated_methods:
             # Replace the method in the replacement class, preserving decorators
-            func = func.with_changes(body=updated_methods[name].body)
+            func = func.with_changes(body=updated_methods[name].body, params = updated_methods[name].params )
         end_meth.append(func)
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
