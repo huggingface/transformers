@@ -903,6 +903,9 @@ class ZambaMLP(nn.Module):
 class ZambaAttentionDecoderLayer(nn.Module):
     def __init__(self, config: ZambaConfig, layer_idx: Optional[int] = None):
         super().__init__()
+        assert config._attn_implementation != 'flash_attention_2', ("Flash attention 2 is currently "
+            "not supported in the HuhhingFace implementation of Zamba v1."
+        )
         self.self_attn = ZAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.feed_forward = ZambaMLP(config)
