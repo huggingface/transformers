@@ -29,7 +29,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
-    from_pretrained_id = "CohereForAI/c4ai-command-r-v01"
+    from_pretrained_id = "hf-internal-testing/tiny-random-CohereForCausalLM"
     special_tokens_map = {
         "bos_token": "<BOS_TOKEN>",
         "eos_token": "<|END_OF_TURN_TOKEN|>",
