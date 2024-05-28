@@ -1854,6 +1854,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
         jinja_env.globals["raise_exception"] = raise_exception
+        jinja_env.policies['json.dumps_kwargs']['ensure_ascii'] = False
         return jinja_env.from_string(chat_template)
 
     @property
