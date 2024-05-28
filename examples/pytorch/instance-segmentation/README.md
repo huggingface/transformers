@@ -126,7 +126,7 @@ With the default settings, the script fine-tunes a [Mask2Former](https://hugging
 
 ## Reload and perform inference
 
-This means that after training, you can easily load your trained model and perform inference as follows::
+This means that after training, you can easily load your trained model and perform inference as follows:
 
 ```python
 import torch
