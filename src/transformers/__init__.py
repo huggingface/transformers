@@ -1182,7 +1182,17 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
-    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache", "StaticCache"]
+    _import_structure["cache_utils"] = [
+        "Cache",
+        "CacheConfig",
+        "DynamicCache",
+        "HQQQuantizedCache",
+        "QuantizedCache",
+        "QuantizedCacheConfig",
+        "QuantoQuantizedCache",
+        "SinkCache",
+        "StaticCache",
+    ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2031,6 +2041,7 @@ else:
         [
             "GemmaForCausalLM",
             "GemmaForSequenceClassification",
+            "GemmaForTokenClassification",
             "GemmaModel",
             "GemmaPreTrainedModel",
         ]
@@ -2288,6 +2299,7 @@ else:
             "LlamaForCausalLM",
             "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
+            "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
         ]
@@ -2435,12 +2447,19 @@ else:
         [
             "MistralForCausalLM",
             "MistralForSequenceClassification",
+            "MistralForTokenClassification",
             "MistralModel",
             "MistralPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
-        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+        [
+            "MixtralForCausalLM",
+            "MixtralForSequenceClassification",
+            "MixtralForTokenClassification",
+            "MixtralModel",
+            "MixtralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -2714,6 +2733,7 @@ else:
         [
             "PersimmonForCausalLM",
             "PersimmonForSequenceClassification",
+            "PersimmonForTokenClassification",
             "PersimmonModel",
             "PersimmonPreTrainedModel",
         ]
@@ -2810,6 +2830,7 @@ else:
         [
             "Qwen2ForCausalLM",
             "Qwen2ForSequenceClassification",
+            "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
         ]
@@ -2818,6 +2839,7 @@ else:
         [
             "Qwen2MoeForCausalLM",
             "Qwen2MoeForSequenceClassification",
+            "Qwen2MoeForTokenClassification",
             "Qwen2MoeModel",
             "Qwen2MoePreTrainedModel",
         ]
@@ -3066,6 +3088,7 @@ else:
         [
             "StableLmForCausalLM",
             "StableLmForSequenceClassification",
+            "StableLmForTokenClassification",
             "StableLmModel",
             "StableLmPreTrainedModel",
         ]
@@ -3074,6 +3097,7 @@ else:
         [
             "Starcoder2ForCausalLM",
             "Starcoder2ForSequenceClassification",
+            "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
         ]
@@ -3949,6 +3973,9 @@ else:
     _import_structure["models.marian"].extend(["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"])
     _import_structure["models.mbart"].extend(
         ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel"]
+    )
+    _import_structure["models.mistral"].extend(
+        ["TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralModel", "TFMistralPreTrainedModel"]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -5778,7 +5805,17 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
-        from .cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+        from .cache_utils import (
+            Cache,
+            CacheConfig,
+            DynamicCache,
+            HQQQuantizedCache,
+            QuantizedCache,
+            QuantizedCacheConfig,
+            QuantoQuantizedCache,
+            SinkCache,
+            StaticCache,
+        )
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -6489,6 +6526,7 @@ if TYPE_CHECKING:
         from .models.gemma import (
             GemmaForCausalLM,
             GemmaForSequenceClassification,
+            GemmaForTokenClassification,
             GemmaModel,
             GemmaPreTrainedModel,
         )
@@ -6686,6 +6724,7 @@ if TYPE_CHECKING:
             LlamaForCausalLM,
             LlamaForQuestionAnswering,
             LlamaForSequenceClassification,
+            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )
@@ -6801,12 +6840,14 @@ if TYPE_CHECKING:
         from .models.mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
+            MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
         )
@@ -7025,6 +7066,7 @@ if TYPE_CHECKING:
         from .models.persimmon import (
             PersimmonForCausalLM,
             PersimmonForSequenceClassification,
+            PersimmonForTokenClassification,
             PersimmonModel,
             PersimmonPreTrainedModel,
         )
@@ -7099,12 +7141,14 @@ if TYPE_CHECKING:
         from .models.qwen2 import (
             Qwen2ForCausalLM,
             Qwen2ForSequenceClassification,
+            Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
         from .models.qwen2_moe import (
             Qwen2MoeForCausalLM,
             Qwen2MoeForSequenceClassification,
+            Qwen2MoeForTokenClassification,
             Qwen2MoeModel,
             Qwen2MoePreTrainedModel,
         )
@@ -7306,12 +7350,14 @@ if TYPE_CHECKING:
         from .models.stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )
         from .models.starcoder2 import (
             Starcoder2ForCausalLM,
             Starcoder2ForSequenceClassification,
+            Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )
@@ -8023,6 +8069,12 @@ if TYPE_CHECKING:
             TFMBartForConditionalGeneration,
             TFMBartModel,
             TFMBartPreTrainedModel,
+        )
+        from .models.mistral import (
+            TFMistralForCausalLM,
+            TFMistralForSequenceClassification,
+            TFMistralModel,
+            TFMistralPreTrainedModel,
         )
         from .models.mobilebert import (
             TFMobileBertForMaskedLM,

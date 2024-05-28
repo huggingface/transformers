@@ -304,6 +304,12 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
             self.fail(self._formatMessage(msg, standardMsg))
 
+    @unittest.skip(
+        "This starts to fail since 2024/05/24, but earlier commits also fail now and affect many other tests. The error is `an illegal memory access was encountered`."
+    )
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

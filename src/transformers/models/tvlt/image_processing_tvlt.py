@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for TVLT."""
+
 from typing import Dict, List, Optional, Union
 
 import numpy as np
