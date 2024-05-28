@@ -61,7 +61,8 @@ inputs = processor(text=prompt, images=raw_image, suffix=answer, return_tensors=
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with PaliGemma. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 - A blog post introducing all the features of PaliGemma can be found [here](https://huggingface.co/blog/paligemma).
-- Demo notebooks on how to fine-tune PaliGemma on a custom dataset along with inference can be found [here](https://x.com/mervenoyann/status/1793629910143213687).
+- Demo notebooks on how to fine-tune PaliGemma for VQA with the Trainer API along with inference can be found [here](https://github.com/huggingface/notebooks/tree/main/examples/paligemma).
+- Demo notebooks on how to fine-tune PaliGemma on a custom dataset (receipt image -> JSON) along with inference can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/PaliGemma). 🌎
 
 ## PaliGemmaConfig
 
