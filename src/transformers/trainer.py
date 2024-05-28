@@ -4269,6 +4269,11 @@ class Trainer:
                 if model_tag not in kwargs["tags"]:
                     kwargs["tags"].append(model_tag)
 
+        if gguf_config is not None:
+            if "tags" not in kwargs:
+                kwargs["tags"] = []
+            kwargs["tags"].append("gguf_generated_from_trainer")
+
         self.create_model_card(model_name=model_name, **kwargs)
 
         # Wait for the current upload to be finished.
@@ -4291,14 +4296,27 @@ class Trainer:
             from gradio_client import Client
             from huggingface_hub.utils import get_token_to_send
 
-            client = Client("ybelkada/gguf-my-repo")
+            if get_token_to_send(token) is None:
+                logger.warning(
+                    "Make sure to login with `huggingface-cli login` before running the GGUF conversion, will silently ignore the GGUF conversion."
+                )
+                return upload_results
 
-            _ = client.predict(
+            if gguf_config.duplicate_space:
+                client = Client.duplicate(gguf_config.space_name, hf_token=get_token_to_send(token))
+            else:
+                client = Client(gguf_config.space_name)
+
+            job = client.submit(
                 model_id=self.hub_model_id,
-                q_method=gguf_config["q_method"],
-                private_repo=self.args.hub_private_repo,
+                q_method=gguf_config.quantization_method,
+                private_repo=gguf_config.private,
                 token=get_token_to_send(token),
                 api_name="/predict",
+            )
+
+            logger.info(
+                f"GGUF conversion Space is running with the status {job.status().code} - please monitor your HF profile to see if the converted model has been pushed"
             )
 
         return upload_results
