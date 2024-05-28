@@ -14,11 +14,11 @@
 # limitations under the License.
 """PyTorch GPTNeoX model."""
 
-from packaging import version
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging, get_torch_version
+from ...utils import get_torch_version, is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
 from .configuration_gpt_neox import GPTNeoXConfig
 
 
@@ -169,10 +169,7 @@ class GPTNeoXAttention(nn.Module):
     ):
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
-            hidden_states=hidden_states,
-            position_ids=position_ids,
-            layer_past=layer_past,
-            use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache
         )
 
         # Compute attention
@@ -214,11 +211,11 @@ class GPTNeoXAttention(nn.Module):
         return tensor
 
     def _attn_projections_and_rope(
-            self,
-            hidden_states: torch.FloatTensor,
-            position_ids: torch.LongTensor,
-            layer_past: Optional[Tuple[torch.Tensor]] = None,
-            use_cache: Optional[bool] = False,
+        self,
+        hidden_states: torch.FloatTensor,
+        position_ids: torch.LongTensor,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
     ):
         has_layer_past = layer_past is not None
 
@@ -373,10 +370,7 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
     ):
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
-            hidden_states=hidden_states,
-            position_ids=position_ids,
-            layer_past=layer_past,
-            use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache
         )
 
         attention_dropout = self.config.attention_dropout if self.training else 0.0
@@ -505,6 +499,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
     `GPTNeoXAttention` as the weights of the module stays untouched. The only changes are on the forward pass
     to adapt to the SDPA API.
     """
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -549,10 +544,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 
         # Apply attention-specific projections and rope
         query, key, value, present = self._attn_projections_and_rope(
-            hidden_states=hidden_states,
-            position_ids=position_ids,
-            layer_past=layer_past,
-            use_cache=use_cache
+            hidden_states=hidden_states, position_ids=position_ids, layer_past=layer_past, use_cache=use_cache
         )
 
         causal_mask = attention_mask
