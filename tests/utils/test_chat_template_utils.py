@@ -390,10 +390,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             Test function
 
             Args:
-                x (int): The first input
+                x: The first input
 
-                y (int): The second input. This is a longer description
-                         that spans multiple lines with indentation and stuff.
+                y: The second input. This is a longer description
+                   that spans multiple lines with indentation and stuff.
 
             Returns:
                 God knows what
@@ -408,7 +408,10 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "type": "object",
                 "properties": {
                     "x": {"type": "integer", "description": "The first input"},
-                    "y": {"type": "integer", "description": "The second input. This is a longer description"},
+                    "y": {
+                        "type": "integer",
+                        "description": "The second input. This is a longer description that spans multiple lines with indentation and stuff.",
+                    },
                 },
                 "required": ["x", "y"],
             },
@@ -424,13 +427,13 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             Test function with multiple args, and docstring args that we have to strip out.
 
             Args:
-                x (str): The first input. It's got a big multiline
+                x: The first input. It's got a big multiline
                    description and also contains
                    (choices: ["a", "b", "c"])
 
-                y (List[Union[int, str], *optional*): The second input. It's a big list with a single-line description.
+                y: The second input. It's a big list with a single-line description.
 
-                z (Tuple[Union[int, str], str]): The third input. It's some kind of tuple with a default arg.
+                z: The third input. It's some kind of tuple with a default arg.
 
             Returns:
                 The output. The return description is also a big multiline
@@ -445,7 +448,11 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "string", "description": "The first input. It's got a big multiline"},
+                    "x": {
+                        "type": "string",
+                        "enum": ["a", "b", "c"],
+                        "description": "The first input. It's got a big multiline description and also contains",
+                    },
                     "y": {
                         "type": "array",
                         "items": {"type": ["string", "integer"]},

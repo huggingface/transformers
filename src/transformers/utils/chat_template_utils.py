@@ -21,7 +21,15 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
-args_split_re = re.compile(r"(?:^|\n)\s*(\w+)\s*(?:\([\w\s\[\],.*]+\))?:\s*(.*?)\s*(?=\n\s*\w|\Z)", re.DOTALL)
+args_split_re = re.compile(
+    r"""
+(?:^|\n)  # Match the start of the args block, or a newline
+\s*(\w+):\s*  # Capture the argument name and strip spacing
+(.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
+(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+""",
+    re.DOTALL | re.VERBOSE,
+)
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
@@ -163,7 +171,7 @@ def parse_google_format_docstring(docstring):
     if docstring_args is not None:
         docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: match[1].replace("\n", " ").strip() for match in matches}
+        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
     else:
         args_dict = {}
 
