@@ -131,10 +131,10 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
             "Jax version": f"{jax_version}",
             "JaxLib version": f"{jaxlib_version}",
-            "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
         if pt_cuda_available:
+            info["Using GPU in script?"] = "<fill in>"
             info["GPU type"] = torch.cuda.get_device_name()
         elif pt_npu_available:
             info["NPU type"] = torch.npu.get_device_name()
