@@ -414,7 +414,7 @@ def main():
         do_resize=True,
         size={"height": args.image_height, "width": args.image_width},
         do_reduce_labels=args.do_reduce_labels,
-        reduce_labels=args.do_reduce_labels,  # TODO: remove in the future
+        reduce_labels=args.do_reduce_labels,  # TODO: remove when mask2former support `do_reduce_labels`
         token=args.token,
     )
 
