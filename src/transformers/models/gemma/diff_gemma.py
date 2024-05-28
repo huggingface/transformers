@@ -23,15 +23,16 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers import PretrainedConfig
+from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaModel,
     LlamaForTokenClassification,
+    LlamaModel,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from transformers.models.llama.configuration_llama import LlamaConfig
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
@@ -109,6 +110,7 @@ class GemmaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -161,6 +163,7 @@ class GemmaConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 # Example where we only want to overwrite the defaults of an init?
 class GemmaConfig(LlamaConfig):
     def __init__(
@@ -187,6 +190,7 @@ class GemmaConfig(LlamaConfig):
         attention_dropout=0.0,
     ):
         super().__init__(self)
+
 
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -407,6 +411,7 @@ class GemmaModel(LlamaModel):
             cache_position,
         )
 
+
 # Example where we ony modify the docstring and call super
 class GemmaForCausalLM(LlamaForCausalLM):
     def forward(
@@ -459,12 +464,13 @@ class GemmaForCausalLM(LlamaForCausalLM):
             output_attentions,
             output_hidden_states,
             return_dict,
-            cache_position, 
+            cache_position,
         )
 
 
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
     pass
+
 
 class GemmaForTokenClassification(LlamaForTokenClassification):
     pass

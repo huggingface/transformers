@@ -74,6 +74,7 @@ AUTO_GENERATED_MESSAGE = """
 
 """
 
+
 def get_module_source_from_name(module_name: str) -> str:
     spec = importlib.util.find_spec(module_name)
     if spec is None or spec.origin is None:
@@ -236,7 +237,17 @@ def find_classes_in_file(module, old_id="llama", new_id="gemma"):
     wrapper.visit(class_finder)
     return class_finder
 
-DOCSTRING_NODE = m.SimpleStatementLine(body=[m.Expr(value=m.SimpleString(value=m.MatchIfTrue(lambda value: re.search(r'\"\"\"[\s\S]*\"\"\"',value) is not None)))])
+
+DOCSTRING_NODE = m.SimpleStatementLine(
+    body=[
+        m.Expr(
+            value=m.SimpleString(
+                value=m.MatchIfTrue(lambda value: re.search(r"\"\"\"[\s\S]*\"\"\"", value) is not None)
+            )
+        )
+    ]
+)
+
 
 class SuperTransformer(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider,)
@@ -347,15 +358,15 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 
     # TODO here is where we merge stuff from super. We can choose to merge the docstring as well!
     # We could also check the docstring here
-    original_methods = {f.name.value if hasattr(f,"name") else f: f for f in original_node.body.body }
+    original_methods = {f.name.value if hasattr(f, "name") else f: f for f in original_node.body.body}
 
     # Copy methods from original node to replacement node, preserving decorators
-    updated_methods = {f.name.value if hasattr(f,"name") else f: f for f in updated_node.body.body }
+    updated_methods = {f.name.value if hasattr(f, "name") else f: f for f in updated_node.body.body}
     end_meth = []
     for name, func in original_methods.items():
         if name in updated_methods:
             # Replace the method in the replacement class, preserving decorators
-            func = func.with_changes(body=updated_methods[name].body, params = updated_methods[name].params )
+            func = func.with_changes(body=updated_methods[name].body, params=updated_methods[name].params)
         end_meth.append(func)
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
