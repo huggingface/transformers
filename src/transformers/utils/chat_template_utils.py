@@ -301,7 +301,7 @@ def get_json_schema(func):
                 f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
-        enum_choices = re.search(r"\(choices:\s*([^)]+)\)\s*$", desc, flags=re.IGNORECASE)
+        enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
             json_schema["properties"][arg]["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
