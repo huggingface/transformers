@@ -3048,6 +3048,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
+        if gguf_file is not None and not is_accelerate_available():
+            raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
+
         if commit_hash is None:
             if not isinstance(config, PretrainedConfig):
                 # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
