@@ -81,7 +81,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id)
 model.load_adapter(peft_model_id)
 ```
 
-Check out the [API documentation](#API-documentation) section below for more details.
+Check out the [API documentation](#API-docs) section below for more details.
 
 ## Load in 8bit or 4bit
 
