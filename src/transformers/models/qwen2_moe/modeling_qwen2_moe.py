@@ -798,16 +798,17 @@ QWEN2MOE_ATTENTION_CLASSES = {
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, specified_num_experts=0):
         super().__init__()
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
+        self.hidden_size = config.hidden_size
 
         # gating
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.gate = nn.Linear(config.hidden_size, config.num_experts-specified_num_experts, bias=False)
         self.experts = nn.ModuleList(
-            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
+            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts - specified_num_experts)]
         )
 
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
@@ -863,13 +864,21 @@ class Qwen2MoeDecoderLayer(nn.Module):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-
-        if config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:
-            self.mlp = Qwen2MoeSparseMoeBlock(config)
+        if isinstance(config.num_pruning_experts, List):
+            print("layer_idx", layer_idx, "num_pruning_experts (List)", config.num_pruning_experts[layer_idx])
         else:
-            self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
+            print("layer_idx", layer_idx, "num_pruning_experts", config.num_pruning_experts)
+        self.self_attn = QWEN2MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        if isinstance(config.num_pruning_experts, List):
+            if config.num_experts - config.num_pruning_experts[layer_idx] > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:
+                self.mlp = Qwen2MoeSparseMoeBlock(config, config.num_pruning_experts[layer_idx])
+            else:
+                self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
+        else:
+            if config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0:          
+                self.mlp = Qwen2MoeSparseMoeBlock(config)
+            else:
+                self.mlp = Qwen2MoeMLP(config, intermediate_size=config.intermediate_size)
 
         self.input_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
