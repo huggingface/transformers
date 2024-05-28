@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch GPTNeoX model."""
 
+from packaging import version
 from typing import Optional, Tuple, Union
 
 import torch
@@ -38,7 +39,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
+from ...utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging, get_torch_version
 from .configuration_gpt_neox import GPTNeoXConfig
 
 
@@ -166,6 +167,59 @@ class GPTNeoXAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         padding_mask: Optional[torch.Tensor] = None,
     ):
+        # Apply attention-specific projections and rope
+        query, key, value, present = self._attn_projections_and_rope(
+            hidden_states=hidden_states,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=use_cache
+        )
+
+        # Compute attention
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+
+        # Reshape outputs
+        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
+        attn_output = self.dense(attn_output)
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+    @classmethod
+    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
+        """
+        Splits hidden dim into attn_head_size and num_attention_heads
+        """
+        # tensor: [bs, seq_len, hidden_size]
+        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(new_shape)
+        # -> [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3)
+        return tensor
+
+    @classmethod
+    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        """
+        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        # -> [bs, seq_len, num_attention_heads, attn_head_size]
+        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
+        # -> [bs, seq_len, hidden_size]
+        return tensor
+
+    def _attn_projections_and_rope(
+            self,
+            hidden_states: torch.FloatTensor,
+            position_ids: torch.LongTensor,
+            layer_past: Optional[Tuple[torch.Tensor]] = None,
+            use_cache: Optional[bool] = False,
+    ):
         has_layer_past = layer_past is not None
 
         # Compute QKV
@@ -206,43 +260,38 @@ class GPTNeoXAttention(nn.Module):
             value = torch.cat((past_value, value), dim=-2)
         present = (key, value) if use_cache else None
 
-        # Compute attention
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
+        target_dtype = value.dtype
+        if query.dtype != target_dtype:
+            query = query.to(target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(target_dtype)
 
-        # Reshape outputs
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
-        attn_output = self.dense(attn_output)
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 / bfloat16 just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        input_dtype = query.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query_key_value.weight.dtype
 
-        outputs = (attn_output, present)
-        if output_attentions:
-            outputs += (attn_weights,)
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
 
-        return outputs
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
 
-    @classmethod
-    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Splits hidden dim into attn_head_size and num_attention_heads
-        """
-        # tensor: [bs, seq_len, hidden_size]
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(new_shape)
-        # -> [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3)
-        return tensor
-
-    @classmethod
-    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
-        """
-        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
-        # -> [bs, seq_len, hidden_size]
-        return tensor
+        return query, key, value, present
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -320,88 +369,20 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ):
-        has_layer_past = layer_past is not None
-
-        # Compute QKV
-        # Attention heads [batch, seq_len, hidden_size]
-        #   --> [batch, seq_len, (np * 3 * head_size)]
-        qkv = self.query_key_value(hidden_states)
-
-        # [batch, seq_len, (num_heads * 3 * head_size)]
-        #   --> [batch, seq_len, num_heads, 3 * head_size]
-        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        qkv = qkv.view(*new_qkv_shape)
-
-        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
-        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
-        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
-
-        query_length = query.shape[-2]
-
-        # Compute rotary embeddings on rotary_ndims
-        query_rot = query[..., : self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims :]
-        key_rot = key[..., : self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims :]
-
-        # Compute token offset for rotary embeddings (when decoding)
-        seq_len = key.shape[-2]
-        if has_layer_past:
-            seq_len += layer_past[0].shape[-2]
-        cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
-
-        # Cache QKV values
-        if has_layer_past:
-            past_key = layer_past[0]
-            past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-        present = (key, value) if use_cache else None
-
-        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
-        target_dtype = value.dtype
-        if query.dtype != target_dtype:
-            query = query.to(target_dtype)
-        if key.dtype != target_dtype:
-            key = key.to(target_dtype)
-
-        # Permute to get the expected shape for Flash Attention
-        query = query.permute(0, 2, 1, 3)
-        key = key.permute(0, 2, 1, 3)
-        value = value.permute(0, 2, 1, 3)
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 / bfloat16 just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        input_dtype = query.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.query_key_value.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query = query.to(target_dtype)
-            key = key.to(target_dtype)
-            value = value.to(target_dtype)
+        # Apply attention-specific projections and rope
+        query, key, value, present = self._attn_projections_and_rope(
+            hidden_states=hidden_states,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=use_cache
+        )
 
         attention_dropout = self.config.attention_dropout if self.training else 0.0
 
         # Compute attention
+        query_length = query.shape[-2]
         attn_weights = self._flash_attention_forward(
             query, key, value, attention_mask, query_length, dropout=attention_dropout, softmax_scale=self.norm_factor
         )
@@ -524,6 +505,14 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
     `GPTNeoXAttention` as the weights of the module stays untouched. The only changes are on the forward pass
     to adapt to the SDPA API.
     """
+    def __init__(self, config):
+        super().__init__(config)
+
+        # Idea adapted from transformers.models.bert.modeling_bert.BertSdpaSelfAttention.__init__
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()`. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from GPTNeoXAttention.forward and following other sdpa implementations
     # such as transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
@@ -557,60 +546,21 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
             )
 
         bsz, q_len, _ = hidden_states.size()
-        has_layer_past = layer_past is not None
 
-        # Compute QKV
-        # Attention heads [batch, seq_len, hidden_size]
-        #   --> [batch, seq_len, (np * 3 * head_size)]
-        qkv = self.query_key_value(hidden_states)
-
-        # [batch, seq_len, (num_heads * 3 * head_size)]
-        #   --> [batch, seq_len, num_heads, 3 * head_size]
-        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        qkv = qkv.view(*new_qkv_shape)
-
-        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
-        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
-        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
-
-        # Compute rotary embeddings on rotary_ndims
-        query_rot = query[..., : self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims :]
-        key_rot = key[..., : self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims :]
-
-        # Compute token offset for rotary embeddings (when decoding)
-        seq_len = key.shape[-2]
-        if has_layer_past:
-            seq_len += layer_past[0].shape[-2]
-        cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
-
-        # Cache KV values
-        if has_layer_past:
-            past_key = layer_past[0]
-            past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-        present = (key, value) if use_cache else None
-
-        # GPT-neo-X casts query and key in fp32 to apply rotary embedding in full precision
-        target_dtype = value.dtype
-        if query.dtype != target_dtype:
-            query = query.to(target_dtype)
-        if key.dtype != target_dtype:
-            key = key.to(target_dtype)
+        # Apply attention-specific projections and rope
+        query, key, value, present = self._attn_projections_and_rope(
+            hidden_states=hidden_states,
+            position_ids=position_ids,
+            layer_past=layer_past,
+            use_cache=use_cache
+        )
 
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query.device.type == "cuda" and causal_mask is not None:
+        # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
+        if self.require_contiguous_qkv and query.device.type == "cuda" and causal_mask is not None:
             query = query.contiguous()
             key = key.contiguous()
             value = value.contiguous()
@@ -999,7 +949,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             attention_mask = attention_mask.view(batch_size, -1)
             if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._use_sdpa and not output_attentions:
+            elif self._use_sdpa and not output_attentions and not any(head_mask):
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask=attention_mask,
                     input_shape=(batch_size, seq_length),
