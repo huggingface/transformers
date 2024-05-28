@@ -18,10 +18,46 @@ import warnings
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
-
-
+from typing import Union
+import os
 logger = logging.get_logger(__name__)
 
+class MplugDocOwlHReducerConfig(PretrainedConfig):
+    model_type = "mplug_docowl_hreducer"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
+        conv_shape='1x4',
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.conv_shape = conv_shape
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the visual_abstractor config dict if we are loading from MplugOwlConfig
+        if config_dict.get("model_type") == "mplug-docowl":
+            config_dict = config_dict["hreducer_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
+DEFAULT_VISUAL_CONFIG = {
+    "visual_hreducer": MplugDocOwlHReducerConfig().to_dict()
+}
 
 class MPLUGDocOwlConfig(PretrainedConfig):
     r"""
@@ -79,6 +115,10 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
+        hreducer_hidden_size = 1024,
+        hreducer_initializer_range = 0.02,
+        hreducer_layer_norm=1e-6,
+        hreducer_conv_shape='1x4',
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
@@ -115,7 +155,7 @@ class MPLUGDocOwlConfig(PretrainedConfig):
                 intermediate_size=4096,
                 hidden_size=1024,
                 patch_size=14,
-                image_size=336,
+                image_size=448,
                 num_hidden_layers=24,
                 num_attention_heads=16,
                 vocab_size=32000,
@@ -132,6 +172,10 @@ class MPLUGDocOwlConfig(PretrainedConfig):
 
         self.text_config = text_config
         self._vocab_size = self.text_config.vocab_size
+        self.hreducer_hidden_size = hreducer_hidden_size
+        self.hreducer_initializer_range = hreducer_initializer_range
+        self.hreducer_layer_norm = hreducer_layer_norm
+        self.hreducer_conv_shape = hreducer_conv_shape
         super().__init__(**kwargs)
 
     @property
@@ -150,3 +194,4 @@ class MPLUGDocOwlConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_vocab_size", None)
         return output
+

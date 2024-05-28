@@ -49,17 +49,21 @@ Example for creating the old state dict file with Python:
 """
 
 KEYS_TO_MODIFY_MAPPING = {
+    r"model\.vision_model\.embeddings\.position_embedding": r"vision_tower.vision_model.embeddings.position_embedding",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.input_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm1",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.post_attention_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm2",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.dense": r"vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.query_key_value": r"vision_tower.vision_model.encoder.layers.\1.self_attn.q_v_k_proj",
+    r"model\.vision_model\.embeddings\.pre_layernorm": r"vision_tower.vision_model.pre_layernorm",
+    r"model\.vision_model\.embeddings\.patch_embed": r"vision_tower.vision_model.embeddings.patch_embedding",
+    r"model\.vision_model\.embeddings\.cls_token": r"vision_tower.vision_model.embeddings.class_embedding",
     r"model\.vision_model\.": r"vision_tower.vision_model.",
     r"model\.layers\.": r"language_model.model.layers.",
     r"model\.mm_projector": r"multi_modal_projector",
     r"lm_head": r"language_model.lm_head",
     r"model\.norm\.": r"language_model.model.norm.",
     r"model\.embed_tokens": r"language_model.model.embed_tokens",
-    r"model\.vision2text": r"model.multi_modal_projector",
+    r"model\.vision2text": r"multi_modal_projector",
 }
 
 
