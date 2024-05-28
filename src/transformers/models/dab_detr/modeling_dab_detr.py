@@ -672,10 +672,8 @@ class DABDETREncoderLayer(nn.Module):
         self.embed_dim = config.d_model
         self.self_attn = nn.MultiheadAttention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = nn.Dropout(config.dropout)
-        self.dropout1 = nn.Dropout(config.dropout)
+        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
-        self.dropout2 = nn.Dropout(config.dropout)
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -719,14 +717,18 @@ class DABDETREncoderLayer(nn.Module):
             )
             object_queries = position_embeddings
 
+
         q = k = self.with_pos_embed(hidden_states, object_queries)
         hidden_states_2, attn_weights = self.self_attn(q, k, value=hidden_states, key_padding_mask=key_padding_mask, average_attn_weights=False)
-        hidden_states = hidden_states + self.dropout1(hidden_states_2)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + hidden_states_2
         hidden_states = self.self_attn_layer_norm(hidden_states)
     
-        hidden_states_2 = self.fc2(self.dropout(self.activation_fn(self.fc1(hidden_states))))
+        hidden_states_2 = nn.functional.dropout(self.activation_fn(self.fc1(hidden_states)), p=self.dropout, training=self.training)
+        hidden_states_2 = self.fc2(hidden_states_2)
+        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
 
-        hidden_states = hidden_states + self.dropout2(hidden_states_2)
+        hidden_states = hidden_states + hidden_states_2
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
@@ -749,6 +751,7 @@ class DABDETRDecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         d_model = config.d_model
+        self.dropout = config.dropout
         # Decoder Self-Attention projections
         if not config.rm_self_attn_decoder:
             self.sa_qcontent_proj = nn.Linear(d_model, d_model)
@@ -763,11 +766,8 @@ class DABDETRDecoderLayer(nn.Module):
                 num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
             )
-            self.dropout = config.dropout 
-            # self.activation_fn = ACT2FN[config.activation_function]
-            # self.activation_dropout = config.activation_dropout
-
             self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+            
 
         # Decoder Cross-Attention projections
         self.ca_qcontent_proj = nn.Linear(d_model, d_model)
@@ -777,24 +777,22 @@ class DABDETRDecoderLayer(nn.Module):
         self.ca_v_proj = nn.Linear(d_model, d_model)
         self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
 
-        self.encoder_attn = DABDETRAttention(
+        self.cross_attn = DABDETRAttention(
             self.embed_dim * 2, self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout
         )
         self.nhead = config.decoder_attention_heads
         self.rm_self_attn_decoder = config.rm_self_attn_decoder
 
         ### FFN
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.cross_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.dropout3 = config.dropout
         self.normalize_before = config.normalize_before
         self.keep_query_pos = config.decoder_keep_query_pos
         
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -912,7 +910,7 @@ class DABDETRDecoderLayer(nn.Module):
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
+            hidden_states, cross_attn_weights = self.cross_attn(
                 hidden_states=q,
                 attention_mask=attention_mask,
                 key_padding_mask=encoder_attention_mask,
@@ -923,7 +921,7 @@ class DABDETRDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.cross_attn_layer_norm(hidden_states)
 
         # ============ End of Cross-Attention =============
 
@@ -1149,7 +1147,8 @@ class DABDETREncoder(DABDETRPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training) 
+        # TODO not in the original implementation
+        # hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training) 
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1213,7 +1212,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.num_layers = config.num_decoder_layers
-        self.return_intermediate = config.return_intermediate_decoder
+        self.return_intermediate = True  # config.return_intermediate_decoder it's default true in the original code
 
         self.layers = nn.ModuleList([DABDETRDecoderLayer(config) for _ in range(config.num_decoder_layers)])
         # in DAB-DETR, the decoder uses layernorm after the last decoder layer output

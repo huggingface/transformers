@@ -194,8 +194,6 @@ class DABDETRConfig(PretrainedConfig):
         decoder_nhead=8,
         hidden_dim=256,
         normalize_before=False,
-        return_intermediate=False,
-        return_intermediate_decoder=True,
         iter_update=True,
         **kwargs,
     ):
@@ -279,10 +277,8 @@ class DABDETRConfig(PretrainedConfig):
         self.decoder_nhead = decoder_nhead
         self.hidden_dim = hidden_dim
         self.normalize_before = normalize_before
-        self.return_intermediate = return_intermediate
         self.num_target_classes = num_target_classes
         self.iter_update = iter_update
-        self.return_intermediate_decoder = return_intermediate_decoder
         self.temperatureW = temperatureW
         self.temperatureH = temperatureH
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

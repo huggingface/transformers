@@ -86,7 +86,7 @@ for i in range(6):
     rename_keys.append(
         (
             f"transformer.decoder.layers.{i}.cross_attn.out_proj.weight",
-            f"decoder.layers.{i}.encoder_attn.out_proj.weight",
+            f"decoder.layers.{i}.cross_attn.out_proj.weight",
         )
     )
     # activation function weight
@@ -94,7 +94,7 @@ for i in range(6):
     rename_keys.append(
         (
             f"transformer.decoder.layers.{i}.cross_attn.out_proj.bias",
-            f"decoder.layers.{i}.encoder_attn.out_proj.bias",
+            f"decoder.layers.{i}.cross_attn.out_proj.bias",
         )
     )
     rename_keys.append((f"transformer.decoder.layers.{i}.linear1.weight", f"decoder.layers.{i}.fc1.weight"))
@@ -106,10 +106,10 @@ for i in range(6):
     )
     rename_keys.append((f"transformer.decoder.layers.{i}.norm1.bias", f"decoder.layers.{i}.self_attn_layer_norm.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.encoder_attn_layer_norm.weight")
+        (f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.cross_attn_layer_norm.weight")
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.encoder_attn_layer_norm.bias")
+        (f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.cross_attn_layer_norm.bias")
     )
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
