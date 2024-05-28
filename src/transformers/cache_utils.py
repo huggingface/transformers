@@ -495,7 +495,7 @@ class QuantoQuantizedCache(QuantizedCache):
         quanto_version = version.parse(importlib.metadata.version("quanto"))
         if quanto_version < version.parse("0.2.0"):
             raise ImportError(
-                f"You need quanto package version to be greater or equal than 0.2.0. Detected version {quanto_version}. "
+                f"You need quanto package version to be greater or equal than 0.2.0 to use `QuantoQuantizedCache`. Detected version {quanto_version}. "
                 f"Please upgrade quanto with `pip install -U quanto`"
             )
 
