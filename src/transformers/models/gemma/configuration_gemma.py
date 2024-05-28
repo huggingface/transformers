@@ -15,18 +15,8 @@
 # limitations under the License.
 
 
-from ...utils import (
-    is_flash_attn_2_available,
-)
-from .configuration_gemma import GemmaConfig
 
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
-if is_flash_attn_2_available():
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+from transformers import PretrainedConfig
 
 
 class GemmaConfig(PretrainedConfig):

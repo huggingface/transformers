@@ -812,6 +812,7 @@ _CONFIG_FOR_DOC = "GemmaConfig"
     GEMMA_START_DOCSTRING,
 )
 class GemmaModel(GemmaPreTrainedModel):
+
     def __init__(self, config: GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1031,6 +1032,7 @@ class GemmaModel(GemmaPreTrainedModel):
 
 
 class GemmaForCausalLM(GemmaPreTrainedModel):
+
     def __init__(self, config):
         super().__init__(config)
         self.model = GemmaModel(config)
