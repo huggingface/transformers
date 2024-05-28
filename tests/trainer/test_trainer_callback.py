@@ -77,7 +77,7 @@ class MyTestTrainerCallback(TrainerCallback):
 
     def on_step_begin(self, args, state, control, **kwargs):
         self.events.append("on_step_begin")
-        
+
     def on_optimizer_step(self, args, state, control, **kwargs):
         self.events.append("on_optimizer_step")
 
