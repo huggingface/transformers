@@ -2595,6 +2595,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
         )
         # Save index if sharded
+        index = None
         if state_dict_split.is_sharded:
             index = {
                 "metadata": state_dict_split.metadata,
