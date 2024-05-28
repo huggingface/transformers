@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
+from ..utils import is_auto_awq_available, is_gradio_client_available, is_hqq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -1090,5 +1090,9 @@ class GgufConfig(QuantizationConfigMixin):
             "Q6_K",
             "Q8_0",
         ]
+
+        if not is_gradio_client_available():
+            raise ValueError("`gradio_client` is required to use` `GgufConfig` - pip install -U `gradio_client`")
+
         if self.quantization_method not in accepted_quant_methods:
-            raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+            raise ValueError(f"Only support weights in {accepted_quant_methods} but found {self.weights}")
