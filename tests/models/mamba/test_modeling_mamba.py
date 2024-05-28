@@ -250,7 +250,7 @@ class MambaModelTester:
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
-    # NOTE :`all_generative_model_classes` does not exist -- the tests it triggers check the attention outputs, which
+    # NOTE :`all_generative_model_classes` does not exist -- the tests it triggers request the attention outputs, which
     # mamba does not have
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
