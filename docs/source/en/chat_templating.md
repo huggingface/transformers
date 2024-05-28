@@ -281,7 +281,7 @@ correctly as tools. Specifically, you should follow these rules:
 - Every argument must have a type hint
 - The function must have a docstring in the standard Google style (in other words, an initial function description  
   followed by an `Args:` block that describes the arguments, unless the function does not have any arguments. 
-  It is not necessary to include types in the `Args:` block.
+  Do not include types in the `Args:` block - put them in the type hints in the function header instead.
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
   because most tool-use models ignore them.
 
