@@ -45,6 +45,7 @@ from ...utils import (
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
+from .modeling_resnet_rt_detr import load_rt_detr_backbone
 
 
 if is_scipy_available():
@@ -557,7 +558,10 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = load_backbone(config)
+        if config.backbone in ["resnet18d", "resnet34d"]:
+            backbone = load_rt_detr_backbone(config)
+        else:
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -1577,6 +1581,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Create encoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
         num_backbone_outs = len(intermediate_channel_sizes)
+        print(intermediate_channel_sizes)
         encoder_input_proj_list = []
         for _ in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[_]
