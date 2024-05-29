@@ -39,7 +39,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_no_arguments(self):
         def fn():
@@ -54,7 +54,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {"type": "object", "properties": {}},
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_union(self):
         def fn(x: Union[int, float]):
@@ -76,7 +76,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_optional(self):
         def fn(x: Optional[int]):
@@ -98,7 +98,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_default_arg(self):
         def fn(x: int = 42):
@@ -116,7 +116,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "description": "Test function",
             "parameters": {"type": "object", "properties": {"x": {"type": "integer", "description": "The input"}}},
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_nested_list(self):
         def fn(x: List[List[Union[str, int]]]):
@@ -144,7 +144,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_multiple_arguments(self):
         def fn(x: int, y: str):
@@ -170,7 +170,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x", "y"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_multiple_complex_arguments(self):
         def fn(x: List[Union[int, float]], y: Optional[Union[int, str]] = None):
@@ -200,7 +200,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_missing_docstring(self):
         def fn(x: int):
@@ -253,7 +253,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
             "return": {"type": "integer"},
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_return_value_docstring(self):
         def fn(x: int) -> int:
@@ -280,7 +280,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
             "return": {"type": "integer", "description": "The output"},
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_tuple(self):
         def fn(x: Tuple[int, str]):
@@ -312,7 +312,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "required": ["x"],
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_single_element_tuple_fails(self):
         def fn(x: Tuple[int]):
@@ -382,7 +382,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
 
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):
@@ -417,7 +417,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
 
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)
 
     def test_everything_all_at_once(self):
         def fn(
@@ -473,4 +473,4 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 "description": "The output. The return description is also a big multiline\n    description that spans multiple lines.",
             },
         }
-        self.assertEqual(schema, expected_schema)
+        self.assertEqual(schema["function"], expected_schema)

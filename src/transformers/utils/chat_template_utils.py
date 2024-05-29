@@ -310,4 +310,4 @@ def get_json_schema(func):
     output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
         output["return"] = return_dict
-    return output
+    return {"type": "function", "function": output}
