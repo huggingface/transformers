@@ -45,11 +45,15 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
-# For GGUF tests
-RUN python3 -m pip install --no-cache-dir gguf
-
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+# Some tests require quanto
+RUN python3 -m pip install --no-cache-dir quanto
+
+# `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
+# (`deformable_detr`, `rwkv`, `mra`)
+RUN python3 -m pip uninstall -y ninja
 
 # For `dinat` model
 # The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
