@@ -808,7 +808,7 @@ class DPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["DPTViTSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
