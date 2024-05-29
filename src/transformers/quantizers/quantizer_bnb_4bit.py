@@ -248,7 +248,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
-        if device_map is None:
+        if device_map is None and torch.cuda.is_available():
             device_map = {"": torch.cuda.current_device()}
             logger.info(
                 "The device_map was not initialized. "
