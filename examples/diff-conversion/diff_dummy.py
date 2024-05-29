@@ -24,7 +24,7 @@ class DummyModel(LlamaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        _pre_process_input(input_ids)
+        input_ids = _pre_process_input(input_ids)
 
         return super().forward(
             None,
