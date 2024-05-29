@@ -105,16 +105,21 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     state_dict_path = hf_hub_download(old_state_dict_id, "pytorch_model.bin")
 
     state_dict = torch.load(state_dict_path, map_location="cpu")
-    breakpoint()
+    #breakpoint()
     state_dict = convert_state_dict_to_hf(state_dict)
+    #breakpoint()
+    state_dict['multi_modal_projector.reducer_before.0.weight'] = state_dict['multi_modal_projector.reducer_before.0.weight'].contiguous()
+    state_dict['multi_modal_projector.reducer.weight'] = state_dict['multi_modal_projector.reducer.weight'].contiguous()
+    #breakpoint()
     model.load_state_dict(state_dict, strict=True, assign=True)
-
+    
     pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
     dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
+    #model.multi_modal_projector.reducer_before = model.multi_modal_projector.reducer_before.contiguous()
+    
     # We add an image token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(

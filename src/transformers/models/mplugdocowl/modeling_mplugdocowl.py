@@ -133,7 +133,7 @@ class MPLUGDocOwlHReducer(nn.Module):
         ## feature interaction with a conv layer
         #encoder_hidden_states = rearrange(encoder_hidden_states, 'B (H W) D -> B D H W', H=int(math.sqrt(L)))
         encoder_hidden_states = encoder_hidden_states.view(B, H, H, C)
-        hidden_states = self.reducer_before(encoder_hidden_states) # B 4D H W/4
+        hidden_states = self.reducer_before(encoder_hidden_states)  # B 4D H W/4
         ## reduce seq length with a conv layer
         B, XD, H, W_div_X = hidden_states.shape
         X = self.conv_patch
@@ -303,7 +303,7 @@ class MPLUGDocOwlForConditionalGeneration(MPLUGDocOwlPreTrainedModel):
         #initialize LlamaAttention
         #replace_llama_modality_adaptive()
         self.language_model = MPLUGDocOwlForCausalLM(config.text_config)
-        breakpoint()
+        #breakpoint()
         #self.language_model = AutoModelForCausalLM.from_config(
         #    config.text_config, attn_implementation= "multiway"
        # )
