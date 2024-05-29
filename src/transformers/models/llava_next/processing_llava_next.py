@@ -23,7 +23,9 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import logging, TensorType
+
+logger = logging.get_logger(__name__)
 
 
 class LlavaNextProcessor(ProcessorMixin):
@@ -48,9 +50,9 @@ class LlavaNextProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
         self.image_size = self.image_processor.size["shortest_edge"]
-        self.patch_size = 14  # self.image_processor.path_size
+        self.patch_size = getattr(self.image_processor, "patch_size", None)
         self.image_token = "<image>"
-        self.vision_feature_select_strategy = "default"  # self.image_processor.vision_feature_select_strategy
+        self.vision_feature_select_strategy = getattr(self.image_processor, "vision_feature_select_strategy", None)
 
     def __call__(
         self,
@@ -120,7 +122,15 @@ class LlavaNextProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if not image_inputs:
+        if self.patch_size is not None and self.vision_feature_select_strategy is not None:
+            prompt_strings = text
+            logger.warning(
+                "Expanding inputs for image tokens in LLaVa should be done in processing. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+            )
+        # cannot infer image expansion length if no images are found 
+        elif not image_inputs:
             prompt_strings = text
         else:
             image_sizes = image_inputs["image_sizes"]

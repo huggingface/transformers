@@ -23,7 +23,9 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import logging, TensorType
+
+logger = logging.get_logger(__name__)
 
 
 class LlavaProcessor(ProcessorMixin):
@@ -47,9 +49,9 @@ class LlavaProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
         self.image_size = self.image_processor.size["shortest_edge"]
-        self.patch_size = 14  # self.image_processor.path_size
+        self.patch_size = getattr(self.image_processor, "patch_size", None)
         self.image_token = "<image>"
-        self.vision_feature_select_strategy = "default"  # self.image_processor.vision_feature_select_strategy
+        self.vision_feature_select_strategy = getattr(self.image_processor, "vision_feature_select_strategy", None)
 
     def __call__(
         self,
@@ -115,15 +117,24 @@ class LlavaProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        # Replace the image token with the expanded image token sequence
-        num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
-        if self.vision_feature_select_strategy == "default":
-            num_image_tokens -= 1
+        # try to expand inputs in processing if we have the necessary parts
+        if self.patch_size is not None and self.vision_feature_select_strategy is not None: 
+            # Replace the image token with the expanded image token sequence
+            num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
+            if self.vision_feature_select_strategy == "default":
+                num_image_tokens -= 1
 
-        prompt_strings = []
-        for sample in text:
-            sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-            prompt_strings.append(sample)
+            prompt_strings = []
+            for sample in text:
+                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                prompt_strings.append(sample)
+        else:
+            prompt_strings = text
+            logger.warning(
+                "Expanding inputs for image tokens in LLaVa should be done in processing. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+            )
 
         text_inputs = self.tokenizer(
             prompt_strings,

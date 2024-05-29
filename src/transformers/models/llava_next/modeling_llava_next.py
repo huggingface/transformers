@@ -753,8 +753,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+            # if the number of image tokens is more than image embeddings seq length, then prob we expanded it in processing
+            # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
+            legacy_processing = (input_ids == self.config.image_token_index).sum(1).max() < 576
+
 
         if pixel_values is not None and pixel_values.size(0) > 0:
             # ! infer image_num_patches from image_sizes
@@ -792,8 +797,57 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 image_sizes,
                 image_newline=self.image_newline,
             )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds[special_image_mask] = image_features.flatten()
+            if legacy_processing:
+                logger.warning(
+                    "Expanding inputs for image tokens in LLaVa should be done in processing. "
+                    "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+                )
+                if input_ids.shape[1] != 1:
+                    inputs_embeds = inputs_embeds.to(image_features.dtype)
+                    inputs_embeds, attention_mask, position_ids, labels = self._merge_input_ids_with_image_features(
+                        image_features,
+                        feature_lens,
+                        inputs_embeds,
+                        input_ids,
+                        attention_mask,
+                        position_ids,
+                        labels=labels,
+                    )
+                else:
+                    # Retrieve the first layer to inspect the logits and mask out the hidden states
+                    # that are set to 0
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+
+                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+
+                    # Get the target length
+                    target_length = input_ids.shape[1]
+                    past_length = first_layer_past_key_value.shape[-1]
+
+                    extended_attention_mask = torch.ones(
+                        (attention_mask.shape[0], past_length),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+
+                    # Filter out only the tokens that can be un-attended, this can happen
+                    # if one uses Llava + Fused modules where the cache on the
+                    # first iteration is already big enough, or if one passes custom cache
+                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                    new_batch_index = batch_index[valid_indices]
+                    new_non_attended_tokens = non_attended_tokens[valid_indices]
+
+                    # Zero-out the places where we don't need to attend
+                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
+                    attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
+                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
+
+            # TODO: @raushan retain only the new behavior after v4.44 
+            else:
+                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                inputs_embeds[special_image_mask] = image_features.flatten()
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -848,7 +902,19 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
-        model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = {}
+
+        # Trigger the new behavior if we have more than image embeddings seq length tokens for images
+        if input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576:
+            cache_position = None        
+        else:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            if past_key_values is None:
+                model_inputs["pixel_values"] = pixel_values
+                model_inputs["image_sizes"] = image_sizes
+        
+        lang_model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -857,12 +923,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values is None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values passed by the user
-        if past_key_values is None:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-
+        model_inputs.update(lang_model_inputs)
         return model_inputs
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache
