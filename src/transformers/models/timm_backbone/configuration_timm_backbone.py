@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Configuration for Backbone models"""
+"""Configuration for Backbone models"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
