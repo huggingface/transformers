@@ -492,17 +492,6 @@ class WhisperGenerationMixin:
         )
         is_shortform = total_input_frames <= num_segment_frames
 
-        # if is_shortform:
-        #     # warn user of ignored inputs
-        #     self._maybe_warn_unused_inputs(
-        #         condition_on_prev_tokens=condition_on_prev_tokens,
-        #         temperature=temperature,
-        #         compression_ratio_threshold=compression_ratio_threshold,
-        #         logprob_threshold=logprob_threshold,
-        #         no_speech_threshold=no_speech_threshold,
-        #         total_input_frames=total_input_frames,
-        #     )
-
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
 
@@ -572,16 +561,16 @@ class WhisperGenerationMixin:
         #             [prompt_ids[None].repeat(decoder_input_ids.shape[0], 1), decoder_input_ids], dim=-1
         #         )
 
-        # max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
-        # if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
-        #     raise ValueError(
-        #         f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-        #         f"is {max_new_tokens}. Thus, the combined length of "
-        #         f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
-        #         f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
-        #         "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-        #         f"so that their combined length is less than {self.config.max_target_positions}."
-        #     )
+        #     max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
+        #     if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
+        #         raise ValueError(
+        #             f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+        #             f"is {max_new_tokens}. Thus, the combined length of "
+        #             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+        #             f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+        #             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+        #             f"so that their combined length is less than {self.config.max_target_positions}."
+        #         )
 
         #     outputs = super().generate(
         #         input_features,
@@ -649,19 +638,14 @@ class WhisperGenerationMixin:
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
             # 6.4 cut out next 30s segment from input features
-            if input_features is not None:
-                # When doing assistant decoding, we only use the "encoder_decoder_outputs"
-                # in kwargs. 'segment_input' will be set to None.
-                segment_input = self._get_input_segment(
-                    input_features=input_features,
-                    seek=seek,
-                    seek_num_frames=seek_num_frames,
-                    num_segment_frames=num_segment_frames,
-                    cur_bsz=cur_bsz,
-                    batch_idx_map=batch_idx_map,
-                )
-            else:
-                segment_input = None
+            segment_input = self._get_input_segment(
+                input_features=input_features,
+                seek=seek,
+                seek_num_frames=seek_num_frames,
+                num_segment_frames=num_segment_frames,
+                cur_bsz=cur_bsz,
+                batch_idx_map=batch_idx_map,
+            )
 
             # 6.5 prepare decoder input ids
             if not is_shortform:
@@ -685,6 +669,7 @@ class WhisperGenerationMixin:
                 config=self.config,
                 device=init_tokens.device,
                 suppress_tokens=suppress_tokens,
+                is_shortform=is_shortform, 
                 kwargs=kwargs,
             )
 
@@ -714,21 +699,20 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.8 Run generate with fallback
-            if segment_input is None: 
-                seek_outputs = super().generate(
-                    segment_input,
-                    generation_config=generation_config,
-                    logits_processor=logits_processor,
-                    stopping_criteria=stopping_criteria,
-                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                    synced_gpus=synced_gpus,
-                    decoder_input_ids=decoder_input_ids,
-                    **kwargs,
-                )
-                return seek_outputs
+            # if segment_input is None: 
+            #     seek_outputs = super().generate(
+            #         segment_input,
+            #         generation_config=generation_config,
+            #         logits_processor=logits_processor,
+            #         stopping_criteria=stopping_criteria,
+            #         prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            #         synced_gpus=synced_gpus,
+            #         decoder_input_ids=decoder_input_ids,
+            #         **kwargs,
+            #     )
+            #     return seek_outputs
 
-            else: 
-                seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form = self.generate_with_fallback(
+            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
@@ -1508,21 +1492,16 @@ class WhisperGenerationMixin:
     @staticmethod
     def _retrieve_max_frames_and_seek(batch_size, attention_mask, total_input_frames, is_shortform):
 
-        if is_shortform:
-            max_frames = torch.ones((batch_size,), dtype=torch.long) * total_input_frames
-            seek = torch.zeros((batch_size,), dtype=torch.long)
-            return max_frames, seek
-
-        if batch_size > 1 and attention_mask is None:
+        if batch_size > 1 and not is_shortform and attention_mask is None:
             raise ValueError(
                 "When doing batched long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
             )
-        elif batch_size > 1:
+        elif batch_size > 1 and not is_shortform: 
             max_frames = attention_mask.sum(-1).cpu().to(torch.long)
             seek = torch.zeros((batch_size,), dtype=torch.long)
         else:
-            max_frames = torch.ones((1,), dtype=torch.long) * total_input_frames
-            seek = torch.zeros((1,), dtype=torch.long)
+            max_frames = torch.ones((batch_size,), dtype=torch.long) * total_input_frames
+            seek = torch.zeros((batch_size,), dtype=torch.long)
 
         return max_frames, seek
 
@@ -1584,6 +1563,10 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _get_input_segment(input_features, seek, seek_num_frames, num_segment_frames, cur_bsz, batch_idx_map):
+
+        if input_features is None: 
+            return None
+
         segment_input = []
         for i in range(cur_bsz):
             prev_i = batch_idx_map[i]
