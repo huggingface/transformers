@@ -3405,6 +3405,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     "revision": revision,
                                     "proxies": proxies,
                                     "token": token,
+                                    "cache_dir": cache_dir,
+                                    "local_files_only": local_files_only,
                                 }
                                 cached_file_kwargs = {
                                     "cache_dir": cache_dir,
