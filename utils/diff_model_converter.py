@@ -189,6 +189,7 @@ DOCSTRING_NODE = m.SimpleStatementLine(
     body=[
         m.Expr(
             value=m.SimpleString(
+                # match anything between """ """
                 value=m.MatchIfTrue(lambda value: re.search(r"\"\"\"[\s\S]*\"\"\"", value) is not None)
             )
         )
@@ -290,12 +291,7 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
                                                                             |     ```
     """
     original_node = class_finder.classes[class_name]
-
-    # TODO here is where we merge stuff from super. We can choose to merge the docstring as well!
-    # We could also check the docstring here
     original_methods = {f.name.value if hasattr(f, "name") else f: f for f in original_node.body.body}
-
-    # Copy methods from original node to replacement node, preserving decorators
     updated_methods = {f.name.value if hasattr(f, "name") else f: f for f in updated_node.body.body}
     end_meth = []
     for name, func in original_methods.items():
