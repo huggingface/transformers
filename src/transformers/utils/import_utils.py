@@ -848,7 +848,7 @@ def is_bitsandbytes_available():
     # let's avoid that by adding a simple check
     import torch
 
-    return _bitsandbytes_available and torch.cuda.is_available()
+    return _bitsandbytes_available
 
 
 def is_flash_attn_2_available():
