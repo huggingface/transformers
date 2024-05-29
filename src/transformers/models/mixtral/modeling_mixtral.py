@@ -893,8 +893,7 @@ class MixtralDecoderLayer(nn.Module):
         if isinstance(config.num_pruning_experts, int):
           self.block_sparse_moe = MixtralSparseMoeBlock(config)
         else:
-          self.block_sparse_moe = MixtralSparseMoeBlock(config,8-config.num_pruning_experts[layer_idx])
-        self.block_sparse_moe = MixtralSparseMoeBlock(config)
+          self.block_sparse_moe = MixtralSparseMoeBlock(config, config.num_pruning_experts[layer_idx])
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
