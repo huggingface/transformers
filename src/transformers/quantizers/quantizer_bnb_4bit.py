@@ -64,9 +64,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-        if not is_accelerate_available():
+        if not (is_accelerate_available() and is_bitsandbytes_available())
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
