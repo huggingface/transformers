@@ -907,7 +907,8 @@ class WhisperGenerationMixin:
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
-                    if return_token_timestamps:
+                    if return_token_timestamps and not is_shortform:
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
                         if not is_shortform:
                             seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
