@@ -14,6 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 from copy import deepcopy
 from enum import Enum
 from typing import Dict, List
@@ -61,7 +62,6 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
 
 
 llama_role_conversions = {
-    MessageRole.SYSTEM: MessageRole.USER,
     MessageRole.TOOL_RESPONSE: MessageRole.USER,
 }
 
@@ -75,11 +75,11 @@ class HfEngine:
         # Get clean message list
         messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
 
-        # Get answer
+        # Get LLM output
         response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=1500)
         response = response.choices[0].message.content
 
-        # Remove stop sequences from the answer
+        # Remove stop sequences from LLM output
         for stop_seq in stop_sequences:
             if response[-len(stop_seq) :] == stop_seq:
                 response = response[: -len(stop_seq)]

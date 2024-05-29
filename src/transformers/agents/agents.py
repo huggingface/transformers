@@ -26,7 +26,7 @@ from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
 from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_JSON_SYSTEM_PROMPT
-from .python_interpreter import evaluate_python_code
+from .python_interpreter import evaluate_python_code, LIST_SAFE_MODULES
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
     Tool,
@@ -410,6 +410,12 @@ class Agent:
                 )
         return memory
 
+    def get_succinct_logs(self):
+        return [
+            {key: value for key, value in log.items() if key != "agent_memory"}
+            for log in self.logs
+        ]
+
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
         Parse action from the LLM output
@@ -487,6 +493,7 @@ class CodeAgent(Agent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        additional_authorized_imports: List[str] = [],
         **kwargs,
     ):
         super().__init__(
@@ -505,6 +512,7 @@ class CodeAgent(Agent):
             )
 
         self.python_evaluator = evaluate_python_code
+        self.additional_authorized_imports = additional_authorized_imports
 
     def parse_code_blob(self, result: str) -> str:
         """
@@ -564,7 +572,12 @@ class CodeAgent(Agent):
         self.log_code_action(code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            output = self.python_evaluator(code_action, available_tools, state=self.state)
+            output = self.python_evaluator(
+                code_action,
+                available_tools,
+                state=self.state,
+                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports
+            )
             self.logger.info(self.state["print_outputs"])
             return output
         except Exception as e:
@@ -804,6 +817,7 @@ class ReactCodeAgent(ReactAgent):
         llm_engine: Callable = HfEngine(),
         system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
         tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        additional_authorized_imports: List[str] = [],
         **kwargs,
     ):
         super().__init__(
@@ -822,6 +836,7 @@ class ReactCodeAgent(ReactAgent):
             )
 
         self.python_evaluator = evaluate_python_code
+        self.additional_authorized_imports = additional_authorized_imports
 
     def step(self):
         """
@@ -868,7 +883,12 @@ class ReactCodeAgent(ReactAgent):
         self.log_code_action(code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
-            result = self.python_evaluator(code_action, available_tools, state=self.state)
+            result = self.python_evaluator(
+                code_action,
+                available_tools,
+                state=self.state,
+                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports
+            )
             information = self.state["print_outputs"]
             self.logger.warning("Print outputs:")
             self.logger.log(32, information)
