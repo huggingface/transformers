@@ -24,14 +24,11 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-
 from transformers import (
     DABDETRConfig,
     DABDETRForObjectDetection,
     DABDETRForSegmentation,
-    ConditionalDetrImageProcessor,
-    # TOODO remove
-    DABDETRModel,
+    DABDETRImageProcessor,
 )
 from transformers.utils import logging
 
@@ -257,7 +254,7 @@ def prepare_img():
 @torch.no_grad()
 def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to our CONDITIONAL_DETR structure.
+    Copy/paste/tweak model's weights to our DAB-DETR structure.
     """
 
     # load default config
@@ -281,7 +278,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
 
     # load image processor
     format = "coco_panoptic" if is_panoptic else "coco_detection"
-    image_processor = ConditionalDetrImageProcessor(format=format)
+    image_processor = DABDETRImageProcessor(format=format)
 
     # prepare image
     img = prepare_img()
@@ -325,12 +322,17 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
-    model.load_state_dict(state_dict) 
+    model.load_state_dict(state_dict)
     model.eval()
-    # model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
+    
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
-    outputs = model(pixel_values, return_dict=False, output_attentions=True, output_hidden_states=True)
+    labels = [{'size': torch.tensor([800, 1066]), 'image_id': torch.tensor([39769]), 'class_labels': torch.tensor([75, 75, 63, 65, 17, 17]), 'boxes': torch.tensor([[0.5503, 0.2765, 0.0604, 0.2215], [0.1695, 0.2016, 0.2080, 0.0940], [0.5006, 0.4933, 0.9978, 0.9865], [0.5008, 0.5002, 0.9983, 0.9955], [0.2627, 0.5456, 0.4707, 0.8646], [0.7715, 0.4115, 0.4570, 0.7161]]), 'area': torch.tensor([5887.9600,  11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438]), 'iscrowd': torch.tensor([0, 0, 0, 0, 0, 0]), 'orig_size': torch.tensor([480, 640])}]
+    
+    outputs = model(pixel_values) # , labels=labels)
+    model.save_pretrained('dab-detr-resnet-50', safe_serialization=False)
+    image_processor.save_pretrained('dab-detr-resnet-50')
+    # model.push_to_hub(repo_id='dab-detr-resnet-50', organization="davidhajdu", commit_message="Add model")
 
     """
     output_attentions: Optional[bool] = None,
@@ -338,14 +340,14 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     
     """
 
-    logits = outputs[-2]
-    pred_boxes = outputs[-1]
+    # logits = outputs[-2]
+    # pred_boxes = outputs[-1]
 
-    print(logits)
-    print(pred_boxes)
+    # print(logits)
+    # print(pred_boxes)
 
-    #print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
-    #print(outputs.pred_boxes.shape)
+    print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
+    print(outputs.pred_boxes.shape)
     # torch.save(logits, 'logits.pth')
     # torch.save(pred_boxes, 'pred_boxes.pth')
     

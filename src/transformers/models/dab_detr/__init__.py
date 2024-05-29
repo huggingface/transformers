@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -23,6 +23,16 @@ _import_structure = {
         "DABDETROnnxConfig",
     ]
 }
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_dab_detr"] = ["DABDETRFeatureExtractor"]
+    _import_structure["image_processing_dab_detr"] = ["DADETRImageProcessor"]
+
 
 try:
     if not is_torch_available():
@@ -43,6 +53,16 @@ if TYPE_CHECKING:
         DABDETRConfig,
         DABDETROnnxConfig,
     )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_dab_detr import DABDETRFeatureExtractor
+        from .image_processing_dab_detr import DABDETRImageProcessor
+
 
     try:
         if not is_torch_available():

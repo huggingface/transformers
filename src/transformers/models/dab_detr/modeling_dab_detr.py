@@ -1843,6 +1843,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+            # -------
 
         if not return_dict:
             if auxiliary_outputs is not None:
@@ -2531,6 +2532,7 @@ class DABDETRHungarianMatcher(nn.Module):
         # We flatten to compute the cost matrices in a batch
         out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
+
 
         # Also concat the target labels and boxes
         target_ids = torch.cat([v["class_labels"] for v in targets])
