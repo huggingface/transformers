@@ -420,6 +420,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
         legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
