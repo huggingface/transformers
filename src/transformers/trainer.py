@@ -2306,6 +2306,8 @@ class Trainer:
 
                     self.optimizer.step()
 
+                    self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
+
                     optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
                     if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
