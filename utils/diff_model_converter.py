@@ -16,10 +16,12 @@ import argparse
 import glob
 import importlib
 import re
+from typing import Dict
 
 import libcst as cst
 from check_copies import run_ruff
-from libcst import ClassDef, CSTTransformer, CSTVisitor, matchers
+from libcst import ClassDef, CSTTransformer, CSTVisitor
+from libcst import matchers as m 
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
 
 from transformers import logging
@@ -71,92 +73,81 @@ class ClassFinder(CSTVisitor):
 
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
 
-    def __init__(self, python_module):
-        self.python_module = python_module
-        self.classes = {}  # class LlamaAttentino
-        self.imports = {}  # from flash_attn import
-        self.function_def = {}  # def repeat_kv
-        self.assignments = {}  # LLAMA_DOCSTRING
-        self.class_dependency_mapping = {}  # "LlamaModel":["LlamaDecoderLayer, "LlamaRMSNorm", "LlamaPreTrainedModel"], "LlamaDecoderLayer":["LlamaAttention","Llama"]
+    def __init__(self, python_module: cst.Module):
+        # fmt: off
+        self.python_module: cst.Module = python_module  # original cst.Module being visited
+        self.classes: Dict[str, cst.ClassDef] = {}      # stores a mapping from classname to the cst.Node
+        self.imports = {}                               # stores all import statements
+        self.function_def = {}                          # stores global scope function definition
+        self.assignments = {}                           # LLAMA_DOCSTRING
+        self.class_dependency_mapping = {}              # "LlamaModel":["LlamaDecoderLayer, "LlamaRMSNorm", "LlamaPreTrainedModel"], "LlamaDecoderLayer":["LlamaAttention","Llama"]
+        # fmt: on
+
+    def _update_class_dependency(self, name, value):
+        dep = set(self.class_dependency_mapping.get(value, set()))
+        dep |= set(self.class_dependency_mapping.get(name, {})) | set({value})
+        self.class_dependency_mapping[name] = dep
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.classes[node.name.value] = node
         for k in node.bases:  # deal with inheritance
             name = self.python_module.code_for_node(k)
+            dep_name = node.name.value
             self.class_dependency_mapping.update(
                 {
-                    node.name.value: set(self.class_dependency_mapping.get(name, {name}))
-                    | self.class_dependency_mapping.get(node.name.value, set())
+                    dep_name: set(self.class_dependency_mapping.get(name, {name}))
+                    | self.class_dependency_mapping.get(dep_name, set())
                 }
             )
 
     def visit_SimpleStatementLine(self, node):
-        if matchers.matches(node, matchers.SimpleStatementLine(body=[matchers.Assign()])) and matchers.matches(
-            self.get_metadata(cst.metadata.ParentNodeProvider, node), matchers.Module()
+        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
+            self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
         ):
             self.assignments[node.body[0].targets[0].target.value] = node
-        if matchers.matches(node, matchers.SimpleStatementLine(body=[matchers.Import()])):
-            self.imports[node.body[0].names] = node
-        if matchers.matches(node, matchers.SimpleStatementLine(body=[matchers.ImportFrom()])):
+        if m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
             self.imports[node.body[0].names] = node
 
     def visit_FunctionDef(self, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if matchers.matches(parent_node, matchers.Module()):
+        if m.matches(parent_node, m.Module()):
             self.function_def[node.name.value] = node
 
     def leave_If(self, node):
         for stmt in node.body.body:
-            if matchers.matches(stmt, matchers.SimpleStatementLine(body=[matchers.ImportFrom() | matchers.Import()])):
+            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                 self.imports[stmt.body[0].names] = node  # match the visit simple statement line to overwrite it
 
     def leave_Name(self, node):
         if node.value in self.classes.keys() | self.assignments.keys() | self.function_def.keys():
             dad = self.get_metadata(cst.metadata.ScopeProvider, node)
             if not isinstance(dad, cst.metadata.scope_provider.GlobalScope):
-                logger.info(f"Name:\t\t{node.value:<45} called in {dad._name_prefix}")
-                name = dad._name_prefix.split(".")[0]
-                dep = set(self.class_dependency_mapping.get(node.value, set()))
-                dep |= set(self.class_dependency_mapping.get(name, {})) | set({node.value})
-                self.class_dependency_mapping[name] = dep
+                self._update_class_dependency(dad._name_prefix.split(".")[0], node.value)
 
     def leave_Arg(self, node):
-        if matchers.matches(node.value, matchers.Name()):
+        if m.matches(node.value, m.Name()):
             dad = self.get_metadata(ParentNodeProvider, node)
-            if matchers.matches(dad, matchers.ClassDef()) and dad.bases:
-                logger.info(f"Arg:\t\t{node.value.value:<45} called in {dad.name.value}")
-                name = dad.name.value
-                dep = set(self.class_dependency_mapping.get(node.value.value, set()))
-                dep |= set(self.class_dependency_mapping.get(name, {})) | set({node.value.value})
-                self.class_dependency_mapping[name] = dep
+            if m.matches(dad, m.ClassDef()) and dad.bases:
+                self._update_class_dependency(dad.name.value, node.value.value)
 
     def leave_Dict(self, node):
         dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if matchers.matches(dad, matchers.Assign(targets=[matchers.AssignTarget()])):
+        if m.matches(dad, m.Assign(targets=[m.AssignTarget()])):
             name = dad.targets[0].target.value
             if name in self.assignments:
                 for k in node.elements:
-                    if k.value.value in self.classes:
-                        dep = set(self.class_dependency_mapping.get(k.value.value, set()))
-                        dep |= self.class_dependency_mapping.get(name, set()) | set({k.value.value})
-                        self.class_dependency_mapping[name] = dep
-                        logger.info(f"Dict:\t\t{k.value.value:<45} called in {name}")
+                    dep_name = k.value.value
+                    if dep_name in self.classes:
+                        self._update_class_dependency(name, dep_name)
 
-    # Decorator: handle nodes used in the decorators
     def leave_Decorator(self, node):
         if hasattr(node.decorator, "args"):
             for k in node.decorator.args:
                 if k.value.value in self.assignments:
                     dad = self.get_metadata(cst.metadata.ParentNodeProvider, node)
                     scope = self.get_metadata(cst.metadata.ScopeProvider, node)
-                    if scope._name_prefix != "":
-                        name = scope._name_prefix.split(".")[0]
-                    else:
-                        name = dad.name.value
-                    logger.info(f"Decorator:\t{k.value.value:<45} called in {name}")
-                    dep = set(self.class_dependency_mapping.get(k.value.value, set()))
-                    dep |= self.class_dependency_mapping.get(name, set()) | set({k.value.value})
-                    self.class_dependency_mapping[name] = dep
+                    name = scope._name_prefix.split(".")[0] if scope._name_prefix != "" else dad.name.value
+                    self._update_class_dependency(name, k.value.value)
 
     def leave_Module(self, node):
         self.global_nodes = {**self.assignments, **self.classes, **self.function_def}
@@ -166,7 +157,7 @@ class ClassFinder(CSTVisitor):
             self.class_start_line[id] = self.get_metadata(cst.metadata.PositionProvider, node).start.line
 
 
-class ReplaceNameTransformer(matchers.MatcherDecoratableTransformer):
+class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     """A transformer that replaces `old_name` with `new_name` in comments, string and any references"""
 
     def __init__(self, old_name, new_name):
@@ -189,7 +180,7 @@ class ReplaceNameTransformer(matchers.MatcherDecoratableTransformer):
 
         return self.regex.sub(replace, text)
 
-    @matchers.leave(matchers.Name() | matchers.SimpleString() | matchers.Comment())
+    @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
         update = self.preserve_case_replace(updated_node.value)
         return updated_node.with_changes(value=update)
@@ -207,11 +198,11 @@ def find_classes_in_file(module: cst.Module, old_id="llama", new_id="gemma"):
     return class_finder
 
 
-DOCSTRING_NODE = matchers.SimpleStatementLine(
+DOCSTRING_NODE = m.SimpleStatementLine(
     body=[
-        matchers.Expr(
-            value=matchers.SimpleString(
-                value=matchers.MatchIfTrue(lambda value: re.search(r"\"\"\"[\s\S]*\"\"\"", value) is not None)
+        m.Expr(
+            value=m.SimpleString(
+                value=m.MatchIfTrue(lambda value: re.search(r"\"\"\"[\s\S]*\"\"\"", value) is not None)
             )
         )
     ]
@@ -236,8 +227,7 @@ class SuperTransformer(cst.CSTTransformer):
         }
         for stmt in existing_body:
             if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
-                if matchers.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
-                    print("Oh docstring")
+                if m.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
                     continue
                 deduplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
@@ -249,35 +239,13 @@ class SuperTransformer(cst.CSTTransformer):
         new_body = []
         self.has_docstring = False
         for expr in node.body:
-            self.has_docstring = matchers.matches(node.body[0], DOCSTRING_NODE)
-
-            if matchers.matches(
+            self.has_docstring = m.matches(node.body[0], DOCSTRING_NODE)
+            if m.matches(
                 expr,
-                matchers.SimpleStatementLine(
+                m.SimpleStatementLine(
                     body=[
-                        matchers.Expr(
-                            value=matchers.Call(
-                                func=matchers.Attribute(
-                                    value=matchers.Call(func=matchers.Name("super")), attr=matchers.Name(func_name)
-                                )
-                            )
-                        )
-                    ]
-                ),
-            ):
-                # Replace the SimpleStatementLine containing super().__init__() with the new body from func_to_body_mapping
-                new_body.extend(self.update_body(self.original_methods[func_name].body.body, node.body))
-            elif matchers.matches(
-                expr,
-                matchers.SimpleStatementLine(
-                    body=[
-                        matchers.Return(
-                            value=matchers.Call(
-                                func=matchers.Attribute(
-                                    value=matchers.Call(func=matchers.Name("super")), attr=matchers.Name(func_name)
-                                )
-                            )
-                        )
+                        m.Return(value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))) |
+                        m.Expr(value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name))))
                     ]
                 ),
             ):
@@ -295,9 +263,9 @@ class SuperTransformer(cst.CSTTransformer):
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
-        if matchers.matches(updated_node.value, matchers.Call(func=matchers.Attribute(attr=matchers.Name("super")))):
+        if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
             func_def = self.get_metadata(ParentNodeProvider, original_node)
-            if matchers.matched(func_def, matchers.FunctionDef()) and func_def.name.value in self.original_methods:
+            if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_methods:
                 updated_return_value = updated_node.value.with_changes(
                     args=[
                         cst.Arg(
@@ -373,7 +341,7 @@ class DiffConverterTransformer(CSTTransformer):
 
     def leave_FunctionDef(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
-        if matchers.matches(parent_node, matchers.Module()):
+        if m.matches(parent_node, m.Module()):
             self.new_body.append(node)
         return node
 
@@ -384,7 +352,7 @@ class DiffConverterTransformer(CSTTransformer):
         3. Add this import to `self.transformers_imports` as visited to not parse it twice
         """
         import_statement = self.python_module.code_for_node(node.module)
-        if matchers.matches(node.module, matchers.Attribute()):
+        if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement):
                     if import_statement not in self.transformers_imports:
@@ -395,24 +363,24 @@ class DiffConverterTransformer(CSTTransformer):
                     self.imported_mapping[imported_class] = import_statement
 
     def leave_SimpleStatementLine(self, original_node: cst.Assign, updated_node: cst.CSTNode):
-        if matchers.matches(original_node, matchers.SimpleStatementLine(body=[matchers.Assign()])):
+        if m.matches(original_node, m.SimpleStatementLine(body=[m.Assign()])):
             assign = self.python_module.code_for_node(original_node.body[0])
             node = original_node.body[0]
-            if matchers.matches(node.value, matchers.Name()) and assign in self.node_mapping:
+            if m.matches(node.value, m.Name()) and assign in self.node_mapping:
                 return self.node_mapping[assign]
 
         # remove all relative imports made in the diff file
         full_statement = self.python_module.code_for_node(updated_node.body[0])
-        if matchers.matches(updated_node, matchers.SimpleStatementLine(body=[matchers.ImportFrom()])):
+        if m.matches(updated_node, m.SimpleStatementLine(body=[m.ImportFrom()])):
             full_statement = self.python_module.code_for_node(updated_node.body[0].module)
             if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", full_statement):
                 return cst.RemoveFromParent()
             self.all_imports.append(updated_node)
-        if matchers.matches(updated_node, matchers.SimpleStatementLine(body=[matchers.Import()])):
+        if m.matches(updated_node, m.SimpleStatementLine(body=[m.Import()])):
             self.all_imports.append(updated_node)
 
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
-        if matchers.matches(parent_node, matchers.Module()):
+        if m.matches(parent_node, m.Module()):
             self.new_body.append(updated_node)
         return updated_node
 
@@ -478,13 +446,13 @@ class DiffConverterTransformer(CSTTransformer):
 
     def leave_If(self, original_node, node):
         parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, original_node)
-        if matchers.matches(parent_node, matchers.Module()):
+        if m.matches(parent_node, m.Module()):
             self.new_body.append(node)
         return node
 
     def leave_Expr(self, original_node: cst.Expr, node: cst.Expr) -> cst.Expr:
         parent_node = self.get_metadata(cst.metadata.ScopeProvider, original_node)
-        if matchers.matches(parent_node, matchers.Module()):
+        if m.matches(parent_node, m.Module()):
             self.new_body.append(node)
         return node
 
