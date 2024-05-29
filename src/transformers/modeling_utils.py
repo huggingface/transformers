@@ -3405,6 +3405,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     "revision": revision,
                                     "proxies": proxies,
                                     "token": token,
+                                    "cache_dir": cache_dir,
+                                    "local_files_only": local_files_only,
                                 }
                                 cached_file_kwargs = {
                                     "cache_dir": cache_dir,
@@ -3432,6 +3434,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 "revision": revision,
                                 "proxies": proxies,
                                 "token": token,
+                                "cache_dir": cache_dir,
+                                "local_files_only": local_files_only,
                             }
                             if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                                 raise EnvironmentError(
@@ -3459,6 +3463,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                                     f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                                 )
+
                 except EnvironmentError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
