@@ -899,7 +899,8 @@ class WhisperGenerationMixin:
                 # remove eos token id
                 if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
-                    if return_token_timestamps:
+                    if return_token_timestamps and not is_shortform:
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
                         if not is_shortform:
                             seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
 
