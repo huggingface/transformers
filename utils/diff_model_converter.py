@@ -202,8 +202,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name, new_name):
         super().__init__()
-        self.new_name = new_name
         self.old_name = old_name
+        self.new_name = new_name
         self.regex = re.compile(re.escape(self.old_name), re.IGNORECASE)
 
     def preserve_case_replace(self, text):
@@ -261,7 +261,7 @@ class SuperTransformer(cst.CSTTransformer):
         """
         Helper method to update the body by removing duplicates before adding new statements.
         """
-        de_duplicated_new_body = []
+        deduplicated_new_body = []
         existing_nodes = {
             self.python_module.code_for_node(node).strip() for node in new_statements if isinstance(node, cst.CSTNode)
         }
@@ -273,15 +273,14 @@ class SuperTransformer(cst.CSTTransformer):
                 de_duplicated_new_body.append(stmt)
                 existing_nodes.add(stmt)
             else:
-                logger.info(f"\n{30*'#'}found duplicate{self.python_module.code_for_node(stmt)}{30*'#'}")
+                logger.info(f"\nFound duplicate {self.python_module.code_for_node(stmt)}")
         return de_duplicated_new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
         new_body = []
         self.has_docstring = False
         for expr in node.body:
-            if m.matches(node.body[0], DOCSTRING_NODE):
-                self.has_docstring = True
+            self.has_docstring = m.matches(node.body[0], DOCSTRING_NODE)
 
             if m.matches(
                 expr,
