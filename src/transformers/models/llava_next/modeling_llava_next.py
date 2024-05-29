@@ -128,7 +128,6 @@ def unpad_image(tensor, original_size):
 
     original_aspect_ratio = original_width / original_height
     current_aspect_ratio = current_width / current_height
-    print(original_height, original_width, current_height, current_width)
 
     if original_aspect_ratio > current_aspect_ratio:
         scale_factor = current_width / original_width
@@ -756,10 +755,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
             # if the number of image tokens is more than image embeddings seq length, then prob we expanded it in processing
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
-            legacy_processing = (input_ids == self.config.image_token_index).sum(1).max() < 576
-
+            # In case we're in decoding stage, legacy behavior is checked by presence of pixel values even if use_cache=True
+            legacy_processing = ((input_ids == self.config.image_token_index).sum(1).max() < 576) or (
+                input_ids.shape[-1] == 1 and pixel_values is not None
+            )
 
         if pixel_values is not None and pixel_values.size(0) > 0:
             # ! infer image_num_patches from image_sizes
@@ -798,7 +800,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                 image_newline=self.image_newline,
             )
             if legacy_processing:
-                logger.warning(
+                logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
@@ -844,9 +846,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
-            # TODO: @raushan retain only the new behavior after v4.44 
+            # TODO: @raushan retain only the new behavior after v4.44
             else:
-                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                special_image_mask = (
+                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                )
                 inputs_embeds[special_image_mask] = image_features.flatten()
 
         outputs = self.language_model(
@@ -902,19 +906,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
-        model_inputs = {}
+        legacy_processing = input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576
 
-        # Trigger the new behavior if we have more than image embeddings seq length tokens for images
-        if input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576:
-            cache_position = None        
-        else:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            if past_key_values is None:
-                model_inputs["pixel_values"] = pixel_values
-                model_inputs["image_sizes"] = image_sizes
-        
-        lang_model_inputs = self.language_model.prepare_inputs_for_generation(
+        model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -923,7 +917,23 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
             **kwargs,
         )
 
-        model_inputs.update(lang_model_inputs)
+        if legacy_processing:
+            # legacy specific code copied from prev version
+            if past_key_values is not None:
+                model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
+                if "position_ids" in model_inputs:
+                    model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
+
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_sizes"] = image_sizes
+            model_inputs["cache_position"] = None
+
+        elif past_key_values is None:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["image_sizes"] = image_sizes
+
         return model_inputs
 
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration._reorder_cache

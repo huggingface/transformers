@@ -516,9 +516,16 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
             # if the number of image/video tokens is more than image embeddings seq length, then prob we expanded it in processing
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
-            legacy_processing = (input_ids == self.config.image_token_index).sum(1).max() < 576 or (input_ids == self.config.video_token_index).sum(1).max() < 4600
+            img_token_count = (input_ids == self.config.image_token_index).sum(1).max()
+            video_token_count = (input_ids == self.config.video_token_index).sum(1).max()
+            inputs_expanded = img_token_count < 256 and video_token_count < 2056
+            pixels_present = (
+                input_ids.shape[-1] == 1 and pixel_values_images is not None and pixel_values_videos is not None
+            )
+            legacy_processing = inputs_expanded or pixels_present
 
         if pixel_values_images is not None or pixel_values_videos is not None:
             image_outputs, video_outputs = self._get_vision_features(
@@ -532,10 +539,9 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                 image_features = self.multi_modal_projector(image_outputs)
             if video_outputs is not None:
                 video_features = self.multi_modal_projector(video_outputs)
-            
-            
+
             if legacy_processing:
-                logger.warning(
+                logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
@@ -595,7 +601,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
 
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-            
+
             # TODO: @raushan retain only the new behavior after v4.44
             else:
                 if image_outputs is not None:
@@ -603,13 +609,12 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
                         (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
                     )
                     inputs_embeds[special_image_mask] = image_features.flatten()
-                
+
                 if video_outputs is not None:
                     special_image_mask = (
                         (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
                     )
                     inputs_embeds[special_image_mask] = video_features.flatten()
-
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -664,28 +669,38 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
-        model_inputs = {}
-
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
-        if input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576:
-            cache_position = None        
-        else:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image/video token anymore
-            # Otherwise we need pixel values to be passed to model
-            if past_key_values is None:
-                model_inputs["pixel_values_images"] = pixel_values_images
-                model_inputs["pixel_values_videos"] = pixel_values_videos
-        
-        lang_model_inputs = self.language_model.prepare_inputs_for_generation(
+        legacy_processing = input_ids is not None and (
+            (input_ids == self.config.image_token_index).sum(1).max() < 256
+            and (input_ids == self.config.video_token_index).sum(1).max() < 2056
+        )
+
+        model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
+            cache_position=cache_position if not legacy_processing else None,
             **kwargs,
         )
 
-        model_inputs.update(lang_model_inputs)
+        if legacy_processing:
+            # legacy specific code copied from prev version, we assume that we always have one more new token (assisted decoding doesn't work for VLMs)
+            if past_key_values is not None:
+                model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
+                if "position_ids" in model_inputs:
+                    model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
+
+            model_inputs["pixel_values_images"] = pixel_values_images
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["cache_position"] = None
+
+        elif past_key_values is None:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values_images"] = pixel_values_images
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):

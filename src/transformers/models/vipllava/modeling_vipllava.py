@@ -427,10 +427,13 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         legacy_processing = False
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
             # if the number of image tokens is more than image embeddings seq length, then prob we expanded it in processing
             # not very reliable, but we don't expect one to actually pass 500+ images for one prompt
-            legacy_processing = (input_ids == self.config.image_token_index).sum(1).max() < 576
-
+            # In case we're in decoding stage, legacy behavior is checked by presence of pixel values even if use_cache=True
+            legacy_processing = ((input_ids == self.config.image_token_index).sum(1).max() < 576) or (
+                input_ids.shape[-1] == 1 and pixel_values is not None
+            )
 
         if pixel_values is not None:
             image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
@@ -440,9 +443,9 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
             image_features = torch.cat(image_features, dim=-1)
             image_features = self.multi_modal_projector(image_features)
-            
-            if legacy_processing:  
-                logger.warning(
+
+            if legacy_processing:
+                logger.warning_once(
                     "Expanding inputs for image tokens in LLaVa should be done in processing. "
                     "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
                     "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
@@ -481,10 +484,12 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
-            
+
             # TODO: @raushan retain only the new behavior after v4.44
             else:
-                special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                special_image_mask = (
+                    (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+                )
                 inputs_embeds[special_image_mask] = image_features.flatten()
 
         outputs = self.language_model(
@@ -539,27 +544,33 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         cache_position=None,
         **kwargs,
     ):
-        model_inputs = {}
-
         # Trigger the new behavior if we have more than image embeddings seq length tokens for images
-        if input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576:
-            cache_position = None        
-        else:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            if past_key_values is None:
-                model_inputs["pixel_values"] = pixel_values
-        
-        lang_model_inputs = self.language_model.prepare_inputs_for_generation(
+        legacy_processing = input_ids is not None and (input_ids == self.config.image_token_index).sum(1).max() < 576
+
+        model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
+            cache_position=cache_position if not legacy_processing else None,
             **kwargs,
         )
 
-        model_inputs.update(lang_model_inputs)
+        if legacy_processing:
+            # legacy specific code copied from prev version
+            if past_key_values is not None:
+                model_inputs["input_ids"] = model_inputs["input_ids"][:, -1:]
+                if "position_ids" in model_inputs:
+                    model_inputs["position_ids"] = model_inputs["position_ids"][:, -1:]
+
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["cache_position"] = None
+
+        elif past_key_values is None:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need pixel values to be passed to model
+            model_inputs["pixel_values"] = pixel_values
+
         return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
