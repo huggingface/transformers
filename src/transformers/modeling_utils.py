@@ -1284,6 +1284,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _supports_cache_class = False
     _supports_static_cache = False
 
+    # Has support for a `QuantoQuantizedCache` instance as `past_key_values`
+    _supports_quantized_cache = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -3045,6 +3048,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
+        if gguf_file is not None and not is_accelerate_available():
+            raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
+
         if commit_hash is None:
             if not isinstance(config, PretrainedConfig):
                 # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
@@ -3389,70 +3395,75 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-
-                    if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
-                            # If the PyTorch file was found, check if there is a safetensors file on the repository
-                            # If there is no safetensors file on the repositories, start an auto conversion
-                            safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                    if not local_files_only and not is_offline_mode():
+                        if resolved_archive_file is not None:
+                            if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                                # If the PyTorch file was found, check if there is a safetensors file on the repository
+                                # If there is no safetensors file on the repositories, start an auto conversion
+                                safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                                has_file_kwargs = {
+                                    "revision": revision,
+                                    "proxies": proxies,
+                                    "token": token,
+                                    "cache_dir": cache_dir,
+                                    "local_files_only": local_files_only,
+                                }
+                                cached_file_kwargs = {
+                                    "cache_dir": cache_dir,
+                                    "force_download": force_download,
+                                    "resume_download": resume_download,
+                                    "local_files_only": local_files_only,
+                                    "user_agent": user_agent,
+                                    "subfolder": subfolder,
+                                    "_raise_exceptions_for_gated_repo": False,
+                                    "_raise_exceptions_for_missing_entries": False,
+                                    "_commit_hash": commit_hash,
+                                    **has_file_kwargs,
+                                }
+                                if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                                    Thread(
+                                        target=auto_conversion,
+                                        args=(pretrained_model_name_or_path,),
+                                        kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
+                                        name="Thread-autoconversion",
+                                    ).start()
+                        else:
+                            # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
+                            # We try those to give a helpful error message.
                             has_file_kwargs = {
                                 "revision": revision,
                                 "proxies": proxies,
                                 "token": token,
-                            }
-                            cached_file_kwargs = {
                                 "cache_dir": cache_dir,
-                                "force_download": force_download,
-                                "resume_download": resume_download,
                                 "local_files_only": local_files_only,
-                                "user_agent": user_agent,
-                                "subfolder": subfolder,
-                                "_raise_exceptions_for_gated_repo": False,
-                                "_raise_exceptions_for_missing_entries": False,
-                                "_commit_hash": commit_hash,
-                                **has_file_kwargs,
                             }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                Thread(
-                                    target=auto_conversion,
-                                    args=(pretrained_model_name_or_path,),
-                                    kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                    name="Thread-autoconversion",
-                                ).start()
-                    else:
-                        # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
-                        # We try those to give a helpful error message.
-                        has_file_kwargs = {
-                            "revision": revision,
-                            "proxies": proxies,
-                            "token": token,
-                        }
-                        if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
-                                " Use `from_tf=True` to load this model from those weights."
-                            )
-                        elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
-                                " `from_flax=True` to load this model from those weights."
-                            )
-                        elif variant is not None and has_file(
-                            pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
-                        ):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
-                                f" {variant}. Use `variant=None` to load this model from those weights."
-                            )
-                        else:
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
-                                f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
-                            )
+                            if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
+                                    " Use `from_tf=True` to load this model from those weights."
+                                )
+                            elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
+                                    " `from_flax=True` to load this model from those weights."
+                                )
+                            elif variant is not None and has_file(
+                                pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
+                            ):
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
+                                    f" {variant}. Use `variant=None` to load this model from those weights."
+                                )
+                            else:
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
+                                    f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
+                                )
+
                 except EnvironmentError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
