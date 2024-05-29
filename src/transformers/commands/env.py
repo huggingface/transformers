@@ -83,7 +83,8 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             )
 
         pt_version = "not installed"
-        pt_cuda_available = "NA"
+        pt_cuda_available = False
+        pt_npu_available = False
         if is_torch_available():
             import torch
 
@@ -92,7 +93,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             pt_npu_available = is_torch_npu_available()
 
         tf_version = "not installed"
-        tf_cuda_available = "NA"
+        tf_cuda_available = False
         if is_tf_available():
             import tensorflow as tf
 
@@ -126,8 +127,8 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Safetensors version": f"{safetensors_version}",
             "Accelerate version": f"{accelerate_version}",
             "Accelerate config": f"{accelerate_config_str}",
-            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
-            "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
+            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available if pt_cuda_available else 'NA'})",
+            "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available if tf_cuda_available else 'NA'})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
             "Jax version": f"{jax_version}",
             "JaxLib version": f"{jaxlib_version}",
