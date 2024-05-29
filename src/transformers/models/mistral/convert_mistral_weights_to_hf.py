@@ -268,7 +268,7 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
-    parser.add_argument("--is_v3", action="store_true", help="Whether to convert v3 weights or not")
+    parser.add_argument("--is_v3", action="store_true", help="Whether the checkpoints correspond to the 3rd version or not.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
     if args.model_size != "tokenizer_only":
