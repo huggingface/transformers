@@ -21,7 +21,7 @@ from typing import Dict
 import libcst as cst
 from check_copies import run_ruff
 from libcst import ClassDef, CSTTransformer, CSTVisitor
-from libcst import matchers as m 
+from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
 
 from transformers import logging
@@ -231,8 +231,12 @@ class SuperTransformer(cst.CSTTransformer):
                 expr,
                 m.SimpleStatementLine(
                     body=[
-                        m.Return(value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))) |
-                        m.Expr(value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name))))
+                        m.Return(
+                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
+                        )
+                        | m.Expr(
+                            value=m.Call(func=m.Attribute(value=m.Call(func=m.Name("super")), attr=m.Name(func_name)))
+                        )
                     ]
                 ),
             ):
