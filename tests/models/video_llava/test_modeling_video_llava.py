@@ -535,6 +535,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).loss
         loss.backward()
 
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "LanguageBind/Video-LLaVA-7B-hf"
         model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)

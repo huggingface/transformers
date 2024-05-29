@@ -466,6 +466,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             self.processor.decode(output_single[0], skip_special_tokens=True),
         )
 
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "llava-hf/llava-v1.6-mistral-7b-hf"
         model = LlavaNextForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)

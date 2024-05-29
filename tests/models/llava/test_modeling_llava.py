@@ -451,6 +451,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
         model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)

@@ -253,6 +253,8 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).loss
         loss.backward()
 
+    @slow
+    @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "llava-hf/vip-llava-7b-hf"
         model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
