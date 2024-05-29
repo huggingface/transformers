@@ -103,6 +103,7 @@ class ClassFinder(CSTVisitor):
     def leave_If(self, node):
         for stmt in node.body.body:
             if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                # TODO this can actually be a duplicated import?
                 self.imports[stmt.body[0].names] = node  # match the visit simple statement line to overwrite it
 
     def leave_Name(self, node):
