@@ -669,7 +669,6 @@ class WhisperGenerationMixin:
                 config=self.config,
                 device=init_tokens.device,
                 suppress_tokens=suppress_tokens,
-                is_shortform=is_shortform, 
                 kwargs=kwargs,
             )
 
