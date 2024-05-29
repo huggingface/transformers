@@ -1,7 +1,7 @@
-from transformers.models.llama.modeling_llama import LlamaForSequenceClassification
+from transformers.models.gemma.modeling_gemma import GemmaForSequenceClassification
 from transformers.models.llama.configuration_llama import LlamaConfig
 # Example where we only want to only modify the docstring
-class GemmaConfig(LlamaConfig):
+class MyNewModel2Config(LlamaConfig):
     r"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -24,5 +24,5 @@ class GemmaConfig(LlamaConfig):
     ```"""
 
 # Example where alllllll the dependencies are fetched to just copy the entire class
-class GemmaForSequenceClassification(LlamaForSequenceClassification):
+class MyNewModel2ForSequenceClassification(GemmaForSequenceClassification):
     pass

@@ -10,7 +10,7 @@ def _pre_process_input(input_ids):
     return input_ids
 
 # example where we need some deps and some functions
-class GemmaModel(LlamaModel):
+class DummyModel(LlamaModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,

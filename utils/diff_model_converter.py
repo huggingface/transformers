@@ -463,9 +463,9 @@ def convert_file(diff_file, cst_transformers=None):
         cst_transformers = DiffConverterTransformer(module)
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
-
-    with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-        f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
+    if len(ruffed_code) > 0:
+        with open(diff_file.replace("diff_", "modeling_"), "w") as f:
+            f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
 
     if hasattr(cst_transformers, "config_body"):
         config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
@@ -482,6 +482,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--files_to_parse",
         default="all",
+        nargs='+',
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
