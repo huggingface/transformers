@@ -31,7 +31,7 @@ Based on the script [`run_instance_segmentation.py`](https://github.com/huggingf
 
 The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
 
-Here we show how to fine-tune a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on the subsample of [ADE20K](https://huggingface.co/datasets/zhoubolei/scene_parse_150) dataset. For this example we created a [small dataset](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) with ~2k images that contain only "person" and "car" annotations, all other pixels marked as "background".
+Here we show how to fine-tune a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on a subsample of the [ADE20K](https://huggingface.co/datasets/zhoubolei/scene_parse_150) dataset. For this example we created a [small dataset](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) with ~2k images that contain only "person" and "car" annotations, all other pixels marked as "background".
 
 Here is how `label2id` looks for this dataset:
 ```python
@@ -44,7 +44,7 @@ label2id = {
 
 Since the `background` label is not an instance and we don't want to predict it, we will specify `do_reduce_labels` to remove it from the data.
 
-You can run the training with following command:
+You can run the training with the following command:
 
 ```bash
 python run_instance_segmentation.py \
@@ -73,7 +73,7 @@ python run_instance_segmentation.py \
     --push_to_hub
 ```
 
-The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
+The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for the current example were not tuned. To improve model quality you could try:
  - changing image size parameters (`--image_height`/`--image_width`)
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
