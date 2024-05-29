@@ -1581,7 +1581,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
         # Create encoder input projection layers
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
         num_backbone_outs = len(intermediate_channel_sizes)
-        print(intermediate_channel_sizes)
         encoder_input_proj_list = []
         for _ in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[_]
