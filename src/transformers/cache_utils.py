@@ -9,7 +9,6 @@ import torch
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_quanto_available, logging
 
-
 if is_quanto_available():
     from quanto import QBitsTensor, qint2, qint4
 
@@ -792,8 +791,8 @@ class StaticCache(Cache):
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        k_out.index_copy_(2, cache_position, key_states)
+        v_out.index_copy_(2, cache_position, value_states)
 
         return k_out, v_out
 
