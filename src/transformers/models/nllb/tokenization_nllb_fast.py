@@ -161,22 +161,10 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        self._lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(str(lang_code)) for lang_code in additional_special_tokens
-        }
-
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
-    @property
-    def lang_code_to_id(self):
-        logger.warning_once(
-            "the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
-        )
-        return self._lang_code_to_id
 
     @property
     def can_save_slow_tokenizer(self) -> bool:

@@ -14,7 +14,6 @@
 # limitations under the License.
 """TF 2.0 TAPAS model."""
 
-
 from __future__ import annotations
 
 import enum

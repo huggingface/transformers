@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
+"""Finetuning a 🤗 Flax Transformers model for sequence classification on GLUE."""
+
 import json
 import logging
 import math

@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available, logging
-from transformers.testing_utils import CaptureLogger, require_torch, slow, torch_device
+from transformers.testing_utils import CaptureLogger, require_deterministic_for_xpu, require_torch, slow, torch_device
 
 from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
@@ -639,6 +639,7 @@ class EncoderDecoderMixin:
         loss.backward()
 
     @slow
+    @require_deterministic_for_xpu
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         model_2.to(torch_device)
