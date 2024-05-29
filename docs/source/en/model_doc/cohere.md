@@ -138,4 +138,7 @@ print(gen_text)
 [[autodoc]] CohereForCausalLM
     - forward
 
+## CohereForTokenClassification
 
+[[autodoc]] CohereForTokenClassification
+    - forward

@@ -35,7 +35,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, CohereForCausalLM, CohereModel
+    from transformers import (
+        AutoTokenizer,
+        CohereForCausalLM,
+        CohereForTokenClassification,
+        CohereModel,
+    )
 
 
 # Copied from transformers.tests.models.llama.LlamaModelTester with Llama->Cohere
@@ -269,12 +274,13 @@ class CohereModelTester:
 
 @require_torch
 class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
+    all_model_classes = (CohereModel, CohereForCausalLM, CohereForTokenClassification) if is_torch_available() else ()
     all_generative_model_classes = (CohereForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": CohereModel,
             "text-generation": CohereForCausalLM,
+            "token-classification": CohereForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -361,6 +367,21 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     res_sdpa,
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
+
+    def test_Cohere_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = CohereForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
 
 @require_torch

@@ -1633,7 +1633,9 @@ else:
             "CodeGenPreTrainedModel",
         ]
     )
-    _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.cohere"].extend(
+        ["CohereForCausalLM", "CohereForTokenClassification", "CohereModel", "CoherePreTrainedModel"]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -6190,11 +6192,7 @@ if TYPE_CHECKING:
             CodeGenModel,
             CodeGenPreTrainedModel,
         )
-        from .models.cohere import (
-            CohereForCausalLM,
-            CohereModel,
-            CoherePreTrainedModel,
-        )
+        from .models.cohere import CohereForCausalLM, CohereForTokenClassification, CohereModel, CoherePreTrainedModel
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
             ConditionalDetrForSegmentation,

@@ -45,6 +45,7 @@ else:
         "CohereForCausalLM",
         "CohereModel",
         "CoherePreTrainedModel",
+        "CohereForTokenClassification",
     ]
 
 
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_cohere import (
             CohereForCausalLM,
+            CohereForTokenClassification,
             CohereModel,
             CoherePreTrainedModel,
         )
