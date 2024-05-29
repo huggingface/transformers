@@ -133,13 +133,14 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "JaxLib version": f"{jaxlib_version}",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
-        if pt_cuda_available:
-            info["Using GPU in script?"] = "<fill in>"
-            info["GPU type"] = torch.cuda.get_device_name()
-        elif pt_npu_available:
-            info["Using NPU in script?"] = "<fill in>"
-            info["NPU type"] = torch.npu.get_device_name()
-            info["CANN version"] = torch.version.cann
+        if is_torch_available():
+            if pt_cuda_available:
+                info["Using GPU in script?"] = "<fill in>"
+                info["GPU type"] = torch.cuda.get_device_name()
+            elif pt_npu_available:
+                info["Using NPU in script?"] = "<fill in>"
+                info["NPU type"] = torch.npu.get_device_name()
+                info["CANN version"] = torch.version.cann
 
         print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")
         print(self.format_dict(info))
