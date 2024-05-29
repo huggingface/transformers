@@ -633,18 +633,30 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, attention_mask=None, **kwargs
+        self,
+        input_ids,
+        inputs_embeds=None,
+        attention_mask=None,
+        use_cache=None,
+        past_key_values: Optional[MambaCache] = None,
+        **kwargs,
     ):
         # only last token for inputs_ids if the state is passed along.
-        if cache_params is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        if inputs_embeds is not None and cache_params is None:
+        if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs["cache_params"] = cache_params
+        model_inputs.update(
+            {
+                "cache_params": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)
