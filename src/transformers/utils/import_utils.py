@@ -846,7 +846,6 @@ def is_bitsandbytes_available():
 
     # bitsandbytes throws an error if cuda is not available
     # let's avoid that by adding a simple check
-    import torch
 
     return _bitsandbytes_available
 
