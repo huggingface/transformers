@@ -142,12 +142,11 @@ def write_model(
     vocab_size = vocab_size if vocab_size is not None else 32000
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
-        num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
-        key_value_dim = dim // num_key_value_heads
     else:  # compatibility with other checkpoints
         num_key_value_heads = n_heads
-        num_local_key_value_heads = n_heads_per_shard
-        key_value_dim = dim
+    num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
+    key_value_dim = dim // num_key_value_heads
+    
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=dim, dim2=dim):
