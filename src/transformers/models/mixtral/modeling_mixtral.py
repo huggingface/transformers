@@ -825,7 +825,7 @@ class MixtralSparseMoeBlock(nn.Module):
     and memory on padding.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, specified_num_experts=0):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.ffn_dim = config.intermediate_size
@@ -833,9 +833,9 @@ class MixtralSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         # gating
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.gate = nn.Linear(self.hidden_dim, self.num_experts - specified_num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts - specified_num_experts)])
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
@@ -885,9 +885,15 @@ class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
+        if isinstance(config.num_pruning_experts, List):
+            print("layer_idx", layer_idx, "num_pruning_experts (List)", config.num_pruning_experts[layer_idx])
+        else:
+            print("layer_idx", layer_idx, "num_pruning_experts", config.num_pruning_experts)
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-
+        if isinstance(config.num_pruning_experts, int):
+          self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        else:
+          self.block_sparse_moe = MixtralSparseMoeBlock(config,8-config.num_pruning_experts[layer_idx])
         self.block_sparse_moe = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

@@ -133,6 +133,7 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_local_experts=8,
+        num_pruning_experts=0,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
@@ -160,6 +161,7 @@ class MixtralConfig(PretrainedConfig):
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
+        self.num_pruning_experts = num_pruning_experts
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
