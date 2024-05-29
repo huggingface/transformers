@@ -1703,14 +1703,13 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
 
         self.config = config
         self.auxiliary_loss = config.auxiliary_loss
-        # CONDITIONAL DETR encoder-decoder model
+        # DAB-DETR encoder-decoder model
         self.model = DABDETRModel(config)
 
         # Object detection heads
         self.class_labels_classifier = nn.Linear(
             config.d_model, config.num_labels
         ) 
-        # self.class_embed = nn.Linear(config.hidden_dim, config.num_target_classes)
 
         # init prior_prob setting for focal loss
         prior_prob = 0.01
@@ -1843,7 +1842,6 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-            # -------
 
         if not return_dict:
             if auxiliary_outputs is not None:

@@ -194,7 +194,7 @@ class DABDETRConfig(PretrainedConfig):
         decoder_nhead=8,
         hidden_dim=256,
         normalize_before=False,
-        iter_update=True,
+        iter_update=False, # HAS to be true
         **kwargs,
     ):
         if not use_timm_backbone and use_pretrained_backbone:
