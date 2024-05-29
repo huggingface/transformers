@@ -31,7 +31,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_dab_detr"] = ["DABDETRFeatureExtractor"]
-    _import_structure["image_processing_dab_detr"] = ["DADETRImageProcessor"]
+    _import_structure["image_processing_dab_detr"] = ["DABDETRImageProcessor"]
 
 
 try:
