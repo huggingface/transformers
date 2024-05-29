@@ -1714,7 +1714,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         # init prior_prob setting for focal loss
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_labels_classifier.bias.data = torch.ones(config.num_target_classes) * bias_value
+        self.class_labels_classifier.bias.data = torch.ones(config.num_labels) * bias_value
         
         # Initialize weights and apply final processing
         self.post_init()
