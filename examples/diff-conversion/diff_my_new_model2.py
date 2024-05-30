@@ -1,5 +1,7 @@
 from transformers.models.gemma.modeling_gemma import GemmaForSequenceClassification
 from transformers.models.llama.configuration_llama import LlamaConfig
+
+
 # Example where we only want to only modify the docstring
 class MyNewModel2Config(LlamaConfig):
     r"""
@@ -22,6 +24,7 @@ class MyNewModel2Config(LlamaConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
 
 # Example where alllllll the dependencies are fetched to just copy the entire class
 class MyNewModel2ForSequenceClassification(GemmaForSequenceClassification):

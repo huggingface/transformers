@@ -162,6 +162,7 @@ class GemmaConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()

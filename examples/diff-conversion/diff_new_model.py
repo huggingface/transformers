@@ -1,6 +1,8 @@
 # Example where we only want to overwrite the defaults of an init
 
 from transformers.models.gemma.configuration_gemma import GemmaConfig
+
+
 class NewModelConfig(GemmaConfig):
     def __init__(
         self,

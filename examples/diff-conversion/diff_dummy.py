@@ -1,13 +1,17 @@
-from transformers.models.llama.modeling_llama import LlamaModel
-from typing import *
-import torch
 from math import log
-from transformers.modeling_outputs import CausalLMOutputWithPast
+from typing import List, Optional, Tuple, Union
+
+import torch
+
 from transformers import Cache
+from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.models.llama.modeling_llama import LlamaModel
+
 
 def _pre_process_input(input_ids):
     print(log(input_ids))
     return input_ids
+
 
 # example where we need some deps and some functions
 class DummyModel(LlamaModel):
