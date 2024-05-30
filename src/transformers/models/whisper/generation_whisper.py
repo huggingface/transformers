@@ -973,7 +973,7 @@ class WhisperGenerationMixin:
 
     def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform):
         # remove all previously passed decoder input ids
-        if isinstance(seek_outputs, torch.Tensor):
+        if isinstance(seek_outputs, torch.Tensor) and not is_shortform:
             seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
             return seek_outputs, seek_outputs
 
