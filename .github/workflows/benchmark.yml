@@ -23,10 +23,16 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - name: Update clone
+        working-directory: /transformers
+        run: |
+          git fetch && git checkout ${{ github.sha }}
 
-      - name: Install locally transformers & other libs
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Benchmark
         run: |
           echo "Hello Benchmark"
           python3 -m pip install optimum-benchmark>=0.2.0
