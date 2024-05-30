@@ -239,6 +239,23 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_generate_quality_dequantize(self):
+        r"""
+        Test that loading the model and unquantize it produce correct results
+        """
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        model_4bit.dequantize()
+
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model_4bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
@@ -285,6 +302,13 @@ class Bnb4BitTest(Base4bitTest):
         """
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_4bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+
+    def test_bnb_4bit_wrong_config(self):
+        r"""
+        Test whether creating a bnb config with unsupported values leads to errors.
+        """
+        with self.assertRaises(ValueError):
+            _ = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_storage="add")
 
 
 @require_bitsandbytes

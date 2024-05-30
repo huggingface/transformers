@@ -1,4 +1,4 @@
-""" Evaluation script for RAG models."""
+"""Evaluation script for RAG models."""
 
 import argparse
 import ast

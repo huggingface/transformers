@@ -24,7 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config", "DebertaV2OnnxConfig"],
+    "configuration_deberta_v2": ["DebertaV2Config", "DebertaV2OnnxConfig"],
     "tokenization_deberta_v2": ["DebertaV2Tokenizer"],
 }
 
@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_deberta_v2"] = [
-        "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDebertaV2ForMaskedLM",
         "TFDebertaV2ForQuestionAnswering",
         "TFDebertaV2ForMultipleChoice",
@@ -60,7 +59,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_deberta_v2"] = [
-        "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DebertaV2ForMaskedLM",
         "DebertaV2ForMultipleChoice",
         "DebertaV2ForQuestionAnswering",
@@ -73,7 +71,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_deberta_v2 import (
-        DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaV2Config,
         DebertaV2OnnxConfig,
     )
@@ -94,7 +91,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_deberta_v2 import (
-            TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
             TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
@@ -111,7 +107,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_deberta_v2 import (
-            DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaV2ForMaskedLM,
             DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,

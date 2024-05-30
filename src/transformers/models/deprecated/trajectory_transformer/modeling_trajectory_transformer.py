@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TrajectoryTransformer model."""
+"""PyTorch TrajectoryTransformer model."""
 
 import math
 import os
@@ -40,9 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "CarlCochet/trajectory-transformer-halfcheetah-medium-v2"
 _CONFIG_FOR_DOC = "TrajectoryTransformerConfig"
-
-
-from .._archive_maps import TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 def load_tf_weights_in_trajectory_transformer(model, config, tf_checkpoint_path):

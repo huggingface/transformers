@@ -43,9 +43,6 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 
 
-from ..deprecated._archive_maps import LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 @dataclass
 class LongformerBaseModelOutput(ModelOutput):
     """
@@ -1593,7 +1590,7 @@ class LongformerModel(LongformerPreTrainedModel):
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
             logger.warning_once(
-                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"Input ids are automatically padded to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:

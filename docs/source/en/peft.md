@@ -81,15 +81,17 @@ model = AutoModelForCausalLM.from_pretrained(model_id)
 model.load_adapter(peft_model_id)
 ```
 
+Check out the [API documentation](#transformers.integrations.PeftAdapterMixin) section below for more details.
+
 ## Load in 8bit or 4bit
 
 The `bitsandbytes` integration supports 8bit and 4bit precision data types, which are useful for loading large models because it saves memory (see the `bitsandbytes` integration [guide](./quantization#bitsandbytes-integration) to learn more). Add the `load_in_8bit` or `load_in_4bit` parameters to [`~PreTrainedModel.from_pretrained`] and set `device_map="auto"` to effectively distribute the model to your hardware:
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 peft_model_id = "ybelkada/opt-350m-lora"
-model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", load_in_8bit=True)
+model = AutoModelForCausalLM.from_pretrained(peft_model_id, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 ## Add a new adapter
@@ -226,6 +228,19 @@ lora_config = LoraConfig(
 
 model.add_adapter(lora_config)
 ```
+
+## API docs
+
+[[autodoc]] integrations.PeftAdapterMixin
+    - load_adapter
+    - add_adapter
+    - set_adapter
+    - disable_adapters
+    - enable_adapters
+    - active_adapters
+    - get_adapter_state_dict
+
+
 
 
 <!--

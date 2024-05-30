@@ -301,6 +301,7 @@ class TestTrainerExt(TestCasePlus):
             --label_smoothing_factor 0.1
             --target_lang ro_RO
             --source_lang en_XX
+            --report_to none
         """.split()
 
         args_eval = f"""
@@ -308,7 +309,7 @@ class TestTrainerExt(TestCasePlus):
             --per_device_eval_batch_size 4
             --max_eval_samples 8
             --val_max_target_length {max_len}
-            --evaluation_strategy steps
+            --eval_strategy steps
             --eval_steps {str(eval_steps)}
         """.split()
 

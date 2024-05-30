@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow SegFormer model."""
-
+"""TensorFlow SegFormer model."""
 
 from __future__ import annotations
 
@@ -54,9 +53,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 256, 16, 16]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "nvidia/mit-b0"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->Segformer

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Deformable DETR model. """
-
+"""Testing suite for the PyTorch Deformable DETR model."""
 
 import inspect
 import math
@@ -251,6 +250,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
     @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
     @unittest.skip(reason="Deformable DETR does not have a get_input_embeddings method")
@@ -521,8 +524,9 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
         config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -538,6 +542,14 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            elif model_class.__name__ == "ConditionalDetrForSegmentation":
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.deformable_detr.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -564,6 +576,18 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
 
     def test_two_stage_training(self):
         model_class = DeformableDetrForObjectDetection

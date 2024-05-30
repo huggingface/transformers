@@ -13,11 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
-    "configuration_mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "configuration_mistral": ["MistralConfig"],
 }
 
 
@@ -32,6 +38,7 @@ else:
         "MistralModel",
         "MistralPreTrainedModel",
         "MistralForSequenceClassification",
+        "MistralForTokenClassification",
     ]
 
 try:
@@ -46,9 +53,22 @@ else:
         "FlaxMistralPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_mistral"] = [
+        "TFMistralModel",
+        "TFMistralForCausalLM",
+        "TFMistralForSequenceClassification",
+        "TFMistralPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
-    from .configuration_mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .configuration_mistral import MistralConfig
 
     try:
         if not is_torch_available():
@@ -59,6 +79,7 @@ if TYPE_CHECKING:
         from .modeling_mistral import (
             MistralForCausalLM,
             MistralForSequenceClassification,
+            MistralForTokenClassification,
             MistralModel,
             MistralPreTrainedModel,
         )
@@ -73,6 +94,19 @@ if TYPE_CHECKING:
             FlaxMistralForCausalLM,
             FlaxMistralModel,
             FlaxMistralPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_mistral import (
+            TFMistralForCausalLM,
+            TFMistralForSequenceClassification,
+            TFMistralModel,
+            TFMistralPreTrainedModel,
         )
 
 

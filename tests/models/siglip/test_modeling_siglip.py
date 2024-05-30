@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SigLIP model. """
-
+"""Testing suite for the PyTorch SigLIP model."""
 
 import inspect
 import os
@@ -147,6 +146,12 @@ class SiglipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
 
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
@@ -687,3 +692,25 @@ class SiglipModelIntegrationTest(unittest.TestCase):
         probs = torch.sigmoid(logits_per_image)  # these are the probabilities
         expected_probs = torch.tensor([[3.1937e-01, 3.2463e-05]], device=torch_device)
         self.assertTrue(torch.allclose(probs, expected_probs, atol=1e-3))
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model_name = "google/siglip-base-patch16-224"
+        model = SiglipModel.from_pretrained(model_name).to(torch_device)
+
+        # 640 x 480 image
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height": 480, "width": 640})
+
+        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the shape
+        # patch size = 16
+        # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
+        expected_shape = torch.Size((1, 1200, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)

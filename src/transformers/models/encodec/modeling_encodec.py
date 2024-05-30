@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch EnCodec model."""
+"""PyTorch EnCodec model."""
 
 import math
 from dataclasses import dataclass
@@ -38,9 +38,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "EncodecConfig"
-
-
-from ..deprecated._archive_maps import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -776,7 +773,7 @@ class EncodecModel(EncodecPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, EncodecModel
 
-        >>> dataset = load_dataset("ashraq/esc50")
+        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model_id = "facebook/encodec_24khz"

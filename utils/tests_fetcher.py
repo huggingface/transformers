@@ -502,7 +502,12 @@ def get_all_doctest_files() -> List[str]:
     """
     py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
     md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+
     test_files_to_run = py_files + md_files
+    # change to use "/" as path separator
+    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
+    # don't run doctest for files in `src/transformers/models/deprecated`
+    test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
     # only include files in `src` or `docs/source/en/`
     test_files_to_run = [x for x in test_files_to_run if x.startswith(("src/", "docs/source/en/"))]
