@@ -1,0 +1,31 @@
+name: Self-hosted runner (benchmark)
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches:
+      - run_benchmark
+      - benchmark_on_github
+
+env:
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: [single-gpu, nvidia-gpu, a10, ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install locally transformers & other libs
+        run: |
+          echo "Hello Benchmark"
