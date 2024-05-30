@@ -2764,7 +2764,7 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self._evaluate(self, trial, ignore_keys_for_eval)
+            metrics = self._evaluate(trial, ignore_keys_for_eval)
 
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
