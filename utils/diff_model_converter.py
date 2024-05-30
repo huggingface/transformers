@@ -311,8 +311,9 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
 class DiffConverterTransformer(CSTTransformer):
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
 
-    def __init__(self, python_module):
+    def __init__(self, python_module, new_name):
         super().__init__()
+        self.camel_case_model_name = new_name
         # fmt: off
         self.python_module = python_module  # we store the original module to use `code_for_node`
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
@@ -384,16 +385,23 @@ class DiffConverterTransformer(CSTTransformer):
         bases = [k.value.value for k in original_node.bases if k.value.value in self.imported_mapping]
         self.global_scope_index += 100
         for super_class in bases:
-            old_name = re.findall(r"[A-Z][a-z0-9]*", super_class)[0].lower()
             if super_class not in self.imported_mapping:
                 raise ImportError(
-                    f"{super_class} was not imported using `from transformers.models.{old_name}.modeling_{old_name} import {super_class}"
+                    f"{super_class} was not imported using `from transformers.models.xxxxx.modeling_xxxx import {super_class}"
                 )
 
             super_file_name = self.imported_mapping[super_class]  # we need to get the parsed tree
-            new_name = re.findall(r"[A-Z][a-z0-9]*", class_name)[0].lower()
+            model_name = re.search(r'_(\S*)', super_file_name)
+            if model_name:
+                model_name = model_name.groups()[0]
+            else:
+                raise ValueError(f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name")
+
+            camel_case_model_name = ''.join(x.title() for x in model_name.split("_"))
+            print(f"Detected inheritance from {camel_case_model_name}")
+            old_name = camel_case_model_name.lower() 
             if super_file_name not in self.visited_module:  # only extract classes once
-                class_finder = find_classes_in_file(self.transformers_imports[super_file_name], old_name, new_name)
+                class_finder = find_classes_in_file(self.transformers_imports[super_file_name], old_name, self.camel_case_model_name.lower())
                 self.visited_module[super_file_name] = class_finder
             else:  # we are re-using the previously parsed data
                 class_finder = self.visited_module[super_file_name]
@@ -445,13 +453,15 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 def convert_file(diff_file, cst_transformers=None):
+    model_name = re.search(r'diff_(.*)(?=\.py$)', diff_file).groups()[0]
+    camel_case_model_name = ''.join(x.title() for x in model_name.split("_"))
     # Parse the Python file
     with open(diff_file, "r") as file:
         code = file.read()
     module = cst.parse_module(code)
     wrapper = MetadataWrapper(module)
     if cst_transformers is None:
-        cst_transformers = DiffConverterTransformer(module)
+        cst_transformers = DiffConverterTransformer(module,camel_case_model_name)
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
     formatted_code = run_ruff(ruffed_code, False)
@@ -474,7 +484,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default="all",
+        default=["/Users/arthurzucker/Work/transformers/examples/diff-conversion/diff_my_new_model.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
