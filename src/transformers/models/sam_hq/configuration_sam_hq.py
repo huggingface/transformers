@@ -99,6 +99,8 @@ class SAMHQMaskDecoderConfig(PretrainedConfig):
             The dimensionality of the hidden states in the IoU head module.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
+        vision_encoder_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of VisionEncoder embeddings
 
     """
 
@@ -114,9 +116,11 @@ class SAMHQMaskDecoderConfig(PretrainedConfig):
         iou_head_depth=3,
         iou_head_hidden_dim=256,
         layer_norm_eps=1e-6,
+        vision_encoder_dim=768,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.vision_encoder_dim = vision_encoder_dim
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.mlp_dim = mlp_dim

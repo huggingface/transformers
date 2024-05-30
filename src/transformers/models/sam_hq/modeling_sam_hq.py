@@ -17,7 +17,7 @@
 import collections
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Type
 
 import numpy as np
 import torch
@@ -466,6 +466,32 @@ class SAMHQMaskDecoder(nn.Module):
         self.iou_prediction_head = SAMHQFeedForward(
             self.hidden_size, config.iou_head_hidden_dim, self.num_mask_tokens, config.iou_head_depth
         )
+
+        # HQ-SAM parameters
+        self.hf_token = nn.Embedding(1, self.hidden_size)  # HQ-Ouptput-Token
+        self.hf_mlp = SAMHQFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8,
+                          3)  # corresponding new MLP layer for HQ-Ouptput-Token
+        self.num_mask_tokens = self.num_mask_tokens + 1
+
+        # three conv fusion layers for obtaining HQ-Feature
+        self.compress_vit_feat = nn.Sequential(
+            nn.ConvTranspose2d(config.vision_encoder_dim, self.hidden_size, kernel_size=2, stride=2),
+            SAMHQLayerNorm(self.hidden_size),
+            nn.GELU(),
+            nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 8, kernel_size=2, stride=2))
+
+        self.embedding_encoder = nn.Sequential(
+            nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2),
+            SAMHQLayerNorm(self.hidden_size // 4),
+            nn.GELU(),
+            nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2),
+        )
+        self.embedding_maskfeature = nn.Sequential(
+            nn.Conv2d(self.hidden_size // 8, self.hidden_size // 4, 3, 1, 1),
+            SAMHQLayerNorm(self.hidden_size // 4),
+            nn.GELU(),
+            nn.Conv2d(self.hidden_size // 4, self.hidden_size // 8, 3, 1, 1))
+
 
     def forward(
         self,
