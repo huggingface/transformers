@@ -2726,12 +2726,12 @@ class Trainer:
                 f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
             )
 
-    def _evaluate(self, trial, ignore_keys_for_eval):
+    def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
         metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and not skip_scheduler:
             metric_to_check = self.args.metric_for_best_model
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"
