@@ -24,22 +24,29 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from transformers import PretrainedConfig
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...modeling_outputs import CausalLMOutputWithPast
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import logging
+import math
+import torch.nn.functional as F
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
+    QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -54,13 +61,10 @@ from .configuration_gemma import GemmaConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
+"""PyTorch Gemma model."""
 
 
 logger = logging.get_logger(__name__)
-
-
-ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 
 
 logger = logging.get_logger(__name__)
@@ -92,6 +96,9 @@ class GemmaRMSNorm(nn.Module):
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
+
+
+ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 
 
 class GemmaRotaryEmbedding(nn.Module):
@@ -727,6 +734,8 @@ class GemmaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+_CONFIG_FOR_DOC = "GemmaConfig"
+
 
 GEMMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -800,8 +809,6 @@ GEMMA_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
-
-_CONFIG_FOR_DOC = "GemmaConfig"
 
 
 @add_start_docstrings(
