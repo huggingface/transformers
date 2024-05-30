@@ -454,14 +454,16 @@ def convert_file(diff_file, cst_transformers=None):
         cst_transformers = DiffConverterTransformer(module)
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
-    if len(ruffed_code) > 0:
+    formatted_code = run_ruff(ruffed_code, False)
+    if len(formatted_code) > 0:
         with open(diff_file.replace("diff_", "modeling_"), "w") as f:
-            f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
+            f.write(AUTO_GENERATED_MESSAGE + formatted_code)
 
     if hasattr(cst_transformers, "config_body"):
         config_module = cst.Module(body=[*cst_transformers.config_body], header=new_mod.header)
         with open(diff_file.replace("diff_", "configuration_"), "w") as f:
             ruffed_code = run_ruff(config_module.code, True)
+            formatted_code = run_ruff(ruffed_code, False)
             f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
 
     # TODO optimize by re-using the class_finder
