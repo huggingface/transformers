@@ -129,8 +129,6 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VideoLlavaVisionAttention"]
 
     def _init_weights(self, module):
-        # important: this ported version of VideoLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")

@@ -137,8 +137,6 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        # important: this ported version of VipLlava isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")

@@ -1344,8 +1344,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
-        # important: this ported version of Idefics2 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
         std = (
             self.config.text_config.initializer_range
             if hasattr(self.config, "initializer_range")
