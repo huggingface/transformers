@@ -375,7 +375,7 @@ def main():
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # Load last checkpoint form output_dir if it exists (and we are not overwriting it)
+    # Load last checkpoint from output_dir if it exists (and we are not overwriting it)
     checkpoint = find_last_checkpoint(training_args)
 
     # ------------------------------------------------------------------------------------------------
