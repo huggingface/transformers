@@ -726,7 +726,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-
 _CONFIG_FOR_DOC = "GemmaConfig"
 
 
@@ -1126,14 +1125,8 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
-        else:
-            logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
         logits = logits.float()
-
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
