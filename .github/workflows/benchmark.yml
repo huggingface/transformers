@@ -37,4 +37,4 @@ jobs:
         run: |
           echo "Hello Benchmark"
           python3 -m pip install optimum-benchmark>=0.2.0
-          python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+          HF_TOKEN=${{ secrets.HF_HUB_READ_TOKEN }} python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
