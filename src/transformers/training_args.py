@@ -1582,7 +1582,7 @@ class TrainingArguments:
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = not(self.metric_for_best_model.endswith("loss"))
+            self.greater_is_better = not (self.metric_for_best_model.endswith("loss"))
         if self.run_name is None:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
