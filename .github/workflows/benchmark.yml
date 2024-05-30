@@ -33,6 +33,7 @@ jobs:
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: Benchmark
+        working-directory: /transformers
         run: |
           echo "Hello Benchmark"
           python3 -m pip install optimum-benchmark>=0.2.0
