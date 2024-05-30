@@ -662,6 +662,13 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.sam_hq": [
+        "SAMHQConfig",
+        "SAMHQMaskDecoderConfig",
+       
+        "SAMHQPromptEncoderConfig",
+        "SAMHQVisionConfig",
+    ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
@@ -3006,6 +3013,12 @@ else:
             "SamPreTrainedModel",
         ]
     )
+    _import_structure["models.sam_hq"].extend(
+        [
+            "SAMHQModel",
+            "SAMHQPreTrainedModel",
+        ]
+    )
     _import_structure["models.seamless_m4t"].extend(
         [
             "SeamlessM4TCodeHifiGan",
@@ -4116,6 +4129,12 @@ else:
         [
             "TFSamModel",
             "TFSamPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sam_hq"].extend(
+        [
+            "TFSAMHQModel",
+            "TFSAMHQPreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -5266,6 +5285,13 @@ if TYPE_CHECKING:
         SamProcessor,
         SamPromptEncoderConfig,
         SamVisionConfig,
+    )
+    from .models.sam_hq import (
+        SAMHQConfig,
+        SAMHQMaskDecoderConfig,
+       
+        SAMHQPromptEncoderConfig,
+        SAMHQVisionConfig,
     )
     from .models.seamless_m4t import (
         SeamlessM4TConfig,
@@ -7285,6 +7311,10 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
+        from .models.sam_hq import (
+            SAMHQModel,
+            SAMHQPreTrainedModel,
+        )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,
             SeamlessM4TForSpeechToSpeech,
@@ -8188,6 +8218,10 @@ if TYPE_CHECKING:
         from .models.sam import (
             TFSamModel,
             TFSamPreTrainedModel,
+        )
+        from .models.sam_hq import (
+            TFSAMHQModel,
+            TFSAMHQPreTrainedModel,
         )
         from .models.segformer import (
             TFSegformerDecodeHead,
