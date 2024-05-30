@@ -1071,7 +1071,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         super().__init__(config)
 
         self.backbone = None
-        if config.is_hybrid or config.backbone_config is None:
+        if config.is_hybrid:
             self.dpt = DPTModel(config, add_pooling_layer=False)
         else:
             self.backbone = load_backbone(config)

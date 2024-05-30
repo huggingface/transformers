@@ -50,7 +50,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if config.backbone is None:
             raise ValueError("backbone is not set in the config. Please set it to a timm model name.")
 
-        if config.backbone not in timm.list_models():
+        if config.backbone.split(".")[0] not in timm.list_models():
             raise ValueError(f"backbone {config.backbone} is not supported by timm.")
 
         if hasattr(config, "out_features") and config.out_features is not None:
