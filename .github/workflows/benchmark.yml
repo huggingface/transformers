@@ -29,4 +29,5 @@ jobs:
       - name: Install locally transformers & other libs
         run: |
           echo "Hello Benchmark"
+          python3 -m pip install optimum-benchmark>=0.2.0
           python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
