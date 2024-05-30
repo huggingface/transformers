@@ -1251,7 +1251,7 @@ class Idefics2PerceiverResampler(nn.Module):
         self.rms_norm_eps = config.text_config.rms_norm_eps
 
         # Create Latents for Perceiver
-        self.latents = nn.Parameter(torch.ones(self.n_latents, self.hidden_size))
+        self.latents = nn.Parameter(torch.randn(self.n_latents, self.hidden_size))
 
         # Create Transformer Blocks
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
