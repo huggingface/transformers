@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import json
 from shutil import copyfile
 from typing import Optional, Tuple
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -150,6 +151,10 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             legacy = True
         self.legacy = legacy
 
+        #TODO:ita
+        self.add_prefix_space = add_prefix_space
+
+        # TODO:ita
         if add_prefix_space is not None:
             kwargs["from_slow"] = True
 
@@ -169,6 +174,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
+        self.update_pre_tokenizer()
+        self.update_normalizer()
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
@@ -201,6 +208,38 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
+
+    def update_normalizer(self):
+        """
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        """
+        sequence = []
+        if getattr(self, "legacy", True):
+            if getattr(self, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+
+        elif not getattr(self, "legacy", True):
+            self._tokenizer.normalizer = normalizers.Sequence(sequence)
+
+    def update_pre_tokenizer(self):
+        sequence = []
+        if getattr(self, "add_prefix_space") == False:
+            prepend_scheme = "never"
+        elif getattr(self, "add_prefix_space") == None:
+            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
+            if prepend_normalizer:
+                prepend_normalizer = prepend_normalizer[0]
+                replacement = prepend_normalizer['prepend']
+                self.add_prefix_space = True
+            else:
+                prepend_scheme = "never"
+        if getattr(self, "add_prefix_space", True):
+            prepend_scheme = "always"
+            if not getattr(self, "legacy", True):
+                prepend_scheme = "first"
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=False)
 
     @property
     def add_eos_token(self):
