@@ -2176,7 +2176,7 @@ class Trainer:
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         if args.sanity_evaluation:
-            self._evaluate(trial, ignore_keys_for_eval)
+            self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):

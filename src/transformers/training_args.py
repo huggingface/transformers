@@ -1459,7 +1459,9 @@ class TrainingArguments:
 
     sanity_evaluation: bool = field(
         default=False,
-        metadata={"help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."},
+        metadata={
+            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
     )
 
     def __post_init__(self):
