@@ -396,16 +396,16 @@ class GemmaModel(LlamaModel):
         hidden_states = hidden_states * normalizer
 
         return super().forward(
-            None,
-            attention_mask,
+            causal_mask,
             position_ids,
             past_key_values,
-            inputs_embeds,
             use_cache,
             output_attentions,
             output_hidden_states,
             return_dict,
             cache_position,
+            input_ids=None,
+            inputs_embeds=hidden_states,
         )
 
 
