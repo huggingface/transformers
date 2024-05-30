@@ -14,83 +14,55 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Summary of the tokenizers
+# Descripción general de los tokenizadores
 
 [[open-in-colab]]
 
-On this page, we will have a closer look at tokenization.
+En esta página, veremos más de cerca la tokenización.
 
 <Youtube id="VFp38yj8h3A"/>
 
-As we saw in [the preprocessing tutorial](preprocessing), tokenizing a text is splitting it into words or
-subwords, which then are converted to ids through a look-up table. Converting words or subwords to ids is
-straightforward, so in this summary, we will focus on splitting a text into words or subwords (i.e. tokenizing a text).
-More specifically, we will look at the three main types of tokenizers used in 🤗 Transformers: [Byte-Pair Encoding
-(BPE)](#byte-pair-encoding), [WordPiece](#wordpiece), and [SentencePiece](#sentencepiece), and show examples
-of which tokenizer type is used by which model.
+Como vimos en [el tutorial de preprocessamiento](preprocessing), tokenizar un texto es dividirlo en palabras o subpalabras, que luego se convierten en indices o ids a través de una tabla de búsqueda. Convertir palabras o subpalabras en ids es sencillo, así que en esta descripción general, nos centraremos en dividir un texto en palabras o subpalabras (es decir, tokenizar un texto). Más específicamente, examinaremos los tres principales tipos de tokenizadores utilizados en 🤗 Transformers: [Byte-Pair Encoding (BPE)](#byte-pair-encoding), [WordPiece](#wordpiece) y [SentencePiece](#sentencepiece), y mostraremos ejemplos de qué tipo de tokenizador se utiliza en cada modelo.
 
-Note that on each model page, you can look at the documentation of the associated tokenizer to know which tokenizer
-type was used by the pretrained model. For instance, if we look at [`BertTokenizer`], we can see
-that the model uses [WordPiece](#wordpiece).
+Ten en cuenta que en las páginas de los modelos, puedes ver la documentación del tokenizador asociado para saber qué tipo de tokenizador se utilizó en el modelo preentrenado. Por ejemplo, si miramos [BertTokenizer](https://huggingface.co/docs/transformers/en/model_doc/bert#transformers.BertTokenizer), podemos ver que dicho modelo utiliza [WordPiece](#wordpiece).
 
-## Introduction
+## Introducción
 
-Splitting a text into smaller chunks is a task that is harder than it looks, and there are multiple ways of doing so.
-For instance, let's look at the sentence `"Don't you love 🤗 Transformers? We sure do."`
+Dividir un texto en trozos más pequeños es más difícil de lo que parece, y hay múltiples formas de hacerlo. Por ejemplo, veamos la oración `"Don't you love 🤗 Transformers? We sure do."`
 
 <Youtube id="nhJxYji1aho"/>
 
-A simple way of tokenizing this text is to split it by spaces, which would give:
+Una forma sencilla de tokenizar este texto es dividirlo por espacios, lo que daría:
 
 ```
 ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 ```
 
-This is a sensible first step, but if we look at the tokens `"Transformers?"` and `"do."`, we notice that the
-punctuation is attached to the words `"Transformer"` and `"do"`, which is suboptimal. We should take the
-punctuation into account so that a model does not have to learn a different representation of a word and every possible
-punctuation symbol that could follow it, which would explode the number of representations the model has to learn.
-Taking punctuation into account, tokenizing our exemplary text would give:
+Este es un primer paso sensato, pero si miramos los tokens `"Transformers?"` y `"do."`, notamos que las puntuaciones están unidas a las palabras `"Transformer"` y `"do"`, lo que es subóptimo. Deberíamos tener en cuenta la puntuación para que un modelo no tenga que aprender una representación diferente de una palabra y cada posible símbolo de puntuación que podría seguirle, lo que explotaría el número de representaciones que el modelo tiene que aprender. Teniendo en cuenta la puntuación, tokenizar nuestro texto daría:
 
 ```
 ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 ```
 
-Better. However, it is disadvantageous, how the tokenization dealt with the word `"Don't"`. `"Don't"` stands for
-`"do not"`, so it would be better tokenized as `["Do", "n't"]`. This is where things start getting complicated, and
-part of the reason each model has its own tokenizer type. Depending on the rules we apply for tokenizing a text, a
-different tokenized output is generated for the same text. A pretrained model only performs properly if you feed it an
-input that was tokenized with the same rules that were used to tokenize its training data.
+Mejor. Sin embargo, es desventajoso cómo la tokenización trata la palabra `"Don't"`. `"Don't"` significa `"do not"`, así que sería mejor tokenizada como `["Do", "n't"]`. Aquí es donde las cosas comienzan a complicarse, y es la razon por la que cada modelo tiene su propio tipo de tokenizador. Dependiendo de las reglas que apliquemos para tokenizar un texto, se genera una salida tokenizada diferente para el mismo texto. Un modelo preentrenado solo se desempeña correctamente si se le proporciona una entrada que fue tokenizada con las mismas reglas que se utilizaron para tokenizar sus datos de entrenamiento.
 
-[spaCy](https://spacy.io/) and [Moses](http://www.statmt.org/moses/?n=Development.GetStarted) are two popular
-rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would output something like:
+[spaCy](https://spacy.io/) y [Moses](http://www.statmt.org/moses/?n=Development.GetStarted) son dos tokenizadores basados en reglas populares. Al aplicarlos en nuestro ejemplo, *spaCy* y *Moses* generarían algo como:
 
 ```
 ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 ```
 
-As can be seen space and punctuation tokenization, as well as rule-based tokenization, is used here. Space and
-punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined
-as splitting sentences into words. While it's the most intuitive way to split texts into smaller chunks, this
-tokenization method can lead to problems for massive text corpora. In this case, space and punctuation tokenization
-usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, [Transformer XL](model_doc/transformerxl) uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
+Como se puede ver, aquí se utiliza tokenización de espacio y puntuación, así como tokenización basada en reglas. La tokenización de espacio y puntuación y la tokenización basada en reglas son ambos ejemplos de tokenización de palabras, que se define de manera simple como dividir oraciones en palabras. Aunque es la forma más intuitiva de dividir textos en trozos más pequeños, este método de tokenización puede generar problemas para corpus de texto masivos. En este caso, la tokenización de espacio y puntuación suele generar un vocabulario muy grande (el conjunto de todas las palabras y tokens únicos utilizados). *Ej.*, [Transformer XL](https://huggingface.co/docs/transformers/main/en/model_doc/transfo-xl) utiliza tokenización de espacio y puntuación, lo que resulta en un tamaño de vocabulario de 267,735.
 
-Such a big vocabulary size forces the model to have an enormous embedding matrix as the input and output layer, which
-causes both an increased memory and time complexity. In general, transformers models rarely have a vocabulary size
-greater than 50,000, especially if they are pretrained only on a single language.
+Un tamaño de vocabulario tan grande fuerza al modelo a tener una matriz de embeddings enormemente grande como capa de entrada y salida, lo que causa un aumento tanto en la complejidad de memoria como en la complejidad de tiempo. En general, los modelos de transformadores rara vez tienen un tamaño de vocabulario mayor que 50,000, especialmente si están preentrenados solo en un idioma.
 
-So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters?
+Entonces, si la simple tokenización de espacios y puntuación es insatisfactoria, ¿por qué no tokenizar simplemente en caracteres?
 
 <Youtube id="ssLq_EK2jLE"/>
 
-While character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder
-for the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent
-representation for the letter `"t"` is much harder than learning a context-independent representation for the word
-`"today"`. Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of
-both worlds, transformers models use a hybrid between word-level and character-level tokenization called **subword**
-tokenization.
+Aunque la tokenización de caracteres es muy simple y reduciría significativamente la complejidad de memoria y tiempo, hace que sea mucho más difícil para el modelo aprender representaciones de entrada significativas. *Ej.* aprender una representación independiente del contexto para la letra `"t"` es mucho más difícil que aprender una representación independiente del contexto para la palabra `"today"`. Por lo tanto, la tokenización de caracteres suele acompañarse de una pérdida de rendimiento. Así que para obtener lo mejor de ambos mundos, los modelos de transformadores utilizan un híbrido entre la tokenización de nivel de palabra y de nivel de carácter llamada **tokenización de subpalabras**.
 
-## Subword tokenization
+## Tokenización de subpalabras
 
 <Youtube id="zHvTiHr506c"/>
 
