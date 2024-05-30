@@ -195,7 +195,7 @@ the symbol `"m"` is not in the base vocabulary. In general, single letters such 
 to happen for very special characters like emojis.
 
 As mentioned earlier, the vocabulary size, *i.e.* the base vocabulary size + the number of merges, is a hyperparameter
-to choose. For instance [GPT](model_doc/gpt) has a vocabulary size of 40,478 since they have 478 base characters
+to choose. For instance [GPT](model_doc/openai-gpt) has a vocabulary size of 40,478 since they have 478 base characters
 and chose to stop training after 40,000 merges.
 
 #### Byte-level BPE
