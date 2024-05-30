@@ -1257,7 +1257,6 @@ class OwlViTClassPredictionHead(nn.Module):
             if query_mask.ndim > 1:
                 query_mask = torch.unsqueeze(query_mask, dim=-2)
 
-            pred_logits = pred_logits.to(torch.float64)
             pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 

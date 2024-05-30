@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root
 RUN apt-get update &&  apt-get install -y libsndfile1-dev espeak-ng time git g++ cmake pkg-config openssh-client git
-ENV VIRTUAL_ENV=/usr/local
+ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv venv && uv pip install --no-cache-dir -U pip setuptools
 RUN uv pip install --no-deps accelerate
 RUN pip install --no-cache-dir 'torch' 'torchvision' 'torchaudio' --index-url https://download.pytorch.org/whl/cpu

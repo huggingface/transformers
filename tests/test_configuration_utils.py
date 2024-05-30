@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import json
 import os
 import shutil
@@ -20,6 +19,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import warnings
 from pathlib import Path
 
 from huggingface_hub import HfFolder, delete_repo
@@ -306,3 +306,10 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertTrue(config._has_non_default_generation_parameters())
         config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
         self.assertFalse(config._has_non_default_generation_parameters())
+
+    def test_loading_config_do_not_raise_future_warnings(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/31002."""
+        # Loading config should not raise a FutureWarning. It was the case before.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            PretrainedConfig.from_pretrained("bert-base-uncased")
