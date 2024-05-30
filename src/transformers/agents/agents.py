@@ -26,7 +26,7 @@ from .agent_types import AgentAudio, AgentImage, AgentText
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
 from .llm_engine import HfEngine, MessageRole
 from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_JSON_SYSTEM_PROMPT
-from .python_interpreter import evaluate_python_code, LIST_SAFE_MODULES
+from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
     Tool,
@@ -411,10 +411,7 @@ class Agent:
         return memory
 
     def get_succinct_logs(self):
-        return [
-            {key: value for key, value in log.items() if key != "agent_memory"}
-            for log in self.logs
-        ]
+        return [{key: value for key, value in log.items() if key != "agent_memory"} for log in self.logs]
 
     def extract_action(self, llm_output: str, split_token: str) -> str:
         """
@@ -576,7 +573,7 @@ class CodeAgent(Agent):
                 code_action,
                 available_tools,
                 state=self.state,
-                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports
+                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports,
             )
             self.logger.info(self.state["print_outputs"])
             return output
@@ -887,7 +884,7 @@ class ReactCodeAgent(ReactAgent):
                 code_action,
                 available_tools,
                 state=self.state,
-                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports
+                authorized_imports=LIST_SAFE_MODULES + self.additional_authorized_imports,
             )
             information = self.state["print_outputs"]
             self.logger.warning("Print outputs:")

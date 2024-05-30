@@ -359,39 +359,38 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
         assert result == "Samuel"
 
-
     def test_classes(self):
         code = """
 class Animal:
     species = "Generic Animal"
-    
+
     def __init__(self, name, age):
         self.name = name
         self.age = age
-    
+
     def sound(self):
         return "The animal makes a sound."
-    
+
     def __str__(self):
         return f"{self.name}, {self.age} years old"
 
 class Dog(Animal):
     species = "Canine"
-    
+
     def __init__(self, name, age, breed):
         super().__init__(name, age)
         self.breed = breed
-    
+
     def sound(self):
         return "The dog barks."
-    
+
     def __str__(self):
         return f"{self.name}, {self.age} years old, {self.breed}"
 
 class Cat(Animal):
     def sound(self):
         return "The cat meows."
-    
+
     def __str__(self):
         return f"{self.name}, {self.age} years old, {self.species}"
 
@@ -427,16 +426,16 @@ cat_str = str(cat)
     """
         state = {}
         evaluate_python_code(code, {"print": print, "len": len, "super": super, "str": str, "sum": sum}, state=state)
-        
+
         # Assert results
-        assert state['dog1_sound'] == "The dog barks."
-        assert state['dog1_str'] == "Fido, 3 years old, Labrador"
-        assert state['dog2_sound'] == "The dog barks."
-        assert state['dog2_str'] == "Buddy, 5 years old, Golden Retriever"
-        assert state['cat_sound'] == "The cat meows."
-        assert state['cat_str'] == "Whiskers, 2 years old, Generic Animal"
-        assert state['num_animals'] == 3
-        assert state['exception_message'] == "An error occurred"
+        assert state["dog1_sound"] == "The dog barks."
+        assert state["dog1_str"] == "Fido, 3 years old, Labrador"
+        assert state["dog2_sound"] == "The dog barks."
+        assert state["dog2_str"] == "Buddy, 5 years old, Golden Retriever"
+        assert state["cat_sound"] == "The cat meows."
+        assert state["cat_str"] == "Whiskers, 2 years old, Generic Animal"
+        assert state["num_animals"] == 3
+        assert state["exception_message"] == "An error occurred"
 
     def test_variable_args(self):
         code = """
@@ -461,4 +460,18 @@ except ValueError as e:
     """
         state = {}
         evaluate_python_code(code, {"print": print, "len": len, "super": super, "str": str, "sum": sum}, state=state)
-        assert state['exception_message'] == "An error occurred"
+        assert state["exception_message"] == "An error occurred"
+
+    def test_subscript(self):
+        code = "vendor = {'revenue': 31000, 'rent': 50312}; vendor['ratio'] = round(vendor['revenue'] / vendor['rent'], 2)"
+
+        state = {}
+        evaluate_python_code(code, {"min": min, "print": print, "round": round}, state=state)
+        assert state["vendor"] == {"revenue": 31000, "rent": 50312, "ratio": 0.62}
+
+    def test_print(self):
+        code = "print(min([1, 2, 3]))"
+        state = {}
+        result = evaluate_python_code(code, {"min": min, "print": print}, state=state)
+        assert result == "1"
+        assert state["print_outputs"] == "1\n"
