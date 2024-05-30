@@ -36,6 +36,7 @@ if is_torch_available():
         get_inverse_sqrt_schedule,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
+        get_scheduler,
         get_wsd_schedule,
     )
 
@@ -175,6 +176,27 @@ class ScheduleInitTest(unittest.TestCase):
                 LambdaScheduleWrapper.wrap_scheduler(scheduler)  # wrap to test picklability of the schedule
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
             self.assertListEqual(lrs_1, lrs_2, msg=f"failed for {scheduler_func} in save and reload")
+
+    def test_get_scheduler(self):
+        test_params = [
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+            },
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
+            },
+            {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
+        ]
+
+        for param in test_params:
+            self.assertTrue(get_scheduler(**param), msg=f"failed for {param['name']} in get_scheduler")
 
 
 class LambdaScheduleWrapper:
