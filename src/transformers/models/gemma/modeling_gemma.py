@@ -19,7 +19,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -54,7 +53,6 @@ from .configuration_gemma import GemmaConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-"""PyTorch Gemma model."""
 
 
 logger = logging.get_logger(__name__)
@@ -727,7 +725,6 @@ class GemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
 
 _CONFIG_FOR_DOC = "GemmaConfig"
 
