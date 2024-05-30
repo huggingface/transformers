@@ -429,7 +429,7 @@ class DiffConverterTransformer(CSTTransformer):
             if re.search(r"[\s\S]*is_.*available", full_statement):
                 self.all_imports.append(node)
             elif full_statement not in self.new_body:
-                self.new_body[node] = {"insert_idx":self.global_scope_index, "node":node}
+                self.new_body[node] = {"insert_idx": self.global_scope_index, "node": node}
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):

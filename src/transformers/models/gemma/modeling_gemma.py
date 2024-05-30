@@ -726,6 +726,7 @@ class GemmaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+
 _CONFIG_FOR_DOC = "GemmaConfig"
 
 
