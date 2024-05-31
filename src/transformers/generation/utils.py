@@ -1348,10 +1348,13 @@ class GenerationMixin:
 
         past_length = 0
         if "past_key_values" in model_kwargs:
-            if isinstance(model_kwargs["past_key_values"], Cache):
-                past_length = model_kwargs["past_key_values"].get_seq_length()
+            past_key_values = model_kwargs["past_key_values"]
+            if self.config.is_encoder_decoder and isinstance(past_key_values[0], Cache):
+                past_key_values = past_key_values[0]
+            if isinstance(past_key_values, Cache):
+                past_length = past_key_values.get_seq_length()
             else:
-                past_length = model_kwargs["past_key_values"][0][0].shape[2]
+                past_length = past_key_values[0][0].shape[2]
         if "inputs_embeds" in model_kwargs:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         else:
@@ -1684,6 +1687,15 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._get_cache(
                     generation_config.cache_implementation, batch_size, generation_config.max_length
                 )
+                if self.config.is_encoder_decoder:
+                    # manually set the cross-attention cache for encoder-decoder models
+                    encoder_outputs = model_kwargs["encoder_outputs"][0]
+                    model_kwargs["past_key_values"] = (
+                        model_kwargs["past_key_values"],
+                        self._get_cache(
+                            generation_config.cache_implementation, batch_size, encoder_outputs.shape[1]
+                        )
+                    )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
                     raise ValueError(
