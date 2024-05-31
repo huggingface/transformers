@@ -244,8 +244,8 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
         quantization_config ('transformers.utils.quantization_config.BitsAndBytesConfig'):
-            To configure and manage settings related to quantization, a technique used to compress neural network models 
-            by reducing the precision of the weights and activations, thus making models more efficient in terms of both 
+            To configure and manage settings related to quantization, a technique used to compress neural network models
+            by reducing the precision of the weights and activations, thus making models more efficient in terms of both
             storage and computation.
     """
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
