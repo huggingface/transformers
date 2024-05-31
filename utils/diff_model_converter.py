@@ -496,14 +496,15 @@ class DiffConverterTransformer(CSTTransformer):
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):
+        imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
+        dependency_imports = {}
+        for visiter in self.visited_module.values():
+            dependency_imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
+        dependency_imports.update(imports)
+        new_body = list(imports.values())
+        if hasattr(self, "config_body"):
+            self.config_body = list(imports.values()) + self.config_body
         if len(self.new_body.keys()) > 0:
-            imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
-            for visiter in self.visited_module.values():
-                imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
-
-            new_body = list(imports.values())
-            if hasattr(self, "config_body"):
-                self.config_body = self.all_imports + self.config_body
             new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
         else:
             new_body = []
@@ -541,7 +542,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["all"],
+        default=["/Users/arthurzucker/Work/transformers/examples/diff-conversion/diff_my_new_model.py"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )

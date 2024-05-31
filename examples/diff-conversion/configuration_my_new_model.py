@@ -4,6 +4,9 @@
 #         the file from the diff. If any change should be done, please apply the change to the
 #                                    diff.py file directly.
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from ...configuration_utils import PretrainedConfig
+
+
 class MyNewModelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MyNewModelModel`]. It is used to instantiate an MyNewModel
