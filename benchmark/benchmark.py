@@ -32,6 +32,8 @@ from pathlib import Path
 
 from git import Repo
 
+from huggingface_hub import HfApi
+
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
@@ -191,7 +193,6 @@ def combine_summaries(summaries):
     with open(os.path.join(exp_run_dir, "summary.json"), "w") as fp:
         json.dump(combined, fp, indent=4)
 
-    # TODO: upload to Hub
     print(json.dumps(combined, indent=4))
 
     return combined
@@ -216,6 +217,11 @@ if __name__ == "__main__":
         help="Comma-separated list of branch names and/or commit sha values on which the benchmark will run. If `diff` is specified, it will run on both the current head and the `main` branch.",
     )
     parser.add_argument("--metrics", type=str, help="The metrics to be included in the summary.")
+
+    parser.add_argument("--repo_id", type=str, default=None, help="The repository to which the file will be uploaded.")
+    parser.add_argument("--path_in_repo", type=str, default=None, help="Relative filepath in the repo.")
+    parser.add_argument("--token", type=str, default=None, help="A valid user access token (string).")
+
     args, optimum_benchmark_args = parser.parse_known_args()
 
     repo = Repo(PATH_TO_REPO)
@@ -308,3 +314,13 @@ if __name__ == "__main__":
             json.dump(run_summaries, fp, indent=4)
 
         combined_summary = combine_summaries(run_summaries)
+
+        # Upload to Hub
+        api = HfApi()
+        api.upload_file(
+            path_or_fileobj=os.path.join(exp_run_dir, "summary.json"),
+            path_in_repo=args.path_in_repo,
+            repo_id=args.repo_id,
+            repo_type="dataset",
+            token=args.token,
+        )
