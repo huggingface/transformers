@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
+This should help you prepare a patch, automatically extracting the commits to cherry-pick
+in chronological order to avoid merge conflicts. An equivalent way to do this is to use
+`git log --pretty=oneline HEAD...v4.41.0` and grep.
+
+Potential TODO: automatically cherry-picks them.
+
 Pass in a list of PR:
 `python utils/patch_helper.py --prs 31108 31054 31008 31010 31004`
 will produce the following:
