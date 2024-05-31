@@ -15,7 +15,7 @@
 """PyTorch Whisper model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import numpy as np
 import torch
@@ -23,9 +23,11 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from transformers import Cache, DynamicCache, StaticCache
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa, \
+    AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -244,6 +246,7 @@ class WhisperAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
+        layer_idx: Optional[int] = None,
         config: Optional[WhisperConfig] = None,
     ):
         super().__init__()
@@ -262,6 +265,14 @@ class WhisperAttention(nn.Module):
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
+        if layer_idx is None and is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+        self.layer_idx = layer_idx
+
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -276,10 +287,11 @@ class WhisperAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -291,42 +303,31 @@ class WhisperAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        past_key_value = getattr(self, "past_key_value", past_key_value)
+        if is_cross_attention:
+            # decoder cross-attention
+            if past_key_value is not None and past_key_value.get_seq_length(self.layer_idx):
+                # reuse k,v, cross_attentions
+                key_states = past_key_value.key_cache[self.layer_idx]
+                value_states = past_key_value.value_cache[self.layer_idx]
+            else:
+                # compute cross_attentions
+                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+                if past_key_value is not None:
+                    # save all cross attention key/value_states to cache
+                    # further calls to cross_attention layer can then reuse all cross-attention
+                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": 0})
         else:
-            # self_attention
+            # either encoder self-attention or decoder self-attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+            if past_key_value is not None:
+                # save all previous decoder key/value_states to cache
+                # further calls to uni-directional self-attention can concat previous decoder
+                # key/value_states to current projected key/value_state
+                # note: if encoder bi-directional self-attention `past_key_value` is always `None`
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -336,18 +337,9 @@ class WhisperAttention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+        if attention_mask is not None:  # no matter the length, we just slice it
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -800,7 +792,7 @@ class WhisperEncoderLayer(nn.Module):
 
 # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Whisper, MBART->WHISPER
 class WhisperDecoderLayer(nn.Module):
-    def __init__(self, config: WhisperConfig):
+    def __init__(self, config: WhisperConfig, layer_idx: int = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -810,6 +802,7 @@ class WhisperDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             is_causal=True,
+            layer_idx=layer_idx,
             config=config,
         )
         self.dropout = config.dropout
@@ -822,6 +815,7 @@ class WhisperDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            layer_idx=layer_idx,
             config=config,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -837,9 +831,10 @@ class WhisperDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[Cache]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -863,15 +858,16 @@ class WhisperDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
+        # decoder uni-directional self-attention cached key/values states are at position 0
+        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        # add present self-attn cache to positions 0 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -883,8 +879,8 @@ class WhisperDecoderLayer(nn.Module):
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            # cross_attn cached key/values tuple is at position 1 of present_key_value tuple
+            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -896,8 +892,8 @@ class WhisperDecoderLayer(nn.Module):
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
 
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
+            # add cross-attn to positions 1 of present_key_value tuple
+            present_key_value = (present_key_value, cross_attn_present_key_value)
 
         # Fully Connected
         residual = hidden_states
@@ -927,6 +923,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1256,7 +1253,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
-        self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -1286,6 +1283,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        cache_position=None,
     ):
         r"""
         Args:
@@ -1364,24 +1362,23 @@ class WhisperDecoder(WhisperPreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = 0
+        if use_cache:
+            use_legacy_cache = not (past_key_values is not None and isinstance(past_key_values[0], Cache))
+            if use_legacy_cache:
+                if past_key_values is None:
+                    self_attn = cross_attn = None
+                else:
+                    self_attn = [key_values[:2] for key_values in past_key_values]
+                    cross_attn = [key_values[2:] for key_values in past_key_values]
+                past_key_values = (
+                    DynamicCache.from_legacy_cache(self_attn),
+                    DynamicCache.from_legacy_cache(cross_attn),
+                )
+            past_key_values_length = past_key_values[0].get_seq_length()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._use_sdpa and head_mask is None and not output_attentions:
-            # output_attentions=True & head_mask can not be supported when using SDPA.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
 
         # embed positions
         if input_ids is not None:
@@ -1396,6 +1393,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values[0], output_attentions
+        )
+
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -1406,7 +1407,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1424,13 +1425,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     encoder_hidden_states,
                     None,  # encoder attention mask
                     head_mask[idx] if head_mask is not None else None,
@@ -1438,24 +1437,26 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     None,  # past_key_value
                     output_attentions,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[3 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1468,7 +1469,13 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache and use_legacy_cache:
+            next_cache = ()
+            for self_attn, cross_attn in zip(
+                next_decoder_cache[0].to_legacy_cache(), next_decoder_cache[1].to_legacy_cache()
+            ):
+                next_cache += (self_attn + cross_attn,)
         if not return_dict:
             return tuple(
                 v
@@ -1482,6 +1489,87 @@ class WhisperDecoder(WhisperPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
+    ):
+        # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
+        # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
+        # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
+        # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
+
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_static_cache = isinstance(past_key_values, StaticCache)
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        if using_static_cache:
+            target_length = past_key_values.get_max_length()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # in this case we assume that the mask comes already in inverted form and requires no inversion or slicing
+            if attention_mask.max() != 0:
+                raise ValueError("Custom 4D attention mask should be passed in inverted form with max==0`")
+            causal_mask = attention_mask
+        else:
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type == "cuda"
+            and not output_attentions
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
 
 @add_start_docstrings(
@@ -1571,13 +1659,14 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[List[Union[Cache, Tuple[torch.FloatTensor]]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
         Returns:
@@ -1637,6 +1726,7 @@ class WhisperModel(WhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1704,7 +1794,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[List[Union[Cache, Tuple[torch.FloatTensor]]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1712,6 +1802,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1766,6 +1857,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         lm_logits = self.proj_out(outputs[0])
 
@@ -1800,6 +1892,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         encoder_outputs=None,
         attention_mask=None,
         decoder_attention_mask=None,
+        cache_position=None,
         **kwargs,
     ):
         decoder_position_ids = None
@@ -1807,7 +1900,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
 
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            if isinstance(past_key_values[0], Cache):
+                past_length = past_key_values[0].get_seq_length
+            else:
+                past_length = past_key_values[0][0].shape[2]
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:
@@ -1821,6 +1917,11 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
 
+            if cache_position is None:
+                cache_position = torch.arange(past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device)
+            elif use_cache:
+                cache_position = cache_position[-decoder_input_ids.shape[1]:]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
@@ -1828,6 +1929,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
+            "cache_position": cache_position,
         }
 
     @staticmethod
