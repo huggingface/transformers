@@ -2276,6 +2276,7 @@ else:
     _import_structure["models.idefics2"].extend(
         [
             "Idefics2ForConditionalGeneration",
+            "Idefics2ForSequenceClassification",
             "Idefics2Model",
             "Idefics2PreTrainedModel",
             "Idefics2Processor",
@@ -6714,6 +6715,7 @@ if TYPE_CHECKING:
         )
         from .models.idefics2 import (
             Idefics2ForConditionalGeneration,
+            Idefics2ForSequenceClassification,
             Idefics2Model,
             Idefics2PreTrainedModel,
             Idefics2Processor,

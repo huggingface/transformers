@@ -4653,6 +4653,13 @@ class Idefics2ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Idefics2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Idefics2Model(metaclass=DummyObject):
     _backends = ["torch"]
 

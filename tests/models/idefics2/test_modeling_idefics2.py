@@ -25,6 +25,7 @@ from transformers import (
     AutoProcessor,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
+    Idefics2ForSequenceClassification,
     Idefics2Model,
     is_torch_available,
     is_vision_available,
@@ -97,6 +98,7 @@ class Idefics2VisionText2TextModelTester:
         use_cache=False,
         tie_word_embeddings=False,
         image_token_id=99,
+        type_sequence_label_size=2,
     ):
         self.parent = parent
         self.is_training = is_training
@@ -112,6 +114,7 @@ class Idefics2VisionText2TextModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.hidden_size = text_config["hidden_size"]
+        self.type_sequence_label_size = type_sequence_label_size
 
         self.vision_config = vision_config
         self.perceiver_config = perceiver_config
@@ -318,6 +321,17 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+    def test_idefics2_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = Idefics2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        input_dict["labels"] = sequence_labels
+        result = model(**input_dict)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, config.num_labels))
+
 
 @require_torch
 class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
@@ -325,7 +339,9 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     Model tester for `Idefics2ForConditionalGeneration`.
     """
 
-    all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (Idefics2ForConditionalGeneration, Idefics2ForSequenceClassification) if is_torch_available() else ()
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True

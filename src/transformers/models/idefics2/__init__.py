@@ -38,6 +38,7 @@ else:
         "Idefics2ForConditionalGeneration",
         "Idefics2PreTrainedModel",
         "Idefics2Model",
+        "Idefics2ForSequenceClassification",
     ]
     _import_structure["processing_idefics2"] = ["Idefics2Processor"]
 
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_idefics2 import (
             Idefics2ForConditionalGeneration,
+            Idefics2ForSequenceClassification,
             Idefics2Model,
             Idefics2PreTrainedModel,
         )
