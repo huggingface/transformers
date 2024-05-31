@@ -759,12 +759,7 @@ class StaticCache(Cache):
         )
 
         self.dtype = dtype if dtype is not None else torch.float32
-        if config.is_encoder_decoder:
-            self.num_key_value_heads = (
-                config.decoder_attention_heads if not getattr(config, "decoder_key_value_heads", None) else config.decoder_key_value_heads
-            )
-        else:
-            self.num_key_value_heads = (
+        self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
@@ -780,6 +775,7 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+        self.is_initialized = True
 
     def update(
         self,
@@ -813,6 +809,8 @@ class StaticCache(Cache):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
+        self.is_initialized = False
+
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -832,6 +830,7 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+        self.is_initialized = True
 
 
 class SlidingWindowCache(Cache):
