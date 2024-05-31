@@ -66,17 +66,9 @@ Aunque la tokenización de caracteres es muy simple y reduciría significativame
 
 <Youtube id="zHvTiHr506c"/>
 
-Subword tokenization algorithms rely on the principle that frequently used words should not be split into smaller
-subwords, but rare words should be decomposed into meaningful subwords. For instance `"annoyingly"` might be
-considered a rare word and could be decomposed into `"annoying"` and `"ly"`. Both `"annoying"` and `"ly"` as
-stand-alone subwords would appear more frequently while at the same time the meaning of `"annoyingly"` is kept by the
-composite meaning of `"annoying"` and `"ly"`. This is especially useful in agglutinative languages such as Turkish,
-where you can form (almost) arbitrarily long complex words by stringing together subwords.
+Los algoritmos de tokenización de subpalabras se basan en el principio de que las palabras frecuentemente utilizadas no deberían dividirse en subpalabras más pequeñas, pero las palabras raras deberían descomponerse en subpalabras significativas. Por ejemplo, `"annoyingly"` podría considerarse una palabra rara y descomponerse en `"annoying"` y `"ly"`. Ambas `"annoying"` y `"ly"` como subpalabras independientes aparecerían con más frecuencia al mismo tiempo que se mantiene el significado de `"annoyingly"` por el significado compuesto de `"annoying"` y `"ly"`. Esto es especialmente útil en lenguas aglutinantes como el turco, donde puedes formar palabras complejas (casi) arbitrariamente largas concatenando subpalabras.
 
-Subword tokenization allows the model to have a reasonable vocabulary size while being able to learn meaningful
-context-independent representations. In addition, subword tokenization enables the model to process words it has never
-seen before, by decomposing them into known subwords. For instance, the [`~transformers.BertTokenizer`] tokenizes
-`"I have a new GPU!"` as follows:
+La tokenización de subpalabras permite al modelo tener un tamaño de vocabulario razonable mientras puede aprender representaciones contextuales independientes significativas. Además, la tokenización de subpalabras permite al modelo procesar palabras que nunca ha visto antes, descomponiéndolas en subpalabras conocidas. Por ejemplo, el tokenizador [`~transformers.BertTokenizer`](https://huggingface.co/docs/transformers/en/model_doc/bert#transformers.BertTokenizer) tokeniza `"I have a new GPU!"` de la siguiente manera:
 
 ```py
 >>> from transformers import BertTokenizer
@@ -86,11 +78,9 @@ seen before, by decomposing them into known subwords. For instance, the [`~trans
 ["i", "have", "a", "new", "gp", "##u", "!"]
 ```
 
-Because we are considering the uncased model, the sentence was lowercased first. We can see that the words `["i", "have", "a", "new"]` are present in the tokenizer's vocabulary, but the word `"gpu"` is not. Consequently, the
-tokenizer splits `"gpu"` into known subwords: `["gp" and "##u"]`. `"##"` means that the rest of the token should
-be attached to the previous one, without space (for decoding or reversal of the tokenization).
+Debido a que estamos considerando el modelo sin mayúsculas, la oración se convirtió a minúsculas primero. Podemos ver que las palabras `["i", "have", "a", "new"]` están presentes en el vocabulario del tokenizador, pero la palabra `"gpu"` no. En consecuencia, el tokenizador divide `"gpu"` en subpalabras conocidas: `["gp" y "##u"]`. `"##"` significa que el resto del token debería adjuntarse al anterior, sin espacio (para decodificar o revertir la tokenización).
 
-As another example, [`~transformers.XLNetTokenizer`] tokenizes our previously exemplary text as follows:
+Como otro ejemplo, el tokenizador [`~transformers.XLNetTokenizer`](https://huggingface.co/docs/transformers/en/model_doc/xlnet#transformers.XLNetTokenizer) tokeniza nuestro texto de ejemplo anterior de la siguiente manera:
 
 ```py
 >>> from transformers import XLNetTokenizer
@@ -100,137 +90,77 @@ As another example, [`~transformers.XLNetTokenizer`] tokenizes our previously ex
 ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 ```
 
-We'll get back to the meaning of those `"▁"` when we look at [SentencePiece](#sentencepiece). As one can see,
-the rare word `"Transformers"` has been split into the more frequent subwords `"Transform"` and `"ers"`.
+Hablaremos del significado de esos `"▁"` cuando veamos [SentencePiece](#sentencepiece). Como se puede ver, la palabra rara `"Transformers"` se ha dividido en las subpalabras más frecuentes `"Transform"` y `"ers"`.
 
-Let's now look at how the different subword tokenization algorithms work. Note that all of those tokenization
-algorithms rely on some form of training which is usually done on the corpus the corresponding model will be trained
-on.
+Ahora, veamos cómo funcionan los diferentes algoritmos de tokenización de subpalabras. Ten en cuenta que todos esos algoritmos de tokenización se basan en alguna forma de entrenamiento que usualmente se realiza en el corpus en el que se entrenará el modelo correspondiente.
 
 <a id='byte-pair-encoding'></a>
 
 ### Byte-Pair Encoding (BPE)
 
-Byte-Pair Encoding (BPE) was introduced in [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
-words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](model_doc/gpt2), [RoBERTa](model_doc/roberta). More advanced pre-tokenization include rule-based tokenization, e.g. [XLM](model_doc/xlm),
-[FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/gpt) which uses
-spaCy and ftfy, to count the frequency of each word in the training corpus.
+La Codificación por Pares de Bytes (BPE por sus siglas en inglés) fue introducida en [Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., 2015)](https://arxiv.org/abs/1508.07909). BPE se basa en un pre-tokenizador que divide los datos de entrenamiento en palabras. La pre-tokenización puede ser tan simple como la tokenización por espacio, por ejemplo, [GPT-2](https://huggingface.co/docs/transformers/en/model_doc/gpt2), [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta). La pre-tokenización más avanzada incluye la tokenización basada en reglas, por ejemplo, [XLM](https://huggingface.co/docs/transformers/en/model_doc/xlm), [FlauBERT](model_doc/flaubert) que utiliza Moses para la mayoría de los idiomas, o [GPT](https://huggingface.co/docs/transformers/en/model_doc/openai-gpt) que utiliza spaCy y ftfy, para contar la frecuencia de cada palabra en el corpus de entrenamiento.
 
-After pre-tokenization, a set of unique words has been created and the frequency with which each word occurred in the
-training data has been determined. Next, BPE creates a base vocabulary consisting of all symbols that occur in the set
-of unique words and learns merge rules to form a new symbol from two symbols of the base vocabulary. It does so until
-the vocabulary has attained the desired vocabulary size. Note that the desired vocabulary size is a hyperparameter to
-define before training the tokenizer.
+Después de la pre-tokenización, se ha creado un conjunto de palabras únicas y ha determinado la frecuencia con la que cada palabra apareció en los datos de entrenamiento. A continuación, BPE crea un vocabulario base que consiste en todos los símbolos que aparecen en el conjunto de palabras únicas y aprende reglas de fusión para formar un nuevo símbolo a partir de dos símbolos del vocabulario base. Lo hace hasta que el vocabulario ha alcanzado el tamaño de vocabulario deseado. Tenga en cuenta que el tamaño de vocabulario deseado es un hiperparámetro que se debe definir antes de entrenar el tokenizador.
 
-As an example, let's assume that after pre-tokenization, the following set of words including their frequency has been
-determined:
+Por ejemplo, supongamos que después de la pre-tokenización, se ha determinado el siguiente conjunto de palabras, incluyendo su frecuencia:
 
 ```
 ("hug", 10), ("pug", 5), ("pun", 12), ("bun", 4), ("hugs", 5)
 ```
 
-Consequently, the base vocabulary is `["b", "g", "h", "n", "p", "s", "u"]`. Splitting all words into symbols of the
-base vocabulary, we obtain:
+En consecuencia, el vocabulario base es `["b", "g", "h", "n", "p", "s", "u"]`. Dividiendo todas las palabras en símbolos del vocabulario base, obtenemos:
 
 ```
 ("h" "u" "g", 10), ("p" "u" "g", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "u" "g" "s", 5)
 ```
 
-BPE then counts the frequency of each possible symbol pair and picks the symbol pair that occurs most frequently. In
-the example above `"h"` followed by `"u"` is present _10 + 5 = 15_ times (10 times in the 10 occurrences of
-`"hug"`, 5 times in the 5 occurrences of `"hugs"`). However, the most frequent symbol pair is `"u"` followed by
-`"g"`, occurring _10 + 5 + 5 = 20_ times in total. Thus, the first merge rule the tokenizer learns is to group all
-`"u"` symbols followed by a `"g"` symbol together. Next, `"ug"` is added to the vocabulary. The set of words then
-becomes
+Luego, BPE cuenta la frecuencia de cada par de símbolos posible y selecciona el par de símbolos que ocurre con más frecuencia. En el ejemplo anterior, `"h"` seguido de `"u"` está presente _10 + 5 = 15_ veces (10 veces en las 10 ocurrencias de `"hug"`, 5 veces en las 5 ocurrencias de `"hugs"`). Sin embargo, el par de símbolos más frecuente es `"u"` seguido de `"g"`, que ocurre _10 + 5 + 5 = 20_ veces en total. Por lo tanto, la primera regla de fusión que aprende el tokenizador es agrupar todos los símbolos `"u"` seguidos de un símbolo `"g"` juntos. A continuación, `"ug"` se agrega al vocabulario. El conjunto de palabras entonces se convierte en
 
 ```
 ("h" "ug", 10), ("p" "ug", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "ug" "s", 5)
 ```
 
-BPE then identifies the next most common symbol pair. It's `"u"` followed by `"n"`, which occurs 16 times. `"u"`,
-`"n"` is merged to `"un"` and added to the vocabulary. The next most frequent symbol pair is `"h"` followed by
-`"ug"`, occurring 15 times. Again the pair is merged and `"hug"` can be added to the vocabulary.
+Seguidamente, BPE identifica el próximo par de símbolos más común. Es `"u"` seguido de `"n"`, que ocurre 16 veces. `"u"`, `"n"` se fusionan en `"un"` y se agregan al vocabulario. El próximo par de símbolos más frecuente es `"h"` seguido de `"ug"`, que ocurre 15 veces. De nuevo, el par se fusiona y `"hug"` se puede agregar al vocabulario.
 
-At this stage, the vocabulary is `["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"]` and our set of unique words
-is represented as
+En este momento, el vocabulario es `["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"]` y nuestro conjunto de palabras únicas se representa como:
 
 ```
 ("hug", 10), ("p" "ug", 5), ("p" "un", 12), ("b" "un", 4), ("hug" "s", 5)
 ```
 
-Assuming, that the Byte-Pair Encoding training would stop at this point, the learned merge rules would then be applied
-to new words (as long as those new words do not include symbols that were not in the base vocabulary). For instance,
-the word `"bug"` would be tokenized to `["b", "ug"]` but `"mug"` would be tokenized as `["<unk>", "ug"]` since
-the symbol `"m"` is not in the base vocabulary. In general, single letters such as `"m"` are not replaced by the
-`"<unk>"` symbol because the training data usually includes at least one occurrence of each letter, but it is likely
-to happen for very special characters like emojis.
+Suponiendo que el entrenamiento por Byte-Pair Encoding se detuviera en este punto, las reglas de combinación aprendidas se aplicarían entonces a nuevas palabras (siempre que esas nuevas palabras no incluyan símbolos que no estuvieran en el vocabulario base). Por ejemplo, la palabra `"bug"` se tokenizaría como `["b", "ug"]`, pero `"mug"` se tokenizaría como `["<unk>", "ug"]` ya que el símbolo `"m"` no está en el vocabulario base. En general, las letras individuales como `"m"` no se reemplazan por el símbolo `"<unk>"` porque los datos de entrenamiento usualmente incluyen al menos una ocurrencia de cada letra, pero es probable que suceda para caracteres especiales como los emojis.
 
-As mentioned earlier, the vocabulary size, *i.e.* the base vocabulary size + the number of merges, is a hyperparameter
-to choose. For instance [GPT](model_doc/gpt) has a vocabulary size of 40,478 since they have 478 base characters
-and chose to stop training after 40,000 merges.
+Como se mencionó anteriormente, el tamaño del vocabulario, es decir, el tamaño del vocabulario base + el número de combinaciones, es un hiperparámetro que se debe elegir. Por ejemplo, [GPT](https://huggingface.co/docs/transformers/en/model_doc/openai-gpt) tiene un tamaño de vocabulario de 40,478 ya que tienen 478 caracteres base y eligieron detener el entrenamiento después de 40,000 combinaciones.
 
 #### Byte-level BPE
 
-A base vocabulary that includes all possible base characters can be quite large if *e.g.* all unicode characters are
-considered as base characters. To have a better base vocabulary, [GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) uses bytes
-as the base vocabulary, which is a clever trick to force the base vocabulary to be of size 256 while ensuring that
-every base character is included in the vocabulary. With some additional rules to deal with punctuation, the GPT2's
-tokenizer can tokenize every text without the need for the <unk> symbol. [GPT-2](model_doc/gpt) has a vocabulary
-size of 50,257, which corresponds to the 256 bytes base tokens, a special end-of-text token and the symbols learned
-with 50,000 merges.
+Un vocabulario base que incluya todos los caracteres base posibles puede ser bastante extenso si, por ejemplo, se consideran todos los caracteres unicode como caracteres base. Para tener un vocabulario base mejor, [GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) utiliza bytes como vocabulario base, lo que es un truco astuto para forzar el vocabulario base a ser de tamaño 256 mientras se asegura de que cada carácter base esté incluido en el vocabulario. Con algunas reglas adicionales para tratar con la puntuación, el tokenizador de GPT2 puede tokenizar cualquier texto sin la necesidad del símbolo `<unk>`. [GPT-2](https://huggingface.co/docs/transformers/en/model_doc/gpt2) tiene un tamaño de vocabulario de 50,257, lo que corresponde a los 256 tokens base de bytes, un token especial de fin de texto y los símbolos aprendidos con 50,000 combinaciones.
 
 <a id='wordpiece'></a>
 
 ### WordPiece
 
-WordPiece is the subword tokenization algorithm used for [BERT](model_doc/bert), [DistilBERT](model_doc/distilbert), and [Electra](model_doc/electra). The algorithm was outlined in [Japanese and Korean
-Voice Search (Schuster et al., 2012)](https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf) and is very similar to
-BPE. WordPiece first initializes the vocabulary to include every character present in the training data and
-progressively learns a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
-symbol pair, but the one that maximizes the likelihood of the training data once added to the vocabulary.
+WordPiece es el algoritmo de tokenización de subpalabras utilizado por [BERT](https://huggingface.co/docs/transformers/en/model_doc/bert), [DistilBERT](https://huggingface.co/docs/transformers/main/en/model_doc/distilbert) y [Electra](https://huggingface.co/docs/transformers/main/en/model_doc/electra). El algoritmo fue descrito en [Japanese and Korean Voice Search (Schuster et al., 2012)](https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf) y es muy similar a BPE. WordPiece inicializa el vocabulario para incluir cada carácter presente en los datos de entrenamiento y aprende progresivamente un número determinado de reglas de fusión. A diferencia de BPE, WordPiece no elige el par de símbolos más frecuente, sino el que maximiza la probabilidad de los datos de entrenamiento una vez agregado al vocabulario.
 
-So what does this mean exactly? Referring to the previous example, maximizing the likelihood of the training data is
-equivalent to finding the symbol pair, whose probability divided by the probabilities of its first symbol followed by
-its second symbol is the greatest among all symbol pairs. *E.g.* `"u"`, followed by `"g"` would have only been
-merged if the probability of `"ug"` divided by `"u"`, `"g"` would have been greater than for any other symbol
-pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it _loses_ by merging two symbols
-to ensure it's _worth it_.
+¿Qué significa esto exactamente? Refiriéndonos al ejemplo anterior, maximizar la probabilidad de los datos de entrenamiento es equivalente a encontrar el par de símbolos cuya probabilidad dividida entre las probabilidades de su primer símbolo seguido de su segundo símbolo es la mayor entre todos los pares de símbolos. *Ej.* `"u"` seguido de `"g"` solo habría sido combinado si la probabilidad de `"ug"` dividida entre `"u"` y `"g"` habría sido mayor que para cualquier otro par de símbolos. Intuitivamente, WordPiece es ligeramente diferente a BPE en que evalúa lo que _pierde_ al fusionar dos símbolos para asegurarse de que _valga la pena_.
 
 <a id='unigram'></a>
 
 ### Unigram
 
-Unigram is a subword tokenization algorithm introduced in [Subword Regularization: Improving Neural Network Translation
-Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf). In contrast to BPE or
-WordPiece, Unigram initializes its base vocabulary to a large number of symbols and progressively trims down each
-symbol to obtain a smaller vocabulary. The base vocabulary could for instance correspond to all pre-tokenized words and
-the most common substrings. Unigram is not used directly for any of the models in the transformers, but it's used in
-conjunction with [SentencePiece](#sentencepiece).
+Unigram es un algoritmo de tokenización de subpalabras introducido en [Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf). A diferencia de BPE o WordPiece, Unigram inicializa su vocabulario base con un gran número de símbolos y progresivamente recorta cada símbolo para obtener un vocabulario más pequeño. El vocabulario base podría corresponder, por ejemplo, a todas las palabras pre-tokenizadas y las subcadenas más comunes. Unigram no se utiliza directamente para ninguno de los modelos transformers, pero se utiliza en conjunto con [SentencePiece](#sentencepiece).
 
-At each training step, the Unigram algorithm defines a loss (often defined as the log-likelihood) over the training
-data given the current vocabulary and a unigram language model. Then, for each symbol in the vocabulary, the algorithm
-computes how much the overall loss would increase if the symbol was to be removed from the vocabulary. Unigram then
-removes p (with p usually being 10% or 20%) percent of the symbols whose loss increase is the lowest, *i.e.* those
-symbols that least affect the overall loss over the training data. This process is repeated until the vocabulary has
-reached the desired size. The Unigram algorithm always keeps the base characters so that any word can be tokenized.
+En cada paso de entrenamiento, el algoritmo Unigram define una pérdida (a menudo definida como la probabilidad logarítmica) sobre los datos de entrenamiento dados el vocabulario actual y un modelo de lenguaje unigram. Luego, para cada símbolo en el vocabulario, el algoritmo calcula cuánto aumentaría la pérdida general si el símbolo se eliminara del vocabulario. Luego, Unigram elimina un porcentaje `p` de los símbolos cuyo aumento de pérdida es el más bajo (siendo `p` generalmente 10% o 20%), es decir, aquellos símbolos que menos afectan la pérdida general sobre los datos de entrenamiento. Este proceso se repite hasta que el vocabulario haya alcanzado el tamaño deseado. El algoritmo Unigram siempre mantiene los caracteres base para que cualquier palabra pueda ser tokenizada.
 
-Because Unigram is not based on merge rules (in contrast to BPE and WordPiece), the algorithm has several ways of
-tokenizing new text after training. As an example, if a trained Unigram tokenizer exhibits the vocabulary:
+Debido a que Unigram no se basa en reglas de combinación (en contraste con BPE y WordPiece), el algoritmo tiene varias formas de tokenizar nuevo texto después del entrenamiento. Por ejemplo, si un tokenizador Unigram entrenado exhibe el vocabulario:
 
 ```
 ["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"],
 ```
 
-`"hugs"` could be tokenized both as `["hug", "s"]`, `["h", "ug", "s"]` or `["h", "u", "g", "s"]`. So which one
-to choose? Unigram saves the probability of each token in the training corpus on top of saving the vocabulary so that
-the probability of each possible tokenization can be computed after training. The algorithm simply picks the most
-likely tokenization in practice, but also offers the possibility to sample a possible tokenization according to their
-probabilities.
+`"hugs"` podría ser tokenizado tanto como `["hug", "s"]`, `["h", "ug", "s"]` o `["h", "u", "g", "s"]`. ¿Cuál elegir? Unigram guarda la probabilidad de cada token en el corpus de entrenamiento junto con el vocabulario, para que la probabilidad de que cada posible tokenización pueda ser computada después del entrenamiento. El algoritmo simplemente elige la tokenización más probable en la práctica, pero también ofrece la posibilidad de muestrear una posible tokenización según sus probabilidades.
 
-Those probabilities are defined by the loss the tokenizer is trained on. Assuming that the training data consists of
-the words \\(x_{1}, \dots, x_{N}\\) and that the set of all possible tokenizations for a word \\(x_{i}\\) is
-defined as \\(S(x_{i})\\), then the overall loss is defined as
+Esas probabilidades están definidas por la pérdida en la que se entrena el tokenizador. Suponiendo que los datos de entrenamiento constan de las palabras \\(x_{1}, \dots, x_{N}\\) y que el conjunto de todas las posibles tokenizaciones para una palabra \\(x_{i}\\) se define como \\(S(x_{i})\\), entonces la pérdida general se define como:
 
 $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )$$
 
@@ -238,17 +168,8 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 
 ### SentencePiece
 
-All tokenization algorithms described so far have the same problem: It is assumed that the input text uses spaces to
-separate words. However, not all languages use spaces to separate words. One possible solution is to use language
-specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer).
-To solve this problem more generally, [SentencePiece: A simple and language independent subword tokenizer and
-detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) treats the input
-as a raw input stream, thus including the space in the set of characters to use. It then uses the BPE or unigram
-algorithm to construct the appropriate vocabulary.
+Todos los algoritmos de tokenización descritos hasta ahora tienen el mismo problema: se asume que el texto de entrada utiliza espacios para separar palabras. Sin embargo, no todos los idiomas utilizan espacios para separar palabras. Una posible solución es utilizar pre-tokenizadores específicos del idioma, *ej.* [XLM](https://huggingface.co/docs/transformers/en/model_doc/xlm) utiliza un pre-tokenizador específico para chino, japonés y tailandés. Para resolver este problema de manera más general, [SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) trata el texto de entrada como una corriente de entrada bruta, por lo que incluye el espacio en el conjunto de caracteres para utilizar. Luego utiliza el algoritmo BPE o unigram para construir el vocabulario apropiado.
 
-The [`XLNetTokenizer`] uses SentencePiece for example, which is also why in the example earlier the
-`"▁"` character was included in the vocabulary. Decoding with SentencePiece is very easy since all tokens can just be
-concatenated and `"▁"` is replaced by a space.
+Por ejemplo, [`XLNetTokenizer`](https://huggingface.co/docs/transformers/en/model_doc/xlnet#transformers.XLNetTokenizer) utiliza SentencePiece, razón por la cual en el ejemplo anterior se incluyó el carácter `"▁"` en el vocabulario. Decodificar con SentencePiece es muy fácil, ya que todos los tokens pueden simplemente concatenarse y `"▁"` se reemplaza por un espacio.
 
-All transformers models in the library that use SentencePiece use it in combination with unigram. Examples of models
-using SentencePiece are [ALBERT](model_doc/albert), [XLNet](model_doc/xlnet), [Marian](model_doc/marian), and [T5](model_doc/t5).
+Todos los modelos transformers de nuestra biblioteca que utilizan SentencePiece lo utilizan en combinación con Unigram. Ejemplos de los modelos que utilizan SentencePiece son [ALBERT](https://huggingface.co/docs/transformers/en/model_doc/albert), [XLNet](https://huggingface.co/docs/transformers/en/model_doc/xlnet), [Marian](https://huggingface.co/docs/transformers/en/model_doc/marian) y [T5](https://huggingface.co/docs/transformers/main/en/model_doc/t5).
