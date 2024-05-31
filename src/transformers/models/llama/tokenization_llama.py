@@ -143,7 +143,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         use_default_system_prompt=False,
         spaces_between_special_tokens=False,
         legacy=None,
-        add_prefix_space=None,
+        add_prefix_space=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

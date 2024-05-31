@@ -157,6 +157,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         # if add_prefix_space is not None:
         #     kwargs["from_slow"] = True
 
+        if self.force_from_slow() is True:
+            kwargs["from_slow"] = True
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -174,8 +177,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-        self.update_pre_tokenizer()
-        self.update_normalizer()
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
@@ -209,6 +210,15 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             single=single, pair=pair, special_tokens=special_tokens
         )
 
+    def force_from_slow(self):
+        if getattr(self, "add_prefix_space") == None:
+            if getattr(self, "_tokenizer", None) is None:
+                return True
+            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
+            if not prepend_normalizer:
+                return True
+
     def update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = []
@@ -233,13 +243,14 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
                 replacement = prepend_normalizer['prepend']
                 self.add_prefix_space = True
             else:
-                prepend_scheme = "never"
+                return
         if getattr(self, "add_prefix_space", True):
             prepend_scheme = "always"
             if not getattr(self, "legacy", True):
                 prepend_scheme = "first"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,
                                                                  split=False)
+        self.update_normalizer()
 
     @property
     def add_eos_token(self):

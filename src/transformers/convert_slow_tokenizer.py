@@ -637,10 +637,9 @@ class SpmConverter(Converter):
         replacement = "▁"
         # TODO:ita added 1
         add_prefix_space = self.proto.normalizer_spec.add_dummy_prefix
-        tokenizer.add_prefix_space = add_prefix_space
+      #  tokenizer.add_prefix_space = add_prefix_space
 
-        if hasattr(self.original_tokenizer,
-                   "add_prefix_space") and self.original_tokenizer.add_prefix_space is not None:
+        if hasattr(self.original_tokenizer,"add_prefix_space") and self.original_tokenizer.add_prefix_space is not None:
             add_prefix_space = self.original_tokenizer.add_prefix_space
 
         pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)

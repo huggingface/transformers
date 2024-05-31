@@ -143,7 +143,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self._tokenizer = fast_tokenizer
 
         self.update_pre_tokenizer()
-        self.update_normalizer()
 
         if slow_tokenizer is not None:
             kwargs.update(slow_tokenizer.init_kwargs)
@@ -872,26 +871,27 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
 
+
+
     def update_normalizer(self):
-        """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
-        """
+        """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = []
-        if self._tokenizer.normalizer is not None:
-            return #TODO change when pretoken modified
         if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
                 sequence += [normalizers.Prepend(prepend="▁")]
             sequence += [normalizers.Replace(pattern=" ", content="▁")]
-
-        elif not getattr(self, "legacy", True):
             self._tokenizer.normalizer = normalizers.Sequence(sequence)
 
+        elif not getattr(self, "legacy", True):
+            return
+            self._tokenizer.normalizer = normalizers.Sequence(sequence) #TODO:ita2
+
+
     def update_pre_tokenizer(self):
+        """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
         sequence = []
-        add_prefix_space = getattr(self, "add_prefix_space", None)
-        if add_prefix_space == None:
-            if self._tokenizer.pre_tokenizer is not None:
+        if getattr(self, "add_prefix_space", None) == None:
+            if getattr(self._tokenizer, "normalizer", None) == None:
                 return
             curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
             prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
@@ -900,13 +900,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 replacement = prepend_normalizer['prepend']
                 self.add_prefix_space = True
             else:
-                prepend_scheme = "never"
-                # Throw error to convert from slow?
-        elif add_prefix_space == False:
+                return
+        elif getattr(self, "add_prefix_space") == False:
             prepend_scheme = "never"
-        if add_prefix_space == True:
+
+        if getattr(self, "add_prefix_space", True):
             prepend_scheme = "always"
             if not getattr(self, "legacy", True):
                 prepend_scheme = "first"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,
                                                                  split=False)
+        self.update_normalizer()
