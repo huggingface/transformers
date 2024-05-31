@@ -16,7 +16,7 @@
 Image/Text processor class for ALIGN
 """
 
-from typing import List, Union, Unpack
+from typing import List, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import (
@@ -109,7 +109,7 @@ class AlignProcessor(ProcessorMixin):
         text_kwargs: AlignProcessorKwargs.text_kwargs = None,
         images_kwargs: AlignProcessorKwargs.images_kwargs = None,
         common_kwargs: AlignProcessorKwargs.common_kwargs = None,
-        **kwargs: Unpack[AlignProcessorKwargs],
+        **kwargs: AlignProcessorKwargs,
     ) -> BatchEncoding:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
