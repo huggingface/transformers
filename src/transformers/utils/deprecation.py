@@ -75,11 +75,11 @@ def deprecate_kwarg(
 
             if message is not None and add_message is not None:
                 message = f"{message} {add_message}"
-
+            if minimum_action == Action.NOTIFY and raise_if_ge_version and is_already_deprecated:
+                miminum_action = Action.RAISE
+            
             # raise error or notify user
             if minimum_action == Action.RAISE:
-                raise ValueError(message)
-            elif minimum_action == Action.NOTIFY and raise_if_ge_version and is_already_deprecated:
                 raise ValueError(message)
             elif minimum_action == Action.NOTIFY:
                 warning(message)
