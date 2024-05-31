@@ -152,6 +152,11 @@ class AlignProcessor(ProcessorMixin):
         # Init with default values if they exist
         text_kwargs = AlignProcessorKwargs._defaults.get("text_kwargs", {}).copy()
 
+        # then override with tokenizer-level arguments passed
+        text_kwargs.update(
+            {k: v for k, v in self.tokenizer.init_kwargs.items() if k in AlignProcessorKwargs.text_kwargs}
+        )
+
         # then get passed per-modality dictionaries if they exist
         text_kwargs.update(kwargs.pop("text_kwargs", {}))
         images_kwargs.update(kwargs.pop("images_kwargs", {}))
