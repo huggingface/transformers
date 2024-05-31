@@ -731,14 +731,14 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
-            if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
-                current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
-                batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
-                seek_num_frames = torch.tensor([seek_num_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-                time_offset = torch.tensor([time_offset[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-                seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-                max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-                decoder_input_ids = torch.tensor([decoder_input_ids[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1)
+            # if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
+            #     current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
+            #     batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
+            #     seek_num_frames = torch.tensor([seek_num_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            #     time_offset = torch.tensor([time_offset[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            #     seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            #     max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            #     decoder_input_ids = torch.tensor([decoder_input_ids[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1)
 
             # 6.9 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
