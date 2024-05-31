@@ -62,6 +62,14 @@ class ClassFinder(CSTVisitor):
             self.value = init_value()
     ```
     then the `class_dependency_mapping` should be: `{"LlamaModel":["PreTrainedModel","init_value"], "init_value":[]}
+
+    The dependency mapping is updated via the `visit_Name`, `visit_Arg` and `visit_Decorator`. This is very broad, and by
+    checking the parent node, or the scope of a `cst.Name` or `cst.Arg` or `cst.Decorator` we are able to map the 
+    dependence parent -> child.
+
+    When visiting such nodes, we update the dependency of the parent node, to take into account the visited node.
+
+    All `visit_XXX` correspond to the code executed when vising the cst.Node of type XXX.
     """
 
     METADATA_DEPENDENCIES = (ParentNodeProvider, ScopeProvider, PositionProvider)
@@ -77,17 +85,24 @@ class ClassFinder(CSTVisitor):
         # fmt: on
 
     def _update_class_dependency(self, name, value):
+        """Update the dependency mapping for `name` with `value` by appending the previous
+        dependencies to the new `value`.
+        """
         dep = set(self.class_dependency_mapping.get(value, set()))
         dep |= set(self.class_dependency_mapping.get(name, {})) | set({value})
         self.class_dependency_mapping[name] = dep
 
     def visit_ClassDef(self, node: ClassDef) -> None:
+        """We don't have non global scope class defs in transformers. Here we add the inheritance dependencies"""
         self.classes[node.name.value] = node
         for k in node.bases:  # deal with inheritance
             base_name = self.python_module.code_for_node(k)
             self._update_class_dependency(node.name.value, base_name)
 
     def visit_SimpleStatementLine(self, node):
+        """"Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
+        are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
+        """
         if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
             self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module()
         ):
@@ -137,6 +152,9 @@ class ClassFinder(CSTVisitor):
                     self._update_class_dependency(name, k.value.value)
 
     def leave_Module(self, node):
+        """When leaving the module, we store the position of each global scoped node (Assigns, function def and class def)
+        to allow sorting the dependencies based on their position in the code. We use the PositionProvider metadata wrapper for this.
+        """
         self.global_nodes = {**self.assignments, **self.classes, **self.function_def}
         # now sort the class dependency_mapping based on the position of the nodes
         self.class_start_line = {}
@@ -145,27 +163,37 @@ class ClassFinder(CSTVisitor):
 
 
 class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
-    """A transformer that replaces `old_name` with `new_name` in comments, string and any references"""
+    """A transformer that replaces `old_name` with `new_name` in comments, string and any references.
+    It should take into account name like `MyNewModel`, or `my_new_model`. Without using the AUTO_MAPPING.
+    Supported renaming patterns:
+        - llama -> my_new_model     and     my_new_model    -> llama
+        - Llama -> MyNewModel       and     MyNewModel      -> Llama
+        - LLAMA -> MY_NEW_MODEL     and     MY_NEW_MODEL    -> LLAMA
+        - LLaMa -> MyNewModel       abd     MyNewModel      -> Llama
+    """
 
     def __init__(self, old_name, new_name):
         super().__init__()
+        camel_case_model_name = ''.join(x.title() for x in old_name.split("_"))
         self.old_name = old_name
         self.new_name = new_name
-        self.regex = re.compile(re.escape(self.old_name), re.IGNORECASE)
-
+        self.default_name = ''.join(x.title() for x in new_name.split("_"))
+        self.patterns = {
+            old_name: new_name,
+            old_name.upper(): new_name.upper(),
+            ''.join(x.title() for x in old_name.split("_")):self.default_name
+        }
+    
     def preserve_case_replace(self, text):
-        def replace(match):
-            word = match.group()
-            if word.isupper():
-                return self.new_name.upper()
-            elif word.istitle():
-                return self.new_name.title()
-            elif word.islower():
-                return self.new_name.lower()
-            else:
-                return self.new_name.title()
+        # Create a regex pattern to match all variations
+        regex_pattern = '|'.join(re.escape(key) for key in self.patterns.keys())
+        compiled_regex = re.compile(regex_pattern, re.IGNORECASE)
 
-        return self.regex.sub(replace, text)
+        def replace(match):
+            word = match.group(0)
+            return self.patterns.get(word, self.default_name)
+
+        return compiled_regex.sub(replace, text)
 
     @m.leave(m.Name() | m.SimpleString() | m.Comment())
     def replace_name(self, original_node, updated_node):
@@ -224,6 +252,10 @@ class SuperTransformer(cst.CSTTransformer):
         return deduplicated_new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
+        """Updates the body of the input `node`'s `func_name` function by replacing calls 
+        to super().func_name() with the source code of the parent class' `func_name`.
+        It keeps everything that is defined before `super().func_name()`.
+        """
         new_body = []
         self.has_docstring = False
         for expr in node.body:
@@ -250,11 +282,11 @@ class SuperTransformer(cst.CSTTransformer):
         if updated_node.name.value in self.updated_methods:
             name = updated_node.name.value
             new_body = self.replace_super_calls(updated_node.body, name)
-            # dont't change the current func's default params
             return updated_node.with_changes(body=new_body, params=updated_node.params)
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
+        """"When a return statement is reached, it is replaced with the unrolled super code"""
         if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
             func_def = self.get_metadata(ParentNodeProvider, original_node)
             if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_methods:
@@ -313,7 +345,7 @@ class DiffConverterTransformer(CSTTransformer):
 
     def __init__(self, python_module, new_name):
         super().__init__()
-        self.camel_case_model_name = new_name
+        self.model_name = new_name          # name of the model being defined. Should be in the format of `llama` or `layout_xlm` our `phi3`
         # fmt: off
         self.python_module = python_module  # we store the original module to use `code_for_node`
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
@@ -397,18 +429,17 @@ class DiffConverterTransformer(CSTTransformer):
             else:
                 raise ValueError(f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name")
 
-            camel_case_model_name = ''.join(x.title() for x in model_name.split("_"))
-            print(f"Detected inheritance from {camel_case_model_name}")
-            old_name = camel_case_model_name.lower() 
+            
+            print(f"Detected inheritance from {model_name}")
             if super_file_name not in self.visited_module:  # only extract classes once
-                class_finder = find_classes_in_file(self.transformers_imports[super_file_name], old_name, self.camel_case_model_name.lower())
+                class_finder = find_classes_in_file(self.transformers_imports[super_file_name], model_name, self.model_name)
                 self.visited_module[super_file_name] = class_finder
             else:  # we are re-using the previously parsed data
                 class_finder = self.visited_module[super_file_name]
 
             list_dependencies = {
                 dep: class_finder.class_start_line.get(dep, 1000)
-                for dep in class_finder.class_dependency_mapping[class_name]
+                for dep in class_finder.class_dependency_mapping.get(class_name,[])
             }
 
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
@@ -423,7 +454,8 @@ class DiffConverterTransformer(CSTTransformer):
                         # make sure the node is written after it's dependencies
                         start_insert_idx = self.new_body[dependency]["insert_idx"] - 1
                     self.inserted_deps.append(dependency)
-            updated_node = replace_call_to_super(class_finder, updated_node, class_name)
+            if len(list_dependencies)>0:
+                updated_node = replace_call_to_super(class_finder, updated_node, class_name)
         if "Config" in class_name:
             self.config_body = [updated_node]
         else:
@@ -454,14 +486,13 @@ class DiffConverterTransformer(CSTTransformer):
 
 def convert_file(diff_file, cst_transformers=None):
     model_name = re.search(r'diff_(.*)(?=\.py$)', diff_file).groups()[0]
-    camel_case_model_name = ''.join(x.title() for x in model_name.split("_"))
     # Parse the Python file
     with open(diff_file, "r") as file:
         code = file.read()
     module = cst.parse_module(code)
     wrapper = MetadataWrapper(module)
     if cst_transformers is None:
-        cst_transformers = DiffConverterTransformer(module,camel_case_model_name)
+        cst_transformers = DiffConverterTransformer(module,model_name)
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
     formatted_code = run_ruff(ruffed_code, False)
@@ -489,7 +520,7 @@ if __name__ == "__main__":
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
-    if args.files_to_parse == "all":
+    if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/diff_*.py", recursive=True)
     for file_name in args.files_to_parse:
         print(f"Converting {file_name} to a single model single file format")
