@@ -248,7 +248,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (MarianMTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MarianMTModel,
             "feature-extraction": MarianModel,
             "summarization": MarianMTModel,
             "text-generation": MarianForCausalLM,
@@ -348,10 +347,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.assertEqual(model.lm_head.weight.shape, (config.vocab_size + 1, config.d_model))
 
     def test_tie_word_embeddings_decoder(self):
-        pass
-
-    @unittest.skip("Skipping for now, to fix @ArthurZ or @ydshieh")
-    def test_pipeline_conversational(self):
         pass
 
     @unittest.skip(

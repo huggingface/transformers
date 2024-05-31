@@ -799,8 +799,6 @@ _import_structure = {
     "pipelines": [
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
-        "Conversation",
-        "ConversationalPipeline",
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
@@ -5428,8 +5426,6 @@ if TYPE_CHECKING:
     from .pipelines import (
         AudioClassificationPipeline,
         AutomaticSpeechRecognitionPipeline,
-        Conversation,
-        ConversationalPipeline,
         CsvPipelineDataFormat,
         DepthEstimationPipeline,
         DocumentQuestionAnsweringPipeline,

@@ -26,7 +26,6 @@ from ...utils import TensorType, logging
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
     from ...tokenization_utils_base import PreTokenizedInput
 
 
@@ -255,7 +254,7 @@ class Idefics2Processor(ProcessorMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]]],
         chat_template: Optional[str] = None,
         tokenize: bool = False,
         **kwargs,
@@ -269,7 +268,7 @@ class Idefics2Processor(ProcessorMixin):
         tokens to the sequence length or adding the surrounding tokens e.g. <fake_image_token>.
 
         Args:
-            conversation (`Union[List[Dict, str, str], "Conversation"]`):
+            conversation (`Union[List[Dict, str, str]]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the default chat template

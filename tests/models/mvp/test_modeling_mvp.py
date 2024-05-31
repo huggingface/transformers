@@ -421,7 +421,6 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MvpForConditionalGeneration,
             "feature-extraction": MvpModel,
             "fill-mask": MvpForConditionalGeneration,
             "question-answering": MvpForQuestionAnswering,

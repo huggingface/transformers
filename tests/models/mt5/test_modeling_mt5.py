@@ -555,7 +555,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (MT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": MT5ForConditionalGeneration,
             "feature-extraction": MT5Model,
             "question-answering": MT5ForQuestionAnswering,
             "summarization": MT5ForConditionalGeneration,
@@ -885,10 +884,6 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # We check the state of decoder_attentions and cross_attentions just from the last step
             attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
             self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
-    @unittest.skip("Does not support conversations.")
-    def test_pipeline_conversational(self):
-        pass
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->MT5

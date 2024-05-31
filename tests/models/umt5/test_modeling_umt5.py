@@ -297,7 +297,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_generative_model_classes = (UMT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": UMT5ForConditionalGeneration,
             "feature-extraction": UMT5Model,
             "question-answering": UMT5ForQuestionAnswering,
             "summarization": UMT5ForConditionalGeneration,
