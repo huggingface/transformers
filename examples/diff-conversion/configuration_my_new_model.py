@@ -116,8 +116,7 @@ class MyNewModelConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        mlp_bias=False,
-        mlp_bias=False, **kwargs,
+        mlp_bias=True, **kwargs,
     ):
         self.mlp_bias = mlp_bias
         self.vocab_size = vocab_size

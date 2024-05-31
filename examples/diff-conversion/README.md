@@ -1,5 +1,7 @@
 # Using the `diff_converter` linter
 
+`pip install libcst` is a must!
+
 The diff converter is a new `linter` specific to `transformers`. It allows us to unpack inheritance in python to convert a modular `diff` file like `diff_gemma.py` into a `single model single file`. 
 
 Examples of possible usage are available in the `examples/diff-conversion`, or `diff_gemma` for a full model usage.
@@ -11,3 +13,6 @@ We use the `libcst` parser to produce an AST representation of the `diff_xxx.py`
 
 The code from the `diff` file and the class dependency mapping are "merged" to produce the single model single file. 
 We use ruff to automatically remove the potential duplicate imports.
+
+## Why we use libcst instead of the native AST?
+AST is super powerful, but it does not keep the `docstring`, `comment` or code formatting. Thus we decided to go with `libcst`
