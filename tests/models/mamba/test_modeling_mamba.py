@@ -65,7 +65,7 @@ class MambaModelTester:
         num_choices=4,
         scope=None,
         tie_word_embeddings=True,
-        classifier_dropout=0.1
+        classifier_dropout=0.1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -138,7 +138,7 @@ class MambaModelTester:
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
             tie_word_embeddings=self.tie_word_embeddings,
-            classifier_dropout=self.classifier_dropout
+            classifier_dropout=self.classifier_dropout,
         )
 
     def get_pipeline_config(self):
@@ -261,15 +261,7 @@ class MambaModelTester:
 )
 @require_torch
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            MambaModel,
-            MambaForCausalLM,
-            MambaForSequenceClassification
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MambaModel, MambaForCausalLM, MambaForSequenceClassification) if is_torch_available() else ()
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
