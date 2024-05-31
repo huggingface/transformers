@@ -798,7 +798,7 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MambaSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
-        checkpoint="Adibvafa/EHRMamba",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MambaSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
