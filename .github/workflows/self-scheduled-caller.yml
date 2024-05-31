@@ -16,6 +16,9 @@ jobs:
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-daily-models"
+      runner: daily-ci
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: Daily CI
     secrets: inherit
 
   torch-pipeline:
@@ -24,6 +27,9 @@ jobs:
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      runner: daily-ci
+      docker: huggingface/transformers-pytorch-gpu
+      ci_event: Daily CI
     secrets: inherit
 
   tf-pipeline:
@@ -32,6 +38,9 @@ jobs:
     with:
       job: run_pipelines_tf_gpu
       slack_report_channel: "#transformers-ci-daily-pipeline-tf"
+      runner: daily-ci
+      docker: huggingface/transformers-tensorflow-gpu
+      ci_event: Daily CI
     secrets: inherit
 
   example-ci:
@@ -40,6 +49,9 @@ jobs:
     with:
       job: run_examples_gpu
       slack_report_channel: "#transformers-ci-daily-examples"
+      runner: daily-ci
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: Daily CI
     secrets: inherit
 
   deepspeed-ci:
@@ -48,6 +60,10 @@ jobs:
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#transformers-ci-daily-deepspeed"
+      runner: daily-ci
+      docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
+      ci_event: Daily CI
+      working-directory-prefix: /workspace
     secrets: inherit
 
   quantization-ci:
@@ -56,4 +72,7 @@ jobs:
     with:
       job: run_quantization_torch_gpu
       slack_report_channel: "#transformers-ci-daily-quantization"
+      runner: daily-ci
+      docker: huggingface/transformers-quantization-latest-gpu
+      ci_event: Daily CI
     secrets: inherit
