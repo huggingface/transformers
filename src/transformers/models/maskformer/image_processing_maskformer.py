@@ -286,7 +286,12 @@ def convert_segmentation_map_to_binary_masks(
 
     # Generate a binary mask for each object instance
     binary_masks = [(segmentation_map == i) for i in all_labels]
-    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
+
+    # Stack the binary masks
+    if binary_masks:
+        binary_masks = np.stack(binary_masks, axis=0)
+    else:
+        binary_masks = np.zeros((0, *segmentation_map.shape))
 
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
@@ -982,17 +987,20 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
-                masks = [mask[None, ...] for mask in masks]
-                masks = [
-                    self._pad_image(
-                        image=mask,
-                        output_size=pad_size,
-                        constant_values=ignore_index,
-                        input_data_format=ChannelDimension.FIRST,
-                    )
-                    for mask in masks
-                ]
-                masks = np.concatenate(masks, axis=0)
+                if masks.shape[0] > 0:
+                    masks = [mask[None, ...] for mask in masks]
+                    masks = [
+                        self._pad_image(
+                            image=mask,
+                            output_size=pad_size,
+                            constant_values=ignore_index,
+                            input_data_format=ChannelDimension.FIRST,
+                        )
+                        for mask in masks
+                    ]
+                    masks = np.concatenate(masks, axis=0)
+                else:
+                    masks = np.zeros((0, *pad_size), dtype=np.float32)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes))
 
