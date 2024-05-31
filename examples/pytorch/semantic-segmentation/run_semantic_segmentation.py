@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional
@@ -112,11 +113,21 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
     )
+    reduce_labels: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
             raise ValueError(
                 "You must specify either a dataset name from the hub or a train and/or validation directory."
+            )
+        if self.reduce_labels:
+            self.do_reduce_labels = self.reduce_labels
+            warnings.warn(
+                "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
+                FutureWarning,
             )
 
 
