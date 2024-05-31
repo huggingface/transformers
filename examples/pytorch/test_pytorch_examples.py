@@ -647,7 +647,6 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_instance_segmentation.py
-            --model_type mask2former
             --model_name_or_path qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former
             --output_dir {tmp_dir}
             --dataset_name qubvel-hf/ade20k-nano
