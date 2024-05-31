@@ -331,7 +331,6 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
             # Replace the method in the replacement class, preserving decorators
             kwarg_name = getattr(updated_methods[name].params,"star_kwarg", None)
             if kwarg_name and kwarg_name.name.value == "super_kwargs":
-                # TODO here we can do a proper merging :)
                 parent_params = {k.name.value:k for k in func.params.params}
                 parent_params.update({k.name.value:k for k in new_params.params[1:]}) 
                 new_params = new_params.with_changes(params=list(parent_params.values()), star_kwarg=func.params.star_kwarg)
@@ -406,7 +405,12 @@ class DiffConverterTransformer(CSTTransformer):
                     self.all_imports.append(updated_node)
                 return updated_node
             self.global_scope_index += 100
-            self.new_body[self.python_module.code_for_node(updated_node.body[0])] = {
+            if m.matches(updated_node, m.SimpleStatementLine(body=[m.Assign()])):
+                # TODO This only works for single target assigns!
+                node_name = updated_node.body[0].targets[0].target.value
+            else:
+                node_name = self.python_module.code_for_node(updated_node.body[0])
+            self.new_body[node_name] = {
                 "insert_idx": self.global_scope_index,
                 "node": updated_node,
             }
@@ -526,7 +530,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["/Users/arthurzucker/Work/transformers/examples/diff-conversion/diff_my_new_model.py"],
+        default=["all"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )

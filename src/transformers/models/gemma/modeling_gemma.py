@@ -58,9 +58,6 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-logger = logging.get_logger(__name__)
-
-
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
