@@ -317,7 +317,8 @@ class WhisperAttention(nn.Module):
                 if past_key_value is not None:
                     # save all cross attention key/value_states to cache
                     # further calls to cross_attention layer can then reuse all cross-attention
-                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": 0})
+                    cache_position = torch.arange(key_states.size(2), device=key_states.device)
+                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
         else:
             # either encoder self-attention or decoder self-attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
@@ -1376,6 +1377,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     DynamicCache.from_legacy_cache(cross_attn),
                 )
             past_key_values_length = past_key_values[0].get_seq_length()
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

@@ -759,7 +759,12 @@ class StaticCache(Cache):
         )
 
         self.dtype = dtype if dtype is not None else torch.float32
-        self.num_key_value_heads = (
+        if config.is_encoder_decoder:
+            self.num_key_value_heads = (
+                config.decoder_attention_heads if not getattr(config, "decoder_key_value_heads", None) else config.decoder_key_value_heads
+            )
+        else:
+            self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
