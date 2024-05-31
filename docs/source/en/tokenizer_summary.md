@@ -268,7 +268,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 
 All tokenization algorithms described so far have the same problem: It is assumed that the input text uses spaces to
 separate words. However, not all languages use spaces to separate words. One possible solution is to use language
-specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer).
+specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer.
 To solve this problem more generally, [SentencePiece: A simple and language independent subword tokenizer and
 detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) treats the input
 as a raw input stream, thus including the space in the set of characters to use. It then uses the BPE or unigram
