@@ -546,50 +546,6 @@ class WhisperGenerationMixin:
             num_beams=generation_config.num_beams,
         )
 
-        # 5. If we're in shortform mode, simple generate the whole input at once and return the output
-        # if is_shortform:
-        #     print('with short_form generation: ')
-        #     if temperature is not None:
-        #         generation_config.temperature = temperature
-
-        #     decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        #     if decoder_input_ids is None:
-        #         decoder_input_ids = init_tokens
-
-        #     if prompt_ids is not None:
-        #         decoder_input_ids = torch.cat(
-        #             [prompt_ids[None].repeat(decoder_input_ids.shape[0], 1), decoder_input_ids], dim=-1
-        #         )
-
-        #     max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
-        #     if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
-        #         raise ValueError(
-        #             f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-        #             f"is {max_new_tokens}. Thus, the combined length of "
-        #             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
-        #             f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
-        #             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-        #             f"so that their combined length is less than {self.config.max_target_positions}."
-        #         )
-
-        #     outputs = super().generate(
-        #         input_features,
-        #         generation_config=generation_config,
-        #         logits_processor=logits_processor,
-        #         stopping_criteria=stopping_criteria,
-        #         prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-        #         synced_gpus=synced_gpus,
-        #         decoder_input_ids=decoder_input_ids,
-        #         **kwargs,
-        #     )
-
-        #     if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-        #         outputs["token_timestamps"] = self._extract_token_timestamps(
-        #             outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames
-        #         )
-
-        #     return outputs
-
         # 6. Else we're in longform mode which is more complex.
         # We need to chunk the audio input depending on when the model generates timestamp tokens
 
