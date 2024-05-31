@@ -3,10 +3,6 @@ name: Self-hosted runner (benchmark)
 on:
   schedule:
     - cron: "17 2 * * *"
-  push:
-    branches:
-      - run_benchmark
-      - benchmark_on_github
 
 env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
