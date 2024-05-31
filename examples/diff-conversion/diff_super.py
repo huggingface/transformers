@@ -6,6 +6,7 @@ from transformers import Cache
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import LlamaModel
 
+
 # example where we need some deps and some functions
 class SuperModel(LlamaModel):
     def forward(

@@ -64,7 +64,7 @@ class ClassFinder(CSTVisitor):
     then the `class_dependency_mapping` should be: `{"LlamaModel":["PreTrainedModel","init_value"], "init_value":[]}
 
     The dependency mapping is updated via the `visit_Name`, `visit_Arg` and `visit_Decorator`. This is very broad, and by
-    checking the parent node, or the scope of a `cst.Name` or `cst.Arg` or `cst.Decorator` we are able to map the 
+    checking the parent node, or the scope of a `cst.Name` or `cst.Arg` or `cst.Decorator` we are able to map the
     dependence parent -> child.
 
     When visiting such nodes, we update the dependency of the parent node, to take into account the visited node.
@@ -100,7 +100,8 @@ class ClassFinder(CSTVisitor):
             self._update_class_dependency(node.name.value, base_name)
 
     def visit_SimpleStatementLine(self, node):
-        """"Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
+        """
+        Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT' and all import statements
         are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
         """
         if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])) and m.matches(
@@ -176,16 +177,16 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
         super().__init__()
         self.old_name = old_name
         self.new_name = new_name
-        self.default_name = ''.join(x.title() for x in new_name.split("_"))
+        self.default_name = "".join(x.title() for x in new_name.split("_"))
         self.patterns = {
             old_name: new_name,
             old_name.upper(): new_name.upper(),
-            ''.join(x.title() for x in old_name.split("_")):self.default_name
+            "".join(x.title() for x in old_name.split("_")): self.default_name,
         }
-    
+
     def preserve_case_replace(self, text):
         # Create a regex pattern to match all variations
-        regex_pattern = '|'.join(re.escape(key) for key in self.patterns.keys())
+        regex_pattern = "|".join(re.escape(key) for key in self.patterns.keys())
         compiled_regex = re.compile(regex_pattern, re.IGNORECASE)
 
         def replace(match):
@@ -251,7 +252,7 @@ class SuperTransformer(cst.CSTTransformer):
         return deduplicated_new_body
 
     def replace_super_calls(self, node: cst.IndentedBlock, func_name: str) -> cst.CSTNode:
-        """Updates the body of the input `node`'s `func_name` function by replacing calls 
+        """Updates the body of the input `node`'s `func_name` function by replacing calls
         to super().func_name() with the source code of the parent class' `func_name`.
         It keeps everything that is defined before `super().func_name()`.
         """
@@ -285,7 +286,7 @@ class SuperTransformer(cst.CSTTransformer):
         return updated_node
 
     def leave_Return(self, original_node: cst.Return, updated_node: cst.Return) -> cst.CSTNode:
-        """"When a return statement is reached, it is replaced with the unrolled super code"""
+        """ "When a return statement is reached, it is replaced with the unrolled super code"""
         if m.matches(updated_node.value, m.Call(func=m.Attribute(attr=m.Name("super")))):
             func_def = self.get_metadata(ParentNodeProvider, original_node)
             if m.matched(func_def, m.FunctionDef()) and func_def.name.value in self.original_methods:
@@ -329,11 +330,13 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
         if name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
-            kwarg_name = getattr(updated_methods[name].params,"star_kwarg", None)
+            kwarg_name = getattr(updated_methods[name].params, "star_kwarg", None)
             if kwarg_name and kwarg_name.name.value == "super_kwargs":
-                parent_params = {k.name.value:k for k in func.params.params}
-                parent_params.update({k.name.value:k for k in new_params.params[1:]}) 
-                new_params = new_params.with_changes(params=list(parent_params.values()), star_kwarg=func.params.star_kwarg)
+                parent_params = {k.name.value: k for k in func.params.params}
+                parent_params.update({k.name.value: k for k in new_params.params[1:]})
+                new_params = new_params.with_changes(
+                    params=list(parent_params.values()), star_kwarg=func.params.star_kwarg
+                )
             func = func.with_changes(body=updated_methods[name].body, params=new_params)
         end_meth.append(func)
 
@@ -350,7 +353,9 @@ class DiffConverterTransformer(CSTTransformer):
 
     def __init__(self, python_module, new_name):
         super().__init__()
-        self.model_name = new_name          # name of the model being defined. Should be in the format of `llama` or `layout_xlm` our `phi3`
+        self.model_name = (
+            new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` our `phi3`
+        )
         # fmt: off
         self.python_module = python_module  # we store the original module to use `code_for_node`
         self.transformers_imports = {}      # maps the imports name like "from transformers.models.xxx" to the parsed AST module
@@ -374,8 +379,10 @@ class DiffConverterTransformer(CSTTransformer):
                 _import = re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement)
                 if _import:
                     source = _import.groups()[0]
-                    if source == "modeling" and f"Config" in self.python_module.code_for_node(imported_):
-                        raise ValueError(f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead")
+                    if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
+                        raise ValueError(
+                            f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead"
+                        )
                     if import_statement not in self.transformers_imports:
                         source_code = get_module_source_from_name(import_statement)
                         tree = cst.parse_module(source_code)
@@ -437,21 +444,25 @@ class DiffConverterTransformer(CSTTransformer):
                 )
 
             super_file_name = self.imported_mapping[super_class]  # we need to get the parsed tree
-            model_name = re.search(r'_(\S*)', super_file_name)
+            model_name = re.search(r"_(\S*)", super_file_name)
             if model_name:
                 model_name = model_name.groups()[0]
             else:
-                raise ValueError(f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name")
+                raise ValueError(
+                    f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name"
+                )
 
             if super_file_name not in self.visited_module:  # only extract classes once
-                class_finder = find_classes_in_file(self.transformers_imports[super_file_name], model_name, self.model_name)
+                class_finder = find_classes_in_file(
+                    self.transformers_imports[super_file_name], model_name, self.model_name
+                )
                 self.visited_module[super_file_name] = class_finder
             else:  # we are re-using the previously parsed data
                 class_finder = self.visited_module[super_file_name]
 
             list_dependencies = {
                 dep: class_finder.class_start_line.get(dep, 1000)
-                for dep in class_finder.class_dependency_mapping.get(class_name,[])
+                for dep in class_finder.class_dependency_mapping.get(class_name, [])
             }
 
             list_dependencies = sorted(list_dependencies.items(), key=lambda x: x[1], reverse=True)
@@ -466,7 +477,7 @@ class DiffConverterTransformer(CSTTransformer):
                         # make sure the node is written after it's dependencies
                         start_insert_idx = self.new_body[dependency]["insert_idx"] - 1
                     self.inserted_deps.append(dependency)
-            if len(list_dependencies)>0:
+            if len(list_dependencies) > 0:
                 updated_node = replace_call_to_super(class_finder, updated_node, class_name)
         if "Config" in class_name:
             self.config_body = [updated_node]
@@ -500,14 +511,14 @@ class DiffConverterTransformer(CSTTransformer):
 
 
 def convert_file(diff_file, cst_transformers=None):
-    model_name = re.search(r'diff_(.*)(?=\.py$)', diff_file).groups()[0]
+    model_name = re.search(r"diff_(.*)(?=\.py$)", diff_file).groups()[0]
     # Parse the Python file
     with open(diff_file, "r") as file:
         code = file.read()
     module = cst.parse_module(code)
     wrapper = MetadataWrapper(module)
     if cst_transformers is None:
-        cst_transformers = DiffConverterTransformer(module,model_name)
+        cst_transformers = DiffConverterTransformer(module, model_name)
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
     formatted_code = run_ruff(ruffed_code, False)
