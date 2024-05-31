@@ -78,7 +78,7 @@ The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
-Note that you can replace the model type (`--model_type maskformer`) and model [checkpoint](https://huggingface.co/models?search=maskformer).
+Note that you can replace the model type (`--model_type maskformer`) or model [checkpoint](https://huggingface.co/models?search=maskformer).
 
 
 ## PyTorch version, no Trainer
