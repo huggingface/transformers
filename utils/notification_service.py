@@ -1171,7 +1171,7 @@ if __name__ == "__main__":
         if is_scheduled_ci_run:
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/model_results.json",
-                path_in_repo=datetime.datetime.today().strftime('%Y-%m-%d'),
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
                 repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
@@ -1193,7 +1193,7 @@ if __name__ == "__main__":
         if is_scheduled_ci_run:
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                path_in_repo=datetime.datetime.today().strftime('%Y-%m-%d'),
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
                 repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
