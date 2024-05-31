@@ -62,7 +62,7 @@ def main(pr_numbers):
             print(f"Skipping invalid version tag: {tag.name}")
 
     last_tag = sorted(tags)[-1]
-    major_minor = ".".join([str(last_tag.major), str(last_tag.minor)]) + ".0"
+    major_minor = f"{last_tag.major}.{last_tag.minor}.0"
     # Iterate through tag ranges to find the merge commits
     for pr in pr_numbers:
         commit = get_merge_commit(repo, pr, major_minor)
@@ -80,13 +80,7 @@ def main(pr_numbers):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find and sort merge commits for specified PRs.")
-    parser.add_argument(
-        "--prs",
-        nargs="+",
-        default=["31108", "31054", "31008", "31010", "31004"],
-        type=int,
-        help="PR numbers to find merge commits for",
-    )
+    parser.add_argument("--prs", nargs="+", required=True, type=int, help="PR numbers to find merge commits for")
 
     args = parser.parse_args()
     main(args.prs)
