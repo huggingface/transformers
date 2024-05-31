@@ -145,7 +145,6 @@ def summarize(run_dir, metrics, expand_metrics=False):
         with open(os.path.join(report_dir, "summary.json"), "w") as fp:
             json.dump(summary, fp, indent=4)
 
-    # TODO: upload to Hub
     return summaries
 
 
