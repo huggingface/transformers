@@ -314,12 +314,13 @@ if __name__ == "__main__":
 
         combined_summary = combine_summaries(run_summaries)
 
-        # Upload to Hub
-        api = HfApi()
-        api.upload_folder(
-            folder_path=exp_run_dir,
-            path_in_repo=args.path_in_repo,
-            repo_id=args.repo_id,
-            repo_type="dataset",
-            token=args.token,
-        )
+        if args.repo_id is not None and args.path_in_repo is not None:
+            # Upload to Hub
+            api = HfApi()
+            api.upload_folder(
+                folder_path=exp_run_dir,
+                path_in_repo=args.path_in_repo,
+                repo_id=args.repo_id,
+                repo_type="dataset",
+                token=args.token,
+            )
