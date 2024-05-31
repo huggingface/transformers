@@ -134,7 +134,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=None,
-        add_prefix_space=True,
+        add_prefix_space=None,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
@@ -211,6 +211,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
+            self.add_prefix_space = normalizer_spec.add_dummy_prefix if self.add_prefix_space is None else self.add_prefix_space
             model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
             tokenizer.LoadFromSerializedProto(sp_model)

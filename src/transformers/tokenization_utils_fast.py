@@ -23,6 +23,7 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from tokenizers import pre_tokenizers, normalizers, processors
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
@@ -132,6 +133,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             )
 
         self._tokenizer = fast_tokenizer
+
+        self.update_pre_tokenizer()
+        self.update_normalizer()
 
         if slow_tokenizer is not None:
             kwargs.update(slow_tokenizer.init_kwargs)
@@ -859,3 +863,42 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
+
+    def update_normalizer(self):
+        """
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        """
+        sequence = []
+        if self._tokenizer.normalizer is not None:
+            return #TODO change when pretoken modified
+        if getattr(self, "legacy", True):
+            if getattr(self, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+
+        elif not getattr(self, "legacy", True):
+            self._tokenizer.normalizer = normalizers.Sequence(sequence)
+
+    def update_pre_tokenizer(self):
+        sequence = []
+        add_prefix_space = getattr(self, "add_prefix_space", None)
+        if add_prefix_space == None:
+            if self._tokenizer.pre_tokenizer is not None:
+                return
+            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
+            if prepend_normalizer:
+                prepend_normalizer = prepend_normalizer[0]
+                replacement = prepend_normalizer['prepend']
+                self.add_prefix_space = True
+            else:
+                prepend_scheme = "never"
+                # Throw error to convert from slow?
+        elif add_prefix_space == False:
+            prepend_scheme = "never"
+        if add_prefix_space == True:
+            prepend_scheme = "always"
+            if not getattr(self, "legacy", True):
+                prepend_scheme = "first"
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,
+                                                                 split=False)

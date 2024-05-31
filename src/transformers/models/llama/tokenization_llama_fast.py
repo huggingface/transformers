@@ -154,11 +154,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         #TODO: ita
         self.add_prefix_space = add_prefix_space
-
-        # TODO:ita
-
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
+        # if add_prefix_space is not None:
+        #     kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file=vocab_file,
@@ -213,9 +210,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         )
 
     def update_normalizer(self):
-        """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
-        """
+        """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = []
         if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
@@ -226,6 +221,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             self._tokenizer.normalizer = normalizers.Sequence(sequence)
 
     def update_pre_tokenizer(self):
+        """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
         sequence = []
         if getattr(self, "add_prefix_space") == False:
             prepend_scheme = "never"

@@ -114,7 +114,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             logger.warning_once(
                 "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
             )
-            kwargs["from_slow"] = True
+           # kwargs["from_slow"] = True
+
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             vocab_file,
@@ -123,6 +125,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             pad_token=pad_token,
             extra_ids=extra_ids,
+            add_prefix_space=add_prefix_space,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
