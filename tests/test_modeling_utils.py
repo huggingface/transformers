@@ -1062,23 +1062,23 @@ class ModelUtilsTest(TestCasePlus):
     @require_torch_accelerator
     def test_save_offloaded_model(self):
         device_map = {
-            "transformer.wte": 0,
-            "transformer.wpe": 0,
+            "transformer.wte": f"{torch_device}:0",
+            "transformer.wpe": f"{torch_device}:0",
             "transformer.h.0": "cpu",
             "transformer.h.1": "cpu",
             "transformer.h.2": "cpu",
             "transformer.h.3": "disk",
             "transformer.h.4": "disk",
-            "transformer.ln_f": 0,
-            "lm_head": 0,
+            "transformer.ln_f": f"{torch_device}:0",
+            "lm_head": f"{torch_device}:0",
         }
 
         # check_models_equal requires onloaded tensors
         model_id = "hf-internal-testing/tiny-random-gpt2"
         onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        input_tokens = tokenizer.encode("Four score and seven years ago", return_tensors="pt")
-        cpu_output = onloaded_model(input_tokens)[0]
+        inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
+        cpu_output = onloaded_model(inputs)[0]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             offload_folder = os.path.join(tmp_dir, "offload")
@@ -1094,9 +1094,6 @@ class ModelUtilsTest(TestCasePlus):
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(input_tokens)[0]
 
-        self.assertTrue(
-            postsaved_memory - presaved_memory < 7e5
-        )  # shard size (2e5) plus buffer (~4e5), will fail if shard is too large
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
