@@ -110,7 +110,7 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v -rs --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+        run: python3 -m pytest -v -rsfE --make-reports=${{ matrix.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
