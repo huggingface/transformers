@@ -26,6 +26,47 @@ from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextI
 from ...utils import TensorType
 
 import numpy as np
+from PIL import Image
+
+grid_dict = {
+    'grid_1':[
+        (1,1)],
+    'grid_4':[
+        (1,1),
+        (1,2),(2,1),
+        (1,3),(3,1),
+        (2,2),(1,4),(4,1)],
+    'grid_9':[
+        (1,1),
+        (1,2),(2,1),
+        (1,3),(3,1),
+        (2,2),(1,4),(4,1),
+        (1,5),(5,1),
+        (1,6),(6,1),(2,3),(3,2),
+        (1,7),(7,1),
+        (4,2),(2,4),(1,8),(8,1),
+        (3,3),(1,9),(9,1)],
+    'grid_3x3':[
+        (3,3)],
+    'grid_20':[
+        (1, 1), 
+        (1, 2), (2, 1), 
+        (1, 3), (3, 1), (1, 4), (2, 2), (4, 1), 
+        (1, 5), (5, 1), 
+        (1, 6), (2, 3), (3, 2), (6, 1), 
+        (1, 7), (7, 1), 
+        (1, 8), (2, 4), (4, 2), (8, 1), 
+        (1, 9), (3, 3), (9, 1), 
+        (1, 10), (2, 5), (5, 2), (10, 1), 
+        (1, 11), (11, 1), 
+        (2, 6), (3, 4), (4, 3), (6, 2), 
+        (2, 7), (7, 2), 
+        (3, 5), (5, 3), 
+        (2, 8), (4, 4), (8, 2), 
+        (2, 9), (3, 6), (6, 3), (9, 2), 
+        (2, 10), (4, 5), (5, 4), (10, 2)]
+}
+
 
 def box_area(boxes):
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -62,21 +103,90 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
     return index
 
 class AnchorResize:
-    def __init__(self, image_size, anchors):
-        self.anchors = np.array([[0, 0, x[1] * image_size[1], x[0] * image_size[0]] for x in anchors])
+    def __init__(self, image_size, anchors, interpolation=Image.BILINEAR, antialias=False):
+        # xyxy
+        self.anchors = np.array(
+            [[0, 0, anchor[1] * image_size[1], anchor[0] * image_size[0]]
+             for anchor in anchors]
+        )
         self.anchor_areas = box_area(self.anchors)
-        self.image_size = image_size
+        self.interpolation = interpolation
+        self.antialias = antialias
 
-    def forward(self, img, skip_resize=False):
-        selected_anchor = anchor_rank(self.anchors, self.anchor_areas, (img.shape[1], img.shape[0]))
-        target_size = self.anchors[selected_anchor][2:]  # w, h
+    def __call__(self, img, skip_resize=False):
+        # Resize image based on selected anchor
+        input_image_size = (img.height, img.width)
+        selected_anchor = anchor_rank(self.anchors, self.anchor_areas, input_image_size)
+        target_size = self.anchors[selected_anchor][2:].astype(int)  # target width, height
         if skip_resize:
-            return selected_anchor
-        return np.resize(img, (int(target_size[1]), int(target_strong_size[0]))), selected_anchor
+            return selected_anchor  # For debug purposes
+        resized_img = img.resize((target_size[0], target_size[1]), resample=self.interpolation)
+        return resized_img, selected_anchor
 
     def __repr__(self):
-        detail = f"(size={self.image_size}, anchors={self.anchors})"
-        return f"{self.__class__.__name__}{detail}"
+        detail = f"AnchorResize(image_size={self.image_size}, anchor={self.anchors}, interpolation={self.interpolation}, antialias={self.antialias})"
+        return detail
+
+class ShapeAdaptiveImageProcessor(ProcessorMixin):
+    def __init__(self, image_size=224, anchors='grid_9', grid_dict=grid_dict, add_global_img = True,add_textual_crop_indicator=False):
+        if grid_dict is None:
+            grid_dict = {'grid_9': [(0.1, 0.1), (0.5, 0.5), (1.0, 1.0)]}  # Define your grid_dict appropriately
+        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        self.anchors = [tuple(_) for _ in grid_dict[anchors]]
+        self.anchor_max = max(max(_) for _ in self.anchors)
+        self.anchors_areas = [box_area(np.array([[0, 0, w*self.image_size[1], h*self.image_size[0]]])) for w, h in self.anchors]
+    
+
+    def _process_image(self, images):
+            new_images = []
+            new_patch_position = []
+            num_image_mult = []
+
+            for image in images:
+                if isinstance(image, str):
+                    image = Image.open(image).convert('RGB')
+                elif isinstance(image, np.ndarray):
+                    image = Image.fromarray(image.astype('uint8'), 'RGB')
+
+                # Resize the image according to the selected anchor
+                image_np = np.array(image)
+                selected_anchor = self.anchor_rank(np.array(self.anchors), np.array(self.anchors_areas), image_np.shape[:2])
+                anchor_size = self.anchors[selected_anchor]
+                new_size = (int(anchor_size[1] * self.image_size[1]), int(anchor_size[0] * self.image_size[0]))
+                resized_image = np.array(image.resize(new_size, Image.BICUBIC))
+
+                # Normalize the image (example normalization values)
+                #resized_image = resized_image / 255.0
+                #resized_image = (resized_image - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+                
+                # Reshape the image
+                num_h, num_w = anchor_size
+                image_input = resized_image.reshape((num_h, self.image_size[0], num_w, self.image_size[1], 3))
+                image_input = image_input.transpose(0, 2, 4, 1, 3).reshape(-1, self.image_size[0], self.image_size[1], 3)
+
+                if self.add_global_img:
+                    global_image = np.array(image)
+                    #global_image = (global_image - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+                    global_image = global_image[np.newaxis, ...]
+                    image_input = np.concatenate([global_image, image_input], axis=0)
+
+                anchor = self.anchors[selected_anchor]  # w,h
+                patch_position = np.concatenate([
+                    np.repeat(np.arange(anchor[0])[:, np.newaxis], anchor[1], axis=1)[:, :, np.newaxis],
+                    np.repeat(np.arange(anchor[1])[np.newaxis, :], anchor[0], axis=0)[:, :, np.newaxis]
+                ], axis=2)
+                patch_position = patch_position.reshape(-1, 2)  # num_patch, (ph, pw)
+
+                if self.add_global_img:
+                    patch_position = np.concatenate([np.ones((1, 2)) * self.anchor_max, patch_position], axis=0)
+
+                new_images.append(image_input)
+                new_patch_position.append(patch_position)
+                num_image_mult.append(patch_position.shape[0])
+
+            new_images = np.concatenate(new_images, axis=0)
+            new_patch_position = np.concatenate(new_patch_position, axis=0)
+            return new_images, new_patch_position, num_image_mult
 
 class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
@@ -182,3 +292,44 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+
+
+
+
+'''
+     def __call__(
+        self,
+        #text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: ImageInput = None,
+        #tokenize_newline_separately: bool = True,
+        #padding: Union[bool, str, PaddingStrategy] = False,
+        #truncation: Union[bool, str, TruncationStrategy] = None,
+        #max_length=None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        do_resize: bool = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        #data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
+        #input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
+        #resample: "PILImageResampling" = None,  # noqa: F821
+        #do_convert_rgb: bool = None,
+        #do_thumbnail: bool = None,
+        #do_align_long_axis: bool = None,
+        #do_rescale: bool = None,
+    ) -> BatchFeature:
+    
+                pixel_values = self.image_processor(
+                image,
+                do_resize=do_resize,
+                do_normalize=do_normalize,
+                return_tensors=return_tensors,
+                image_mean=image_mean,
+                image_std=image_std,
+                input_data_format=input_data_format,
+                data_format=data_format,
+                resample=resample,
+                do_convert_rgb=do_convert_rgb)['pixel_values']
+'''
