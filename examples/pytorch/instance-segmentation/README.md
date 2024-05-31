@@ -14,26 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Instance segmentation examples
+# Instance Segmentation Examples
 
-This directory contains 2 scripts that showcase how to fine-tune [MaskFormer](https://huggingface.co/docs/transformers/model_doc/maskformer) and [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) for instance segmentation using PyTorch.
+This directory contains two scripts that demonstrate how to fine-tune [MaskFormer](https://huggingface.co/docs/transformers/model_doc/maskformer) and [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) for instance segmentation using PyTorch.
 
 Content:
-* [PyTorch version with Trainer](#pytorch-version-trainer)
-* [PyTorch version with Accelerate](#pytorch-version-no-trainer)
-* [Reload and perform inference](#reload-and-perform-inference)
-* [Note on custom data](#note-on-custom-data)
+- [PyTorch Version with Trainer](#pytorch-version-with-trainer)
+- [PyTorch Version with Accelerate](#pytorch-version-with-accelerate)
+- [Reload and Perform Inference](#reload-and-perform-inference)
+- [Note on Custom Data](#note-on-custom-data)
 
+## PyTorch Version with Trainer
 
-## PyTorch version, Trainer
+This example is based on the script [`run_instance_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/instance-segmentation/run_instance_segmentation.py).
 
-Based on the script [`run_instance_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/instance-segmentation/run_instance_segmentation.py).
+The script uses the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to manage training automatically, including distributed environments.
 
-The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
+Here, we show how to fine-tune a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on a subsample of the [ADE20K](https://huggingface.co/datasets/zhoubolei/scene_parse_150) dataset. We created a [small dataset](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) with approximately 2,000 images containing only "person" and "car" annotations; all other pixels are marked as "background."
 
-Here we show how to fine-tune a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on a subsample of the [ADE20K](https://huggingface.co/datasets/zhoubolei/scene_parse_150) dataset. For this example we created a [small dataset](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) with ~2k images that contain only "person" and "car" annotations, all other pixels marked as "background".
+Here is the `label2id` mapping for this dataset:
 
-Here is how `label2id` looks for this dataset:
 ```python
 label2id = {
     "background": 0,
@@ -42,9 +42,9 @@ label2id = {
 }
 ```
 
-Since the `background` label is not an instance and we don't want to predict it, we will specify `do_reduce_labels` to remove it from the data.
+Since the `background` label is not an instance and we don't want to predict it, we will use `do_reduce_labels` to remove it from the data.
 
-You can run the training with the following command:
+Run the training with the following command:
 
 ```bash
 python run_instance_segmentation.py \
@@ -72,33 +72,32 @@ python run_instance_segmentation.py \
     --push_to_hub
 ```
 
-The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former. Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for the current example were not tuned. To improve model quality you could try:
- - changing image size parameters (`--image_height`/`--image_width`)
- - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
- - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
+The resulting model can be viewed [here](https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former). Always refer to the original paper for details on training hyperparameters. To improve model quality, consider:
+- Changing image size parameters (`--image_height`/`--image_width`)
+- Adjusting training parameters such as learning rate, batch size, warmup, optimizer, and more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
+- Adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
-Note that you can replace the model [checkpoint](https://huggingface.co/models?search=maskformer).
+You can also replace the model [checkpoint](https://huggingface.co/models?search=maskformer).
 
+## PyTorch Version with Accelerate
 
-## PyTorch version, no Trainer
+This example is based on the script [`run_instance_segmentation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/instance-segmentation/run_instance_segmentation_no_trainer.py).
 
-Based on the script [`run_instance_segmentation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/instance-segmentation/run_instance_segmentation.py).
+The script uses [🤗 Accelerate](https://github.com/huggingface/accelerate) to write your own training loop in PyTorch and run it on various environments, including CPU, multi-CPU, GPU, multi-GPU, and TPU, with support for mixed precision.
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision.
-
-First, run:
+First, configure the environment:
 
 ```bash
 accelerate config
 ```
 
-and reply to the questions asked regarding the environment on which you'd like to train. Then
+Answer the questions regarding your training environment. Then, run:
 
 ```bash
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you can launch training with
+This command ensures everything is ready for training. Finally, launch training with:
 
 ```bash
 accelerate launch run_instance_segmentation_no_trainer.py \
@@ -117,14 +116,12 @@ accelerate launch run_instance_segmentation_no_trainer.py \
     --push_to_hub
 ```
 
-and boom, you're training, possibly on multiple GPUs, logging everything to all trackers found in your environment (like Weights and Biases, Tensorboard) and regularly pushing your model to the hub (with the repo name being equal to `args.output_dir` at your HF username) 🤗
+With this setup, you can train on multiple GPUs, log everything to trackers (like Weights and Biases, Tensorboard), and regularly push your model to the hub (with the repo name set to `args.output_dir` under your HF username).
+With the default settings, the script fine-tunes a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on the sample of [ADE20K](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) dataset. The resulting model can be viewed [here](https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former-no-trainer).
 
-With the default settings, the script fine-tunes a [Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former) model on the sample of [ADE20K](https://huggingface.co/datasets/qubvel-hf/ade20k-mini) dataset. The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former-no-trainer. 
+## Reload and Perform Inference
 
-
-## Reload and perform inference
-
-This means that after training, you can easily load your trained model and perform inference as follows:
+After training, you can easily load your trained model and perform inference as follows:
 
 ```python
 import torch
@@ -133,7 +130,6 @@ import matplotlib.pyplot as plt
 
 from PIL import Image
 from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
-
 
 # Load image
 image = Image.open(requests.get("http://farm4.staticflickr.com/3017/3071497290_31f0393363_z.jpg", stream=True).raw)
@@ -150,7 +146,7 @@ inputs = image_processor(images=[image], return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
 
-# Post process outputs
+# Post-process outputs
 outputs = image_processor.post_process_instance_segmentation(outputs, target_sizes=[image.size[::-1]])
 
 print("Mask shape: ", outputs[0]["segmentation"].shape)
@@ -171,7 +167,8 @@ Segment:  {'id': 5, 'label_id': 1, 'was_fused': False, 'score': 0.531299}
 Segment:  {'id': 6, 'label_id': 1, 'was_fused': False, 'score': 0.929477}
 ```
 
-Visualize the results with the following code:
+Use the following code to visualize the results:
+
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
@@ -187,14 +184,14 @@ plt.imshow(segmentation)
 plt.axis("off")
 plt.show()
 ```
+
 ![Result](https://i.imgur.com/rZmaRjD.png)
 
-
-## Note on custom data
+## Note on Custom Data
 
 Here is a short script demonstrating how to create your own dataset for instance segmentation and push it to the hub:
 
-> Note: Annotations should be represented as 3-channel images (similar to [scene_parsing_150](https://huggingface.co/datasets/zhoubolei/scene_parse_150#instance_segmentation-1) dataset), first channel is semantic-segmentation map with values corresponding to `label2id`, second is instance-segmentation map, where each instance has its unique value, third channel should be empty (filled with zeros).
+> Note: Annotations should be represented as 3-channel images (similar to the [scene_parsing_150](https://huggingface.co/datasets/zhoubolei/scene_parse_150#instance_segmentation-1) dataset). The first channel is a semantic-segmentation map with values corresponding to `label2id`, the second is an instance-segmentation map where each instance has a unique value, and the third channel should be empty (filled with zeros).
 
 ```python
 from datasets import Dataset, DatasetDict
@@ -232,6 +229,6 @@ dataset = create_instance_segmentation_dataset(label2id, train=train_split, vali
 dataset.push_to_hub("qubvel-hf/ade20k-nano")
 ```
 
-Then, you could use this dataset for fine-tuning by specifying its name with `--dataset_name <your_dataset>`.
+Use this dataset for fine-tuning by specifying its name with `--dataset_name <your_dataset_repo>`.
 
 See also: [Dataset Creation Guide](https://huggingface.co/docs/datasets/image_dataset#create-an-image-dataset)
