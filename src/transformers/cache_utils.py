@@ -765,6 +765,7 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.is_initialized = []
         cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
@@ -775,7 +776,7 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
-        self.is_initialized = True
+            self.is_initialized.append(True)
 
     def update(
         self,
@@ -809,7 +810,7 @@ class StaticCache(Cache):
         k_out[:, :, cache_position] = key_states
         v_out[:, :, cache_position] = value_states
 
-        self.is_initialized = False
+        self.is_initialized[layer_idx] = False
 
         return k_out, v_out
 
@@ -830,7 +831,7 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
-        self.is_initialized = True
+            self.is_initialized[layer_idx] = True
 
 
 class SlidingWindowCache(Cache):
