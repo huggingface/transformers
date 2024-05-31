@@ -317,8 +317,8 @@ if __name__ == "__main__":
 
         # Upload to Hub
         api = HfApi()
-        api.upload_file(
-            path_or_fileobj=os.path.join(exp_run_dir, "summary.json"),
+        api.upload_folder(
+            folder_path=exp_run_dir,
             path_in_repo=args.path_in_repo,
             repo_id=args.repo_id,
             repo_type="dataset",
