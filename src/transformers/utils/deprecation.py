@@ -31,11 +31,11 @@ def deprecate_kwarg(
     If raise_error is set to True, ValueError will be raised when deprecated keyword argument is used.
 
     Args:
-        old_name (str): name of the deprecated keyword argument
-        version (str): version when the keyword argument was (will be) deprecated
-        new_name (Optional[str], optional): new name of the keyword argument. Defaults to None.
-        raise_if_ge_version (bool, optional): raise ValueError if deprecated version is greater or equal to current version. Defaults to False.
-        raise_if_both_names (bool, optional): raise ValueError if both deprecated and new keyword arguments are set. Defaults to False.
+        old_name (`str`): name of the deprecated keyword argument
+        version (`str`): version when the keyword argument was (will be) deprecated
+        new_name (`Optional[str]`, *optional*): new name of the keyword argument.
+        raise_if_ge_version (`bool`, *optional*, defaults to `False`): raise ValueError if deprecated version is greater or equal to current version.
+        raise_if_both_names (`bool`, *optional*, defaults to `False`): raise ValueError if both deprecated and new keyword arguments are set.
 
     Raises:
         ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True
