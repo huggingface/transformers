@@ -804,11 +804,12 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.norm_topk_prob = config.norm_topk_prob
         self.hidden_size = config.hidden_size
+        self.real_num_experts = self.num_experts - specified_num_experts
 
         # gating
-        self.gate = nn.Linear(config.hidden_size, config.num_experts-specified_num_experts, bias=False)
+        self.gate = nn.Linear(config.hidden_size, self.real_num_experts, bias=False)
         self.experts = nn.ModuleList(
-            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts - specified_num_experts)]
+            [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.real_num_experts)]
         )
 
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
@@ -834,10 +835,10 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
         # One hot encode the selected experts to create an expert mask
         # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.real_num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
+        for expert_idx in range(self.real_num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
 

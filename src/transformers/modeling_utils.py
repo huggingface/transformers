@@ -331,36 +331,18 @@ def dtype_byte_size(dtype):
 
 
 def shard_checkpoint(
-    state_dict: Dict[str, torch.Tensor], max_shard_size: Union[int, str] = "10GB", weights_name: str = WEIGHTS_NAME
+    state_dict: Dict[str, torch.Tensor], weights_name: str = WEIGHTS_NAME
 ):
     """
-    Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
-    given size.
-
-    The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so there is no
-    optimization made to make each sub-checkpoint as close as possible to the maximum size passed. For example, if the
-    limit is 10GB and we have weights of sizes [6GB, 6GB, 2GB, 6GB, 2GB, 2GB] they will get sharded as [6GB], [6+2GB],
-    [6+2+2GB] and not [6+2+2GB], [6+2GB], [6GB].
-
-    <Tip warning={true}>
-
-    If one of the model's weight is bigger than `max_shard_size`, it will end up in its own sub-checkpoint which will
-    have a size greater than `max_shard_size`.
-
-    </Tip>
+    Splits a model state dictionary into sub-checkpoints so that each sub-checkpoint contains the weights of one layer.
 
     Args:
         state_dict (`Dict[str, torch.Tensor]`): The state dictionary of a model to save.
-        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
-            The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
-            (like `"5MB"`).
         weights_name (`str`, *optional*, defaults to `"pytorch_model.bin"`):
             The name of the model save file.
     """
-    max_shard_size = convert_file_size_to_int(max_shard_size)
 
-    sharded_state_dicts = [{}]
-    last_block_size = 0
+    sharded_state_dicts = []
     total_size = 0
     storage_id_to_block = {}
 
@@ -379,16 +361,11 @@ def shard_checkpoint(
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-
-        # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
-        # weight in the current shard.
-        if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
-            sharded_state_dicts.append({})
-            last_block_size = 0
-
-        sharded_state_dicts[-1][key] = weight
-        last_block_size += weight_size
         total_size += weight_size
+
+        # Create a new shard for each layer
+        new_shard = {key: weight}
+        sharded_state_dicts.append(new_shard)
         storage_id_to_block[storage_id] = len(sharded_state_dicts) - 1
 
     # If we only have one shard, we return it
@@ -2554,7 +2531,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
+        shards, index = shard_checkpoint(state_dict, weights_name=weights_name)
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
