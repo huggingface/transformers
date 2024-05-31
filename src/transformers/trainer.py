@@ -153,7 +153,6 @@ from .utils import (
     is_datasets_available,
     is_galore_torch_available,
     is_grokadamw_available,
-    is_schedulefree_available,
     is_in_notebook,
     is_ipex_available,
     is_liger_kernel_available,
@@ -162,6 +161,7 @@ from .utils import (
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
+    is_schedulefree_available,
     is_torch_compile_available,
     is_torch_mlu_available,
     is_torch_mps_available,
@@ -1499,6 +1499,7 @@ class Trainer:
                     " install it with `pip install schedulefree`"
                 )
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
+
             additional_optim_kwargs = {}
             if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW_32BIT:
                 optimizer_cls = AdamWScheduleFree
