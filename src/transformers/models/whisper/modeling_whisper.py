@@ -610,6 +610,7 @@ class WhisperSdpaAttention(WhisperAttention):
                 attention_mask=attention_mask,
                 layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
