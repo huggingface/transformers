@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union, List
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -759,7 +759,7 @@ class MambaClassificationHead(nn.Module):
     def forward(self, features, **kwargs):
         """Forward pass."""
         # Pooling is done by the forward pass in `MambaForSequenceClassification`
-        x = features 
+        x = features
         x = self.dropout(x)
         x = self.dense(x)
         x = self.activation(x)
@@ -834,12 +834,12 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         )
 
         last_hidden_states = mamba_outputs[0]
-        
+
         if input_ids is not None:
             batch_size, _ = input_ids.shape[:2]
         else:
             batch_size, _ = inputs_embeds.shape[:2]
-        
+
         assert (
             self.config.pad_token_id is not None or batch_size == 1
         ), "Cannot handle batch sizes > 1 if no padding token is defined."
@@ -858,7 +858,7 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
-        
+
         pooled_last_hidden_states = last_hidden_states[
             torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths
         ]

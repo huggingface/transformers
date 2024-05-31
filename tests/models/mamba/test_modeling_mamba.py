@@ -182,7 +182,7 @@ class MambaModelTester:
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-    
+
     def create_and_check_sequence_classification(self, config, input_ids, sequence_labels, *args):
         config.num_labels = self.num_labels
         model = MambaForSequenceClassification(config)
@@ -354,7 +354,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_mamba_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm(*config_and_inputs)
-    
+
     def test_mamba_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_sequence_classification(*config_and_inputs)
