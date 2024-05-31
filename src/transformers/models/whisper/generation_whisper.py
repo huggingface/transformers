@@ -494,7 +494,6 @@ class WhisperGenerationMixin:
 
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
-
         self._set_return_outputs(
             return_dict_in_generate=return_dict_in_generate,
             return_token_timestamps=return_token_timestamps,
@@ -546,10 +545,7 @@ class WhisperGenerationMixin:
             num_beams=generation_config.num_beams,
         )
 
-        # 6. Else we're in longform mode which is more complex.
-        # We need to chunk the audio input depending on when the model generates timestamp tokens
-
-        # 6.1 Set and retrieve global longform generation variables
+        # 4 Set and retrieve global generation variables
         self._set_condition_on_prev_tokens(
             condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config
         )
@@ -566,10 +562,8 @@ class WhisperGenerationMixin:
             batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames, is_shortform=is_shortform
         )
 
-        # 6.2 Prepare running variables, list for generation
-       
+        # 5 Prepare running variables, list for generation
         num_return_sequences = generation_config.num_return_sequences
-
         batch_size, batch_idx_map, cur_bsz, input_features, seek, max_frames, init_tokens, do_condition_on_prev_tokens = self._expand_variables_for_generation(
             input_features=input_features, 
             seek=seek, 
@@ -580,7 +574,6 @@ class WhisperGenerationMixin:
             generation_config=generation_config
         )
 
-
         current_segments = self._prepare_segments(
             prompt_ids=prompt_ids,
             batch_size=batch_size,
@@ -588,10 +581,9 @@ class WhisperGenerationMixin:
         )
 
 
-
-        # 6.2 Transcribe audio until we reach the end of all input audios
+        # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
-            # 6.3 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
+            # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
             # Set updated index map, duration of previously decoded chunks and number of max frames of current decoding chunk
@@ -605,7 +597,7 @@ class WhisperGenerationMixin:
             time_offset = seek * time_precision / input_stride
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
-            # 6.4 cut out next 30s segment from input features
+            # 6.2 cut out next 30s segment from input features
             segment_input = self._get_input_segment(
                 input_features=input_features,
                 seek=seek,
@@ -615,7 +607,7 @@ class WhisperGenerationMixin:
                 batch_idx_map=batch_idx_map,
             )
 
-            # 6.5 prepare decoder input ids
+            # 6.3 prepare decoder input ids
             if logits_processor is not None: 
                 suppress_tokens = _get_attr_from_logit_processors(
                     logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
@@ -651,21 +643,20 @@ class WhisperGenerationMixin:
                     f"so that their combined length is less than {self.config.max_target_positions}."
                 )
 
-
-            # 6.6 set max new tokens or max length
+            # 6.4 set max new tokens or max length
             self._set_max_new_tokens_and_length(
                 config=self.config,
                 decoder_input_ids=decoder_input_ids,
                 generation_config=generation_config,
             )
 
-            # 6.7 Set current `begin_index` for all logit processors
+            # 6.5 Set current `begin_index` for all logit processors
             if logits_processor is not None: 
                 for proc in logits_processor:
                     if hasattr(proc, "set_begin_index"):
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
-            # 6.8 Run generate with fallback
+            # 6.6 Run generate with fallback
             if segment_input is None: 
                 seek_outputs = super().generate(
                     segment_input,
@@ -700,7 +691,7 @@ class WhisperGenerationMixin:
             )
 
 
-            # 6.9 In every generated sequence, split by timestamp tokens and extract segments
+            # 6.7 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
                 prev_i = batch_idx_map[i] 
 
