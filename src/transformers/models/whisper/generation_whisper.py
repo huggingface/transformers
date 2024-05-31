@@ -621,6 +621,19 @@ class WhisperGenerationMixin:
         batch_idx_map = list(range(batch_size))
         do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
 
+        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
+            current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
+            batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
+            cur_bsz = len(batch_idx_map)
+            seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            input_features = torch.stack([input_features[i // generation_config.num_return_sequences]  for i in range(len(batch_idx_map))]).to(input_features.device)
+            max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            init_tokens = torch.tensor([init_tokens[i //generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1).to(init_tokens.device)
+            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
+            generation_config.num_return_sequences = 1
+
+
+
         # 6.2 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
             # 6.3 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
@@ -731,14 +744,6 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
-            # if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
-            #     current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
-            #     batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
-            #     seek_num_frames = torch.tensor([seek_num_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            #     time_offset = torch.tensor([time_offset[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            #     seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            #     max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            #     decoder_input_ids = torch.tensor([decoder_input_ids[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1)
 
             # 6.9 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
@@ -829,14 +834,6 @@ class WhisperGenerationMixin:
         needs_fallback = [False for _ in range(cur_bsz)]
         should_skip = [False for _ in range(cur_bsz)]
         fallback_index_map = list(range(cur_bsz))
-
-        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1: 
-            seek_sequence_list = [None for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
-            seek_outputs_list = [None for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
-            needs_fallback = [False for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
-            should_skip = [False for _ in range(cur_bsz) for _ in range(generation_config.num_return_sequences)]
-            fallback_index_map = list(range(cur_bsz * generation_config.num_return_sequences))
-
         if generation_config.no_speech_threshold is not None:
             self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs)
 
@@ -886,10 +883,7 @@ class WhisperGenerationMixin:
 
             for i, seek_sequence in enumerate(seek_sequences):
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1: 
-                    prev_i = batch_idx_map[fallback_index_map[i // generation_config.num_return_sequences ]]
-                else: 
-                    prev_i = batch_idx_map[fallback_index_map[i]]
+                prev_i = batch_idx_map[fallback_index_map[i]]
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
 
                 # remove eos token id
@@ -919,15 +913,9 @@ class WhisperGenerationMixin:
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
                 is_low_temperature = temperature is None or temperature < 0.5
-
-                if generation_config.num_return_sequences is not None and generation_config.num_return_sequences >1: 
-                    do_condition_on_prev_tokens[fallback_index_map[i] // generation_config.num_return_sequences] = (
-                        generation_config.condition_on_prev_tokens and is_low_temperature
-                    )
-                else: 
-                    do_condition_on_prev_tokens[fallback_index_map[i]] = (
-                        generation_config.condition_on_prev_tokens and is_low_temperature
-                    )
+                do_condition_on_prev_tokens[fallback_index_map[i]] = (
+                    generation_config.condition_on_prev_tokens and is_low_temperature
+                )
 
                 if needs_fallback[i]:
                     new_fallback_index_map.append(fallback_index_map[i])
@@ -981,26 +969,17 @@ class WhisperGenerationMixin:
 
         def split_by_batch_index(values, key, batch_idx, generation_config):
             
-            if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1: 
-                if key in ['scores', "encoder_attentions", 'encoder_hidden_states']: 
-                    return [v[batch_idx // generation_config.num_return_sequences].cpu() for v in values]
-                if key == 'logits': 
-                    return [v[batch_idx].cpu() for v in values]
-                if key in ["decoder_attentions", "decoder_hidden_states"]:
-                    return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-                if key == "cross_attentions": 
-                    if isinstance(values[batch_idx // generation_config.num_return_sequences], tuple): 
-                        return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-                    else: 
-                        [v[batch_idx // generation_config.num_return_sequences].cpu() for v in values]    
-
-            if key in ["scores", "encoder_attentions"]:
+            if key in ['scores', "encoder_attentions", 'encoder_hidden_states']: 
                 return [v[batch_idx].cpu() for v in values]
+            if key == 'logits': 
+                return [v[batch_idx].cpu() for v in values]
+            if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
+                return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
+
             elif key == "past_key_values":
                 # we don't save `past_key_values` as this is too costly
-                return None
-            elif isinstance(values[batch_idx], tuple) and torch.is_tensor(values[batch_idx][0]):
-                return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
+                return None 
+            
             return values[batch_idx].cpu()
 
         sequence_tokens = seek_outputs["sequences"]
