@@ -598,7 +598,7 @@ class WhisperGenerationMixin:
             condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config
         )
 
-        if not is_shortform:
+        if hasattr(generation_config, 'no_timestamps_token_id'):
             timestamp_begin = generation_config.no_timestamps_token_id + 1
         else:
             timestamp_begin = None
@@ -698,18 +698,18 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.8 Run generate with fallback
-            # if segment_input is None: 
-            #     seek_outputs = super().generate(
-            #         segment_input,
-            #         generation_config=generation_config,
-            #         logits_processor=logits_processor,
-            #         stopping_criteria=stopping_criteria,
-            #         prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-            #         synced_gpus=synced_gpus,
-            #         decoder_input_ids=decoder_input_ids,
-            #         **kwargs,
-            #     )
-            #     return seek_outputs
+            if segment_input is None: 
+                seek_outputs = super().generate(
+                    segment_input,
+                    generation_config=generation_config,
+                    logits_processor=logits_processor,
+                    stopping_criteria=stopping_criteria,
+                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                    synced_gpus=synced_gpus,
+                    decoder_input_ids=decoder_input_ids,
+                    **kwargs,
+                )
+                return seek_outputs
 
             seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form = self.generate_with_fallback(
                 segment_input=segment_input,
@@ -771,11 +771,7 @@ class WhisperGenerationMixin:
             if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
-        sequences = _pad_to_max_length(
-            final_segments, 
-            pad_token_id = generation_config.pad_token_id,
-            padding="right"
-        )
+        sequences = _pad_to_max_length(final_segments, pad_token_id = generation_config.pad_token_id, padding="right")
 
         if is_shortform: 
             # add decoder_input_ids tokens:
@@ -901,18 +897,14 @@ class WhisperGenerationMixin:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-                        if not is_shortform:
-                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-
+                        
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-                        if not is_shortform:
-                            seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
-
+                        
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
                     seek_sequence,
@@ -973,7 +965,7 @@ class WhisperGenerationMixin:
 
     def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform):
         # remove all previously passed decoder input ids
-        if isinstance(seek_outputs, torch.Tensor) and not is_shortform:
+        if isinstance(seek_outputs, torch.Tensor):
             seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
             return seek_outputs, seek_outputs
 
