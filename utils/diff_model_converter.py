@@ -500,10 +500,10 @@ class DiffConverterTransformer(CSTTransformer):
         dependency_imports = {}
         for visiter in self.visited_module.values():
             dependency_imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
-        dependency_imports.update(imports)
-        new_body = list(imports.values())
         if hasattr(self, "config_body"):
             self.config_body = list(imports.values()) + self.config_body
+        dependency_imports.update(imports)
+        new_body = list(dependency_imports.values())
         if len(self.new_body.keys()) > 0:
             new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
         else:
