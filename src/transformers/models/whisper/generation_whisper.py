@@ -657,19 +657,6 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.6 Run generate with fallback
-            if segment_input is None: 
-                seek_outputs = super().generate(
-                    segment_input,
-                    generation_config=generation_config,
-                    logits_processor=logits_processor,
-                    stopping_criteria=stopping_criteria,
-                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                    synced_gpus=synced_gpus,
-                    decoder_input_ids=decoder_input_ids,
-                    **kwargs,
-                )
-                return seek_outputs
-
             seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
@@ -686,7 +673,7 @@ class WhisperGenerationMixin:
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
-                is_shortform=is_shortform, 
+                is_shortform=is_shortform,
                 kwargs=kwargs,
             )
 
