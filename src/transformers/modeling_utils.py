@@ -118,6 +118,7 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
     if accelerate_version > version.parse("0.31.1"):
         from accelerate.utils.modeling import get_state_dict_from_offload
@@ -2512,7 +2513,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded to the disk, make module map
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+            if hasattr(self, "hf_device_map") and (
+                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            ):
                 warnings.warn(
                     "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
                 )

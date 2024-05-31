@@ -25,7 +25,6 @@ import unittest.mock as mock
 import uuid
 from pathlib import Path
 
-import psutil
 import requests
 from huggingface_hub import HfApi, HfFolder, delete_repo
 from pytest import mark
@@ -1076,7 +1075,6 @@ class ModelUtilsTest(TestCasePlus):
         # check_models_equal requires onloaded tensors
         model_id = "hf-internal-testing/tiny-random-gpt2"
         onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = torch.tensor([[1, 2, 3]]).to(f"{torch_device}:0")
         cpu_output = onloaded_model(inputs)[0]
 
@@ -1085,14 +1083,12 @@ class ModelUtilsTest(TestCasePlus):
             offloaded_model = AutoModelForCausalLM.from_pretrained(
                 model_id, device_map=device_map, offload_folder=offload_folder
             )
-            presaved_output = offloaded_model(input_tokens)[0]
-            presaved_memory = psutil.virtual_memory().used
+            presaved_output = offloaded_model(inputs)[0]
             offloaded_model.save_pretrained(
                 tmp_dir, max_shard_size="200KB"
             )  # model is 1.6MB, max shard size is allocated to cpu by default
-            postsaved_memory = psutil.virtual_memory().used
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
-            postsaved_output = saved_model(input_tokens)[0]
+            postsaved_output = saved_model(inputs)[0]
 
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
