@@ -1251,6 +1251,8 @@ class CohereForCausalLM(CoherePreTrainedModel):
     """,
     COHERE_START_DOCSTRING,
 )
+# Copied from
+# transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Cohere, LLAMA->COHERE
 class CohereForTokenClassification(CoherePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -368,6 +368,8 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
+    # Copied from
+    # tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Cohere, llama->cohere
     def test_Cohere_token_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
