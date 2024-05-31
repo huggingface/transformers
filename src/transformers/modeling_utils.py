@@ -342,10 +342,10 @@ def shard_checkpoint(
             The name of the model save file.
     """
 
-    sharded_state_dicts = []
+    sharded_state_dicts = [{}]
     total_size = 0
     storage_id_to_block = {}
-
+    prev_layer_idx = 0
     for key, weight in state_dict.items():
         # when bnb serialization is used the weights in the state dict can be strings
         # check: https://github.com/huggingface/transformers/pull/24416 for more details
@@ -362,10 +362,18 @@ def shard_checkpoint(
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
         total_size += weight_size
-
-        # Create a new shard for each layer
-        new_shard = {key: weight}
-        sharded_state_dicts.append(new_shard)
+        
+        # parse the key name, it should be started with the format "model.layer.x", creat one new shard for each layer
+        if "layers" in key:
+            layer_idx = key.split(".")[2]
+            if layer_idx != prev_layer_idx:
+                sharded_state_dicts.append({})
+                prev_layer_idx = layer_idx
+            # Create a new shard for each layer
+            sharded_state_dicts[-1][key] = weight
+        else:
+            # put other weights in the first shard
+            sharded_state_dicts[0][key] = weight
         storage_id_to_block[storage_id] = len(sharded_state_dicts) - 1
 
     # If we only have one shard, we return it
