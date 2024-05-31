@@ -13,22 +13,21 @@
 # limitations under the License.
 
 import ast
-import datetime
 import collections
+import datetime
 import functools
 import json
 import operator
 import os
 import re
-import requests
 import sys
 import time
-
-from huggingface_hub import HfApi
 from typing import Dict, List, Optional, Union
 
+import requests
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports
+from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
