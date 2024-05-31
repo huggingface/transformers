@@ -795,13 +795,8 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        MAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    )
-    @replace_return_docstrings(
-        output_type=MambaSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC
-    )
+    @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=MambaSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         checkpoint="Adibvafa/EHRMamba",
         output_type=MambaSequenceClassifierOutput,
