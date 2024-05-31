@@ -1,4 +1,4 @@
-from transformers.models.llama.modeling_llama import LlamaConfig
+from transformers.models.llama.configuration_llama import LlamaConfig
 
 
 # Example where we only want to only add a new config argument and new arg doc
@@ -8,6 +8,6 @@ class MyNewModelConfig(LlamaConfig):
     mlp_bias (`bool`, *optional*, defaults to `False`)
     """
 
-    def __init__(self, mlp_bias=False):
+    def __init__(self, mlp_bias=True, **super_kwargs):
         self.mlp_bias = mlp_bias
-        super().__init__(self)
+        super().__init__(self, **super_kwargs)

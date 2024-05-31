@@ -174,7 +174,6 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name, new_name):
         super().__init__()
-        camel_case_model_name = ''.join(x.title() for x in old_name.split("_"))
         self.old_name = old_name
         self.new_name = new_name
         self.default_name = ''.join(x.title() for x in new_name.split("_"))
@@ -328,8 +327,13 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     end_meth = []
     for name, func in original_methods.items():
         if name in updated_methods:
+            new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
-            func = func.with_changes(body=updated_methods[name].body, params=updated_methods[name].params)
+            kwarg_name =  getattr(updated_methods[name].params,"star_kwarg", None)
+            if kwarg_name.name.value == "super_kwargs":
+                # TODO here we can do a proper merging :) 
+                new_params = new_params.with_changes(params=func.params.params + new_params.params[1:], star_kwarg=func.params.star_kwarg)
+            func = func.with_changes(body=updated_methods[name].body, params=new_params)
         end_meth.append(func)
 
     result_node = original_node.with_changes(body=cst.IndentedBlock(body=end_meth))
@@ -366,7 +370,11 @@ class DiffConverterTransformer(CSTTransformer):
         import_statement = self.python_module.code_for_node(node.module)
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                if re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement):
+                _import = re.search(r"transformers\.models\..*\.(modeling|configuration)_.*", import_statement)
+                if _import:
+                    source = _import.groups()[0]
+                    if source == "modeling" and f"Config" in self.python_module.code_for_node(imported_):
+                        raise ValueError(f"You are importing {self.python_module.code_for_node(imported_)} from the modeling file. Import from the `configuration_xxxx.py` file instead")
                     if import_statement not in self.transformers_imports:
                         source_code = get_module_source_from_name(import_statement)
                         tree = cst.parse_module(source_code)
@@ -429,8 +437,6 @@ class DiffConverterTransformer(CSTTransformer):
             else:
                 raise ValueError(f"Tried parsing the name of the imported package from {super_file_name}, could not extract the model name")
 
-            
-            print(f"Detected inheritance from {model_name}")
             if super_file_name not in self.visited_module:  # only extract classes once
                 class_finder = find_classes_in_file(self.transformers_imports[super_file_name], model_name, self.model_name)
                 self.visited_module[super_file_name] = class_finder
