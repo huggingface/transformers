@@ -19,6 +19,8 @@ on:
         required: true
         type: string
 
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
 jobs:
   send_results:
