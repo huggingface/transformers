@@ -233,7 +233,7 @@ The sun.</s>
 
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
-## Advanced: Extra inputs to chat templates
+## Extra inputs to chat templates
 
 The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
 argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
@@ -242,9 +242,11 @@ strings, lists, dicts or whatever else you want.
 
 That said, there are some common use-cases for these extra arguments,
 such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
-we have some opinionated recommendations about what the names and formats of these arguments should be.
+we have some opinionated recommendations about what the names and formats of these arguments should be, which are
+described in the sections below. We encourage model authors to make their chat templates compatible with this format,
+to make it easy to transfer tool-calling code between models.
 
-### Tool use / function calling
+## Tool use / function calling
 
 "Tool use" LLMs can choose to call functions as external tools before generating an answer. When passing tools
 to a tool-use model, you can simply pass a list of functions to the `tools` argument:
@@ -285,7 +287,22 @@ correctly as tools. Specifically, you should follow these rules:
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
   because most tool-use models ignore them.
 
-### Understanding tool schemas
+### Passing tool results to the model
+
+The sample code above is enough to list the available tools for your model, but what happens if it wants to actually use
+one? If that happens, you should:
+
+1. Parse the model's output to get the tool name and arguments.
+2. Add the model's tool call to the conversation, in the format `{role: "assistant", "tool_calls": [{"name": function_name, "arguments": arguments}]}`
+3. Call the corresponding function with those arguments.
+4. Add the result to the conversation, in the format `{"role": "tool", "content": tool_results}`
+
+Here is an example conversation, containing tool calls:
+
+# TODO example goes here
+
+
+### Advanced: Understanding tool schemas
 
 Each function you pass to the `tools` argument of `apply_chat_template` is converted into a 
 [JSON schema](https://json-schema.org/learn/getting-started-step-by-step. These schemas
@@ -379,7 +396,7 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-### Retrieval-augmented generation
+## Retrieval-augmented generation
 
 "Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
 to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
