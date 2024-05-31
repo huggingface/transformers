@@ -84,6 +84,32 @@ class AlignProcessor(ProcessorMixin):
     [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that interits both the image processor and
     tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
+    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
+        ```python
+        from transformers import AlignProcessor
+        from PIL import Image
+        model_id = "kakaobrain/align-base"
+        processor = AlignProcessor.from_pretrained(model_id)
+
+        # Define the kwargs for each modality
+        common_kwargs = {"return_tensors": "pt"}
+        images_kwargs = {"crop_size": {"height": 224, "width": 224}}
+        text_kwargs = {"padding": "do_not_pad"}
+
+        # Combine them into a single dictionary
+
+        all_kwargs = {
+        "images_kwargs": images_kwargs,
+        "text_kwargs": text_kwargs,
+        "common_kwargs": common_kwargs
+        }
+
+        processor(images=your_pil_image, text=["What is that?"], **all_kwargs)
+
+        # passing directly any number of kwargs is also supported, but not recommended
+
+        processor(images=your_pil_image, text=["What is that?"], padding="do_not_pad)
+        ```
 
     Args:
         image_processor ([`EfficientNetImageProcessor`]):
@@ -106,9 +132,9 @@ class AlignProcessor(ProcessorMixin):
         images: ImageInput = None,
         audio=None,
         videos=None,
-        text_kwargs: AlignProcessorKwargs.text_kwargs = None,
-        images_kwargs: AlignProcessorKwargs.images_kwargs = None,
-        common_kwargs: AlignProcessorKwargs.common_kwargs = None,
+        text_kwargs: AlignProcessorKwargs.text_kwargs = {},
+        images_kwargs: AlignProcessorKwargs.images_kwargs = {},
+        common_kwargs: AlignProcessorKwargs.common_kwargs = {},
         **kwargs: AlignProcessorKwargs,
     ) -> BatchEncoding:
         """
@@ -143,12 +169,6 @@ class AlignProcessor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
-
-        # create empty dictionaries to be updated
-        text_kwargs = {}
-        images_kwargs = {}
-        common_kwargs = {}
-
         # Init with default values if they exist
         text_kwargs = AlignProcessorKwargs._defaults.get("text_kwargs", {}).copy()
 
@@ -156,12 +176,10 @@ class AlignProcessor(ProcessorMixin):
         text_kwargs.update(
             {k: v for k, v in self.tokenizer.init_kwargs.items() if k in AlignProcessorKwargs.text_kwargs}
         )
-
         # then get passed per-modality dictionaries if they exist
         text_kwargs.update(kwargs.pop("text_kwargs", {}))
         images_kwargs.update(kwargs.pop("images_kwargs", {}))
         common_kwargs.update(kwargs.pop("common_kwargs", {}))
-
         # then merge kwargs by name
         for text_key in AlignProcessorKwargs.text_kwargs.keys():
             text_kwarg_value = kwargs.pop(text_key, None)
@@ -172,7 +190,6 @@ class AlignProcessor(ProcessorMixin):
             images_kwarg_value = kwargs.pop(images_key, None)
             if images_kwarg_value is not None:
                 images_kwargs[images_key] = images_kwarg_value
-
         # if something remains in kwargs, it belongs to common
         common_kwargs.update(kwargs)
 
