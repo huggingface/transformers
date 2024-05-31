@@ -219,38 +219,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             if not prepend_normalizer:
                 return True
 
-    def update_normalizer(self):
-        """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
-        sequence = []
-        if getattr(self, "legacy", True):
-            if getattr(self, "add_prefix_space", True):
-                sequence += [normalizers.Prepend(prepend="▁")]
-            sequence += [normalizers.Replace(pattern=" ", content="▁")]
 
-        elif not getattr(self, "legacy", True):
-            self._tokenizer.normalizer = normalizers.Sequence(sequence)
-
-    def update_pre_tokenizer(self):
-        """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
-        sequence = []
-        if getattr(self, "add_prefix_space") == False:
-            prepend_scheme = "never"
-        elif getattr(self, "add_prefix_space") == None:
-            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
-            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
-            if prepend_normalizer:
-                prepend_normalizer = prepend_normalizer[0]
-                replacement = prepend_normalizer['prepend']
-                self.add_prefix_space = True
-            else:
-                return
-        if getattr(self, "add_prefix_space", True):
-            prepend_scheme = "always"
-            if not getattr(self, "legacy", True):
-                prepend_scheme = "first"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,
-                                                                 split=False)
-        self.update_normalizer()
 
     @property
     def add_eos_token(self):

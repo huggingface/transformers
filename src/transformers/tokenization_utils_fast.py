@@ -112,12 +112,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None:  # and not from_slow:
-            # We have a serialization from tokenizers which let us directly build the backend
-            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif fast_tokenizer_file is not None:  # and not from_slow:
+            # We have a serialization from tokenizers which let us directly build the backend
+            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
@@ -883,7 +883,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._tokenizer.normalizer = normalizers.Sequence(sequence)
 
         elif not getattr(self, "legacy", True):
-            return
             self._tokenizer.normalizer = normalizers.Sequence(sequence) #TODO:ita2
 
 
