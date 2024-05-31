@@ -918,7 +918,6 @@ src/transformers/pipelines/audio_classification.py
 src/transformers/pipelines/audio_utils.py
 src/transformers/pipelines/automatic_speech_recognition.py
 src/transformers/pipelines/base.py
-src/transformers/pipelines/conversational.py
 src/transformers/pipelines/depth_estimation.py
 src/transformers/pipelines/document_question_answering.py
 src/transformers/pipelines/feature_extraction.py
