@@ -1,6 +1,6 @@
+import warnings
 from functools import wraps
 from typing import Optional
-from warnings import warn
 
 import packaging.version
 
@@ -11,10 +11,6 @@ from . import ExplicitEnum
 class Action(ExplicitEnum):
     RAISE = "raise"
     NOTIFY = "notify"
-
-
-def warning(message):
-    warn(message, FutureWarning)
 
 
 def deprecate_kwarg(
@@ -75,14 +71,16 @@ def deprecate_kwarg(
 
             if message is not None and add_message is not None:
                 message = f"{message} {add_message}"
-            if minimum_action == Action.NOTIFY and raise_if_ge_version and is_already_deprecated:
-                miminum_action = Action.RAISE
-            
+
+            # update minimum_action if raise_if_greater_or_equal_version is set
+            if minimum_action == Action.NOTIFY and raise_if_greater_or_equal_version and is_already_deprecated:
+                minimum_action = Action.RAISE
+
             # raise error or notify user
             if minimum_action == Action.RAISE:
                 raise ValueError(message)
             elif minimum_action == Action.NOTIFY:
-                warning(message)
+                warnings.warn(message, FutureWarning)
 
             return func(*args, **kwargs)
 
