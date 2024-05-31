@@ -20,7 +20,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Dict, List, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional
 
 import albumentations as A
 import numpy as np
@@ -30,11 +30,9 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 import transformers
 from transformers import (
+    AutoImageProcessor,
+    AutoModelForUniversalSegmentation,
     HfArgumentParser,
-    Mask2FormerForUniversalSegmentation,
-    Mask2FormerImageProcessor,
-    MaskFormerForInstanceSegmentation,
-    MaskFormerImageProcessor,
     Trainer,
     TrainingArguments,
 )
@@ -52,18 +50,6 @@ check_min_version("4.42.0.dev0")
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
 
-supported_models = {
-    "mask2former": {
-        "model": Mask2FormerForUniversalSegmentation,
-        "image_processor": Mask2FormerImageProcessor,
-    },
-    "maskformer": {
-        "model": MaskFormerForInstanceSegmentation,
-        "image_processor": MaskFormerImageProcessor,
-    },
-}
-
-
 @dataclass
 class Arguments:
     """
@@ -72,10 +58,6 @@ class Arguments:
     them on the command line.
     """
 
-    model_type: str = field(
-        default="mask2former",
-        metadata={"help": "Model type to use for instance segmentation. Choose from 'mask2former', 'maskformer'."},
-    )
     model_name_or_path: str = field(
         default="facebook/mask2former-swin-tiny-coco-instance",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
@@ -108,7 +90,7 @@ class Arguments:
 
 
 def augment_and_transform_batch(
-    examples: Mapping[str, Any], transform: A.Compose, image_processor: Mask2FormerImageProcessor
+    examples: Mapping[str, Any], transform: A.Compose, image_processor: AutoImageProcessor
 ) -> BatchFeature:
     batch = {
         "pixel_values": [],
@@ -182,7 +164,7 @@ class Evaluator:
 
     def __init__(
         self,
-        image_processor: Union[MaskFormerImageProcessor, Mask2FormerImageProcessor],
+        image_processor: AutoImageProcessor,
         id2label: Mapping[int, str],
         threshold: float = 0.0,
     ):
@@ -190,7 +172,7 @@ class Evaluator:
         Initialize evaluator with image processor, id2label mapping and threshold for filtering predictions.
 
         Args:
-            image_processor (Union[MaskFormerImageProcessor, Mask2FormerImageProcessor]): Image processor for
+            image_processor (AutoImageProcessor): Image processor for
                 `post_process_instance_segmentation` method.
             id2label (Mapping[int, str]): Mapping from class id to class name.
             threshold (float): Threshold to filter predicted boxes by confidence. Defaults to 0.0.
@@ -399,9 +381,7 @@ def main():
     # ------------------------------------------------------------------------------------------------
     # Load pretrained config, model and image processor
     # ------------------------------------------------------------------------------------------------
-    model_class = supported_models[args.model_type]["model"]
-    image_processor_class = supported_models[args.model_type]["image_processor"]
-    model = model_class.from_pretrained(
+    model = AutoModelForUniversalSegmentation.from_pretrained(
         args.model_name_or_path,
         label2id=label2id,
         id2label=id2label,
@@ -409,7 +389,7 @@ def main():
         token=args.token,
     )
 
-    image_processor = image_processor_class.from_pretrained(
+    image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path,
         do_resize=True,
         size={"height": args.image_height, "width": args.image_width},

@@ -48,7 +48,6 @@ You can run the training with the following command:
 
 ```bash
 python run_instance_segmentation.py \
-    --model_type mask2former \
     --model_name_or_path facebook/mask2former-swin-tiny-coco-instance \
     --output_dir finetune-instance-segmentation-ade20k-mini-mask2former \
     --dataset_name qubvel-hf/ade20k-mini \
@@ -78,7 +77,7 @@ The resulting model can be seen here: https://huggingface.co/qubvel-hf/finetune-
  - changing training parameters, such as learning rate, batch size, warmup, optimizer and many more (see [TrainingArguments](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments))
  - adding more image augmentations (we created a helpful [HF Space](https://huggingface.co/spaces/qubvel-hf/albumentations-demo) to choose some)
 
-Note that you can replace the model type (`--model_type maskformer`) and model [checkpoint](https://huggingface.co/models?search=maskformer).
+Note that you can replace the model [checkpoint](https://huggingface.co/models?search=maskformer).
 
 
 ## PyTorch version, no Trainer
@@ -103,7 +102,6 @@ that will check everything is ready for training. Finally, you can launch traini
 
 ```bash
 accelerate launch run_instance_segmentation_no_trainer.py \
-    --model_type mask2former \
     --model_name_or_path facebook/mask2former-swin-tiny-coco-instance \
     --output_dir finetune-instance-segmentation-ade20k-mini-mask2former-no-trainer \
     --dataset_name qubvel-hf/ade20k-mini \
