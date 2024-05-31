@@ -475,3 +475,9 @@ except ValueError as e:
         result = evaluate_python_code(code, {"min": min, "print": print}, state=state)
         assert result == "1"
         assert state["print_outputs"] == "1\n"
+
+    def test_types_as_objects(self):
+        code = "type_a = float(2); type_b = str; type_c = int"
+        state = {}
+        result = evaluate_python_code(code, {"float": float, "str": str, "int": int}, state=state)
+        assert result == int

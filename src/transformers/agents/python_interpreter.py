@@ -340,6 +340,8 @@ def evaluate_subscript(subscript, state, tools):
 def evaluate_name(name, state, tools):
     if name.id in state:
         return state[name.id]
+    elif name.id in tools:
+        return tools[name.id]
     elif name.id in ERRORS:
         return ERRORS[name.id]
     close_matches = difflib.get_close_matches(name.id, list(state.keys()))

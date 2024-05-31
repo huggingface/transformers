@@ -84,8 +84,14 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
         return json_data
     except json.JSONDecodeError as e:
         place = e.pos
+        if json_blob[place - 1 : place + 2] == "},\n":
+            raise ValueError(
+                "JSON is invalid: you probably tried to provide multiple tool calls in one action. PROVIDE ONLY ONE TOOL CALL."
+            )
         raise ValueError(
-            f"The JSON blob you used is invalid: due to the following error: {e}. JSON blob was: {json_blob}, decoding failed at '{json_blob[place-4:place+5]}'."
+            f"The JSON blob you used is invalid due to the following error: {e}.\n"
+            f"JSON blob was: {json_blob}, decoding failed on that specific part of the blob:\n"
+            f"'{json_blob[place-4:place+5]}'."
         )
     except Exception as e:
         raise ValueError(f"Error in parsing the JSON blob: {e}")
@@ -381,7 +387,7 @@ class Agent:
                 message_content = (
                     "Error: "
                     + str(step_log["error"])
-                    + "\nNow let's retry: take care not to repeat previous errors! Try to adopt different approaches.\n"
+                    + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
                 )
             elif "observation" in step_log:
                 message_content = f"Observation: {step_log['observation']}"
