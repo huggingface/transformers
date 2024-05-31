@@ -44,15 +44,9 @@ from ...utils import (
     is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 logger = logging.get_logger(__name__)
 
@@ -70,16 +64,6 @@ _CHECKPOINT_FOR_DOC = "google-t5/t5-small"
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
 
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -713,14 +697,9 @@ class T5SdpaAttention(T5Attention):
             outputs = outputs + (attn_weights,)
         return outputs
 
-class T5FlashAttention2(T5Attention):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
 T5_ATTENTION_CLASSES = {
     "eager": T5Attention,
-    "flash_attention_2": T5FlashAttention2,
     "sdpa": T5SdpaAttention,
 }
 
@@ -950,7 +929,6 @@ class T5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
 
     @property
