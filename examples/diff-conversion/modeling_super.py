@@ -5,7 +5,6 @@
 #                                    diff.py file directly.
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
-from math import log
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -16,7 +15,7 @@ from torch import nn
 from transformers import Cache
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -29,17 +28,12 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
 )
-from .configuration_dummy import DummyConfig
+from .configuration_super import SuperConfig
 
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
-
-def _pre_process_input(input_ids):
-    print(log(input_ids))
-    return input_ids
 
 
 logger = logging.get_logger(__name__)
@@ -57,10 +51,10 @@ def _get_unpad_data(attention_mask):
     )
 
 
-class DummyRMSNorm(nn.Module):
+class SuperRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        DummyRMSNorm is equivalent to T5LayerNorm
+        SuperRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -74,7 +68,7 @@ class DummyRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class DummyRotaryEmbedding(nn.Module):
+class SuperRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         super().__init__()
         self.scaling_factor = scaling_factor
@@ -103,8 +97,8 @@ class DummyRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class DummyLinearScalingRotaryEmbedding(DummyRotaryEmbedding):
-    """DummyRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+class SuperLinearScalingRotaryEmbedding(SuperRotaryEmbedding):
+    """SuperRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: a scaling factor is aplied to the position ids
@@ -113,8 +107,8 @@ class DummyLinearScalingRotaryEmbedding(DummyRotaryEmbedding):
         return cos, sin
 
 
-class DummyDynamicNTKScalingRotaryEmbedding(DummyRotaryEmbedding):
-    """DummyRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+class SuperDynamicNTKScalingRotaryEmbedding(SuperRotaryEmbedding):
+    """SuperRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def forward(self, x, position_ids):
         # difference to the original RoPE: inv_freq is recomputed when the sequence length > original length
@@ -166,7 +160,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class DummyMLP(nn.Module):
+class SuperMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -212,10 +206,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class DummyAttention(nn.Module):
+class SuperAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: DummyConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: SuperConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -250,7 +244,7 @@ class DummyAttention(nn.Module):
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = DummyRotaryEmbedding(
+            self.rotary_emb = SuperRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -259,14 +253,14 @@ class DummyAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = DummyLinearScalingRotaryEmbedding(
+                self.rotary_emb = SuperLinearScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = DummyDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = SuperDynamicNTKScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -358,9 +352,9 @@ class DummyAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class DummyFlashAttention2(DummyAttention):
+class SuperFlashAttention2(SuperAttention):
     """
-    Dummy flash attention module. This module inherits from `DummyAttention` as the weights of the module stays
+    Super flash attention module. This module inherits from `SuperAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -424,7 +418,7 @@ class DummyFlashAttention2(DummyAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (DummyRMSNorm handles it correctly)
+        # in fp32. (SuperRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
@@ -483,7 +477,7 @@ class DummyFlashAttention2(DummyAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in DummyFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in SuperFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
@@ -556,14 +550,14 @@ class DummyFlashAttention2(DummyAttention):
         )
 
 
-class DummySdpaAttention(DummyAttention):
+class SuperSdpaAttention(SuperAttention):
     """
-    Dummy attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `DummyAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    Super attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `SuperAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
 
-    # Adapted from DummyAttention.forward
+    # Adapted from SuperAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -577,7 +571,7 @@ class DummySdpaAttention(DummyAttention):
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "DummyModel is using DummySdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                "SuperModel is using SuperSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
                 'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -643,23 +637,23 @@ class DummySdpaAttention(DummyAttention):
         return attn_output, None, past_key_value
 
 
-DUMMY_ATTENTION_CLASSES = {
-    "eager": DummyAttention,
-    "flash_attention_2": DummyFlashAttention2,
-    "sdpa": DummySdpaAttention,
+SUPER_ATTENTION_CLASSES = {
+    "eager": SuperAttention,
+    "flash_attention_2": SuperFlashAttention2,
+    "sdpa": SuperSdpaAttention,
 }
 
 
-class DummyDecoderLayer(nn.Module):
-    def __init__(self, config: DummyConfig, layer_idx: int):
+class SuperDecoderLayer(nn.Module):
+    def __init__(self, config: SuperConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = DUMMY_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = SUPER_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
-        self.mlp = DummyMLP(config)
-        self.input_layernorm = DummyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DummyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = SuperMLP(config)
+        self.input_layernorm = SuperRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = SuperRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -718,7 +712,7 @@ class DummyDecoderLayer(nn.Module):
         return outputs
 
 
-DUMMY_START_DOCSTRING = r"""
+SUPER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -728,7 +722,7 @@ DUMMY_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`DummyConfig`]):
+        config ([`SuperConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -736,14 +730,14 @@ DUMMY_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Dummy Model outputting raw hidden-states without any specific head on top.",
-    DUMMY_START_DOCSTRING,
+    "The bare Super Model outputting raw hidden-states without any specific head on top.",
+    SUPER_START_DOCSTRING,
 )
-class DummyPreTrainedModel(PreTrainedModel):
-    config_class = DummyConfig
+class SuperPreTrainedModel(PreTrainedModel):
+    config_class = SuperConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["DummyDecoderLayer"]
+    _no_split_modules = ["SuperDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -763,7 +757,7 @@ class DummyPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-DUMMY_INPUTS_DOCSTRING = r"""
+SUPER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -838,27 +832,27 @@ DUMMY_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Dummy Model outputting raw hidden-states without any specific head on top.",
-    DUMMY_START_DOCSTRING,
+    "The bare Super Model outputting raw hidden-states without any specific head on top.",
+    SUPER_START_DOCSTRING,
 )
-class DummyModel(DummyPreTrainedModel):
+class SuperModel(SuperPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`DummyDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`SuperDecoderLayer`]
 
     Args:
-        config: DummyConfig
+        config: SuperConfig
     """
 
-    def __init__(self, config: DummyConfig):
+    def __init__(self, config: SuperConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [DummyDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [SuperDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = DummyRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = SuperRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -870,7 +864,7 @@ class DummyModel(DummyPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(DUMMY_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SUPER_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -884,105 +878,20 @@ class DummyModel(DummyPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        input_ids = _pre_process_input(input_ids)
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        out = super().forward(
+            input_ids,
+            attention_mask,
+            position_ids,
+            past_key_values,
+            inputs_embeds,
+            use_cache,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            cache_position,
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
-            return_legacy_cache = True
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
-
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
-        )
-
-        # embed positions
-        hidden_states = inputs_embeds
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
-
-        for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                )
-
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        next_cache = next_decoder_cache if use_cache else None
-        if return_legacy_cache:
-            next_cache = next_cache.to_legacy_cache()
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        out.logits *= 2**4
+        return out
 
     def _update_causal_mask(
         self,

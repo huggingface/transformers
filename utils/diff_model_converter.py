@@ -326,11 +326,11 @@ def replace_call_to_super(class_finder: ClassFinder, updated_node: cst.ClassDef,
     updated_methods = {f.name.value if hasattr(f, "name") else f: f for f in updated_node.body.body}
     end_meth = []
     for name, func in original_methods.items():
-        if name in updated_methods:
+        if name in updated_methods and updated_methods[name] is not None:
             new_params = updated_methods[name].params
             # Replace the method in the replacement class, preserving decorators
-            kwarg_name =  getattr(updated_methods[name].params,"star_kwarg", None)
-            if kwarg_name.name.value == "super_kwargs":
+            kwarg_name = getattr(updated_methods[name].params,"star_kwarg", None)
+            if kwarg_name and kwarg_name.name.value == "super_kwargs":
                 # TODO here we can do a proper merging :)
                 parent_params = {k.name.value:k for k in func.params.params}
                 parent_params.update({k.name.value:k for k in new_params.params[1:]}) 

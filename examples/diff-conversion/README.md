@@ -2,6 +2,8 @@
 
 `pip install libcst` is a must!
 
+# `sh examples/diff-conversion/convert_examples.sh` to get the converted outputs
+
 The diff converter is a new `linter` specific to `transformers`. It allows us to unpack inheritance in python to convert a modular `diff` file like `diff_gemma.py` into a `single model single file`. 
 
 Examples of possible usage are available in the `examples/diff-conversion`, or `diff_gemma` for a full model usage.
