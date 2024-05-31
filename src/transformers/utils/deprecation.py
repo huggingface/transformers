@@ -32,22 +32,28 @@ def deprecate_kwarg(
     new_name: Optional[str] = None,
     raise_if_greater_or_equal_version: bool = False,
     raise_if_both_names: bool = False,
-    add_message: Optional[str] = None,
+    additional_message: Optional[str] = None,
 ):
     """Function or method decorator to notify user about deprecated keyword argument and replace it with new name if specified.
     If new name is specified, deprecated keyword argument will be replaced with it.
     If new name is not specified, only notification will be shown.
     If raise_error is set to True, ValueError will be raised when deprecated keyword argument is used.
 
-    Args:
-        old_name (`str`): name of the deprecated keyword argument
-        version (`str`): version when the keyword argument was (will be) deprecated
-        new_name (`Optional[str]`, *optional*): new name of the keyword argument.
-        raise_if_ge_version (`bool`, *optional*, defaults to `False`): raise ValueError if deprecated version is greater or equal to current version.
-        raise_if_both_names (`bool`, *optional*, defaults to `False`): raise ValueError if both deprecated and new keyword arguments are set.
+    Parameters:
+        old_name (`str`):
+            Name of the deprecated keyword argument.
+        version (`str`):
+            Version when the keyword argument was (will be) deprecated.
+        new_name (`Optional[str]`, *optional*):
+            New name of the keyword argument.
+        raise_if_ge_version (`bool`, *optional*, defaults to `False`):
+            Weather to raise `ValueError` if deprecated version is greater or equal to the current version.
+        raise_if_both_names (`bool`, *optional*, defaults to `False`):
+            Weather to raise `ValueError` if both deprecated and new keyword arguments are set.
+        additional_message (`Optional[str]`, *optional*):
+            Additional message that will be appended to the default message.
 
-    Raises:
-        ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True
+    Raises:        ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True
     """
 
     deprecated_version = packaging.version.parse(version)
@@ -82,8 +88,8 @@ def deprecate_kwarg(
                 minimum_action = Action.NOTIFY
                 message = f"`{old_name}` is deprecated {version_message}."
 
-            if message is not None and add_message is not None:
-                message = f"{message} {add_message}"
+            if message is not None and additional_message is not None:
+                message = f"{message} {additional_message}"
 
             # update minimum_action if raise_if_greater_or_equal_version is set
             if minimum_action == Action.NOTIFY and raise_if_greater_or_equal_version and is_already_deprecated:
