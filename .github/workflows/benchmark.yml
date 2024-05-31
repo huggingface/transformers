@@ -5,9 +5,7 @@ on:
     - cron: "17 2 * * *"
 
 env:
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
-  TRANSFORMERS_IS_CI: yes
   TF_FORCE_GPU_ALLOW_GROWTH: true
 
 
@@ -31,6 +29,5 @@ jobs:
       - name: Benchmark
         working-directory: /transformers
         run: |
-          echo "Hello Benchmark"
           python3 -m pip install optimum-benchmark>=0.2.0
           HF_TOKEN=${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }} python3 benchmark/benchmark.py --repo_id hf-internal-testing/benchmark_results --path_in_repo $(date +'%Y-%m-%d') --config-dir benchmark/config --config-name generation --commit=${{ github.sha }} backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
