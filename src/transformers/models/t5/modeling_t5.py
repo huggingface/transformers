@@ -282,12 +282,12 @@ class T5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
-        ):
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
+        # if (
+        #     isinstance(self.wo.weight, torch.Tensor)
+        #     and hidden_states.dtype != self.wo.weight.dtype
+        #     and self.wo.weight.dtype != torch.int8
+        # ):
+        #     hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -535,20 +535,15 @@ class T5Attention(nn.Module):
             key_states = key_states[:,:,aranged]
             value_states = value_states[:,:,aranged]
 
-        # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads, real_seq_length, key_length), device=key_states.device, dtype=key_states.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+                position_bias = self.compute_bias(real_seq_length, key_length, device=key_states.device)
 
             # if key and values are already calculated
             # we want only the last query position bias
@@ -565,19 +560,41 @@ class T5Attention(nn.Module):
         else:
             position_bias_masked = position_bias
 
-        scores += position_bias_masked
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_dropout = self.dropout if self.training else 0.0
+
+        if query_states.device.type == "cuda" and position_bias_masked is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=position_bias_masked,
+            dropout_p=attn_dropout,
+            is_causal=position_bias_masked is None,
+            scale=1.0,
+        )
+        attn_output = unshape(attn_output)
+
+        # scores = torch.matmul(
+        #     query_states, key_states.transpose(3, 2)
+        # )
+        # scores += position_bias_masked
+        # attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+        #     scores
+        # )
+        # attn_weights = nn.functional.dropout(
+        #     attn_weights, p=self.dropout, training=self.training
+        # )
+        # attn_output = unshape(torch.matmul(attn_weights, value_states))
+
 
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
@@ -824,6 +841,7 @@ class T5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
+    _supports_sdpa = True
 
     @property
     def dummy_inputs(self):
