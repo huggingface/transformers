@@ -1358,7 +1358,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 )
             past_key_values_length = past_key_values[0].get_seq_length()
 
-        if position_ids is None:
+        if position_ids is None and cache_position is not None:
             position_ids = cache_position.unsqueeze(0)
 
         if inputs_embeds is None:
