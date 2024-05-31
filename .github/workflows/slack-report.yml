@@ -56,6 +56,7 @@ jobs:
         # empty string, and the called script still get one argument (which is the emtpy string).
         run: |
           sudo apt-get install -y curl
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ inputs.folder_slices }}"
