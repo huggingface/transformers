@@ -44,12 +44,12 @@ from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,
+    filter_out_non_signature_kwargs,
     is_torch_available,
     is_torch_tensor,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import filter_out_non_signature_kwargs
 
 
 logger = logging.get_logger(__name__)
