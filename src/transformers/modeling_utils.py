@@ -2512,7 +2512,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # if any model parameters are offloaded to the disk, make module map
             if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
                 warnings.warn(
-                    "Attempting to save a model with disk-offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
+                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
                 )
                 for name, module in model_to_save.named_modules():
                     if name == "":
