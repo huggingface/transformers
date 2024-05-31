@@ -648,12 +648,12 @@ class WhisperGenerationMixin:
             )
 
             # 6.5 prepare decoder input ids
-            if not is_shortform:
-                suppress_tokens = _get_attr_from_logit_processors(
-                    logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
-                )
-            else:
-                suppress_tokens = None
+            # if not is_shortform:
+            suppress_tokens = _get_attr_from_logit_processors(
+                logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
+            )
+            # else:
+            #     suppress_tokens = None
 
             # Remove decoder_input_ids if present in kwargs:
             decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -692,10 +692,10 @@ class WhisperGenerationMixin:
             )
 
             # 6.7 Set current `begin_index` for all logit processors
-            if not is_shortform: 
-                for proc in logits_processor:
-                    if hasattr(proc, "set_begin_index"):
-                        proc.set_begin_index(decoder_input_ids.shape[-1])
+            # if not is_shortform: 
+            for proc in logits_processor:
+                if hasattr(proc, "set_begin_index"):
+                    proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.8 Run generate with fallback
             if segment_input is None: 
