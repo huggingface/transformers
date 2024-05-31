@@ -1692,9 +1692,7 @@ class GenerationMixin:
                     encoder_outputs = model_kwargs["encoder_outputs"][0]
                     model_kwargs["past_key_values"] = (
                         model_kwargs["past_key_values"],
-                        self._get_cache(
-                            generation_config.cache_implementation, batch_size, encoder_outputs.shape[1]
-                        )
+                        self._get_cache(generation_config.cache_implementation, batch_size, encoder_outputs.shape[1]),
                     )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:

@@ -15,7 +15,7 @@
 """PyTorch Whisper model."""
 
 import math
-from typing import Optional, Tuple, Union, List
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -23,11 +23,13 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
 from transformers import Cache, DynamicCache, StaticCache
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa, \
-    AttentionMaskConverter
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -306,7 +308,11 @@ class WhisperAttention(nn.Module):
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if is_cross_attention:
             # decoder cross-attention
-            if past_key_value is not None and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx]) or past_key_value.get_seq_length(self.layer_idx):
+            if (
+                past_key_value is not None
+                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
+                or past_key_value.get_seq_length(self.layer_idx)
+            ):
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
@@ -318,7 +324,9 @@ class WhisperAttention(nn.Module):
                     # save all cross attention key/value_states to cache
                     # further calls to cross_attention layer can then reuse all cross-attention
                     cache_position = torch.arange(key_states.size(2), device=key_states.device)
-                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                    key_states, value_states = past_key_value.update(
+                        key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    )
         else:
             # either encoder self-attention or decoder self-attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
@@ -328,7 +336,9 @@ class WhisperAttention(nn.Module):
                 # further calls to uni-directional self-attention can concat previous decoder
                 # key/value_states to current projected key/value_state
                 # note: if encoder bi-directional self-attention `past_key_value` is always `None`
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
@@ -411,7 +421,11 @@ class WhisperFlashAttention2(WhisperAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if is_cross_attention:
             # decoder cross-attention
-            if past_key_value is not None and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx]) or past_key_value.get_seq_length(self.layer_idx):
+            if (
+                past_key_value is not None
+                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
+                or past_key_value.get_seq_length(self.layer_idx)
+            ):
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
@@ -423,7 +437,9 @@ class WhisperFlashAttention2(WhisperAttention):
                     # save all cross attention key/value_states to cache
                     # further calls to cross_attention layer can then reuse all cross-attention
                     cache_position = torch.arange(key_states.size(2), device=key_states.device)
-                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                    key_states, value_states = past_key_value.update(
+                        key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    )
         else:
             # either encoder self-attention or decoder self-attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
@@ -433,7 +449,9 @@ class WhisperFlashAttention2(WhisperAttention):
                 # further calls to uni-directional self-attention can concat previous decoder
                 # key/value_states to current projected key/value_state
                 # note: if encoder bi-directional self-attention `past_key_value` is always `None`
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]
         #  We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
@@ -622,7 +640,11 @@ class WhisperSdpaAttention(WhisperAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if is_cross_attention:
             # decoder cross-attention
-            if past_key_value is not None and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx]) or past_key_value.get_seq_length(self.layer_idx):
+            if (
+                past_key_value is not None
+                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
+                or past_key_value.get_seq_length(self.layer_idx)
+            ):
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
@@ -634,7 +656,9 @@ class WhisperSdpaAttention(WhisperAttention):
                     # save all cross attention key/value_states to cache
                     # further calls to cross_attention layer can then reuse all cross-attention
                     cache_position = torch.arange(key_states.size(2), device=key_states.device)
-                    key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                    key_states, value_states = past_key_value.update(
+                        key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    )
         else:
             # either encoder self-attention or decoder self-attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
@@ -644,7 +668,9 @@ class WhisperSdpaAttention(WhisperAttention):
                 # further calls to uni-directional self-attention can concat previous decoder
                 # key/value_states to current projected key/value_state
                 # note: if encoder bi-directional self-attention `past_key_value` is always `None`
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
@@ -1225,7 +1251,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
-        self.layers = nn.ModuleList([WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [WhisperDecoderLayer(config, layer_idx) for layer_idx in range(config.decoder_layers)]
+        )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
@@ -1893,9 +1921,11 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
 
             if cache_position is None:
-                cache_position = torch.arange(past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device)
+                cache_position = torch.arange(
+                    past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device
+                )
             elif use_cache:
-                cache_position = cache_position[-decoder_input_ids.shape[1]:]
+                cache_position = cache_position[-decoder_input_ids.shape[1] :]
 
         return {
             "encoder_outputs": encoder_outputs,
