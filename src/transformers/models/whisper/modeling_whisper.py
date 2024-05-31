@@ -306,7 +306,7 @@ class WhisperAttention(nn.Module):
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if is_cross_attention:
             # decoder cross-attention
-            if past_key_value is not None and (isinstance(past_key_value, StaticCache) and past_key_value.is_initialized[self.layer_idx]) or past_key_value.get_seq_length(self.layer_idx):
+            if past_key_value is not None and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx]) or past_key_value.get_seq_length(self.layer_idx):
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
