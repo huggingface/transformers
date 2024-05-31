@@ -710,9 +710,11 @@ class WhisperGenerationMixin:
         )
         sequences = _pad_to_max_length(final_segments, pad_token_id = generation_config.pad_token_id, padding="right")
 
-        if is_shortform: 
-            # add decoder_input_ids tokens:
+        # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
+        if return_segments:
+            return {"sequences": sequences, "segments": final_segments}
 
+        if is_shortform: 
             sequences = torch.cat([decoder_input_ids.to(sequences.device), sequences], dim=-1)
             # add eos token:
             if generation_config.max_new_tokens is None:
@@ -724,22 +726,16 @@ class WhisperGenerationMixin:
                 outputs['token_timestamps'] = torch.stack([d['token_timestamps'] for d in seek_outputs], dim=0)
             else:
                 outputs = sequences
-            if generation_config.return_dict_in_generate:
                 
+            if generation_config.return_dict_in_generate:
                 if num_return_sequences > 1:
-                    seek_outputs_short_form.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
-                    seek_outputs_short_form.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
-
+                    outputs = seek_outputs_short_form
+                    outputs.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
+                    outputs.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
                 if return_token_timestamps:
-                    seek_outputs_short_form['token_timestamps'] = outputs['token_timestamps']
-                return seek_outputs_short_form
+                    outputs['token_timestamps'] = outputs['token_timestamps']
 
-            else: 
-                return outputs
-
-        # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
-        if return_segments:
-            return {"sequences": sequences, "segments": final_segments}
+            return outputs
 
         return sequences
 
