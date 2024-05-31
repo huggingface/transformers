@@ -894,7 +894,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if getattr(self._tokenizer, "normalizer", None) == None:
                 return
             curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
-            if not curr_normalizer['normalizers']:
+            if 'normalizers' not in curr_normalizer:
                 return
             prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
             if prepend_normalizer:
