@@ -118,7 +118,9 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
-    from accelerate.utils.modeling import get_state_dict_from_offload
+    accelerate_version = version.parse(importlib.metadata.version("accelerate"))
+    if accelerate_version > version.parse("0.31.1"):
+        from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -2639,6 +2641,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map:
+                if accelerate_version < version.parse("0.31.1"):
+                    raise ImportError(
+                        f"You need accelerate version to be greater or equal than 0.31.1 to save models with offloaded parameters. Detected version {accelerate_version}. "
+                        f"Please upgrade accelerate with `pip install -U accelerate`"
+                    )
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
                 for module_name in state_dict.keys():
