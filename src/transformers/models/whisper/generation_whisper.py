@@ -690,7 +690,6 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
-
             # 6.7 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
                 prev_i = batch_idx_map[i] 
@@ -791,10 +790,8 @@ class WhisperGenerationMixin:
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
             generation_config.temperature = temperature if generation_config.do_sample else 1.0
-            # The following lines are commented for compatibility with the "test_beam_search_generate", but 
-            # in the official whisper repo, num_beams is set to 1 when temperature is 0...
-            # if generation_config.do_sample:
-            #     generation_config.num_beams = 1
+            if generation_config.do_sample:
+                generation_config.num_beams = 1
 
             generate_kwargs = copy.copy(kwargs)
             for key in ["do_sample", "temperature", "num_beams"]:
