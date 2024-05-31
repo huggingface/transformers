@@ -314,12 +314,12 @@ tokenizer.chat_template = template  # Set the new template
 tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 ```
 
-由于[`~PreTrainedTokenizer.apply_chat_template`]方法是由[`ConversationalPipeline`]类调用，
-因此一旦你设置了聊天模板，您的模型将自动与[`ConversationalPipeline`]兼容。
+由于[`~PreTrainedTokenizer.apply_chat_template`]方法是由[`TextGenerationPipeline`]类调用，
+因此一旦你设置了聊天模板，您的模型将自动与[`TextGenerationPipeline`]兼容。
 ### “默认”模板是什么？
 
 在引入聊天模板（chat_template）之前，聊天prompt是在模型中通过硬编码处理的。为了向前兼容，我们保留了这种硬编码处理聊天prompt的方法。
-如果一个模型没有设置聊天模板，但其模型有默认模板，`ConversationalPipeline`类和`apply_chat_template`等方法将使用该模型的聊天模板。
+如果一个模型没有设置聊天模板，但其模型有默认模板，`TextGenerationPipeline`类和`apply_chat_template`等方法将使用该模型的聊天模板。
 您可以通过检查`tokenizer.default_chat_template`属性来查找`tokenizer`的默认模板。
 
 这是我们纯粹为了向前兼容性而做的事情，以避免破坏任何现有的工作流程。即使默认的聊天模板适用于您的模型，
@@ -364,7 +364,7 @@ How are you?<|im_end|>
 I'm doing great!<|im_end|>
 ```
 
-`user`，`system`和`assistant`是对话助手模型的标准角色，如果您的模型要与[`ConversationalPipeline`]兼容，我们建议你使用这些角色。
+`user`，`system`和`assistant`是对话助手模型的标准角色，如果您的模型要与[`TextGenerationPipeline`]兼容，我们建议你使用这些角色。
 但您可以不局限于这些角色，模板非常灵活，任何字符串都可以成为角色。
 
 ### 如何添加聊天模板？
@@ -375,7 +375,7 @@ I'm doing great!<|im_end|>
 请发起一个[pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions)，以便正确设置该属性！
 
 一旦属性设置完成，就完成了！`tokenizer.apply_chat_template`现在将在该模型中正常工作，
-这意味着它也会自动支持在诸如`ConversationalPipeline`的地方！
+这意味着它也会自动支持在诸如`TextGenerationPipeline`的地方！
 
 通过确保模型具有这一属性，我们可以确保整个社区都能充分利用开源模型的全部功能。
 格式不匹配已经困扰这个领域并悄悄地损害了性能太久了，是时候结束它们了！
