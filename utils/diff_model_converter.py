@@ -473,14 +473,17 @@ class DiffConverterTransformer(CSTTransformer):
         return node
 
     def leave_Module(self, original_node: cst.Assign, node):
-        imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
-        for visiter in self.visited_module.values():
-            imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
+        if len(self.new_body.keys()) > 0:
+            imports = {self.python_module.code_for_node(k): k for k in self.all_imports}
+            for visiter in self.visited_module.values():
+                imports.update({self.python_module.code_for_node(k): k for k in visiter.imports.values()})
 
-        new_body = list(imports.values())
-        if hasattr(self, "config_body"):
-            self.config_body = self.all_imports + self.config_body
-        new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
+            new_body = list(imports.values())
+            if hasattr(self, "config_body"):
+                self.config_body = self.all_imports + self.config_body
+            new_body += [k[1]["node"] for k in sorted(self.new_body.items(), key=lambda x: x[1]["insert_idx"])]
+        else:
+            new_body = []
         return node.with_changes(body=[*new_body])
 
 
@@ -496,7 +499,7 @@ def convert_file(diff_file, cst_transformers=None):
     new_mod = wrapper.visit(cst_transformers)
     ruffed_code = run_ruff(new_mod.code, True)
     formatted_code = run_ruff(ruffed_code, False)
-    if len(formatted_code) > 0:
+    if len(formatted_code.strip()) > 0:
         with open(diff_file.replace("diff_", "modeling_"), "w") as f:
             f.write(AUTO_GENERATED_MESSAGE + formatted_code)
 
