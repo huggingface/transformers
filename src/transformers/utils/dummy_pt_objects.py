@@ -655,6 +655,9 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 MODEL_FOR_IMAGE_MAPPING = None
 
 
+MODEL_FOR_IMAGE_MATCHING_MAPPING = None
+
+
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
 
 
@@ -5064,6 +5067,20 @@ class LevitModel(metaclass=DummyObject):
 
 
 class LevitPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LightGlueForKeypointMatching(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LightGluePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
