@@ -3439,7 +3439,7 @@ class Trainer:
         """
         model.train()
         if "ScheduleFree" in self.optimizer.__class__.__name__:
-            self.optimizer.eval()
+            self.optimizer.train()
 
         inputs = self._prepare_inputs(inputs)
         if is_sagemaker_mp_enabled():
