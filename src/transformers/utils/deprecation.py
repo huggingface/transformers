@@ -21,7 +21,7 @@ def deprecate_kwarg(
     old_name: str,
     version: str,
     new_name: Optional[str] = None,
-    raise_if_ge_version: bool = False,
+    raise_if_greater_or_equal_version: bool = False,
     raise_if_both_names: bool = False,
     add_message: Optional[str] = None,
 ):
