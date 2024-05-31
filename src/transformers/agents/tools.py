@@ -185,7 +185,7 @@ class Tool:
             "tool_class": full_name,
             "description": self.description,
             "name": self.name,
-            "inputs": str(self.inputs),
+            "inputs": self.inputs,
             "output_type": str(self.output_type),
         }
         with open(config_file, "w", encoding="utf-8") as f:
@@ -315,7 +315,7 @@ class Tool:
         if tool_class.output_type != custom_tool["output_type"]:
             tool_class.output_type = custom_tool["output_type"]
 
-        return tool_class(model_repo_id, token=token, **kwargs)
+        return tool_class(**kwargs)
 
     def push_to_hub(
         self,

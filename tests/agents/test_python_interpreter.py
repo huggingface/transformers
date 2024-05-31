@@ -353,3 +353,131 @@ if char.isalpha():
         result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state=state)
         assert result == "Ok no one cares"
         assert state["print_outputs"] == "Hello world!\nOk no one cares\n"
+
+    def test_tuple_target_in_iterator(self):
+        code = "for a, b in [('Ralf Weikert', 'Austria'), ('Samuel Seungwon Lee', 'South Korea')]:res = a.split()[0]"
+        result = evaluate_python_code(code, BASE_PYTHON_TOOLS, state={})
+        assert result == "Samuel"
+
+    def test_classes(self):
+        code = """
+class Animal:
+    species = "Generic Animal"
+
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def sound(self):
+        return "The animal makes a sound."
+
+    def __str__(self):
+        return f"{self.name}, {self.age} years old"
+
+class Dog(Animal):
+    species = "Canine"
+
+    def __init__(self, name, age, breed):
+        super().__init__(name, age)
+        self.breed = breed
+
+    def sound(self):
+        return "The dog barks."
+
+    def __str__(self):
+        return f"{self.name}, {self.age} years old, {self.breed}"
+
+class Cat(Animal):
+    def sound(self):
+        return "The cat meows."
+
+    def __str__(self):
+        return f"{self.name}, {self.age} years old, {self.species}"
+
+
+# Testing multiple instances
+dog1 = Dog("Fido", 3, "Labrador")
+dog2 = Dog("Buddy", 5, "Golden Retriever")
+
+# Testing method with built-in function
+animals = [dog1, dog2, Cat("Whiskers", 2)]
+num_animals = len(animals)
+
+# Testing exceptions in methods
+class ExceptionTest:
+    def method_that_raises(self):
+        raise ValueError("An error occurred")
+
+try:
+    exc_test = ExceptionTest()
+    exc_test.method_that_raises()
+except ValueError as e:
+    exception_message = str(e)
+
+
+# Collecting results
+dog1_sound = dog1.sound()
+dog1_str = str(dog1)
+dog2_sound = dog2.sound()
+dog2_str = str(dog2)
+cat = Cat("Whiskers", 2)
+cat_sound = cat.sound()
+cat_str = str(cat)
+    """
+        state = {}
+        evaluate_python_code(code, {"print": print, "len": len, "super": super, "str": str, "sum": sum}, state=state)
+
+        # Assert results
+        assert state["dog1_sound"] == "The dog barks."
+        assert state["dog1_str"] == "Fido, 3 years old, Labrador"
+        assert state["dog2_sound"] == "The dog barks."
+        assert state["dog2_str"] == "Buddy, 5 years old, Golden Retriever"
+        assert state["cat_sound"] == "The cat meows."
+        assert state["cat_str"] == "Whiskers, 2 years old, Generic Animal"
+        assert state["num_animals"] == 3
+        assert state["exception_message"] == "An error occurred"
+
+    def test_variable_args(self):
+        code = """
+def var_args_method(self, *args, **kwargs):
+    return sum(args) + sum(kwargs.values())
+
+var_args_method(1, 2, 3, x=4, y=5)
+"""
+        state = {}
+        result = evaluate_python_code(code, {"sum": sum}, state=state)
+        assert result == 15
+
+    def test_exceptions(self):
+        code = """
+def method_that_raises(self):
+    raise ValueError("An error occurred")
+
+try:
+    method_that_raises()
+except ValueError as e:
+    exception_message = str(e)
+    """
+        state = {}
+        evaluate_python_code(code, {"print": print, "len": len, "super": super, "str": str, "sum": sum}, state=state)
+        assert state["exception_message"] == "An error occurred"
+
+    def test_subscript(self):
+        code = "vendor = {'revenue': 31000, 'rent': 50312}; vendor['ratio'] = round(vendor['revenue'] / vendor['rent'], 2)"
+
+        state = {}
+        evaluate_python_code(code, {"min": min, "print": print, "round": round}, state=state)
+        assert state["vendor"] == {"revenue": 31000, "rent": 50312, "ratio": 0.62}
+
+    def test_print(self):
+        code = "print(min([1, 2, 3]))"
+        state = {}
+        result = evaluate_python_code(code, {"min": min, "print": print}, state=state)
+        assert result == "1"
+        assert state["print_outputs"] == "1\n"
+
+    def test_types_as_objects(self):
+        code = "type_a = float(2); type_b = str; type_c = int"
+        state = {}
+        result = evaluate_python_code(code, {"float": float, "str": str, "int": int}, state=state)
+        assert result == int
