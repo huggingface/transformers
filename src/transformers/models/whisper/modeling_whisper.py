@@ -381,9 +381,6 @@ class WhisperFlashAttention2(WhisperAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -394,6 +391,11 @@ class WhisperFlashAttention2(WhisperAttention):
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if isinstance(past_key_value, StaticCache):
+            raise ValueError(
+                "The `static` cache implementation is not compatible with `attn_implementation='flash_attention_2'`. "
+                "Use `attn_implementation='sdpa'` in the meantime, and open an issue at https://github.com/huggingface/transformers"
+            )
         # WhisperFlashAttention2 attention does not support output_attentions
         if output_attentions:
             raise ValueError("WhisperFlashAttention2 attention does not support output_attentions")
@@ -433,9 +435,11 @@ class WhisperFlashAttention2(WhisperAttention):
                 # note: if encoder bi-directional self-attention `past_key_value` is always `None`
                 key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, {"cache_position": cache_position})
 
-        key_states = self._reshape(key_states, tgt_len, bsz)
-        value_states = self._reshape(value_states, tgt_len, bsz)
-        query_states = self._reshape(query_states, tgt_len, bsz)
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]
+        #  We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
