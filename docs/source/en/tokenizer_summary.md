@@ -73,7 +73,7 @@ As can be seen space and punctuation tokenization, as well as rule-based tokeniz
 punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined
 as splitting sentences into words. While it's the most intuitive way to split texts into smaller chunks, this
 tokenization method can lead to problems for massive text corpora. In this case, space and punctuation tokenization
-usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, [Transformer XL](model_doc/transfo-xl.md) uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
+usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, [Transformer XL](model_doc/transfo-xl) uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
 
 Such a big vocabulary size forces the model to have an enormous embedding matrix as the input and output layer, which
 causes both an increased memory and time complexity. In general, transformers models rarely have a vocabulary size
