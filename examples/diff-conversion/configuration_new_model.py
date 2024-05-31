@@ -7,7 +7,6 @@
 # Example where we only want to overwrite the defaults of an init
 
 
-
 class NewModelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NewModelModel`]. It is used to instantiate an NewModel

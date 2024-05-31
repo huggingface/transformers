@@ -4,8 +4,6 @@
 #         the file from the diff. If any change should be done, please apply the change to the
 #                                    diff.py file directly.
 #           🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
-
 class MyNewModelConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MyNewModelModel`]. It is used to instantiate an MyNewModel
@@ -116,7 +114,9 @@ class MyNewModelConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        mlp_bias=True, new_param=0, **kwargs,
+        mlp_bias=True,
+        new_param=0,
+        **kwargs,
     ):
         self.mlp_bias = mlp_bias
         self.new_param = new_param

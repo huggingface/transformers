@@ -516,7 +516,7 @@ def convert_file(diff_file, cst_transformers=None):
         with open(diff_file.replace("diff_", "configuration_"), "w") as f:
             ruffed_code = run_ruff(config_module.code, True)
             formatted_code = run_ruff(ruffed_code, False)
-            f.write(AUTO_GENERATED_MESSAGE + ruffed_code)
+            f.write(AUTO_GENERATED_MESSAGE + formatted_code)
 
     # TODO optimize by re-using the class_finder
     return cst_transformers
