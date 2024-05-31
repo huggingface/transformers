@@ -170,7 +170,7 @@ class CacheConfig:
     # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
     def update(self, **kwargs):
         """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
 
         Args:
