@@ -116,9 +116,10 @@ class MyNewModelConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        mlp_bias=True, **kwargs,
+        mlp_bias=True, new_param=0, **kwargs,
     ):
         self.mlp_bias = mlp_bias
+        self.new_param = new_param
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
