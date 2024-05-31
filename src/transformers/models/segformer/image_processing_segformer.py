@@ -35,7 +35,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.kwargs_validation import filter_out_non_signature_kwargs
+from ...utils.generic import filter_out_non_signature_kwargs
 
 
 if is_vision_available():

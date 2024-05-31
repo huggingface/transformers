@@ -49,7 +49,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.kwargs_validation import filter_out_non_signature_kwargs
+from ...utils.generic import filter_out_non_signature_kwargs
 
 
 logger = logging.get_logger(__name__)
