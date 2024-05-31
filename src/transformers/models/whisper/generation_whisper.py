@@ -610,27 +610,26 @@ class WhisperGenerationMixin:
             batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames, is_shortform=is_shortform
         )
 
-        # 6.2 Preppare running variables, list for generation
-        cur_bsz = batch_size
+        # 6.2 Prepare running variables, list for generation
+       
+        num_return_sequences = generation_config.num_return_sequences
+
+        batch_size, batch_idx_map, cur_bsz, input_features, seek, max_frames, init_tokens, do_condition_on_prev_tokens = self._expand_variables_for_generation(
+            input_features=input_features, 
+            seek=seek, 
+            max_frames=max_frames, 
+            init_tokens=init_tokens,
+            batch_size=batch_size, 
+            condition_on_prev_tokens=condition_on_prev_tokens,
+            generation_config=generation_config
+        )
+
+
         current_segments = self._prepare_segments(
             prompt_ids=prompt_ids,
             batch_size=batch_size,
             generation_config=generation_config,
         )
-
-        batch_idx_map = list(range(batch_size))
-        do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
-
-        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
-            current_segments = [[] for _ in range(batch_size*generation_config.num_return_sequences)]
-            batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
-            cur_bsz = len(batch_idx_map)
-            seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            input_features = torch.stack([input_features[i // generation_config.num_return_sequences]  for i in range(len(batch_idx_map))]).to(input_features.device)
-            max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            init_tokens = torch.tensor([init_tokens[i //generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1).to(init_tokens.device)
-            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
-            generation_config.num_return_sequences = 1
 
 
 
@@ -793,6 +792,11 @@ class WhisperGenerationMixin:
             else:
                 outputs = sequences
             if generation_config.return_dict_in_generate:
+                
+                if num_return_sequences > 1:
+                    seek_outputs_short_form.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
+                    seek_outputs_short_form.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
+
                 if return_token_timestamps:
                     seek_outputs_short_form['token_timestamps'] = outputs['token_timestamps']
                 return seek_outputs_short_form
@@ -1034,6 +1038,25 @@ class WhisperGenerationMixin:
                 should_skip = True
 
         return needs_fallback, should_skip
+    
+    def _expand_variables_for_generation(self, input_features, seek, max_frames, init_tokens, batch_size, condition_on_prev_tokens, generation_config): 
+        
+        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
+            batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
+            batch_size = len(batch_idx_map)
+            cur_bsz = len(batch_idx_map)
+            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
+            input_features = torch.stack([input_features[i // generation_config.num_return_sequences]  for i in range(len(batch_idx_map))]).to(input_features.device)
+            seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
+            init_tokens = torch.tensor([init_tokens[i //generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1).to(init_tokens.device)
+            generation_config.num_return_sequences = 1
+        else: 
+            cur_bsz = batch_size
+            batch_idx_map = list(range(batch_size))
+            do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
+
+        return batch_size, batch_idx_map, cur_bsz, input_features, seek, max_frames, init_tokens, do_condition_on_prev_tokens
 
     @staticmethod
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
@@ -1516,6 +1539,8 @@ class WhisperGenerationMixin:
             no_speech_detector.set_model(self)
 
         return logits_processor
+    
+
 
     @staticmethod
     def _maybe_reduce_batch(input_features, seek, max_frames, cur_bsz, batch_idx_map):
