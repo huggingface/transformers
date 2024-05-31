@@ -53,7 +53,8 @@ def deprecate_kwarg(
         additional_message (`Optional[str]`, *optional*):
             Additional message that will be appended to the default message.
 
-    Raises:        ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True
+    Raises:        
+        ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True.
     """
 
     deprecated_version = packaging.version.parse(version)
