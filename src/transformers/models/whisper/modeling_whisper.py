@@ -895,6 +895,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1443,7 +1444,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
+        next_cache = next_decoder_cache
         if use_cache and use_legacy_cache:
             next_cache = ()
             for self_attn, cross_attn in zip(
@@ -1875,7 +1876,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
         if past_key_values is not None:
             if isinstance(past_key_values[0], Cache):
-                past_length = past_key_values[0].get_seq_length
+                past_length = past_key_values[0].get_seq_length()
             else:
                 past_length = past_key_values[0][0].shape[2]
 
