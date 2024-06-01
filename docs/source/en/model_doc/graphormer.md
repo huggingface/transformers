@@ -1,7 +1,7 @@
 <!--Copyright 2022 The HuggingFace Team and Microsoft. All rights reserved.
 
 Licensed under the MIT License; you may not use this file except in compliance with
-the License. 
+the License.
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
@@ -14,9 +14,17 @@ rendered properly in your Markdown viewer.
 
 # Graphormer
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
+
+</Tip>
+
 ## Overview
 
-The Graphormer model was proposed in [Do Transformers Really Perform Bad for Graph Representation?](https://arxiv.org/abs/2106.05234)  by 
+The Graphormer model was proposed in [Do Transformers Really Perform Bad for Graph Representation?](https://arxiv.org/abs/2106.05234)  by
 Chengxuan Ying, Tianle Cai, Shengjie Luo, Shuxin Zheng, Guolin Ke, Di He, Yanming Shen and Tie-Yan Liu. It is a Graph Transformer model, modified to allow computations on graphs instead of text sequences by generating embeddings and features of interest during preprocessing and collation, then using a modified attention.
 
 The abstract from the paper is the following:

@@ -383,6 +383,10 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if bnb_4bit_quant_storage is None:
             self.bnb_4bit_quant_storage = torch.uint8
         elif isinstance(bnb_4bit_quant_storage, str):
+            if bnb_4bit_quant_storage not in ["float16", "float32", "int8", "uint8", "float64", "bfloat16"]:
+                raise ValueError(
+                    "`bnb_4bit_quant_storage` must be a valid string (one of 'float16', 'float32', 'int8', 'uint8', 'float64', 'bfloat16') "
+                )
             self.bnb_4bit_quant_storage = getattr(torch, bnb_4bit_quant_storage)
         elif isinstance(bnb_4bit_quant_storage, torch.dtype):
             self.bnb_4bit_quant_storage = bnb_4bit_quant_storage
