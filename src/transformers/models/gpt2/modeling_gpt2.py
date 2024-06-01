@@ -610,6 +610,7 @@ class GPT2SdpaAttention(GPT2Attention):
 
         bsz, q_len, _ = hidden_states.size()
 
+        # Initial attention projections
         is_cross_attention = encoder_hidden_states is not None
         if is_cross_attention:
             if not hasattr(self, "q_attn"):
@@ -628,6 +629,7 @@ class GPT2SdpaAttention(GPT2Attention):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
+        # Optional kv caching
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
@@ -644,7 +646,7 @@ class GPT2SdpaAttention(GPT2Attention):
             key = key.contiguous()
             value = value.contiguous()
 
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # In SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if attention_mask is None and q_len > 1 and not is_cross_attention else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
@@ -660,7 +662,7 @@ class GPT2SdpaAttention(GPT2Attention):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, self.embed_dim)
 
-        # Final projections
+        # Final projection
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
@@ -1137,7 +1139,6 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        bsz, seq_len, _ = inputs_embeds.shape
         _use_sdpa = self._use_sdpa and output_attentions is False and head_mask is None
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
@@ -1146,7 +1147,7 @@ class GPT2Model(GPT2PreTrainedModel):
             elif _use_sdpa:
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask=attention_mask,
-                    input_shape=(bsz, seq_len),
+                    input_shape=(batch_size, input_shape[-1]),
                     inputs_embeds=inputs_embeds,
                     past_key_values_length=past_length,
                 )
@@ -1175,7 +1176,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
             if _use_sdpa:
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=seq_len
+                    mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=input_shape[-1]
                 )
             else:
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
