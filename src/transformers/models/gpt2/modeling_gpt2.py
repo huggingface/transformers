@@ -628,8 +628,6 @@ class GPT2SdpaAttention(GPT2Attention):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        kv_len = key.shape[2]
-
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
@@ -639,9 +637,6 @@ class GPT2SdpaAttention(GPT2Attention):
         present = None
         if use_cache is True:
             present = (key, value)
-
-        if attention_mask is not None and not is_cross_attention:
-            attention_mask = attention_mask[:, :, :, :kv_len]
 
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
         if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
