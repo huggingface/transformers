@@ -1149,7 +1149,8 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        bsz, seq_len, _ = inputs_embeds.shape
+        #bsz, seq_len, _ = inputs_embeds.shape
+        bsz, seq_len = input_shape
         _use_sdpa = self._use_sdpa and output_attentions is False and not any(head_mask)
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
