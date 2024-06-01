@@ -938,13 +938,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
@@ -954,7 +947,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             attention_mask = attention_mask.view(batch_size, -1)
             if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self._use_sdpa and not output_attentions and not any(head_mask):
+            elif self._use_sdpa and not output_attentions and head_mask is None:
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask=attention_mask,
                     input_shape=(batch_size, seq_length),
@@ -968,6 +961,13 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                     inputs_embeds=inputs_embeds,
                     past_key_values_length=past_length,
                 )
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.emb_dropout(inputs_embeds)
 
