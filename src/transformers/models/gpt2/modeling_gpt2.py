@@ -1137,21 +1137,14 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape n_layer x batch x n_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        #bsz, seq_len, _ = inputs_embeds.shape
-        bsz, seq_len = input_shape
-        _use_sdpa = self._use_sdpa and output_attentions is False and not any(head_mask)
+        bsz, seq_len, _ = inputs_embeds.shape
+        _use_sdpa = self._use_sdpa and output_attentions is False and head_mask is None
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
             if self._use_flash_attention_2:
@@ -1194,6 +1187,12 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # head_mask has shape n_layer x batch x n_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
