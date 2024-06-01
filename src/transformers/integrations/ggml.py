@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter
+from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -516,9 +516,9 @@ class GGUFTokenizerSkeleton:
         for k, v in dict_.items():
             setattr(self, k, v)
 
-        if not hasattr(self, "tokens") or not hasattr(self, "scores"):
+        if (not hasattr(self, "tokens") or not hasattr(self, "scores")) and not hasattr(self, "merges"):
             raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer to be instantiated.")
-        else:
+        elif not hasattr(self, "merges"):
             tokens = self.tokens
             scores = self.scores
             vocab = {t: scores[i] for i, t in enumerate(tokens)}
@@ -588,12 +588,33 @@ class GGUFLlamaConverter(LlamaConverter):
         return decoders.Sequence(sequence)
 
 
+class GGUFQwen2Converter(Qwen2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+        tokenizer = super().converted(vocab, merges)
+
+        tokenizer.add_special_tokens(
+            [
+                AddedToken("<|endoftext|>", normalized=False, special=True),
+                AddedToken("<|im_start|>", normalized=False, special=True),
+                AddedToken("<|im_end|>", normalized=False, special=True),
+            ]
+        )
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
+    "mistral": GGUFLlamaConverter,
+    "qwen2": GGUFQwen2Converter,
 }
 
 
-def convert_gguf_tokenizer(tokenizer_dict) -> Tokenizer:
+def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -606,6 +627,6 @@ def convert_gguf_tokenizer(tokenizer_dict) -> Tokenizer:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
         [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
-    tokenizer_class_name = tokenizer_dict["tokenizer_type"]
+    tokenizer_class_name = architecture
     converter_class = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name]
     return converter_class(tokenizer_dict).converted()
