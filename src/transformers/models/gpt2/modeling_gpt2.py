@@ -19,17 +19,18 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from packaging import version
 from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -38,7 +39,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask_for_sdpa, _prepare_4d_attention_mask_for_sdpa
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
@@ -580,15 +580,15 @@ class GPT2SdpaAttention(GPT2Attention):
     # Adapted from GPT2Attention.forward and following other sdpa implementations
     # such as transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
-            self,
-            hidden_states: Optional[Tuple[torch.FloatTensor]],
-            layer_past: Optional[Tuple[torch.Tensor]] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.Tensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            use_cache: Optional[bool] = False,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if output_attentions or head_mask is not None:
             logger.warning_once(
@@ -628,7 +628,7 @@ class GPT2SdpaAttention(GPT2Attention):
         key = self._split_heads(key, self.num_heads, self.head_dim)
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        tgt_len = key.shape[2]
+        kv_len = key.shape[2]
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -641,7 +641,7 @@ class GPT2SdpaAttention(GPT2Attention):
             present = (key, value)
 
         if attention_mask is not None and not is_cross_attention:
-            attention_mask = attention_mask[:, :, :, : tgt_len]
+            attention_mask = attention_mask[:, :, :, :kv_len]
 
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
         if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
@@ -658,7 +658,7 @@ class GPT2SdpaAttention(GPT2Attention):
             value,
             attn_mask=attention_mask,
             dropout_p=self.attn_dropout.p if self.training else 0.0,
-            is_causal=is_causal
+            is_causal=is_causal,
         )
 
         # Reshape outputs
@@ -689,11 +689,7 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
-GPT2_ATTENTION_CLASSES = {
-    "eager": GPT2Attention,
-    "flash_attention_2": GPT2FlashAttention2,
-    "sdpa": GPT2SdpaAttention
-}
+GPT2_ATTENTION_CLASSES = {"eager": GPT2Attention, "flash_attention_2": GPT2FlashAttention2, "sdpa": GPT2SdpaAttention}
 
 
 class GPT2Block(nn.Module):
@@ -1152,7 +1148,7 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        bsz, seq_len = input_shape
+        bsz, seq_len, _ = inputs_embeds.shape
         _use_sdpa = self._use_sdpa and output_attentions is False and not any(head_mask)
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
@@ -1190,9 +1186,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
             if _use_sdpa:
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    mask=encoder_attention_mask,
-                    dtype=inputs_embeds.dtype,
-                    tgt_len=seq_len
+                    mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=seq_len
                 )
             else:
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
