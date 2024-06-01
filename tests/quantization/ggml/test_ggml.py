@@ -158,7 +158,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello,\n\nI'm trying to create a"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-    
+
     def test_qwen2_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.qwen2_model_id, gguf_file=self.q4_0_qwen2_model_id)
         model = AutoModelForCausalLM.from_pretrained(

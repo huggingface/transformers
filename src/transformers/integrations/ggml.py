@@ -115,7 +115,7 @@ GGUF_TENSOR_MAPPING = {
         "attn_output": "self_attn.o_proj",
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
-    }
+    },
 }
 
 
