@@ -560,25 +560,21 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
         if key.dtype != target_dtype:
             key = key.to(target_dtype)
 
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key.shape[-2]]
-
         # Avoid torch==2.1.2 specific bug for the memory-efficient backend in SDPA
-        if self.require_contiguous_qkv and query.device.type == "cuda" and causal_mask is not None:
+        if self.require_contiguous_qkv and query.device.type == "cuda" and attention_mask is not None:
             query = query.contiguous()
             key = key.contiguous()
             value = value.contiguous()
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = True if attention_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query=query,
             key=key,
             value=value,
-            attn_mask=causal_mask,
+            attn_mask=attention_mask,
             dropout_p=self.attention_dropout.p if self.training else 0.0,
             is_causal=is_causal,
         )
