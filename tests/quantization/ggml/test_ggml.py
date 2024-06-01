@@ -31,7 +31,7 @@ class GgufIntegrationTests(unittest.TestCase):
     original_model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     model_id = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
-    qwen_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
+    qwen2_model_id = "Qwen/Qwen1.5-0.5B-Chat-GGUF"
 
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
     q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
@@ -160,9 +160,9 @@ class GgufIntegrationTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
     
     def test_qwen2_q4_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen2_model_id, gguf_file=self.q4_0_qwen2_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id, device_map="auto", torch_dtype=torch.float16
+            self.qwen2_model_id, gguf_file=self.q4_0_qwen2_model_id, device_map="auto", torch_dtype=torch.float16
         )
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
