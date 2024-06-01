@@ -104,6 +104,7 @@ from .utils import (
     is_sacremoses_available,
     is_safetensors_available,
     is_scipy_available,
+    is_schedulefree_available,
     is_sentencepiece_available,
     is_seqio_available,
     is_soundfile_availble,
@@ -368,6 +369,14 @@ def require_grokadamw(test_case):
     Decorator marking a test that requires GrokAdamW. These tests are skipped when GrokAdamW isn't installed.
     """
     return unittest.skipUnless(is_grokadamw_available(), "test requires GrokAdamW")(test_case)
+
+
+def require_schedulefree(test_case):
+    """
+    Decorator marking a test that requires schedulefree. These tests are skipped when schedulefree isn't installed.
+    https://github.com/facebookresearch/schedule_free
+    """
+    return unittest.skipUnless(is_schedulefree_available(), "test requires schedulefree")(test_case)
 
 
 def require_cv2(test_case):

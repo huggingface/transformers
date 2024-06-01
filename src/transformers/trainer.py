@@ -1490,8 +1490,8 @@ class Trainer:
             optimizer_cls = AdamW4bit
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
-            OptimizerNames.SCHEDULE_FREE_ADAMW_32BIT,
-            OptimizerNames.SCHEDULE_FREE_SGD_32BIT,
+            OptimizerNames.SCHEDULE_FREE_ADAMW,
+            OptimizerNames.SCHEDULE_FREE_SGD,
         ]:
             if not is_schedulefree_available():
                 raise ImportError(
@@ -1501,10 +1501,10 @@ class Trainer:
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
-            if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW_32BIT:
+            if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW:
                 optimizer_cls = AdamWScheduleFree
                 additional_optim_kwargs = adam_kwargs
-            elif args.optim == OptimizerNames.SCHEDULE_FREE_SGD_32BIT:
+            elif args.optim == OptimizerNames.SCHEDULE_FREE_SGD:
                 optimizer_cls = SGDScheduleFree
             else:
                 raise ValueError("Invalid schedulefree optimizer")
