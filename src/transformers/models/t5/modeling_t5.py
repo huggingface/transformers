@@ -521,10 +521,18 @@ class T5Attention(nn.Module):
 
         # get key/value states
         key_states = self._project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None, batch_size
+            hidden_states,
+            self.k,
+            key_value_states,
+            past_key_value[0] if past_key_value is not None else None,
+            batch_size,
         )
         value_states = self._project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None, batch_size
+            hidden_states,
+            self.v,
+            key_value_states,
+            past_key_value[1] if past_key_value is not None else None,
+            batch_size,
         )
 
         # compute scores
