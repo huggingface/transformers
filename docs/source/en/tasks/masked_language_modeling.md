@@ -245,6 +245,7 @@ At this point, only three steps remain:
 ...     train_dataset=lm_dataset["train"],
 ...     eval_dataset=lm_dataset["test"],
 ...     data_collator=data_collator,
+...     tokenizer=tokenizer,
 ... )
 
 >>> trainer.train()
