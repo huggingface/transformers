@@ -601,6 +601,7 @@ class DABDETRAttention(nn.Module):
         value_states: Optional[torch.Tensor] = None,
         key_padding_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        cross=False
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -609,14 +610,24 @@ class DABDETRAttention(nn.Module):
         # get query proj
         query_states = hidden_states * self.scaling
         # get key, value proj
-        key_states = self._qk_shape(key_states, -1, batch_size)
-        value_states = self._v_shape(value_states, -1, batch_size)
+        if cross is False:
+            key_states = self._qk_shape(key_states, -1, batch_size)
+            value_states = self._v_shape(value_states, -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
         v_proj_shape = (batch_size * self.num_heads, -1, self.v_head_dim)
-        query_states = self._qk_shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*v_proj_shape)
+        if cross:
+            query_states = query_states.contiguous().view(target_len, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
+        else:
+            query_states = self._qk_shape(query_states, target_len, batch_size).view(*proj_shape)
+        if cross:
+            key_states = key_states.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
+        else:
+            key_states = key_states.view(*proj_shape)
+        if cross:
+            value_states = value_states.contiguous().view(-1, batch_size * self.num_heads, self.v_head_dim).transpose(0, 1)
+        else:
+            value_states = value_states.view(*v_proj_shape)
 
         source_len = key_states.size(1)
 
@@ -868,6 +879,7 @@ class DABDETRDecoderLayer(nn.Module):
                 key_states=k,
                 value_states=v,
                 output_attentions=output_attentions,
+                cross=True
             )
             # ============ End of Self-Attention =============
 
@@ -917,6 +929,7 @@ class DABDETRDecoderLayer(nn.Module):
                 key_states=k,
                 value_states=v,
                 output_attentions=output_attentions,
+                cross=True
             )
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
