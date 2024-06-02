@@ -30,7 +30,6 @@ if is_timm_available():
         AvgPool2dSame,
         DropBlock2d,
         DropPath,
-        LayerType,
         create_attn,
         create_classifier,
         get_act_layer,
