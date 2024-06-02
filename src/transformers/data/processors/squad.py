@@ -654,6 +654,9 @@ class SquadProcessor(DataProcessor):
             title = entry["title"]
             for paragraph in entry["paragraphs"]:
                 context_text = paragraph["context"]
+                # these are shared between all "qas", take a lot of memory and are expensive to calculate
+                doc_tokens, char_to_word_offset = context_to_mapped_tokens(context_text)
+
                 for qa in paragraph["qas"]:
                     qas_id = qa["id"]
                     question_text = qa["question"]
@@ -679,6 +682,8 @@ class SquadProcessor(DataProcessor):
                         title=title,
                         is_impossible=is_impossible,
                         answers=answers,
+                        doc_tokens=doc_tokens,
+                        char_to_word_offset=char_to_word_offset,
                     )
                     examples.append(example)
         return examples
@@ -694,6 +699,27 @@ class SquadV2Processor(SquadProcessor):
     dev_file = "dev-v2.0.json"
 
 
+def context_to_mapped_tokens(context_text: str):
+    """
+    This function does the expensive work of iterating all characters in context_text,
+    whitespace-tokenizing it and mapping each character to the respective token.
+    """
+    doc_tokens = []
+    char_to_word_offset = []
+    prev_is_whitespace = True
+    for c in context_text:
+        if _is_whitespace(c):
+            prev_is_whitespace = True
+        else:
+            if prev_is_whitespace:
+                doc_tokens.append(c)
+            else:
+                doc_tokens[-1] += c
+            prev_is_whitespace = False
+        char_to_word_offset.append(len(doc_tokens) - 1)
+    return doc_tokens, char_to_word_offset
+
+
 class SquadExample:
     """
     A single training/test example for the Squad dataset, as loaded from disk.
@@ -707,6 +733,8 @@ class SquadExample:
         title: The title of the example
         answers: None by default, this is used during evaluation. Holds answers as well as their start positions.
         is_impossible: False by default, set to True if the example has no possible answer.
+        doc_tokens: Optional. Cached whitespace-tokenized context_text, from a previous SquadExample.
+        char_to_word_offset: Optional. Cached map from chars in context_text to tokens in doc_tokens.
     """
 
     def __init__(
@@ -719,6 +747,8 @@ class SquadExample:
         title,
         answers=[],
         is_impossible=False,
+        doc_tokens=None,
+        char_to_word_offset=None,
     ):
         self.qas_id = qas_id
         self.question_text = question_text
@@ -730,24 +760,10 @@ class SquadExample:
 
         self.start_position, self.end_position = 0, 0
 
-        doc_tokens = []
-        char_to_word_offset = []
-        prev_is_whitespace = True
-
-        # Split on whitespace so that different tokens may be attributed to their original position.
-        for c in self.context_text:
-            if _is_whitespace(c):
-                prev_is_whitespace = True
-            else:
-                if prev_is_whitespace:
-                    doc_tokens.append(c)
-                else:
-                    doc_tokens[-1] += c
-                prev_is_whitespace = False
-            char_to_word_offset.append(len(doc_tokens) - 1)
-
-        self.doc_tokens = doc_tokens
-        self.char_to_word_offset = char_to_word_offset
+        if doc_tokens is not None and char_to_word_offset is not None:
+            self.doc_tokens, self.char_to_word_offset = doc_tokens, char_to_word_offset
+        else:
+            self.doc_tokens, self.char_to_word_offset = context_to_mapped_tokens(context_text)
 
         # Start and end positions only has a value during evaluation.
         if start_position_character is not None and not is_impossible:
