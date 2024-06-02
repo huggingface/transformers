@@ -35,7 +35,7 @@ Rejoignez la communauté grandissante sur le [Hub](https://huggingface.co/models
     <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="width: 100%; max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
 </a>
 
-## Contents
+## Contenu
 
 La documentation est organisée en 5 parties:
 
