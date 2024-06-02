@@ -2864,6 +2864,8 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                             "revision": revision,
                             "proxies": proxies,
                             "token": token,
+                            "cache_dir": cache_dir,
+                            "local_files_only": local_files_only,
                         }
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True

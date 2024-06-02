@@ -303,6 +303,13 @@ class Bnb4BitTest(Base4bitTest):
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_4bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
+    def test_bnb_4bit_wrong_config(self):
+        r"""
+        Test whether creating a bnb config with unsupported values leads to errors.
+        """
+        with self.assertRaises(ValueError):
+            _ = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_storage="add")
+
 
 @require_bitsandbytes
 @require_accelerate
