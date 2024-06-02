@@ -152,7 +152,9 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if os.path.isdir(pretrained_model_name_or_path) or os.path.isfile(pretrained_model_name_or_path):
-            decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path)
+            decoder = BeamSearchDecoderCTC.load_from_dir(
+                pretrained_model_name_or_path, **kwargs,
+            )
         else:
             # BeamSearchDecoderCTC has no auto class
             kwargs.pop("_from_auto", None)
