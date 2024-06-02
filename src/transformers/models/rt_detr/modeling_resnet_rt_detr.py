@@ -691,7 +691,7 @@ class ResNet(nn.Module):
 
 
 # Copied from transformers.models.timm_backbone.modeling_timm_backbone.TimmBackbone
-class RTDETRTimmBackbone(PreTrainedModel, BackboneMixin):
+class RTDetrTimmBackbone(PreTrainedModel, BackboneMixin):
     """
     Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
     other models in the library keeping the same API.
@@ -874,7 +874,7 @@ def load_rt_detr_backbone(config):
         and backbone_checkpoint is None
         and backbone_checkpoint is None
     ):
-        return RTDETRTimmBackbone.from_config(config=config, **backbone_kwargs)
+        return RTDetrTimmBackbone.from_config(config=config, **backbone_kwargs)
 
     # config from the parent model that has a backbone
     if use_timm_backbone:
@@ -882,7 +882,7 @@ def load_rt_detr_backbone(config):
             raise ValueError("config.backbone must be set if use_timm_backbone is True")
         # Because of how timm backbones were originally added to models, we need to pass in use_pretrained_backbone
         # to determine whether to load the pretrained weights.
-        backbone = RTDETRTimmBackbone.from_pretrained(
+        backbone = RTDetrTimmBackbone.from_pretrained(
             backbone_checkpoint,
             use_timm_backbone=use_timm_backbone,
             use_pretrained_backbone=use_pretrained_backbone,
@@ -891,11 +891,11 @@ def load_rt_detr_backbone(config):
     elif use_pretrained_backbone:
         if backbone_checkpoint is None:
             raise ValueError("config.backbone must be set if use_pretrained_backbone is True")
-        backbone = RTDETRTimmBackbone.from_pretrained(backbone_checkpoint, **backbone_kwargs)
+        backbone = RTDetrTimmBackbone.from_pretrained(backbone_checkpoint, **backbone_kwargs)
     else:
         if backbone_config is None and backbone_checkpoint is None:
             raise ValueError("Either config.backbone_config or config.backbone must be set")
         if backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(backbone_checkpoint, **backbone_kwargs)
-        backbone = RTDETRTimmBackbone.from_config(config=backbone_config)
+        backbone = RTDetrTimmBackbone.from_config(config=backbone_config)
     return backbone

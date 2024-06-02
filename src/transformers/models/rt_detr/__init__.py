@@ -34,10 +34,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_rt_detr"] = [
-        "RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RTDetrForObjectDetection",
         "RTDetrModel",
         "RTDetrPreTrainedModel",
+    ]
+    _import_structure["modeling_resnet_rt_detr"] = [
+        "RTDetrTimmBackbone",
     ]
 
 
@@ -58,6 +60,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .modeling_resnet_rt_detr import (
+            RTDetrTimmBackbone,
+        )
         from .modeling_rt_detr import (
             RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             RTDetrForObjectDetection,
