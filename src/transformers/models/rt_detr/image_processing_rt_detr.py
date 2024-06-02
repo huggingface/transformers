@@ -165,7 +165,6 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-
 # Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
 def get_numpy_to_framework_fn(arr) -> Callable:
     """
