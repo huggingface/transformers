@@ -771,6 +771,9 @@ class TrainingArguments:
             rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
+
+        sanity_evaluation(`bool`, *optional*, defaults to `False`):
+            Whether or not to perform a sanity check to ensure that the validation steps works correctly. It will be performed before the training.
     """
 
     framework = "pt"
@@ -1452,6 +1455,13 @@ class TrainingArguments:
     batch_eval_metrics: bool = field(
         default=False,
         metadata={"help": "Break eval metrics calculation into batches to save memory."},
+    )
+
+    sanity_evaluation: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
     )
 
     def __post_init__(self):

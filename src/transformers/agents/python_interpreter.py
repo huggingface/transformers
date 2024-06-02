@@ -15,9 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import ast
+import builtins
 import difflib
 from collections.abc import Mapping
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class InterpretorError(ValueError):
@@ -29,7 +30,25 @@ class InterpretorError(ValueError):
     pass
 
 
-LIST_SAFE_MODULES = ["random", "math", "time", "queue", "itertools", "re", "stat", "statistics", "unicodedata"]
+ERRORS = {
+    name: getattr(builtins, name)
+    for name in dir(builtins)
+    if isinstance(getattr(builtins, name), type) and issubclass(getattr(builtins, name), BaseException)
+}
+
+
+LIST_SAFE_MODULES = [
+    "random",
+    "collections",
+    "math",
+    "time",
+    "queue",
+    "itertools",
+    "re",
+    "stat",
+    "statistics",
+    "unicodedata",
+]
 
 
 class BreakException(Exception):
@@ -87,21 +106,62 @@ def evaluate_while(while_loop, state, tools):
     return None
 
 
-def evaluate_function_def(function_def, state, tools):
-    def create_function(func_def, state, tools):
-        def new_func(*args):
-            new_state = state.copy()
-            for arg, val in zip(func_def.args.args, args):
-                new_state[arg.arg] = val
-            result = None
-            for node in func_def.body:
-                result = evaluate_ast(node, new_state, tools)
-            return result
+def create_function(func_def, state, tools):
+    def new_func(*args, **kwargs):
+        func_state = state.copy()
+        arg_names = [arg.arg for arg in func_def.args.args]
+        for name, value in zip(arg_names, args):
+            func_state[name] = value
+        if func_def.args.vararg:
+            vararg_name = func_def.args.vararg.arg
+            func_state[vararg_name] = args
+        if func_def.args.kwarg:
+            kwarg_name = func_def.args.kwarg.arg
+            func_state[kwarg_name] = kwargs
 
-        return new_func
+        # Update function state with self and __class__
+        if func_def.args.args and func_def.args.args[0].arg == "self":
+            if args:
+                func_state["self"] = args[0]
+                func_state["__class__"] = args[0].__class__
 
-    tools[function_def.name] = create_function(function_def, state, tools)
-    return None
+        result = None
+        for stmt in func_def.body:
+            result = evaluate_ast(stmt, func_state, tools)
+        return result
+
+    return new_func
+
+
+def create_class(class_name, class_bases, class_body):
+    class_dict = {}
+    for key, value in class_body.items():
+        class_dict[key] = value
+    return type(class_name, tuple(class_bases), class_dict)
+
+
+def evaluate_function_def(func_def, state, tools):
+    tools[func_def.name] = create_function(func_def, state, tools)
+    return tools[func_def.name]
+
+
+def evaluate_class_def(class_def, state, tools):
+    class_name = class_def.name
+    bases = [evaluate_ast(base, state, tools) for base in class_def.bases]
+    class_dict = {}
+
+    for stmt in class_def.body:
+        if isinstance(stmt, ast.FunctionDef):
+            class_dict[stmt.name] = evaluate_function_def(stmt, state, tools)
+        elif isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                class_dict[target.id] = evaluate_ast(stmt.value, state, tools)
+        else:
+            raise InterpretorError(f"Unsupported statement in class body: {stmt.__class__.__name__}")
+
+    new_class = type(class_name, tuple(bases), class_dict)
+    state[class_name] = new_class
+    return new_class
 
 
 def evaluate_augassign(expression: ast.AugAssign, state: Dict[str, Any], tools: Dict[str, Callable]):
@@ -176,11 +236,20 @@ def evaluate_assign(assign, state, tools):
     var_names = assign.targets
     result = evaluate_ast(assign.value, state, tools)
     if len(var_names) == 1:
-        if isinstance(var_names[0], ast.Tuple):
-            for i, elem in enumerate(var_names[0].elts):
+        target = var_names[0]
+        if isinstance(target, ast.Tuple):
+            for i, elem in enumerate(target.elts):
                 state[elem.id] = result[i]
+        elif isinstance(target, ast.Attribute):
+            obj = evaluate_ast(target.value, state, tools)
+            setattr(obj, target.attr, result)
+        elif isinstance(target, ast.Subscript):
+            obj = evaluate_ast(target.value, state, tools)
+            key = evaluate_ast(target.slice, state, tools)
+            obj[key] = result
         else:
-            state[var_names[0].id] = result
+            state[target.id] = result
+
     else:
         if len(result) != len(var_names):
             raise InterpretorError(f"Expected {len(var_names)} values but got {len(result)}.")
@@ -190,41 +259,64 @@ def evaluate_assign(assign, state, tools):
 
 
 def evaluate_call(call, state, tools):
+    if not (isinstance(call.func, ast.Attribute) or isinstance(call.func, ast.Name)):
+        raise InterpretorError(
+            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func})."
+        )
     if isinstance(call.func, ast.Attribute):
         obj = evaluate_ast(call.func.value, state, tools)
         func_name = call.func.attr
         if not hasattr(obj, func_name):
             raise InterpretorError(f"Object {obj} has no attribute {func_name}")
         func = getattr(obj, func_name)
-        args = [evaluate_ast(arg, state, tools) for arg in call.args]
-        kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
-        return func(*args, **kwargs)
-
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
-
         if func_name in state:
             func = state[func_name]
         elif func_name in tools:
             func = tools[func_name]
+        elif func_name in ERRORS:
+            func = ERRORS[func_name]
         else:
             raise InterpretorError(
                 f"It is not permitted to evaluate other functions than the provided tools or imported functions (tried to execute {call.func.id})."
             )
-        # Todo deal with args
-        args = [evaluate_ast(arg, state, tools) for arg in call.args]
-        kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
-        output = func(*args, **kwargs)
 
-        # store logs of print statements
-        if func_name == "print":
-            state["print_outputs"] += output + "\n"
+    args = [evaluate_ast(arg, state, tools) for arg in call.args]
+    kwargs = {keyword.arg: evaluate_ast(keyword.value, state, tools) for keyword in call.keywords}
 
-        return output
+    if isinstance(func, type) and len(func.__module__.split(".")) > 1:  # Check for user-defined classes
+        # Instantiate the class using its constructor
+        obj = func.__new__(func)  # Create a new instance of the class
+        if hasattr(obj, "__init__"):  # Check if the class has an __init__ method
+            obj.__init__(*args, **kwargs)  # Call the __init__ method correctly
+        return obj
     else:
-        raise InterpretorError(
-            f"It is not permitted to evaluate other functions than the provided tools (tried to execute {call.func})."
-        )
+        if func_name == "super":
+            if not args:
+                if "__class__" in state and "self" in state:
+                    return super(state["__class__"], state["self"])
+                else:
+                    raise InterpretorError("super() needs at least one argument")
+            cls = args[0]
+            if not isinstance(cls, type):
+                raise InterpretorError("super() argument 1 must be type")
+            if len(args) == 1:
+                return super(cls)
+            elif len(args) == 2:
+                instance = args[1]
+                return super(cls, instance)
+            else:
+                raise InterpretorError("super() takes at most 2 arguments")
+
+        else:
+            if func_name == "print":
+                output = " ".join(map(str, args))
+                state["print_outputs"] += output + "\n"
+                return output
+            else:  # Assume it's a callable object
+                output = func(*args, **kwargs)
+                return output
 
 
 def evaluate_subscript(subscript, state, tools):
@@ -248,6 +340,10 @@ def evaluate_subscript(subscript, state, tools):
 def evaluate_name(name, state, tools):
     if name.id in state:
         return state[name.id]
+    elif name.id in tools:
+        return tools[name.id]
+    elif name.id in ERRORS:
+        return ERRORS[name.id]
     close_matches = difflib.get_close_matches(name.id, list(state.keys()))
     if len(close_matches) > 0:
         return state[close_matches[0]]
@@ -307,7 +403,11 @@ def evaluate_for(for_loop, state, tools):
     result = None
     iterator = evaluate_ast(for_loop.iter, state, tools)
     for counter in iterator:
-        state[for_loop.target.id] = counter
+        if isinstance(for_loop.target, ast.Tuple):
+            for i, elem in enumerate(for_loop.target.elts):
+                state[elem.id] = counter[i]
+        else:
+            state[for_loop.target.id] = counter
         for node in for_loop.body:
             try:
                 line_result = evaluate_ast(node, state, tools)
@@ -337,7 +437,56 @@ def evaluate_listcomp(listcomp, state, tools):
     return result
 
 
-def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Callable]):
+def evaluate_try(try_node, state, tools):
+    try:
+        for stmt in try_node.body:
+            evaluate_ast(stmt, state, tools)
+    except Exception as e:
+        matched = False
+        for handler in try_node.handlers:
+            if handler.type is None or isinstance(e, evaluate_ast(handler.type, state, tools)):
+                matched = True
+                if handler.name:
+                    state[handler.name] = e
+                for stmt in handler.body:
+                    evaluate_ast(stmt, state, tools)
+                break
+        if not matched:
+            raise e
+    else:
+        if try_node.orelse:
+            for stmt in try_node.orelse:
+                evaluate_ast(stmt, state, tools)
+    finally:
+        if try_node.finalbody:
+            for stmt in try_node.finalbody:
+                evaluate_ast(stmt, state, tools)
+
+
+def evaluate_raise(raise_node, state, tools):
+    if raise_node.exc is not None:
+        exc = evaluate_ast(raise_node.exc, state, tools)
+    else:
+        exc = None
+    if raise_node.cause is not None:
+        cause = evaluate_ast(raise_node.cause, state, tools)
+    else:
+        cause = None
+    if exc is not None:
+        if cause is not None:
+            raise exc from cause
+        else:
+            raise exc
+    else:
+        raise InterpretorError("Re-raise is not supported without an active exception")
+
+
+def evaluate_ast(
+    expression: ast.AST,
+    state: Dict[str, Any],
+    tools: Dict[str, Callable],
+    authorized_imports: List[str] = LIST_SAFE_MODULES,
+):
     """
     Evaluate an abstract syntax tree using the content of the variables stored in a state and only evaluating a given
     set of functions.
@@ -353,6 +502,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         tools (`Dict[str, Callable]`):
             The functions that may be called during the evaluation. Any call to another function will fail with an
             `InterpretorError`.
+        authorized_imports (`List[str]`):
+            The list of modules that can be imported by the code. By default, only a few safe modules are allowed.
+            Add more at your own risk!
     """
     if isinstance(expression, ast.Assign):
         # Assignement -> we evaluate the assignement which should update the state
@@ -459,7 +611,7 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
         return result
     elif isinstance(expression, ast.Import):
         for alias in expression.names:
-            if alias.name in LIST_SAFE_MODULES:
+            if alias.name in authorized_imports:
                 module = __import__(alias.name)
                 state[alias.asname or alias.name] = module
             else:
@@ -468,19 +620,27 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.While):
         return evaluate_while(expression, state, tools)
     elif isinstance(expression, ast.ImportFrom):
-        if expression.module in LIST_SAFE_MODULES:
+        if expression.module in authorized_imports:
             module = __import__(expression.module)
             for alias in expression.names:
                 state[alias.asname or alias.name] = getattr(module, alias.name)
         else:
             raise InterpretorError(f"Import from {expression.module} is not allowed.")
         return None
+    elif isinstance(expression, ast.ClassDef):
+        return evaluate_class_def(expression, state, tools)
+    elif isinstance(expression, ast.Try):
+        return evaluate_try(expression, state, tools)
+    elif isinstance(expression, ast.Raise):
+        return evaluate_raise(expression, state, tools)
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpretorError(f"{expression.__class__.__name__} is not supported.")
 
 
-def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, state=None):
+def evaluate_python_code(
+    code: str, tools: Optional[Dict[str, Callable]] = {}, state=None, authorized_imports: List[str] = LIST_SAFE_MODULES
+):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.
@@ -506,9 +666,10 @@ def evaluate_python_code(code: str, tools: Optional[Dict[str, Callable]] = {}, s
         state = {}
     result = None
     state["print_outputs"] = ""
+
     for idx, node in enumerate(expression.body):
         try:
-            line_result = evaluate_ast(node, state, tools)
+            line_result = evaluate_ast(node, state, tools, authorized_imports)
         except InterpretorError as e:
             msg = f"You tried to execute the following code:\n{code}\n"
             msg += f"You got these outputs:\n{state['print_outputs']}\n"
