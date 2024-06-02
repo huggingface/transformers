@@ -56,13 +56,13 @@ logger = logging.get_logger(__name__)
 MultiScaleDeformableAttention = None
 
 
-# Copied from transformers.models.deta.modeling_deta.load_cuda_kernels
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.load_cuda_kernels
 def load_cuda_kernels():
     from torch.utils.cpp_extension import load
 
     global MultiScaleDeformableAttention
 
-    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deta"
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "deformable_detr"
     src_files = [
         root / filename
         for filename in [
@@ -72,7 +72,7 @@ def load_cuda_kernels():
         ]
     ]
 
-    load(
+    MultiScaleDeformableAttention = load(
         "MultiScaleDeformableAttention",
         src_files,
         with_cuda=True,

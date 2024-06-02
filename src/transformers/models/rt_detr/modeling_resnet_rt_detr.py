@@ -397,6 +397,7 @@ def make_blocks(
     return stages, feature_info
 
 
+# Inspired by https://github.com/huggingface/pytorch-image-models/blob/5dce71010174ad6599653da4e8ba37fd5f9fa572/timm/models/resnet.py#L363
 class ResNet(nn.Module):
     """ResNet / ResNeXt / SE-ResNeXt / SE-Net
 
@@ -690,6 +691,7 @@ class ResNet(nn.Module):
         return x
 
 
+# Copied from transformers.models.timm_backbone.modeling_timm_backbone.TimmBackbone
 class RTDETRTimmBackbone(PreTrainedModel, BackboneMixin):
     """
     Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
@@ -700,6 +702,7 @@ class RTDETRTimmBackbone(PreTrainedModel, BackboneMixin):
     supports_gradient_checkpointing = False
     config_class = TimmBackboneConfig
 
+    # Ignore copy
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
         super().__init__(config)
@@ -762,6 +765,7 @@ class RTDETRTimmBackbone(PreTrainedModel, BackboneMixin):
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
+    # Ignore copy
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])
