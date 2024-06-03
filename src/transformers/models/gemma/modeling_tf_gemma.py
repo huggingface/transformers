@@ -258,7 +258,7 @@ class TFGemmaAttention(tf.keras.layers.Layer):
         if attention_mask is not None:  # no matter the length, we just slice it
             if cache_position is not None:
                 start_position = cache_position[0]
-                end_position = cache_position[1]  # Assuming you want a slice until this position
+                end_position = cache_position[1] if len (cache_position)>1 else start_position + 1
                 # Generate a range of indices based on start and end positions
                 indices = tf.range(start=start_position, limit=end_position)
                 causal_mask = tf.gather(attention_mask, indices, axis=2)
