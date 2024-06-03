@@ -591,6 +591,9 @@ _import_structure = {
         "MusicgenMelodyDecoderConfig",
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.nat": ["NatConfig"],
+    "models.nemotron": ["NemotronConfig"],
+    "models.nezha": ["NezhaConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
     "models.nougat": ["NougatProcessor"],
@@ -2735,6 +2738,37 @@ else:
             "MvpForSequenceClassification",
             "MvpModel",
             "MvpPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nat"].extend(
+        [
+            "NatBackbone",
+            "NatForImageClassification",
+            "NatModel",
+            "NatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nemotron"].extend(
+        [
+            "NemotronForPreTraining",
+            "NemotronForQuestionAnswering",
+            "NemotronForSequenceClassification",
+            "NemotronForTokenClassification",
+            "NemotronModel",
+            "NemotronPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nezha"].extend(
+        [
+            "NezhaForMaskedLM",
+            "NezhaForMultipleChoice",
+            "NezhaForNextSentencePrediction",
+            "NezhaForPreTraining",
+            "NezhaForQuestionAnswering",
+            "NezhaForSequenceClassification",
+            "NezhaForTokenClassification",
+            "NezhaModel",
+            "NezhaPreTrainedModel",
         ]
     )
     _import_structure["models.nllb_moe"].extend(
@@ -5280,6 +5314,9 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.nat import NatConfig
+    from .models.nemotron import NemotronConfig
+    from .models.nezha import NezhaConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
     from .models.nystromformer import (
@@ -7176,6 +7213,31 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
+        )
+        from .models.nat import (
+            NatBackbone,
+            NatForImageClassification,
+            NatModel,
+            NatPreTrainedModel,
+        )
+        from .models.nemotron import (
+            NemotronForCausalLM,
+            NemotronForQuestionAnswering,
+            NemotronForSequenceClassification,
+            NemotronForTokenClassification,
+            NemotronModel,
+            NemotronPreTrainedModel,           
+        )
+        from .models.nezha import (
+            NezhaForMaskedLM,
+            NezhaForMultipleChoice,
+            NezhaForNextSentencePrediction,
+            NezhaForPreTraining,
+            NezhaForQuestionAnswering,
+            NezhaForSequenceClassification,
+            NezhaForTokenClassification,
+            NezhaModel,
+            NezhaPreTrainedModel,
         )
         from .models.nllb_moe import (
             NllbMoeForConditionalGeneration,
