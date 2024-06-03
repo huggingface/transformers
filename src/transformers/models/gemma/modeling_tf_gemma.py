@@ -752,7 +752,9 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        if getattr(self.config, 'use outpu enbedding',False):
+            return self.lm_head
+        return None
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
