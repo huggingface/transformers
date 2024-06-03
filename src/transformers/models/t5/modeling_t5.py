@@ -686,12 +686,16 @@ class T5SdpaAttention(T5Attention):
         else:
             position_bias_masked = position_bias
 
+        # spda kernels require tensors to have stride=1 in the last dimension
+        # .contiguous() does not behave correctly for tensors with singleton dimensions
+        # .clone(memory_format=torch.contiguous_format) is a workaround
+        position_bias_masked = position_bias_masked.clone(memory_format=torch.contiguous_format)
         attn_output = self._unshape(
             torch.nn.functional.scaled_dot_product_attention(
                 query_states,
                 key_states,
                 value_states,
-                attn_mask=position_bias_masked.contiguous(),
+                attn_mask=position_bias_masked,
                 dropout_p=self.dropout if self.training else 0.0,
                 scale=1.0,
             ),
