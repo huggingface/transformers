@@ -162,6 +162,7 @@ from . import (
     musicgen_melody,
     mvp,
     nat,
+    nemotron,
     nezha,
     nllb,
     nllb_moe,

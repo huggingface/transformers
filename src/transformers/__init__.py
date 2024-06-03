@@ -555,6 +555,7 @@ _import_structure = {
     ],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
     "models.nat": ["NatConfig"],
+    "models.nemotron": ["NemotronConfig"],
     "models.nezha": ["NezhaConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NllbMoeConfig"],
@@ -2586,6 +2587,16 @@ else:
             "NatForImageClassification",
             "NatModel",
             "NatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.nemotron"].extend(
+        [
+            "NemotronForPreTraining",
+            "NemotronForQuestionAnswering",
+            "NemotronForSequenceClassification",
+            "NemotronForTokenClassification",
+            "NemotronModel",
+            "NemotronPreTrainedModel",
         ]
     )
     _import_structure["models.nezha"].extend(
@@ -5142,6 +5153,7 @@ if TYPE_CHECKING:
     )
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NatConfig
+    from .models.nemotron import NemotronConfig
     from .models.nezha import NezhaConfig
     from .models.nllb_moe import NllbMoeConfig
     from .models.nougat import NougatProcessor
@@ -6951,6 +6963,14 @@ if TYPE_CHECKING:
             NatForImageClassification,
             NatModel,
             NatPreTrainedModel,
+        )
+        from .models.nemotron import (
+            NemotronForCausalLM,
+            NemotronForQuestionAnswering,
+            NemotronForSequenceClassification,
+            NemotronForTokenClassification,
+            NemotronModel,
+            NemotronPreTrainedModel,           
         )
         from .models.nezha import (
             NezhaForMaskedLM,
