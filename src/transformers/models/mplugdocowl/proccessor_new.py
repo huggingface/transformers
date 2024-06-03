@@ -135,7 +135,7 @@ class ShapeAdaptiveImageProcessor(ProcessorMixin):
         self.anchors = [tuple(_) for _ in grid_dict[anchors]]
         self.anchor_max = max(max(_) for _ in self.anchors)
         self.anchors_areas = [box_area(np.array([[0, 0, w*self.image_size[1], h*self.image_size[0]]])) for w, h in self.anchors]
-    
+        self.add_global_img = add_global_img
 
     def _process_image(self, images):
             new_images = []
@@ -187,6 +187,18 @@ class ShapeAdaptiveImageProcessor(ProcessorMixin):
             new_images = np.concatenate(new_images, axis=0)
             new_patch_position = np.concatenate(new_patch_position, axis=0)
             return new_images, new_patch_position, num_image_mult
+    
+    def __call__(self, images, return_tensors=None):
+        
+        processed_images, patch_positions, num_image_mult = self._process_image(images)
+        
+        #if return_tensors == "pt":
+            #processed_images = torch.tensor(processed_images).permute(0, 3, 1, 2)
+       # if return_tensors == "np":
+        processed_images = np.array(processed_images).transpose(0, 3, 1, 2)
+        
+        return {"pixel_values": processed_images, "patch_positions": patch_positions, "num_image_mult": num_image_mult}
+
 
 class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
@@ -215,6 +227,10 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
+        do_resize: bool = True,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
@@ -298,38 +314,3 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
 
 
 
-'''
-     def __call__(
-        self,
-        #text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        #tokenize_newline_separately: bool = True,
-        #padding: Union[bool, str, PaddingStrategy] = False,
-        #truncation: Union[bool, str, TruncationStrategy] = None,
-        #max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        do_resize: bool = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        #data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        #input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        #resample: "PILImageResampling" = None,  # noqa: F821
-        #do_convert_rgb: bool = None,
-        #do_thumbnail: bool = None,
-        #do_align_long_axis: bool = None,
-        #do_rescale: bool = None,
-    ) -> BatchFeature:
-    
-                pixel_values = self.image_processor(
-                image,
-                do_resize=do_resize,
-                do_normalize=do_normalize,
-                return_tensors=return_tensors,
-                image_mean=image_mean,
-                image_std=image_std,
-                input_data_format=input_data_format,
-                data_format=data_format,
-                resample=resample,
-                do_convert_rgb=do_convert_rgb)['pixel_values']
-'''
