@@ -619,7 +619,6 @@ class MistralSdpaAttention(MistralAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = self.rotary_emb(value_states, position_ids)
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -655,7 +654,7 @@ class MistralSdpaAttention(MistralAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
 
@@ -1290,9 +1289,9 @@ class MistralForCausalLM(MistralPreTrainedModel):
             past_length > 0
             and attention_mask is not None
             and isinstance(past_key_values, SlidingWindowCache)
-            and attention_mask.shape[1] > past_key_values.sliding_window_size
+            and attention_mask.shape[1] > past_key_values.max_cache_len
         ):
-            attention_mask = attention_mask[:, -past_key_values.sliding_window_size :]
+            attention_mask = attention_mask[:, -past_key_values.max_cache_len :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

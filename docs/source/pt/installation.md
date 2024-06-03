@@ -173,7 +173,7 @@ No Windows, este diretório pré-definido é dado por `C:\Users\username\.cache\
 ## Modo Offline
 
 O 🤗 Transformers também pode ser executado num ambiente de firewall ou fora da rede (offline) usando arquivos locais.
-Para tal, configure a variável de ambiente de modo que `TRANSFORMERS_OFFLINE=1`.
+Para tal, configure a variável de ambiente de modo que `HF_HUB_OFFLINE=1`.
 
 <Tip>
 
@@ -191,7 +191,7 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 Execute esse mesmo programa numa instância offline com o seguinte comando:
 
 ```bash
-HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
 python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 

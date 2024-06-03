@@ -1853,6 +1853,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise TemplateError(message)
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.policies["json.dumps_kwargs"]["ensure_ascii"] = False
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 

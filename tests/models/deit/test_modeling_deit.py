@@ -227,6 +227,13 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = DeiTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37)
 
+    @unittest.skip(
+        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
+        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
