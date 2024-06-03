@@ -150,7 +150,6 @@ def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Realm
 class RealmEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -215,7 +214,6 @@ class RealmEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Realm
 class RealmSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -350,7 +348,6 @@ class RealmSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Realm
 class RealmSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -370,7 +367,6 @@ REALM_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Realm,BERT->REALM
 class RealmAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -422,7 +418,6 @@ class RealmAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Realm
 class RealmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -438,7 +433,6 @@ class RealmIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Realm
 class RealmOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -453,7 +447,6 @@ class RealmOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Realm
 class RealmLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -540,7 +533,6 @@ class RealmLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Realm
 class RealmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -634,7 +626,6 @@ class RealmEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Realm
 class RealmPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

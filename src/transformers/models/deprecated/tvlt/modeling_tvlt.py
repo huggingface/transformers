@@ -340,7 +340,6 @@ class TvltAudioPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltSelfAttention with Vilt->Tvlt
 class TvltSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -401,7 +400,6 @@ class TvltSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltSelfOutput with Vilt->Tvlt
 class TvltSelfOutput(nn.Module):
     """
     The residual connection is defined in TvltLayer instead of here (as is the case with other models), due to the
@@ -420,7 +418,6 @@ class TvltSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltAttention with Vilt->Tvlt
 class TvltAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -455,7 +452,6 @@ class TvltAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltIntermediate with Vilt->Tvlt
 class TvltIntermediate(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -472,7 +468,6 @@ class TvltIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt
 class TvltOutput(nn.Module):
     def __init__(self, config: TvltConfig) -> None:
         super().__init__()
@@ -488,7 +483,6 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltLayer with Vilt->Tvlt
 class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -527,7 +521,6 @@ class TvltLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltEncoder with Vilt->Tvlt
 class TvltEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
