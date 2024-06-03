@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -737,7 +736,7 @@ class Mask4DTestHard(unittest.TestCase):
         gc.collect()
         torch.cuda.empty_cache()
 
-    @cached_property
+    @property
     def model(self):
         if self.__class__._model is None:
             self.__class__._model = MistralForCausalLM.from_pretrained(
