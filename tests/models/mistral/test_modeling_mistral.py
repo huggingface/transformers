@@ -741,7 +741,9 @@ class Mask4DTestHard(unittest.TestCase):
     @cached_property
     def model(self):
         if self.__class__._model is None:
-            self.__class__._model = MistralForCausalLM.from_pretrained(self.model_name, torch_dtype=self.model_dtype).to(torch_device)
+            self.__class__._model = MistralForCausalLM.from_pretrained(
+                self.model_name, torch_dtype=self.model_dtype
+            ).to(torch_device)
         return self.__class__._model
 
     @cached_property
