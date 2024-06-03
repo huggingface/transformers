@@ -17,9 +17,11 @@ Image/Text processor class for AltCLIP
 """
 
 import warnings
+from typing import List, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...image_utils import ChannelDimension, ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class AltCLIPProcessor(ProcessorMixin):
@@ -35,22 +37,21 @@ class AltCLIPProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        feature_extractor ([`CLIPFeatureExtractor`], *optional*):
+            The feature extractor is a deprecated input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
+    def __init__(self, image_processor=None, tokenizer=None, feature_extractor=None):
+        if "feature_extractor":
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
             )
-            feature_extractor = kwargs.pop("feature_extractor")
-
         image_processor = image_processor if image_processor is not None else feature_extractor
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
@@ -58,8 +59,49 @@ class AltCLIPProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": None},
+            "text_kwargs": {
+                "add_special_tokens": True,
+                "padding": False,
+                "truncation": None,
+                "max_length": None,
+                "stride": 0,
+                "is_split_into_words": False,
+                "pad_to_multiple_of": None,
+                "return_token_type_ids": None,
+                "return_attention_mask": None,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {
+                "do_resize": None,
+                "size": None,
+                "resample": None,
+                "do_thumbnail": None,
+                "do_align_long_axis": None,
+                "do_pad": None,
+                "do_rescale": None,
+                "rescale_factor": None,
+                "do_normalize": None,
+                "image_mean": None,
+                "image_std": None,
+                "data_format": ChannelDimension.FIRST,
+                "input_data_format": None,
+            },
+        }
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs,
+    ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to XLMRobertaTokenizerFast's [`~XLMRobertaTokenizerFast.__call__`] if `text` is not
@@ -68,22 +110,20 @@ class AltCLIPProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -94,22 +134,20 @@ class AltCLIPProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
+        text_kwargs = {**self.processing_kwargs["text_kwargs"], **self.processing_kwargs["common_kwargs"], **kwargs}
+        images_kwargs = {
+            **self.processing_kwargs["images_kwargs"],
+            **self.processing_kwargs["common_kwargs"],
+            **kwargs,
+        }
 
-        if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+        if text:
+            encoding = self.tokenizer(text, **text_kwargs)
+        if images:
+            image_features = self.image_processor(images, **images_kwargs)
+            encoding.update(image_features)
 
-        if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+        return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
