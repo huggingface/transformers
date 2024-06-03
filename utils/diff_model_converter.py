@@ -238,11 +238,16 @@ class SuperTransformer(cst.CSTTransformer):
         Helper method to update the body by removing duplicates before adding new statements.
         """
         deduplicated_new_body = []
-        existing_nodes = {
-            self.python_module.code_for_node(node).strip() for node in new_statements if isinstance(node, cst.CSTNode)
-        }
+        existing_nodes = set()
+        for node in new_statements:
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            existing_nodes.add(comment_less_code)
         for stmt in existing_body:
-            if self.python_module.code_for_node(stmt).strip() not in existing_nodes:
+            comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if comment_less_code not in existing_nodes:
                 if m.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
                     continue
                 deduplicated_new_body.append(stmt)
@@ -542,7 +547,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["/Users/arthurzucker/Work/transformers/examples/diff-conversion/diff_my_new_model.py"],
+        default=["all"],
         nargs="+",
         help="A list of `diff_xxxx` files that should be converted to single model file",
     )
