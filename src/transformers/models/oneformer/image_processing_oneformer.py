@@ -285,7 +285,12 @@ def convert_segmentation_map_to_binary_masks(
 
     # Generate a binary mask for each object instance
     binary_masks = [(segmentation_map == i) for i in all_labels]
-    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
+
+    # Stack the binary masks
+    if binary_masks:
+        binary_masks = np.stack(binary_masks, axis=0)
+    else:
+        binary_masks = np.zeros((0, *segmentation_map.shape))
 
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:

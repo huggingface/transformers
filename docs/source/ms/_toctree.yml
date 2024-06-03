@@ -147,8 +147,6 @@
       title: Bagaimana untuk menyumbang kepada transformer?
     - local: add_new_model
       title: Bagaimana untuk menambah model pada 🤗 Transformers?
-    - local: add_tensorflow_model
-      title: Bagaimana untuk menukar model Transformers kepada TensorFlow?
     - local: add_new_pipeline
       title: Bagaimana untuk menambah saluran paip ke 🤗 Transformers?
     - local: testing

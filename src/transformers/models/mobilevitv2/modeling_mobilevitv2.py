@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViTV2 model."""
-
+"""PyTorch MobileViTV2 model."""
 
 from typing import Optional, Tuple, Union
 
@@ -55,9 +54,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevitv2-1.0-imagenet1k-256"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-from ..deprecated._archive_maps import MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
@@ -606,6 +602,7 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevitv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTV2Layer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""

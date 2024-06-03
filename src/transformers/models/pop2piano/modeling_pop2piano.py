@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Pop2Piano model."""
-
+"""PyTorch Pop2Piano model."""
 
 import copy
 import math
@@ -65,9 +64,6 @@ _CONFIG_FOR_DOC = "Pop2PianoConfig"
 _CHECKPOINT_FOR_DOC = "sweetcocoa/pop2piano"
 
 
-from ..deprecated._archive_maps import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 POP2PIANO_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -75,7 +71,7 @@ POP2PIANO_INPUTS_DOCSTRING = r"""
             so you should be able to pad the inputs on both the right and the left. Indices can be obtained using
             [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids) To know more on how to prepare `input_ids` for pretraining
-            take a look a [Pop2Pianp Training](./Pop2Piano#training).
+            take a look a [Pop2Piano Training](./Pop2Piano#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,

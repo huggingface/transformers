@@ -31,6 +31,7 @@ from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -123,9 +124,9 @@ class ImageProcessingMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the image processor files and override the cached versions if
                 they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -287,7 +288,7 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", False)
+        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -375,11 +376,15 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
-        if "auto_map" in image_processor_dict and not is_local:
-            image_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                image_processor_dict["auto_map"], pretrained_model_name_or_path
-            )
-
+        if not is_local:
+            if "auto_map" in image_processor_dict:
+                image_processor_dict["auto_map"] = add_model_info_to_auto_map(
+                    image_processor_dict["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in image_processor_dict:
+                image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
+                )
         return image_processor_dict, kwargs
 
     @classmethod
@@ -662,7 +667,13 @@ class BaseImageProcessor(ImageProcessingMixin):
         )
 
 
-VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
+VALID_SIZE_DICT_KEYS = (
+    {"height", "width"},
+    {"shortest_edge"},
+    {"shortest_edge", "longest_edge"},
+    {"longest_edge"},
+    {"max_height", "max_width"},
+)
 
 
 def is_valid_size_dict(size_dict):

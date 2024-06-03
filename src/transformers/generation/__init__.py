@@ -18,7 +18,7 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 
 
 _import_structure = {
-    "configuration_utils": ["GenerationConfig", "GenerationMode"],
+    "configuration_utils": ["GenerationConfig", "GenerationMode", "WatermarkingConfig"],
     "streamers": ["TextIteratorStreamer", "TextStreamer"],
 }
 
@@ -64,6 +64,7 @@ else:
         "LogitsWarper",
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
+        "MinPLogitsWarper",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -77,6 +78,7 @@ else:
         "TypicalLogitsWarper",
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
         "WhisperTimeStampLogitsProcessor",
+        "WatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -86,6 +88,7 @@ else:
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
+        "StopStringCriteria",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -103,6 +106,10 @@ else:
         "GenerateBeamEncoderDecoderOutput",
         "GenerateDecoderOnlyOutput",
         "GenerateEncoderDecoderOutput",
+    ]
+    _import_structure["watermarking"] = [
+        "WatermarkDetector",
+        "WatermarkDetectorOutput",
     ]
 
 try:
@@ -172,7 +179,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_utils import GenerationConfig, GenerationMode
+    from .configuration_utils import GenerationConfig, GenerationMode, WatermarkingConfig
     from .streamers import TextIteratorStreamer, TextStreamer
 
     try:
@@ -203,6 +210,7 @@ if TYPE_CHECKING:
             LogitsWarper,
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
+            MinPLogitsWarper,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,
@@ -215,6 +223,7 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
@@ -224,6 +233,7 @@ if TYPE_CHECKING:
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
+            StopStringCriteria,
             validate_stopping_criteria,
         )
         from .utils import (
@@ -242,6 +252,10 @@ if TYPE_CHECKING:
             GreedySearchEncoderDecoderOutput,
             SampleDecoderOnlyOutput,
             SampleEncoderDecoderOutput,
+        )
+        from .watermarking import (
+            WatermarkDetector,
+            WatermarkDetectorOutput,
         )
 
     try:

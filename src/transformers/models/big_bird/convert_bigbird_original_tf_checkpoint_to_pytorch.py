@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BigBird checkpoint."""
 
-
 import argparse
 
 from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdForQuestionAnswering, load_tf_weights_in_big_bird

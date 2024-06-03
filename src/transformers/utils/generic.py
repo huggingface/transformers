@@ -38,10 +38,6 @@ from .import_utils import (
 )
 
 
-if is_flax_available():
-    import jax.numpy as jnp
-
-
 class cached_property(property):
     """
     Descriptor that mimics @property but caches output in member variable.
@@ -624,6 +620,8 @@ def transpose(array, axes=None):
 
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.transpose(array, axes=axes)
     else:
         raise ValueError(f"Type not supported for transpose: {type(array)}.")
@@ -643,6 +641,8 @@ def reshape(array, newshape):
 
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.reshape(array, newshape)
     else:
         raise ValueError(f"Type not supported for reshape: {type(array)}.")
@@ -662,6 +662,8 @@ def squeeze(array, axis=None):
 
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.squeeze(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for squeeze: {type(array)}.")
@@ -681,6 +683,8 @@ def expand_dims(array, axis):
 
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
+        import jax.numpy as jnp
+
         return jnp.expand_dims(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
@@ -715,6 +719,19 @@ def add_model_info_to_auto_map(auto_map, repo_id):
             auto_map[key] = f"{repo_id}--{value}"
 
     return auto_map
+
+
+def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
+    """
+    Adds the information of the repo_id to a given custom pipeline.
+    """
+    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
+    for task in custom_pipeline.keys():
+        if "impl" in custom_pipeline[task]:
+            module = custom_pipeline[task]["impl"]
+            if "--" not in module:
+                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
+    return custom_pipeline
 
 
 def infer_framework(model_class):

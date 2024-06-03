@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Pix2Struct model. """
+"""Testing suite for the PyTorch Pix2Struct model."""
 
 import copy
 import inspect
@@ -386,6 +386,7 @@ class Pix2StructModelTester:
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):

@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch GIT model."""
 
-
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -44,9 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
-
-
-from ..deprecated._archive_maps import GIT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 @dataclass
@@ -267,11 +263,18 @@ class GitSelfOutput(nn.Module):
         return hidden_states
 
 
+GIT_SELF_ATTENTION_CLASSES = {
+    "eager": GitSelfAttention,
+}
+
+
 class GitAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Git,BERT->GIT
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = GitSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = GIT_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = GitSelfOutput(config)
         self.pruned_heads = set()
 

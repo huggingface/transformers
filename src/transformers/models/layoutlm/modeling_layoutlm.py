@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LayoutLM model."""
-
+"""PyTorch LayoutLM model."""
 
 import math
 from typing import Optional, Tuple, Union
@@ -42,9 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlm-base-uncased"
-
-
-from ..deprecated._archive_maps import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LayoutLMLayerNorm = nn.LayerNorm
@@ -276,11 +272,18 @@ class LayoutLMSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
+LAYOUTLM_SELF_ATTENTION_CLASSES = {
+    "eager": LayoutLMSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM,BERT->LAYOUTLM
 class LayoutLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = LayoutLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = LAYOUTLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = LayoutLMSelfOutput(config)
         self.pruned_heads = set()
 
@@ -587,6 +590,9 @@ class LayoutLMLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -866,6 +872,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+        self.cls.predictions.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)

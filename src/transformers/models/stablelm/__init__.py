@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_stablelm": ["STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP", "StableLmConfig"],
+    "configuration_stablelm": ["StableLmConfig"],
 }
 
 
@@ -36,11 +36,12 @@ else:
         "StableLmModel",
         "StableLmPreTrainedModel",
         "StableLmForSequenceClassification",
+        "StableLmForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_stablelm import STABLELM_PRETRAINED_CONFIG_ARCHIVE_MAP, StableLmConfig
+    from .configuration_stablelm import StableLmConfig
 
     try:
         if not is_torch_available():
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         from .modeling_stablelm import (
             StableLmForCausalLM,
             StableLmForSequenceClassification,
+            StableLmForTokenClassification,
             StableLmModel,
             StableLmPreTrainedModel,
         )
