@@ -24,8 +24,6 @@ from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
     LlamaFlashAttention2,
     LlamaForCausalLM,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaSdpaAttention,
     repeat_kv,
 )
@@ -754,11 +752,3 @@ class CohereForCausalLM(LlamaForCausalLM):
             "`tie_word_embeddings` attribute is going to be deprecated in future versions, please use `model.config.tie_word_embeddings` instead."
         )
         return self.config.tie_word_embeddings
-
-
-class CohereForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class CohereForTokenClassification(LlamaForTokenClassification):
-    pass
