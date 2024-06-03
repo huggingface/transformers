@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -729,15 +730,40 @@ class MistralIntegrationTest(unittest.TestCase):
 @slow
 @require_torch_gpu
 class Mask4DTestHard(unittest.TestCase):
+    model_name = "mistralai/Mistral-7B-v0.1"
+    _model = None
+    _pre_computed_data = None
+
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
+    @cached_property
+    def model(self):
+        if self.__class__._model is None:
+            self.__class__._model = MistralForCausalLM.from_pretrained(self.model_name, torch_dtype=self.model_dtype).to(torch_device)
+        return self.__class__._model
+
+    @cached_property
+    def pre_computed_data(self):
+        if self.__class__._pre_computed_data is None:
+            (
+                input_ids,
+                position_ids,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                position_ids_shared_prefix,
+            ) = self.get_test_data()
+            logits = self.model.forward(input_ids, position_ids=position_ids).logits
+            logits_last = logits[:, -1, :]  # last tokens in each batch line
+            decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+
+            self.__class__._pre_computed_data = logits, logits_last, decoded
+        return self.__class__._pre_computed_data
+
     def setUp(self):
-        model_name = "mistralai/Mistral-7B-v0.1"
-        self.model_dtype = torch.float32
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        self.model = MistralForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model_dtype = torch.float16
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
 
     def get_test_data(self):
         template = "my favorite {}"
@@ -793,9 +819,7 @@ class Mask4DTestHard(unittest.TestCase):
         ) = self.get_test_data()
 
         # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+        logits, logits_last, decoded = self.pre_computed_data
 
         # single forward run with 4D custom mask
         logits_shared_prefix = self.model.forward(
@@ -820,9 +844,7 @@ class Mask4DTestHard(unittest.TestCase):
         ) = self.get_test_data()
 
         # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
+        logits, logits_last, decoded = self.pre_computed_data
 
         # 2 forward runs with custom 4D masks
         part_a = 3  # split point
