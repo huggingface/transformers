@@ -162,7 +162,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     return coords
 
 
-def transform_preds(coords, center, scale, output_size, use_udp=False):
+def transform_preds(coords, center, scale, output_size):
     """Get final keypoint predictions from heatmaps and apply scaling and
     translation to map them back to the image.
 
@@ -183,8 +183,6 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
             Scale of the bounding box wrt [width, height].
         output_size (`np.ndarray[2,] or `List(2,)`):
             Size of the destination heatmaps in (height, width) format.
-        use_udp (`bool`, *optional*, defaults to `False`):
-            Whether to use unbiased data processing.
 
     Returns:
         np.ndarray: Predicted coordinates in the images.
@@ -201,12 +199,9 @@ def transform_preds(coords, center, scale, output_size, use_udp=False):
     # Recover the scale which is normalized by a factor of 200.
     scale = scale * 200.0
 
-    if use_udp:
-        scale_y = scale[1] / (output_size[0] - 1.0)
-        scale_x = scale[0] / (output_size[1] - 1.0)
-    else:
-        scale_y = scale[1] / output_size[0]
-        scale_x = scale[0] / output_size[1]
+    # We use unbiased data processing
+    scale_y = scale[1] / (output_size[0] - 1.0)
+    scale_x = scale[0] / (output_size[1] - 1.0)
 
     target_coords = np.ones_like(coords)
     target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
@@ -476,7 +471,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         center,
         scale,
         kernel=11,
-        use_udp=False,
     ):
         """
         Get final keypoint predictions from heatmaps and transform them back to
@@ -492,8 +486,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             kernel (int):
                 Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
-            use_udp (`bool`, *optional*, defaults to `False`):
-                Use unbiased data processing.
 
         Returns:
             tuple: A tuple containing keypoint predictions and scores.
@@ -514,11 +506,11 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         # Transform back to the image
         for i in range(batch_size):
-            preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width], use_udp=use_udp)
+            preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width])
 
         return preds, scores
 
-    def post_process_pose_estimation(self, outputs, boxes, kernel_size=11, use_udp=True):
+    def post_process_pose_estimation(self, outputs, boxes, kernel_size=11):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
@@ -529,8 +521,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Bounding boxes.
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
-            use_udp (`bool`, *optional*, defaults to `False`):
-                Whether to use unbiased data processing.
         """
 
         # First compute centers and scales for each bounding box
@@ -543,9 +533,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             centers[i, :] = center
             scales[i, :] = scale
 
-        preds, scores = self.keypoints_from_heatmaps(
-            outputs.heatmaps, centers, scales, kernel=kernel_size, use_udp=use_udp
-        )
+        preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps, centers, scales, kernel=kernel_size)
 
         all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
         all_boxes = np.zeros((batch_size, 6), dtype=np.float32)

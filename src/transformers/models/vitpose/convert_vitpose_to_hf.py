@@ -39,7 +39,7 @@ def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_pro
         centers[i, :] = img_metas[i]["center"]
         scales[i, :] = img_metas[i]["scale"]
 
-    preds, scores = image_processor.keypoints_from_heatmaps(output_heatmap, center=centers, scale=scales, use_udp=True)
+    preds, scores = image_processor.keypoints_from_heatmaps(output_heatmap, center=centers, scale=scales)
 
     all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
     all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
@@ -285,7 +285,7 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # test post_process_pose_estimation
     # results are slightly different due to no flip augmentation
-    hf_pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0], use_udp=True)
+    hf_pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0])
     if model_name == "vitpose-base-simple":
         assert torch.allclose(
             torch.tensor(hf_pose_results[1]["keypoints"][0, :3]),
