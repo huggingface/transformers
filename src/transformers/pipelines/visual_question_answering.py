@@ -67,7 +67,12 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             postprocess_params["top_k"] = top_k
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, image: Union["Image.Image", str], question: str = None, **kwargs):
+    def __call__(
+        self,
+        image: Union["Image.Image", str, list["Image.Image"], list[str]],
+        question: Union[str, list[str]] = None,
+        **kwargs,
+    ):
         r"""
         Answers open-ended questions about images. The pipeline accepts several types of inputs which are detailed
         below:
@@ -101,8 +106,14 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
+        is_image_batch = isinstance(image, list) and all(isinstance(item, (Image.Image, str)) for item in image)
+        is_question_batch = isinstance(question, list) and all(isinstance(item, str) for item in question)
         if isinstance(image, (Image.Image, str)) and isinstance(question, str):
             inputs = {"image": image, "question": question}
+        elif is_image_batch and isinstance(question, str):
+            inputs = [{"image": im, "question": question} for im in image]
+        elif isinstance(image, (Image.Image, str)) and is_question_batch:
+            inputs = [{"image": image, "question": q} for q in question]
         else:
             """
             Supports the following format
@@ -117,7 +128,10 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
         image = load_image(inputs["image"], timeout=timeout)
         model_inputs = self.tokenizer(
-            inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            inputs["question"],
+            return_tensors=self.framework,
+            padding=padding,
+            truncation=truncation,
         )
         image_features = self.image_processor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
