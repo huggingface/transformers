@@ -401,7 +401,7 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab=None, merges=None) -> Tokenizer:
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:

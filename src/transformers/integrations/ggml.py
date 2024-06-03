@@ -619,6 +619,7 @@ def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
+        architecture (`str`): The model architecture derived from gguf file.
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
