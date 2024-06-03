@@ -649,15 +649,14 @@ class CohereDecoderLayer(nn.Module):
         self.self_attn = COHERE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = CohereMLP(config)
-        self.input_layernorm = CohereRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = CohereRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -681,7 +680,7 @@ class CohereDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states_attention, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -690,13 +689,12 @@ class CohereDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
         )
-        hidden_states = residual + hidden_states
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states_mlp = self.mlp(hidden_states)
+
+        # Add everything together
+        hidden_states = residual + hidden_states_attention + hidden_states_mlp
 
         outputs = (hidden_states,)
 
@@ -1148,7 +1146,7 @@ class CohereForCausalLM(CoherePreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits * self.logit_scale
+        logits = logits * self.config.logit_scale
         logits = logits.float()
 
         loss = None
