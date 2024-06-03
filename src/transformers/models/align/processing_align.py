@@ -132,9 +132,9 @@ class AlignProcessor(ProcessorMixin):
         images: ImageInput = None,
         audio=None,
         videos=None,
-        text_kwargs: AlignProcessorKwargs.text_kwargs = {},
-        images_kwargs: AlignProcessorKwargs.images_kwargs = {},
-        common_kwargs: AlignProcessorKwargs.common_kwargs = {},
+        text_kwargs: AlignProcessorKwargs.text_kwargs = None,
+        images_kwargs: AlignProcessorKwargs.images_kwargs = None,
+        common_kwargs: AlignProcessorKwargs.common_kwargs = None,
         **kwargs: AlignProcessorKwargs,
     ) -> BatchEncoding:
         """
@@ -169,6 +169,15 @@ class AlignProcessor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
+
+        # set kwargs as empty dicts to avoid default mutable
+        if text_kwargs is None:
+            text_kwargs = {}
+        if images_kwargs is None:
+            images_kwargs = {}
+        if common_kwargs is None:
+            common_kwargs = {}
+
         # Init with default values if they exist
         text_kwargs = AlignProcessorKwargs._defaults.get("text_kwargs", {}).copy()
 
@@ -177,6 +186,7 @@ class AlignProcessor(ProcessorMixin):
             {k: v for k, v in self.tokenizer.init_kwargs.items() if k in AlignProcessorKwargs.text_kwargs}
         )
         # then get passed per-modality dictionaries if they exist
+
         text_kwargs.update(kwargs.pop("text_kwargs", {}))
         images_kwargs.update(kwargs.pop("images_kwargs", {}))
         common_kwargs.update(kwargs.pop("common_kwargs", {}))
