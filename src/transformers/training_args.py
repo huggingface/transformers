@@ -772,8 +772,8 @@ class TrainingArguments:
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
 
-        sanity_evaluation(`bool`, *optional*, defaults to `False`):
-            Whether or not to perform a sanity check to ensure that the validation steps works correctly. It will be performed before the training.
+        eval_on_start(`bool`, *optional*, defaults to `False`):
+            Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
     """
 
     framework = "pt"
@@ -1330,6 +1330,12 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
+    eval_on_start: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
+    )
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -1455,13 +1461,6 @@ class TrainingArguments:
     batch_eval_metrics: bool = field(
         default=False,
         metadata={"help": "Break eval metrics calculation into batches to save memory."},
-    )
-
-    sanity_evaluation: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
-        },
     )
 
     def __post_init__(self):
