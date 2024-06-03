@@ -182,6 +182,8 @@ class ZambaConfig(PretrainedConfig):
 
         self.rope_theta = rope_theta
 
+        self.layers_block_type = self._layers_block_type(num_hidden_layers, attn_layer_period, attn_layer_offset)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -191,11 +193,10 @@ class ZambaConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @property
-    def layers_block_type(self):
+    def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
         layers = ["mamba", "mamba", "attention+mamba",] + \
             [
-                "attention+mamba" if i % self.attn_layer_period == self.attn_layer_offset else "mamba"
-                for i in range(self.num_hidden_layers - 3)
+                "attention+mamba" if i % attn_layer_period == attn_layer_offset else "mamba"
+                for i in range(num_hidden_layers - 3)
             ]
         return layers
