@@ -703,7 +703,6 @@ class CogvlmModel(CogvlmPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
         self.vision = CogvlmVisionModel(config)
         self.num_vision_tokens = (
             self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -790,15 +789,14 @@ class CogvlmModel(CogvlmPreTrainedModel):
         if past_key_values is not None:
             pass  # generate mode with past_key_values. the image features are already mapped
         else:
-            # not allow for inputs_embeds, because we want to process image feature
-            assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
             if pixel_values is not None:
                 # multi-modality
                 if token_type_ids is None:
                     raise ValueError("Multi-modality requires `token_type_ids`!")
-                if len(input_ids) != len(pixel_values):
-                    raise ValueError("Make sure to pass as many texts as images")
-                inputs_embeds = self.embed_tokens(input_ids)
+                if input_ids is not None:
+                    if len(input_ids) != len(pixel_values):
+                        raise ValueError("Make sure to pass as many texts as images")
+                inputs_embeds = self.embed_tokens(input_ids) if input_ids is not None else inputs_embeds
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
