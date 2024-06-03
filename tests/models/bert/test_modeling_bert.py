@@ -768,8 +768,11 @@ class BertModelIntegrationTest(unittest.TestCase):
         del inp["attention_mask"]
 
         with torch.no_grad():
+            res_eager = model(**inp)
+            res_sdpa = model_sdpa(**inp)
+            self.assertTrue(torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state))
+
             # Case where query length != kv_length.
             res_eager = model(**inp, past_key_values=pkv)
             res_sdpa = model_sdpa(**inp, past_key_values=pkv)
-
-        self.assertTrue(torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state))
+            self.assertTrue(torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state))
