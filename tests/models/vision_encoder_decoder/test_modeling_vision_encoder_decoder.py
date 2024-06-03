@@ -401,6 +401,29 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         return model, inputs
 
+    def test_attention_implementation(self):
+        model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+            "hf-internal-testing/tiny-random-deit", "hf-internal-testing/tiny-random-roberta"
+        )
+        self.assertTrue(model.encoder.config._attn_implementation == "sdpa")
+
+        configs_and_inputs = self.prepare_config_and_inputs()
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            configs_and_inputs["config"], configs_and_inputs["decoder_config"]
+        )
+        enc_dec_model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            enc_dec_model.save_pretrained(tmpdirname)
+            enc_dec_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname)
+
+            self.assertTrue(enc_dec_model.encoder.config._attn_implementation == "sdpa")
+            self.assertTrue(enc_dec_model.decoder.config._attn_implementation == "sdpa")
+
+            enc_dec_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="eager")
+            self.assertTrue(enc_dec_model.encoder.config._attn_implementation == "eager")
+            self.assertTrue(enc_dec_model.decoder.config._attn_implementation == "eager")
+
     def check_encoder_decoder_model_output_attentions(
         self,
         config,

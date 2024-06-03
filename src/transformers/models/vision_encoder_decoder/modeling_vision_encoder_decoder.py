@@ -15,9 +15,10 @@
 """Classes to support Vision-Encoder-Text-Decoder architectures"""
 
 import gc
+import importlib
 import os
 import tempfile
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -28,7 +29,7 @@ from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
+from ..auto.modeling_auto import MODEL_MAPPING_NAMES, AutoModel, AutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
 
 
@@ -189,10 +190,12 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config.encoder._attn_implementation)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
+            decoder = AutoModelForCausalLM.from_config(
+                config.decoder, attn_implementation=config.decoder._attn_implementation
+            )
 
         self.encoder = encoder
         self.decoder = decoder
@@ -368,6 +371,41 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         kwargs["_fast_init"] = False
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+    @classmethod
+    def _autoset_attn_implementation(
+        cls,
+        config,
+        use_flash_attention_2: bool = False,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        check_device_map: bool = True,
+    ):
+        encoder_model_class_name = MODEL_MAPPING_NAMES[config.encoder.model_type]
+        decoder_model_class_name = MODEL_MAPPING_NAMES[config.decoder.model_type]
+        encoder_model_class = getattr(importlib.import_module("transformers"), encoder_model_class_name)
+        decoder_model_class = getattr(importlib.import_module("transformers"), decoder_model_class_name)
+
+        if hasattr(config, "_attn_implementation_internal") and config._attn_implementation_internal is not None:
+            config.encoder._attn_implementation = config._attn_implementation_internal
+            config.decoder._attn_implementation = config._attn_implementation_internal
+
+        config.encoder = encoder_model_class._autoset_attn_implementation(
+            config=config.encoder,
+            use_flash_attention_2=use_flash_attention_2,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            check_device_map=check_device_map,
+        )
+        config.decoder = decoder_model_class._autoset_attn_implementation(
+            config=config.decoder,
+            use_flash_attention_2=use_flash_attention_2,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            check_device_map=check_device_map,
+        )
+
+        return config
 
     @classmethod
     def from_encoder_decoder_pretrained(
