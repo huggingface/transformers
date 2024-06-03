@@ -544,6 +544,9 @@ class GGUFTokenizerSkeleton:
         if not hasattr(self, "added_tokens"):
             self.added_tokens = []
 
+        if not hasattr(self, "unk_token_id"):
+            self.unk_token_id = None
+
 
 class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
@@ -560,9 +563,10 @@ class GGUFLlamaConverter(LlamaConverter):
         vocab_scores = self.vocab(self.proto)
         merges = self.merges(self.proto)
         bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-        tokenizer = Tokenizer(
-            BPE(bpe_vocab, merges, unk_token=proto.tokens[proto.unk_token_id], fuse_unk=True, byte_fallback=True)
-        )
+
+        unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+
+        tokenizer = Tokenizer(BPE(bpe_vocab, merges, unk_token=unk_token, fuse_unk=True, byte_fallback=True))
         tokenizer.add_special_tokens(
             [
                 AddedToken("<unk>", normalized=False, special=True),
