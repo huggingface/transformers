@@ -584,8 +584,7 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
         return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.embed_tokens.embeddings = value
-        self.embed_tokens.vocab_size = shape_list(value)[0]
+        self.embed_tokens = value
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
@@ -750,8 +749,7 @@ class TFGemmaForCausalLM(TFGemmaPreTrainedModel):
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens.embeddings = value
-        self.model.embed_tokens.vocab_size = shape_list(value)[0]
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -950,8 +948,7 @@ class TFGemmaForSequenceClassification(TFGemmaPreTrainedModel):
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens.embeddings = value
-        self.model.embed_tokens.vocab_size = shape_list(value)[0]
+        self.model.embed_tokens = value
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GEMMA_INPUTS_DOCSTRING)
