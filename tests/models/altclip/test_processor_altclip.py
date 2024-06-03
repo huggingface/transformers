@@ -1,17 +1,10 @@
-
-import json
-import os
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
-import pytest
 
 from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
-from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_vision_available
 
 
 if is_vision_available():
