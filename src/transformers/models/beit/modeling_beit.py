@@ -188,9 +188,7 @@ class BeitEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         embeddings, (patch_height, patch_width) = self.patch_embeddings(
-            pixel_values,
-            self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None,
-            interpolate_pos_encoding,
+            pixel_values, self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None
         )
         batch_size, seq_len, _ = embeddings.size()
 
@@ -243,20 +241,12 @@ class BeitPatchEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         position_embedding: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
 
         embeddings = self.projection(pixel_values)
         patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
@@ -667,6 +657,8 @@ BEIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """

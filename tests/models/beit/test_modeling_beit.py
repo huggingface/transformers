@@ -552,11 +552,12 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         processor = BeitImageProcessor.from_pretrained(model_name)
-        inputs = processor(images=image, return_tensors="pt", size=480)
+        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # with interpolate_pos_encoding being False an exception should be raised with higher resolution
         # images than what the model supports.
+        self.assertFalse(processor.do_center_crop)
         with torch.no_grad():
             with self.assertRaises(ValueError, msg="doesn't match model"):
                 model(pixel_values, interpolate_pos_encoding=False)
