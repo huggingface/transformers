@@ -440,7 +440,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                     new_images.append(transformed_image)
             images = new_images
 
-        # TODO each image might have a variable number of boxes => padding?
         # since the number of boxes can differ per image, the image processor takes a list
         # rather than a numpy array of boxes
         # it currently create pixel_values of shape (batch_size*num_persons, num_channels, height, width)
@@ -498,7 +497,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         # Avoid mutation
         heatmaps = heatmaps.numpy().copy()
 
-        batch_size, num_keypoints, height, width = heatmaps.shape
+        batch_size, _, height, width = heatmaps.shape
 
         preds, scores = _get_max_preds(heatmaps)
 
