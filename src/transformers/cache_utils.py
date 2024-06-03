@@ -373,7 +373,8 @@ class DynamicCache(Cache):
         return None
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
+        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format. Used for
+        backward compatibility."""
         legacy_cache = ()
         for layer_idx in range(len(self)):
             legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
@@ -381,7 +382,8 @@ class DynamicCache(Cache):
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
+        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
+        backward compatibility."""
         cache = cls()
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
@@ -391,7 +393,7 @@ class DynamicCache(Cache):
 
     def crop(self, maximum_length: int):
         """Crop the past key values up to a new `maximum_length` in terms of tokens. `maximum_length` can also be
-        negative to remove `maximum_length` tokens."""
+        negative to remove `maximum_length` tokens. This is used in assisted decoding and contrastive search."""
 
         # In case it is negative
         if maximum_length < 0:
