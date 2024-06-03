@@ -125,7 +125,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-
 class HybridMambaAttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
@@ -140,6 +139,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
+    # Adapted from transformers.models.jamba.modeling_llama.HybridMambaAttentionDynamicCache
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
@@ -163,7 +163,8 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
 
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-
+    
+    # Copied from transformers.models.jamba.modeling_llama.HybridMambaAttentionDynamicCache.update
     def update(
         self,
         key_states: torch.Tensor,
@@ -176,12 +177,12 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             self.key_cache[layer_idx] = key_states
             self.value_cache[layer_idx] = value_states
         else:
-            #  print('\nshapes:', self.key_cache[layer_idx].shape, key_states.shape)
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
+    # Copied from transformers.models.jamba.modeling_llama.HybridMambaAttentionDynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
@@ -195,6 +196,7 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
+    # Copied from transformers.models.jamba.modeling_llama.HybridMambaAttentionDynamicCache.get_seq_len
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -211,7 +213,12 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
+# Also, the input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
+# The extra factor of 2 comes from the input being the concatenation of x_orig with the output of the previous (mamba) layer.
+# Additionally, replaced
+# attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
+# attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
 class ZambaAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -304,7 +311,10 @@ class ZambaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
+# Also:
+# added softmax_scale = 1 / (query_states.shape[-1]/2)**0.5 to the arguments of self._flash_attention_forward
+# dropped use_sliding_windows from the arguments of self._flash_attention_forward
 class ZambaFlashAttention2(ZambaAttention):
     """
     Zamba flash attention module. This module inherits from `ZambaAttention` as the weights of the module stays
@@ -545,7 +555,9 @@ class ZambaFlashAttention2(ZambaAttention):
         )
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
+# Also:
+# added scale = 1 / (query_states.shape[-1]/2)**0.5 to the arguments of torch.nn.functional.scaled_dot_product_attention
 class ZambaSdpaAttention(ZambaAttention): 
     """
     Zamba attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -635,7 +647,6 @@ ZAMBA_ATTENTION_CLASSES = {
 }
 
 
-# Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
 class ZambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -915,7 +926,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        x_orig: torch.Tensor,
         layer_id_num: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -928,7 +938,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            x_orig (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
@@ -941,8 +950,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
         """
-
-        hidden_states = torch.concatenate([hidden_states, x_orig], dim=-1) 
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1146,7 +1153,6 @@ ZAMBA_INPUTS_DOCSTRING = r"""
     "The bare Zamba Model outputting raw hidden-states without any specific head on top.",
     ZAMBA_START_DOCSTRING,
 )
-# Adapted from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->ZAMBA, Mistral->Zamba
 class ZambaModel(ZambaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ZambaDecoderLayer`]
@@ -1227,6 +1233,8 @@ class ZambaModel(ZambaPreTrainedModel):
         hidden_states = inputs_embeds
         
         x_orig = torch.clone(inputs_embeds)
+        # x_orig: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
+        # see fig. xx of xx
 
 
         if use_cache and past_key_values is None:
@@ -1257,11 +1265,11 @@ class ZambaModel(ZambaPreTrainedModel):
         for layer_id_num, layer_type in enumerate(self.layers_block_type):
 
             if layer_type == "attention+mamba":
+                hidden_states = torch.concatenate([hidden_states, x_orig], dim=-1) 
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         self.block.__call__,
                         hidden_states,
-                        x_orig,
                         layer_id_num,
                         causal_mask,
                         position_ids,
@@ -1273,7 +1281,6 @@ class ZambaModel(ZambaPreTrainedModel):
                 else:
                     layer_outputs = self.block(
                         hidden_states,
-                        x_orig=x_orig,
                         layer_id_num=layer_id_num,
                         attention_mask=causal_mask,
                         position_ids=position_ids,
@@ -1392,7 +1399,6 @@ class ZambaModel(ZambaPreTrainedModel):
         return causal_mask
 
 
-# Adapted from transformers.models.mixtral.modeling_mixtral.MixtralForCausalLM with MIXTRAL->ZAMBA, Mixtral->Zamba
 class ZambaForCausalLM(ZambaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
