@@ -710,7 +710,6 @@ class WhisperGenerationMixin:
         sequences = _pad_to_max_length(final_segments, pad_token_id = generation_config.pad_token_id, padding="right")
 
 
-
         if is_shortform: 
             sequences = torch.cat([decoder_input_ids.to(sequences.device), sequences], dim=-1)
             # add eos token:
@@ -726,11 +725,11 @@ class WhisperGenerationMixin:
                 
             if generation_config.return_dict_in_generate:
                 if num_return_sequences > 1:
-                    outputs = seek_outputs_short_form
-                    outputs.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
-                    outputs.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
+                    seek_outputs_short_form.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
+                    seek_outputs_short_form.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
                 if return_token_timestamps:
-                    outputs['token_timestamps'] = outputs['token_timestamps']
+                    seek_outputs_short_form['token_timestamps'] = outputs['token_timestamps']
+                return seek_outputs_short_form
 
             return outputs
         

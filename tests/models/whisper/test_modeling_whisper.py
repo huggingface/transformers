@@ -367,6 +367,7 @@ class WhisperModelTester:
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
+   
 
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -1535,6 +1536,46 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
+
+    # def test_beam_sample_generate_dict_output(self):
+        
+    #     config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+    #     # disable cache
+    #     config.use_cache = False
+
+    #     model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+    #     _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
+    #     beam_kwargs = self._get_beam_kwargs()
+
+    #     output_generate = self._beam_sample_generate(
+    #         model=model,
+    #         input_ids=input_ids,
+    #         attention_mask=attention_mask,
+    #         beam_kwargs=beam_kwargs,
+    #         logits_warper_kwargs=logits_warper_kwargs,
+    #         output_scores=True,
+    #         output_logits=True,
+    #         output_hidden_states=True,
+    #         output_attentions=True,
+    #         return_dict_in_generate=True,
+    #     )
+
+    #     if model.config.is_encoder_decoder:
+    #         self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+    #         self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+    #         # Retrocompatibility check
+    #         self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
+    #     else:
+    #         self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+    #         self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+    #         # Retrocompatibility check
+    #         self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
+
+    #     self._check_outputs(
+    #         output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+    #     )
+
 
 
 @require_torch
