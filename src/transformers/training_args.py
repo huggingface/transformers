@@ -1330,12 +1330,6 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
-    eval_on_start: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
-        },
-    )
     # Deprecated arguments
     fp16_backend: str = field(
         default="auto",
@@ -1461,6 +1455,13 @@ class TrainingArguments:
     batch_eval_metrics: bool = field(
         default=False,
         metadata={"help": "Break eval metrics calculation into batches to save memory."},
+    )
+
+    eval_on_start: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
     )
 
     def __post_init__(self):
