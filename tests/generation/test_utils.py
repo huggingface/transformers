@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     require_auto_gptq,
     require_quanto,
     require_torch,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -1688,6 +1689,49 @@ class GenerationTesterMixin:
             generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
             with self.assertRaises(ValueError):
                 model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
+    @require_torch_gpu
+    @slow
+    @is_flaky()  # compilation may result in equivalent (!= same) FP ops, causing the argmax in `generate` to be flaky
+    def test_generate_compile_fullgraph(self):
+        """
+        Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
+        ⚠️ Runs two sequential generations to ensure the cache doesn't get stuck after the first compiled run! ⚠️
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest("This model doesn't support static cache")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device)
+            input_ids = inputs_dict["input_ids"].to(torch_device)
+            # creates two sets of *different* inputs with the same shape
+            half_batch_size = input_ids.shape[0] // 2
+            input_ids_sets = [input_ids[:half_batch_size, :], input_ids[half_batch_size : half_batch_size * 2, :]]
+            self.assertTrue(input_ids_sets[0].shape == input_ids_sets[1].shape)
+
+            generation_kwargs = {
+                "do_sample": False,
+                "max_new_tokens": 10,
+            }
+
+            for model_inputs in input_ids_sets:
+                # dynamic cache
+                output_dynamic = model.generate(model_inputs, **generation_kwargs)
+
+                # eager static cache
+                torch.compiler.reset()
+                model.generation_config.cache_implementation = "static"
+                output_static = model.generate(model_inputs, **generation_kwargs)
+                self.assertListEqual(output_dynamic.tolist(), output_static.tolist())
+
+                # compiled static cache
+                torch.compiler.reset()
+                generation_config = copy.deepcopy(model.generation_config)
+                generation_config.update(**generation_kwargs)
+                compiled_generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
+                output_compiled = compiled_generate(model_inputs, generation_config=generation_config)
+                self.assertListEqual(output_dynamic.tolist(), output_compiled.tolist())
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
