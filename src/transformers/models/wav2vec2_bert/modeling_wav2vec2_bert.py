@@ -521,10 +521,7 @@ class Wav2Vec2BertSelfAttention(nn.Module):
             scores = self._apply_relative_embeddings(
                 query=query, key=key, relative_position_embeddings=relative_position_embeddings
             )
-        else:
-            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
-
-        if self.position_embeddings_type == "relative_key":
+        elif self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
             position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
@@ -537,6 +534,8 @@ class Wav2Vec2BertSelfAttention(nn.Module):
 
             relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
             scores = scores + (relative_position_attn_weights / math.sqrt(self.head_size))
+        else:
+            scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
         # apply attention_mask if necessary
         if attention_mask is not None:
