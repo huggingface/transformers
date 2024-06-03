@@ -1290,9 +1290,9 @@ class MistralForCausalLM(MistralPreTrainedModel):
             past_length > 0
             and attention_mask is not None
             and isinstance(past_key_values, SlidingWindowCache)
-            and attention_mask.shape[1] > past_key_values.sliding_window_size
+            and attention_mask.shape[1] > past_key_values.max_cache_len
         ):
-            attention_mask = attention_mask[:, -past_key_values.sliding_window_size :]
+            attention_mask = attention_mask[:, -past_key_values.max_cache_len :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
