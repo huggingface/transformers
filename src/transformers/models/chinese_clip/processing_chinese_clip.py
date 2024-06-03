@@ -20,8 +20,69 @@ import warnings
 from typing import List, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import (
+    CommonKwargs,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+)
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+
+
+class ChineseClipProcessorKwargs(ProcessingKwargs, total=False):
+    """
+    Inherits from `ProcessingKwargs` to provide:
+        1) Additional keys that this model requires to process inputs.
+        2) Default values for extra keys.
+    New keys have to be defined as follows to ensure type hinting is done correctly.
+
+    ```python
+    common_kwargs: CommonKwargs = {
+            **CommonKwargs.__annotations__,
+        }
+        text_kwargs: TextKwargs = {
+            **TextKwargs.__annotations__,
+            "a_new_text_boolean_key": Optional[bool],
+        }
+        images_kwargs: ImagesKwargs = {
+            **ImagesKwargs.__annotations__,
+            "a_new_image_processing_key": Optional[int]
+        }
+    ```
+
+    """
+
+    common_kwargs: CommonKwargs = {
+        **CommonKwargs.__annotations__,
+    }
+    text_kwargs: TextKwargs = {
+        **TextKwargs.__annotations__,
+    }
+    images_kwargs: ImagesKwargs = {
+        **ImagesKwargs.__annotations__,
+    }
+
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "truncation": True,
+            "max_length": 64,
+            "stride": 0,
+            "is_split_into_words": False,
+            "pad_to_multiple_of": None,
+            "return_token_type_ids": None,
+            "return_attention_mask": None,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
 
 
 class ChineseCLIPProcessor(ProcessorMixin):
@@ -61,48 +122,6 @@ class ChineseCLIPProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
-        self.processing_kwargs: ProcessingKwargs = {
-            "common_kwargs": {"return_tensors": None},
-            "text_kwargs": {
-                "text_pair": None,
-                "text_target": None,
-                "text_pair_target": None,
-                "add_special_tokens": True,
-                "truncation": True,
-                "max_length": 64,
-                "stride": 0,
-                "is_split_into_words": False,
-                "pad_to_multiple_of": None,
-                "return_token_type_ids": None,
-                "return_attention_mask": None,
-                "return_overflowing_tokens": False,
-                "return_special_tokens_mask": False,
-                "return_offsets_mapping": False,
-                "return_length": False,
-                "verbose": True,
-            },
-            "images_kwargs": {
-                "do_thumbnail": None,
-                "do_center_crop": None,
-                "do_convert_rgb": None,
-                "do_crop_margin": None,
-                "do_resize": None,
-                "size": None,
-                "crop_size": None,
-                "resample": None,
-                "do_align_long_axis": None,
-                "do_pad": None,
-                "do_rescale": None,
-                "rescale_factor": None,
-                "do_normalize": None,
-                "image_mean": None,
-                "image_std": None,
-                "data_format": "channels_first",
-                "input_data_format": None,
-            },
-            "audio_kwargs": {},
-            "videos_kwargs": {},
-        }
 
     def __call__(
         self,
@@ -110,7 +129,10 @@ class ChineseCLIPProcessor(ProcessorMixin):
         images: ImageInput = None,
         audio=None,
         videos=None,
-        **kwargs,
+        text_kwargs: ChineseClipProcessorKwargs.text_kwargs = None,
+        images_kwargs: ChineseClipProcessorKwargs.images_kwargs = None,
+        common_kwargs: ChineseClipProcessorKwargs.common_kwargs = None,
+        **kwargs: ChineseClipProcessorKwargs,
     ) -> BatchEncoding:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -146,27 +168,56 @@ class ChineseCLIPProcessor(ProcessorMixin):
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
+        # Set kwargs as empty dicts to avoid default mutable
+        if text_kwargs is None:
+            text_kwargs = {}
+        if images_kwargs is None:
+            images_kwargs = {}
+        if common_kwargs is None:
+            common_kwargs = {}
+
+        # Init with default values if they exist
+        default_text_kwargs = ChineseClipProcessorKwargs._defaults.get("text_kwargs", {}).copy()
+        default_images_kwargs = ChineseClipProcessorKwargs._defaults.get("images_kwargs", {}).copy()
+
+        # Override with tokenizer-level arguments passed
+        default_text_kwargs.update(
+            {k: v for k, v in self.tokenizer.init_kwargs.items() if k in ChineseClipProcessorKwargs.text_kwargs}
+        )
+
+        # Get passed per-modality dictionaries if they exist
+        text_kwargs = {**default_text_kwargs, **text_kwargs, **kwargs.pop("text_kwargs", {})}
+        images_kwargs = {**default_images_kwargs, **images_kwargs, **kwargs.pop("images_kwargs", {})}
+        common_kwargs.update(kwargs.pop("common_kwargs", {}))
+
+        # Merge kwargs by name
+        for text_key in ChineseClipProcessorKwargs.text_kwargs.keys():
+            text_kwarg_value = kwargs.pop(text_key, None)
+            if text_kwarg_value is not None:
+                text_kwargs[text_key] = text_kwarg_value
+
+        for images_key in ChineseClipProcessorKwargs.images_kwargs.keys():
+            images_kwarg_value = kwargs.pop(images_key, None)
+            if images_kwarg_value is not None:
+                images_kwargs[images_key] = images_kwarg_value
+
+        # If something remains in kwargs, it belongs to common
+        common_kwargs.update(kwargs)
+
+        # All modality-specific kwargs are updated with common kwargs
+        for k, v in common_kwargs.items():
+            text_kwargs.setdefault(k, v)
+            images_kwargs.setdefault(k, v)
+
+        # BC for explicit return_tensors
+        if "return_tensors" in common_kwargs:
+            return_tensors = common_kwargs.pop("return_tensors", None)
+
         if text is not None:
-            text_kwargs = {
-                **self.processing_kwargs["text_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
             encoding = self.tokenizer(text, **text_kwargs)
 
         if images is not None:
-            images_kwargs = {
-                **self.processing_kwargs["images_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
             image_features = self.image_processor(images, **images_kwargs)
-
-        # BC for explicit return_tensors
-        common_kwargs = {**self.processing_kwargs["common_kwargs"], **kwargs}
-
-        if "return_tensors" in common_kwargs:
-            return_tensors = kwargs.pop("return_tensors", None)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
