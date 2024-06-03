@@ -732,7 +732,6 @@ class MistralIntegrationTest(unittest.TestCase):
 class Mask4DTestHard(unittest.TestCase):
     model_name = "mistralai/Mistral-7B-v0.1"
     _model = None
-    _pre_computed_data = None
 
     def tearDown(self):
         gc.collect()
@@ -745,23 +744,6 @@ class Mask4DTestHard(unittest.TestCase):
                 self.model_name, torch_dtype=self.model_dtype
             ).to(torch_device)
         return self.__class__._model
-
-    @cached_property
-    def pre_computed_data(self):
-        if self.__class__._pre_computed_data is None:
-            (
-                input_ids,
-                position_ids,
-                input_ids_shared_prefix,
-                mask_shared_prefix,
-                position_ids_shared_prefix,
-            ) = self.get_test_data()
-            logits = self.model.forward(input_ids, position_ids=position_ids).logits
-            logits_last = logits[:, -1, :]  # last tokens in each batch line
-            decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-            self.__class__._pre_computed_data = logits, logits_last, decoded
-        return self.__class__._pre_computed_data
 
     def setUp(self):
         self.model_dtype = torch.float16
@@ -821,7 +803,9 @@ class Mask4DTestHard(unittest.TestCase):
         ) = self.get_test_data()
 
         # regular batch
-        logits, logits_last, decoded = self.pre_computed_data
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
 
         # single forward run with 4D custom mask
         logits_shared_prefix = self.model.forward(
@@ -846,7 +830,9 @@ class Mask4DTestHard(unittest.TestCase):
         ) = self.get_test_data()
 
         # regular batch
-        logits, logits_last, decoded = self.pre_computed_data
+        logits = self.model.forward(input_ids, position_ids=position_ids).logits
+        logits_last = logits[:, -1, :]  # last tokens in each batch line
+        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
 
         # 2 forward runs with custom 4D masks
         part_a = 3  # split point
