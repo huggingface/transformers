@@ -1368,18 +1368,15 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        if cache_implementation == "sliding_window":
+            max_cache_len = min(self.config.sliding_window, max_cache_len)
+
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size < max_batch_size
+            or self._cache.max_batch_size != max_batch_size
+            or self._cache.max_cache_len < max_cache_len
         )
-        if cache_implementation == "sliding_window":
-            need_new_cache = need_new_cache or (
-                self._cache.sliding_window_size < self._cache.model_sliding_window_size
-                and max_cache_len > self._cache.max_cache_len
-            )
-        elif cache_implementation == "static":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
