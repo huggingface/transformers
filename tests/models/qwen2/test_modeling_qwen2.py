@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Qwen2 model. """
-
+"""Testing suite for the PyTorch Qwen2 model."""
 
 import gc
 import tempfile
@@ -45,6 +44,7 @@ if is_torch_available():
     from transformers import (
         Qwen2ForCausalLM,
         Qwen2ForSequenceClassification,
+        Qwen2ForTokenClassification,
         Qwen2Model,
     )
 
@@ -299,12 +299,17 @@ class Qwen2ModelTester:
 @require_torch
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2
 class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification, Qwen2ForTokenClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Qwen2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen2Model,
             "text-classification": Qwen2ForSequenceClassification,
+            "token-classification": Qwen2ForTokenClassification,
             "text-generation": Qwen2ForCausalLM,
             "zero-shot": Qwen2ForSequenceClassification,
         }
@@ -386,6 +391,22 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->Qwen2,llama->Qwen2
+    def test_Qwen2_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = Qwen2ForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
 
     @unittest.skip("Qwen2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):

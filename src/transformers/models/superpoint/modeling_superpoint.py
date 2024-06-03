@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SuperPoint model."""
+
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 

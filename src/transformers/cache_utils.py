@@ -1,11 +1,24 @@
+import copy
+import importlib.metadata
+import json
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import logging
+from .utils import is_hqq_available, is_quanto_available, logging
 
+
+if is_quanto_available():
+    quanto_version = version.parse(importlib.metadata.version("quanto"))
+    if quanto_version >= version.parse("0.2.0"):
+        from quanto import AffineQuantizer, MaxOptimizer, qint2, qint4
+
+if is_hqq_available():
+    from hqq.core.quantize import Quantizer as HQQQuantizer
 
 logger = logging.get_logger(__name__)
 
@@ -80,6 +93,201 @@ class Cache:
             return self._seen_tokens
         else:
             return None
+
+
+@dataclass
+class CacheConfig:
+    """
+    Base class for cache configs
+    """
+
+    cache_implementation: None
+
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        """
+        Constructs a CacheConfig instance from a dictionary of parameters.
+        Args:
+            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            **kwargs: Additional keyword arguments to override dictionary values.
+        Returns:
+            CacheConfig: Instance of CacheConfig constructed from the dictionary.
+        """
+        config = cls(**config_dict)
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+        return config
+
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_json_file
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default
+                `QuantizationConfig()` is serialized to JSON file.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+            writer.write(json_string)
+
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_dict
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return copy.deepcopy(self.__dict__)
+
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__iter__
+    def __iter__(self):
+        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
+        for attr, value in copy.deepcopy(self.__dict__).items():
+            yield attr, value
+
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__repr__
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def to_json_string(self):
+        """
+        Serializes this instance to a JSON formatted string.
+        Returns:
+            str: JSON formatted string representing the configuration instance.
+        """
+        return json.dumps(self.__dict__, indent=2) + "\n"
+
+    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.update
+    def update(self, **kwargs):
+        """
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        returning all the unused kwargs.
+
+        Args:
+            kwargs (`Dict[str, Any]`):
+                Dictionary of attributes to tentatively update this class.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+        """
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+
+        # Remove all the attributes that were updated, without modifying the input dict
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        return unused_kwargs
+
+
+@dataclass
+class QuantizedCacheConfig(CacheConfig):
+    """
+    Configuration class for quantized cache settings.
+
+    Attributes:
+        backend (`str`, *optional*, defaults to `"quanto"`):
+            Backend to use when performing quantization, Can be one of [`quanto`, `HQQ`]
+        nbits (`Optional[int]`, *optional*, defaults to 4):
+            Number of bits, can be 2 or 4 for the `quanto` backend and one of [1, 2, 3, 4, 8] for the `HQQ` backend. Defaults to 2.
+        axis_key (`int`, *optional*, defaults to 0):
+            Axis over which to perform grouping for the key tensors. Can be [0, -1] for `quanto` backend and [0, 1] for `HQQ` backend.
+        axis_value (`int`, *optional*, defaults to 0):
+            Axis over which to perform grouping for the value tensors. Can be [0, -1] for `quanto` backend and [0, 1] for `HQQ` backend.
+        q_group_size (`Optional[int]`, *optional*, defaults to 64):
+            Size of the quantization group, should be a divisor of the model's hidden dimension.
+            Defaults to 64.
+        residual_length (`Optional[int]`, *optional*, defaults to 128):
+            Length of the residual cache which will always be stored in original presicion.
+            Defaults to 128.
+        compute_dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
+            The defualt dtype used for computations in the model. Keys and Values will be cast to this dtype after dequantization.
+        device (`str`, *optional*, defaults to `"cpu"`):
+            Device on which to peform computations, should be same as the model's device.
+    """
+
+    def __init__(
+        self,
+        backend: str = "quanto",
+        nbits: Optional[int] = 4,
+        axis_key: Optional[int] = 0,
+        axis_value: Optional[int] = 0,
+        q_group_size: Optional[int] = 64,
+        residual_length: Optional[int] = 128,
+        compute_dtype: Optional[torch.dtype] = torch.float16,
+        device: Optional[str] = "cpu",
+    ):
+        self.backend = backend
+        self.nbits = nbits
+        self.axis_key = axis_key
+        self.axis_value = axis_value
+        self.q_group_size = q_group_size
+        self.residual_length = residual_length
+        self.compute_dtype = compute_dtype
+        self.device = device
+
+    def validate(self):
+        """Validates if the arguments passed are correct"""
+
+        incorrect_arg_msg = (
+            "Some of the keys in `cache_config` are defined incorrectly. `{key}` should be {correct_value}` "
+            "but found {found_value}"
+        )
+        # Check that the values are reasonable in general (nbits, axis)
+        # Later in QuantizedCache init we check if they are supported for that particular backend
+        if self.nbits not in [1, 2, 3, 4, 8]:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="nbits",
+                    correct_value="2 or 4 or 8",
+                    found_value=self.nbits,
+                ),
+            )
+        if self.q_group_size <= 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="q_group_size",
+                    correct_value="a positive integer",
+                    found_value=self.q_group_size,
+                ),
+            )
+        if self.residual_length < 0:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="residual_length",
+                    correct_value="a positive integer",
+                    found_value=self.residual_length,
+                ),
+            )
+
+        if self.axis_key not in [0, 1, -1]:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="axis_key",
+                    correct_value="`1` or `0`, `-1`",
+                    found_value=self.axis_key,
+                ),
+            )
+
+        if self.axis_value not in [0, 1, -1]:
+            raise ValueError(
+                incorrect_arg_msg.format(
+                    key="axis_value",
+                    correct_value="`1` or `0` or `-1`",
+                    found_value=self.axis_value,
+                ),
+            )
 
 
 class DynamicCache(Cache):
@@ -184,6 +392,177 @@ class DynamicCache(Cache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
+
+
+class QuantizedCache(DynamicCache):
+    """
+    A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
+    It allows the model to generate longer sequence length without allocating too much memory for Key and Value cache by applying quantization.
+
+    The cache has two types of storage, one for original precision and one for the quantized cache. A `residual length` is set as a maximum capacity for the
+    original precision cache. When the length goes beyond maximum capacity, the original precision cache is discarded and moved into the quantized cache. The
+    quantization is done per-channel with a set `q_group_size` for both Keys and Values, in contrast to what was described in the paper.
+
+    It stores Keys and Values a list of quantized tensors (tuples in case we need to store metadata), one for each layer. Additionally, it stores the Key and
+    Value in original precision states as a list of tensors, one for each layer. The size of each tensor
+    is `[batch_size, num_heads, seq_len - residual_length, head_dim]`
+    """
+
+    def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        self._quantized_key_cache: List[torch.Tensor] = []
+        self._quantized_value_cache: List[torch.Tensor] = []
+
+        self.nbits = cache_config.nbits
+        self.residual_length = cache_config.residual_length
+        self.q_group_size = cache_config.q_group_size
+        self.axis_key = cache_config.axis_key
+        self.axis_value = cache_config.axis_value
+        self.compute_dtype = cache_config.compute_dtype
+        self.device = cache_config.device
+
+        super().__init__()
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+
+        if len(self.key_cache) <= layer_idx:
+            self._quantized_key_cache.append(self._quantize(key_states.contiguous(), axis=self.axis_key))
+            self._quantized_value_cache.append(self._quantize(value_states.contiguous(), axis=self.axis_value))
+            self.key_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
+            self.value_cache.append(torch.zeros(0, dtype=key_states.dtype, device=key_states.device))
+            keys_to_return, values_to_return = key_states, value_states
+        else:
+            dequant_key = self._dequantize(self._quantized_key_cache[layer_idx])
+            dequant_value = self._dequantize(self._quantized_value_cache[layer_idx])
+            keys_to_return = [dequant_key, self.key_cache[layer_idx], key_states]
+            values_to_return = [dequant_value, self.value_cache[layer_idx], value_states]
+
+            keys_to_return = torch.cat(keys_to_return, dim=-2)
+            values_to_return = torch.cat(values_to_return, dim=-2)
+            if (
+                self.key_cache[layer_idx].dim() == 4
+                and self.key_cache[layer_idx].shape[-2] + 1 >= self.residual_length
+            ):
+                self._quantized_key_cache[layer_idx] = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
+                self._quantized_value_cache[layer_idx] = self._quantize(
+                    values_to_return.contiguous(), axis=self.axis_value
+                )
+                self.key_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+                self.value_cache[layer_idx] = torch.zeros(0, dtype=key_states.dtype, device=key_states.device)
+            else:
+                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return keys_to_return, values_to_return
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        if len(self.key_cache) <= layer_idx:
+            return 0
+        # since we cannot get the seq_length of each layer directly and rely on `_seen_tokens` which is
+        # updated every "layer_idx" == 0, this is a hack to get the actual seq_length for the given layer_idx
+        # this part of code otherwise fails when used to verify attn_weight shape in some models
+        return self._seen_tokens if layer_idx == 0 else self._seen_tokens - 1
+
+    def _quantize(self, tensor, axis):
+        """Quantizes a key/value using a defined quantization method."""
+        raise NotImplementedError("Make sure to implement `_quantize` in a subclass.")
+
+    def _dequantize(self, q_tensor):
+        """Dequantizes back the tensor that was quantized by `self._quantize()`"""
+        raise NotImplementedError("Make sure to implement `_dequantize` in a subclass.")
+
+
+class QuantoQuantizedCache(QuantizedCache):
+    """
+    Quantized Cache class that uses `quanto` as a backend to perform quantization. Current implementation supports `int2` and `int4` dtypes only.
+
+    Parameters:
+        cache_config (`QuantizedCacheConfig`,):
+            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+    """
+
+    def __init__(self, cache_config: CacheConfig) -> None:
+        super().__init__(cache_config)
+        quanto_version = version.parse(importlib.metadata.version("quanto"))
+        if quanto_version < version.parse("0.2.0"):
+            raise ImportError(
+                f"You need quanto package version to be greater or equal than 0.2.0 to use `QuantoQuantizedCache`. Detected version {quanto_version}. "
+                f"Please upgrade quanto with `pip install -U quanto`"
+            )
+
+        if self.nbits not in [2, 4]:
+            raise ValueError(f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}")
+
+        if self.axis_key not in [0, -1]:
+            raise ValueError(f"`axis_key` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_key}")
+
+        if self.axis_value not in [0, -1]:
+            raise ValueError(
+                f"`axis_value` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_value}"
+            )
+
+        self.qtype = qint4 if self.nbits == 4 else qint2
+        self.optimizer = MaxOptimizer()  # hardcode as it's the only one for per-channel quantization
+
+    def _quantize(self, tensor, axis):
+        scale, zeropoint = self.optimizer(tensor, self.qtype.bits, axis, self.q_group_size)
+        qtensor = AffineQuantizer.apply(tensor, self.qtype, axis, self.q_group_size, scale, zeropoint)
+        return qtensor
+
+    def _dequantize(self, qtensor):
+        return qtensor.dequantize()
+
+
+class HQQQuantizedCache(QuantizedCache):
+    """
+    Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
+
+    Parameters:
+        cache_config (`QuantizedCacheConfig`,):
+            A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
+    """
+
+    def __init__(self, cache_config: CacheConfig) -> None:
+        super().__init__(cache_config)
+        if self.nbits not in [1, 2, 3, 4, 8]:
+            raise ValueError(
+                f"`nbits` for `HQQ` backend has to be one of [`1`, `2`, `3`, `4`, `8`] but got {self.nbits}"
+            )
+
+        if self.axis_key not in [0, 1]:
+            raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
+
+        if self.axis_value not in [0, 1]:
+            raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
+
+        self.quantizer = HQQQuantizer
+
+    def _quantize(self, tensor, axis):
+        qtensor, meta = self.quantizer.quantize(
+            tensor,
+            axis=axis,
+            device=self.device,
+            compute_dtype=self.compute_dtype,
+            nbits=self.nbits,
+            group_size=self.q_group_size,
+        )
+        meta["compute_dtype"] = self.compute_dtype
+        self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
+        return qtensor, meta
+
+    def _dequantize(self, qtensor):
+        quant_tensor, meta = qtensor
+        tensor = self.quantizer.dequantize(quant_tensor, meta)
+        return tensor
 
 
 class SinkCache(Cache):
@@ -448,3 +827,124 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+
+class SlidingWindowCache(Cache):
+    """
+    Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
+    Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.config.sliding_window_size - 1`,
+    if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
+    we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
+
+    The `to_shift` is only true once we are above sliding_window_size. Thus with `sliding_window_size==64`:
+
+    indices = (slicing + to_shift[-1].int()-1) % self.config.sliding_window_size
+    tensor([ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+        19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+        37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+        55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
+
+    We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window_size`)
+
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+    """
+
+    def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
+        if not hasattr(config, "sliding_window") or config.sliding_window is None:
+            raise ValueError(
+                "Setting `cache_implementation` to 'sliding_window' requires the model config supporting "
+                "sliding window attention, please check if there is a `sliding_window` field in the model "
+                "config and it's not set to None."
+            )
+
+        super().__init__()
+        self.max_batch_size = max_batch_size
+        # take the minimum of max_cache_len and config.sliding_window so that we allocate less memory
+        # when we do short-sentence generation
+        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.model_sliding_window_size = config.sliding_window
+        self.sliding_window_size = min(self.max_cache_len, self.model_sliding_window_size)
+        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
+        self.head_dim = (
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+        )
+
+        self.dtype = dtype if dtype is not None else torch.float32
+        self.num_key_value_heads = (
+            config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
+        )
+
+        cache_shape = (
+            config.num_hidden_layers,
+            max_batch_size,
+            self.num_key_value_heads,
+            self.sliding_window_size,
+            self.head_dim,
+        )
+
+        self.key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+
+        torch._dynamo.mark_static_address(self.key_cache)
+        torch._dynamo.mark_static_address(self.value_cache)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor]:
+        cache_position = cache_kwargs.get("cache_position")
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+
+        # assume this only happens in prefill phase when prompt length > sliding_window_size
+        if cache_position.shape[0] > self.sliding_window_size:
+            k_out = key_states[:, :, -self.sliding_window_size :, :]
+            v_out = value_states[:, :, -self.sliding_window_size :, :]
+            self.key_cache[layer_idx] = k_out
+            self.value_cache[layer_idx] = v_out
+            # we should return the whole states instead of k_out, v_out to take the whole prompt
+            # into consideration when building kv cache instead of just throwing away tokens outside of the window
+            return key_states, value_states
+
+        slicing = torch.ones(self.sliding_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
+        cache_position = cache_position.clamp(0, self.sliding_window_size - 1)
+        to_shift = cache_position >= self.sliding_window_size - 1
+        indices = (slicing + to_shift[-1].int() - 1) % self.sliding_window_size
+
+        k_out = k_out[:, :, indices]
+        v_out = v_out[:, :, indices]
+
+        k_out[:, :, cache_position] = key_states
+        v_out[:, :, cache_position] = value_states
+
+        self.key_cache[layer_idx] = k_out
+        self.value_cache[layer_idx] = v_out
+
+        return k_out, v_out
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        # assume this will be called only in the first generation step
+        # `cache_postion` will be used in other cases
+        return 0
+
+    def get_max_length(self) -> Optional[int]:
+        # in theory there is no limit because the sliding window size is fixed
+        # no matter how long the sentence is
+        return None
+
+    def reset(self):
+        self.key_cache.zero_()
+        self.value_cache.zero_()

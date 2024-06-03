@@ -63,7 +63,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
-                "and the latest version of bitsandbytes: `pip install -i https://pypi.org/simple/ bitsandbytes`"
+                "and the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
@@ -312,3 +312,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def _dequantize(self, model):
+        from ..integrations import dequantize_and_replace
+
+        model = dequantize_and_replace(
+            model, self.modules_to_not_convert, quantization_config=self.quantization_config
+        )
+        return model

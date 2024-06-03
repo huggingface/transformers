@@ -42,6 +42,7 @@ from .utils import (
     TensorType,
     add_end_docstrings,
     add_model_info_to_auto_map,
+    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -1537,10 +1538,10 @@ INIT_TOKENIZER_DOCSTRING = r"""
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not the special tokens should be split during the tokenization process. The default behavior is
-            to not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") =
-            ['<s>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<',
-            's', '>']`. This argument is only supported for `slow` tokenizers for the moment.
+            Whether or not the special tokens should be split during the tokenization process. Passing will affect the
+            internal state of the tokenizer. The default behavior is to not split special tokens. This means that if
+            `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") = ['<s>`]. Otherwise, if
+            `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<','s', '>']`.
 """
 
 
@@ -1852,6 +1853,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise TemplateError(message)
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.policies["json.dumps_kwargs"]["ensure_ascii"] = False
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
@@ -1968,6 +1970,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
+        gguf_file = kwargs.get("gguf_file", None)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -1995,7 +1998,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1:
+            if len(cls.vocab_files_names) > 1 and not gguf_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
@@ -2010,42 +2013,45 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
         else:
-            # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-            additional_files_names = {
-                "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
-                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
-                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
-                "tokenizer_file": FULL_TOKENIZER_FILE,
-            }
-            vocab_files = {**cls.vocab_files_names, **additional_files_names}
-            if "tokenizer_file" in vocab_files:
-                # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                fast_tokenizer_file = FULL_TOKENIZER_FILE
-                resolved_config_file = cached_file(
-                    pretrained_model_name_or_path,
-                    TOKENIZER_CONFIG_FILE,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    resume_download=resume_download,
-                    proxies=proxies,
-                    token=token,
-                    revision=revision,
-                    local_files_only=local_files_only,
-                    subfolder=subfolder,
-                    user_agent=user_agent,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                    _commit_hash=commit_hash,
-                )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                if resolved_config_file is not None:
-                    with open(resolved_config_file, encoding="utf-8") as reader:
-                        tokenizer_config = json.load(reader)
-                        if "fast_tokenizer_files" in tokenizer_config:
-                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                vocab_files["tokenizer_file"] = fast_tokenizer_file
+            if gguf_file:
+                vocab_files["vocab_file"] = gguf_file
+            else:
+                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+                additional_files_names = {
+                    "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
+                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
+                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                    # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
+                    "tokenizer_file": FULL_TOKENIZER_FILE,
+                }
+                vocab_files = {**cls.vocab_files_names, **additional_files_names}
+                if "tokenizer_file" in vocab_files:
+                    # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                    fast_tokenizer_file = FULL_TOKENIZER_FILE
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        resume_download=resume_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_gated_repo=False,
+                        _raise_exceptions_for_missing_entries=False,
+                        _raise_exceptions_for_connection_errors=False,
+                        _commit_hash=commit_hash,
+                    )
+                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                    if resolved_config_file is not None:
+                        with open(resolved_config_file, encoding="utf-8") as reader:
+                            tokenizer_config = json.load(reader)
+                            if "fast_tokenizer_files" in tokenizer_config:
+                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                    vocab_files["tokenizer_file"] = fast_tokenizer_file
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -2084,7 +2090,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "files are necessary for the tokenizer to operate."
             )
 
-        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
+        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
+        # loaded directly from the GGUF file.
+        if all(full_file_name is None for full_file_name in resolved_vocab_files.values()) and not gguf_file:
             raise EnvironmentError(
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
                 "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
@@ -2133,8 +2141,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
+        gguf_file = kwargs.get("gguf_file", None)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None:
+
+        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
+        # loaded directly from the GGUF file.
+        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
@@ -2167,13 +2179,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             config_tokenizer_class = None
             init_kwargs = init_configuration
 
-        if "auto_map" in init_kwargs and not _is_local:
-            # For backward compatibility with odl format.
-            if isinstance(init_kwargs["auto_map"], (tuple, list)):
-                init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-            init_kwargs["auto_map"] = add_model_info_to_auto_map(
-                init_kwargs["auto_map"], pretrained_model_name_or_path
-            )
+        if not _is_local:
+            if "auto_map" in init_kwargs:
+                # For backward compatibility with odl format.
+                if isinstance(init_kwargs["auto_map"], (tuple, list)):
+                    init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
+                init_kwargs["auto_map"] = add_model_info_to_auto_map(
+                    init_kwargs["auto_map"], pretrained_model_name_or_path
+                )
+            if "custom_pipelines" in init_kwargs:
+                init_kwargs["custom_pipelines"] = add_model_info_to_custom_pipelines(
+                    init_kwargs["custom_pipelines"], pretrained_model_name_or_path
+                )
 
         if config_tokenizer_class is None:
             # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
@@ -2860,6 +2877,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "return_special_tokens_mask": return_special_tokens_mask,
             "return_offsets_mapping": return_offsets_mapping,
             "return_length": return_length,
+            "split_special_tokens": kwargs.pop("split_special_tokens", self.split_special_tokens),
             "verbose": verbose,
         }
         all_kwargs.update(kwargs)
@@ -2904,6 +2922,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         # Input type checking for clearer error
@@ -2973,6 +2992,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
+                split_special_tokens=split_special_tokens,
                 **kwargs,
             )
         else:
@@ -2994,6 +3014,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
+                split_special_tokens=split_special_tokens,
                 **kwargs,
             )
 
@@ -3067,6 +3088,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=kwargs.pop("split_special_tokens", self.split_special_tokens),
             **kwargs,
         )
 
@@ -3089,6 +3111,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -3119,6 +3142,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -3164,6 +3188,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 
@@ -3192,6 +3217,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError

@@ -9,9 +9,11 @@ on:
       docker_image:
         description: 'Name of the Docker image'
         required: true
+      num_gpus:
+        description: 'Type of the number of gpus to use (`single` or `multi`)'
+        required: true
 
 env:
-  IS_GITHUB_CI: "1"
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache 
   TRANSFORMERS_IS_CI: yes 
@@ -20,12 +22,13 @@ env:
   RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`. 
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }} 
   TF_FORCE_GPU_ALLOW_GROWTH: true 
+  CUDA_VISIBLE_DEVICES: 0,1
   RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
   ssh_runner:
     name: "SSH"
-    runs-on: [single-gpu, nvidia-gpu, "${{ github.event.inputs.runner_type }}", ci]
+    runs-on: ["${{ github.event.inputs.num_gpus }}-gpu", nvidia-gpu, "${{ github.event.inputs.runner_type }}", ci]
     container:
       image: ${{ github.event.inputs.docker_image }}
       options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -52,7 +55,7 @@ jobs:
           nvidia-smi
       
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@v1
+        uses: huggingface/tailscale-action@main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}

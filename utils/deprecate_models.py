@@ -45,14 +45,14 @@ def get_last_stable_minor_release():
 def build_tip_message(last_stable_release):
     return (
         """
-    <Tip warning={true}>
+<Tip warning={true}>
 
-    This model is in maintenance mode only, we don't accept any new PRs changing its code.
-    """
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+"""
         + f"""If you run into any issues running this model, please reinstall the last version that supported this model: v{last_stable_release}.
-    You can do so by running the following command: `pip install -U transformers=={last_stable_release}`.
+You can do so by running the following command: `pip install -U transformers=={last_stable_release}`.
 
-    </Tip>"""
+</Tip>"""
     )
 
 
@@ -79,17 +79,13 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
 
 def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
     # Possible variants of the model name in the model doc path
-    model_doc_paths = [
-        REPO_PATH / f"docs/source/en/model_doc/{model}.md",
-        # Try replacing _ with - in the model name
-        REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '-')}.md",
-        # Try replacing _ with "" in the model name
-        REPO_PATH / f"docs/source/en/model_doc/{model.replace('_', '')}.md",
-    ]
+    model_names = [model, model.replace("_", "-"), model.replace("_", "")]
 
-    for model_doc_path in model_doc_paths:
+    model_doc_paths = [REPO_PATH / f"docs/source/en/model_doc/{model_name}.md" for model_name in model_names]
+
+    for model_doc_path, model_name in zip(model_doc_paths, model_names):
         if os.path.exists(model_doc_path):
-            return model_doc_path, model
+            return model_doc_path, model_name
 
     return None, None
 
@@ -168,7 +164,8 @@ def update_main_init_file(models):
 
     # 1. For each model, find all the instances of model.model_name and replace with model.deprecated.model_name
     for model in models:
-        init_file = init_file.replace(f"models.{model}", f"models.deprecated.{model}")
+        init_file = init_file.replace(f'models.{model}"', f'models.deprecated.{model}"')
+        init_file = init_file.replace(f"models.{model} import", f"models.deprecated.{model} import")
 
     with open(filename, "w") as f:
         f.write(init_file)
@@ -186,6 +183,7 @@ def remove_model_references_from_file(filename, models, condition):
         models (List[str]): The models to remove
         condition (Callable): A function that takes the line and model and returns True if the line should be removed
     """
+    filename = REPO_PATH / filename
     with open(filename, "r") as f:
         init_file = f.read()
 
@@ -268,14 +266,14 @@ def add_models_to_deprecated_models_in_config_auto(models):
         elif in_deprecated_models and line.strip() == "]":
             in_deprecated_models = False
             # Add the new models to deprecated models list
-            deprecated_models_list.extend([f'"{model},"' for model in models])
+            deprecated_models_list.extend([f'    "{model}", ' for model in models])
             # Sort so they're in alphabetical order in the file
             deprecated_models_list = sorted(deprecated_models_list)
             new_file_lines.extend(deprecated_models_list)
             # Make sure we still have the closing bracket
             new_file_lines.append(line)
         elif in_deprecated_models:
-            deprecated_models_list.append(line.strip())
+            deprecated_models_list.append(line)
         else:
             new_file_lines.append(line)
 

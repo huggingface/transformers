@@ -129,6 +129,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
         ("jamba", "JambaConfig"),
+        ("jetmoe", "JetMoeConfig"),
         ("jukebox", "JukeboxConfig"),
         ("kosmos-2", "Kosmos2Config"),
         ("layoutlm", "LayoutLMConfig"),
@@ -182,6 +183,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("opt", "OPTConfig"),
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
+        ("paligemma", "PaliGemmaConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -254,6 +256,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("van", "VanConfig"),
+        ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
         ("vipllava", "VipLlavaConfig"),
@@ -402,6 +405,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
         ("jamba", "Jamba"),
+        ("jetmoe", "JetMoe"),
         ("jukebox", "Jukebox"),
         ("kosmos-2", "KOSMOS-2"),
         ("layoutlm", "LayoutLM"),
@@ -465,6 +469,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("opt", "OPT"),
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
+        ("paligemma", "PaliGemma"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -541,6 +546,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("van", "VAN"),
+        ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
         ("vipllava", "VipLlava"),
@@ -583,14 +589,29 @@ MODEL_NAMES_MAPPING = OrderedDict(
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = [
     "bort",
+    "deta",
+    "efficientformer",
+    "ernie_m",
+    "gptsan_japanese",
+    "graphormer",
+    "jukebox",
     "mctct",
+    "mega",
     "mmbt",
+    "nat",
+    "nezha",
     "open_llama",
+    "qdqbert",
+    "realm",
     "retribert",
+    "speech_to_text_2",
     "tapex",
     "trajectory_transformer",
     "transfo_xl",
+    "tvlt",
     "van",
+    "vit_hybrid",
+    "xlm_prophetnet",
 ]
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
@@ -614,7 +635,11 @@ def model_type_to_module_name(key):
     """Converts a config key to the corresponding module."""
     # Special treatment
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
-        return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
+        key = SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
+
+        if key in DEPRECATED_MODELS:
+            key = f"deprecated.{key}"
+        return key
 
     key = key.replace("-", "_")
     if key in DEPRECATED_MODELS:

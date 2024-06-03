@@ -93,14 +93,14 @@ class Plot:
                 self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
                 if can_convert_to_int(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][
-                        (int(row["batch_size"]), int(row["sequence_length"]))
-                    ] = int(row["result"])
+                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
+                        int(row["result"])
+                    )
                 elif can_convert_to_float(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][
-                        (int(row["batch_size"]), int(row["sequence_length"]))
-                    ] = float(row["result"])
+                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
+                        float(row["result"])
+                    )
 
     def plot(self):
         fig, ax = plt.subplots()

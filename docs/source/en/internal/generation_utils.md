@@ -209,6 +209,10 @@ generation.
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
 
+[[autodoc]] WatermarkLogitsProcessor
+    - __call__
+
+
 ### TensorFlow
 
 [[autodoc]] TFForcedBOSTokenLogitsProcessor
@@ -356,12 +360,26 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] Cache
     - update
 
+[[autodoc]] CacheConfig
+	- update
+
+[[autodoc]] QuantizedCacheConfig
+	- validate
+
 [[autodoc]] DynamicCache
     - update
     - get_seq_length
     - reorder_cache
     - to_legacy_cache
     - from_legacy_cache
+
+[[autodoc]] QuantizedCache
+    - update
+    - get_seq_length
+
+[[autodoc]] QuantoQuantizedCache
+
+[[autodoc]] HQQQuantizedCache
 
 [[autodoc]] SinkCache
     - update
@@ -371,4 +389,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] StaticCache
     - update
     - get_seq_length
-    - reorder_cache
+    - reset
+
+
+## Watermark Utils
+
+[[autodoc]] WatermarkDetector
+    - __call__
+

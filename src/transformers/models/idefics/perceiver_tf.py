@@ -36,6 +36,7 @@ References:
     - Code borrowed w/ love from: https://github.com/lucidrains/flamingo-pytorch
 
 """
+
 from typing import Optional, Tuple
 
 import tensorflow as tf
