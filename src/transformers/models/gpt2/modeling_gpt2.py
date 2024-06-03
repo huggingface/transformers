@@ -577,8 +577,6 @@ class GPT2SdpaAttention(GPT2Attention):
         # Reference: https://github.com/pytorch/pytorch/issues/112577
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
-    # Adapted from GPT2Attention.forward and following other sdpa implementations
-    # such as transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
@@ -1015,8 +1013,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
         self._attn_implementation = config._attn_implementation
-        self._use_flash_attention_2 = self._attn_implementation == "flash_attention_2"
-        self._use_sdpa = self._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1140,10 +1136,10 @@ class GPT2Model(GPT2PreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        _use_sdpa = self._use_sdpa and output_attentions is False and head_mask is None
+        _use_sdpa = self._attn_implementation == "sdpa" and output_attentions is False and head_mask is None
         if attention_mask is not None:
             attention_mask = attention_mask.view(batch_size, -1)
-            if self._use_flash_attention_2:
+            if self._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif _use_sdpa:
                 attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
@@ -1179,7 +1175,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=input_shape[-1]
                 )
-            elif not self._use_flash_attention_2:
+            elif self._attn_implementation == "eager":
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
