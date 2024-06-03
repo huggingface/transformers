@@ -709,6 +709,9 @@ class WhisperGenerationMixin:
         )
         sequences = _pad_to_max_length(final_segments, pad_token_id = generation_config.pad_token_id, padding="right")
 
+        # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
+        if return_segments:
+            return {"sequences": sequences, "segments": final_segments}
 
         if is_shortform: 
             sequences = torch.cat([decoder_input_ids.to(sequences.device), sequences], dim=-1)
@@ -732,10 +735,6 @@ class WhisperGenerationMixin:
                 return seek_outputs_short_form
 
             return outputs
-        
-        # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
-        if return_segments:
-            return {"sequences": sequences, "segments": final_segments}
 
         return sequences
 

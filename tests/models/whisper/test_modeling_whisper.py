@@ -67,6 +67,8 @@ if is_torch_available():
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
 
+    from transformers.generation import GenerateBeamEncoderDecoderOutput, BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput, GenerateBeamDecoderOnlyOutput 
+
     class DummyTimestampLogitProcessor(LogitsProcessor):
         """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
 
@@ -1537,45 +1539,47 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
-    # def test_beam_sample_generate_dict_output(self):
+    def test_beam_sample_generate_dict_output(self):
         
-    #     config, input_ids, attention_mask = self._get_input_ids_and_config()
+        config, input_ids, attention_mask = self._get_input_ids_and_config()
 
-    #     # disable cache
-    #     config.use_cache = False
+        # disable cache
+        config.use_cache = False
 
-    #     model = WhisperForConditionalGeneration(config).to(torch_device).eval()
-    #     _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
-    #     beam_kwargs = self._get_beam_kwargs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+        _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
+        beam_kwargs = self._get_beam_kwargs()
 
-    #     output_generate = self._beam_sample_generate(
-    #         model=model,
-    #         input_ids=input_ids,
-    #         attention_mask=attention_mask,
-    #         beam_kwargs=beam_kwargs,
-    #         logits_warper_kwargs=logits_warper_kwargs,
-    #         output_scores=True,
-    #         output_logits=True,
-    #         output_hidden_states=True,
-    #         output_attentions=True,
-    #         return_dict_in_generate=True,
-    #     )
+        # With Whisper, we can only perform a beam search if the temperature is set to 0. 
+        logits_warper_kwargs['temperature'] = 0
 
-    #     if model.config.is_encoder_decoder:
-    #         self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
-    #         self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
-    #         # Retrocompatibility check
-    #         self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
-    #     else:
-    #         self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
-    #         self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
-    #         # Retrocompatibility check
-    #         self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
+        output_generate = self._beam_sample_generate(
+            model=model,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            beam_kwargs=beam_kwargs,
+            logits_warper_kwargs=logits_warper_kwargs,
+            output_scores=True,
+            output_logits=True,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict_in_generate=True,
+        )
 
-    #     self._check_outputs(
-    #         output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
-    #     )
+        if model.config.is_encoder_decoder:
+            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+            self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+            # Retrocompatibility check
+            self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
+        else:
+            self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+            self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+            # Retrocompatibility check
+            self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
+        self._check_outputs(
+            output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+        )
 
 
 @require_torch
