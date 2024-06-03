@@ -22,13 +22,27 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
+
+import numpy as np
 
 from .dynamic_module_utils import custom_object_save
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .image_utils import ChannelDimension, is_vision_available
+
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
+
+
+from .tokenization_utils_base import (
+    PaddingStrategy,
+    PreTrainedTokenizerBase,
+    TruncationStrategy,
+)
 from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
+    TensorType,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
     cached_file,
@@ -52,6 +66,190 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
 }
+
+
+class TextKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for text processing. For extended documentation, check out tokenization_utils_base methods and
+    docstrings associated.
+
+    Attributes:
+        add_special_tokens (`bool`, *optional*, defaults to `True`):
+            Whether or not to add special tokens when encoding the sequences.
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+            Activates and controls padding.
+        truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `False`):
+            Activates and controls truncation.
+        max_length (`int`, *optional*):
+            Controls the maximum length to use by one of the truncation/padding parameters.
+        stride (`int`, *optional*, defaults to 0):
+            If set, the overflowing tokens will contain some tokens from the end of the truncated sequence.
+        is_split_into_words (`bool`, *optional*, defaults to `False`):
+            Whether or not the input is already pre-tokenized.
+        pad_to_multiple_of (`int`, *optional*):
+            If set, will pad the sequence to a multiple of the provided value.
+        return_token_type_ids (`bool`, *optional*):
+            Whether to return token type IDs.
+        return_attention_mask (`bool`, *optional*):
+            Whether to return the attention mask.
+        return_overflowing_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not to return overflowing token sequences.
+        return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not to return special tokens mask information.
+        return_offsets_mapping (`bool`, *optional*, defaults to `False`):
+            Whether or not to return `(char_start, char_end)` for each token.
+        return_length (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the lengths of the encoded inputs.
+        verbose (`bool`, *optional*, defaults to `True`):
+            Whether or not to print more information and warnings.
+        padding_side (`str`, *optional*):
+            The side on which padding will be applied.
+    """
+
+    add_special_tokens: Optional[bool]
+    padding: Union[bool, str, PaddingStrategy]
+    truncation: Union[bool, str, TruncationStrategy]
+    max_length: Optional[int]
+    stride: Optional[int]
+    is_split_into_words: Optional[bool]
+    pad_to_multiple_of: Optional[int]
+    return_token_type_ids: Optional[bool]
+    return_attention_mask: Optional[bool]
+    return_overflowing_tokens: Optional[bool]
+    return_special_tokens_mask: Optional[bool]
+    return_offsets_mapping: Optional[bool]
+    return_length: Optional[bool]
+    verbose: Optional[bool]
+    padding_side: Optional[str]
+
+
+class ImagesKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for image processing. For extended documentation, check the appropriate ImageProcessor
+    class methods and docstrings.
+
+    Attributes:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image.
+        size (`Dict[str, int]`, *optional*, defaults to `{'shortest_edge': 288}`):
+            Resize the shorter side of the input to `size["shortest_edge"]`.
+        size_divisor (`int`, *optional*, defaults to 32):
+            The size by which to make sure both the height and width can be divided.
+        crop_size (`Dict[str, int]`, *optional*):
+            Desired output size when applying center-cropping.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            Mean to use if normalizing the image.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            Standard deviation to use if normalizing the image.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+        do_center_crop (`bool`, *optional*, defaults to `True`):
+            Whether to center crop the image.
+        data_format (`ChannelDimension` or `str`, *optional*, defaults to `"channels_first"`):
+            The channel dimension format for the output image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image.
+    """
+
+    do_resize: Optional[bool]
+    size: Optional[Dict[str, int]]
+    size_divisor: Optional[int]
+    crop_size: Optional[Dict[str, int]]
+    resample: Optional[Union["PILImageResampling", int]]
+    do_rescale: Optional[bool]
+    rescale_factor: Optional[float]
+    do_normalize: Optional[bool]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
+    do_pad: Optional[bool]
+    do_center_crop: Optional[bool]
+    data_format: Optional[ChannelDimension]
+    input_data_format: Optional[Union[str, ChannelDimension]]
+
+
+class VideosKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for video processing.
+
+    Attributes:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image.
+        # ... (Add docstrings for other videos_kwargs)
+    """
+
+    do_resize: Optional[bool]
+    size: Optional[Dict[str, int]]
+    size_divisor: Optional[int]
+    resample: Optional["PILImageResampling"]
+    do_rescale: Optional[bool]
+    rescale_factor: Optional[float]
+    do_normalize: Optional[bool]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
+    do_pad: Optional[bool]
+    do_center_crop: Optional[bool]
+    data_format: Optional[ChannelDimension]
+    input_data_format: Optional[Union[str, ChannelDimension]]
+
+
+class AudioKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for audio processing.
+
+    Attributes:
+        sampling_rate (`int`, *optional*):
+            The sampling rate at which the `raw_speech` input was sampled.
+        raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
+            values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+            stereo, i.e. single float per timestep.
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding
+            index) among:
+
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                sequence if provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                lengths).
+        max_length (`int`, *optional*):
+            Maximum length of the returned list and optionally padding length (see above).
+        truncation (`bool`):
+            Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+        pad_to_multiple_of (`int`, *optional*):
+            If set, will pad the sequence to a multiple of the provided value.
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+    """
+
+    sampling_rate: Optional[int]
+    raw_speech: Optional[Union["np.ndarray", List[float], List["np.ndarray"], List[List[float]]]]
+    padding: Optional[Union[bool, str, PaddingStrategy]]
+    max_length: Optional[int]
+    truncation: Optional[bool]
+    pad_to_multiple_of: Optional[int]
+    return_attention_mask: Optional[bool]
+
+
+class CommonKwargs(TypedDict, total=False):
+    return_tensors: Optional[Union[str, TensorType]]
+
+
+class ProcessingKwargs(TypedDict, total=False):
+    common_kwargs: CommonKwargs
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    audio_kwargs: AudioKwargs
+    videos_kwargs: VideosKwargs
 
 
 class ProcessorMixin(PushToHubMixin):

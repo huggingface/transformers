@@ -159,7 +159,6 @@ class AlignProcessorTest(unittest.TestCase):
         encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str, padding="max_length", max_length=64)
-
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
