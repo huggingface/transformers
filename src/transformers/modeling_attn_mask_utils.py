@@ -413,7 +413,7 @@ def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: 
     `(batch_size, key_value_length)`
 
     Args:
-        mask (`torch.Tensor` or `None`):
+        mask (`torch.Tensor`):
             A 2D attention mask of shape `(batch_size, key_value_length)`
         dtype (`torch.dtype`):
             The torch dtype the created mask shall have.
@@ -429,36 +429,25 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     `(batch_size, key_value_length)`
 
     Args:
-        mask (`torch.Tensor` or `None`):
+        mask (`torch.Tensor`):
             A 2D attention mask of shape `(batch_size, key_value_length)`
         dtype (`torch.dtype`):
             The torch dtype the created mask shall have.
         tgt_len (`int`):
             The target length or query length the created mask shall have.
     """
-    batch_size, key_value_length = mask.shape
+    _, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 
-    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
-    # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
-    # TODO: For dynamo, rather use a check on fullgraph=True once this is possible (https://github.com/pytorch/pytorch/pull/120400).
     is_tracing = (
         torch.jit.is_tracing()
         or isinstance(mask, torch.fx.Proxy)
         or (hasattr(torch, "_dynamo") and torch._dynamo.is_compiling())
     )
 
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture data-dependent controlflows.
     if not is_tracing and torch.all(mask == 1):
-        if tgt_len == 1:
-            # For query_length == 1, causal attention and bi-directional attention are the same.
-            return None
-        elif key_value_length == tgt_len:
-            return None
-        else:
-            # Unfortunately, for query_length > 1 and key_value_length != query_length, we can not generally ignore the attention mask, as SDPA causal mask generation
-            # may be wrong. We will set is_causal=False in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
-            # Reference: https://github.com/pytorch/pytorch/issues/108108
-            return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
+        return None
     else:
         return AttentionMaskConverter._expand_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
 
