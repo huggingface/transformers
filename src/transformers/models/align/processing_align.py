@@ -169,7 +169,6 @@ class AlignProcessor(ProcessorMixin):
         """
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
-
         # set kwargs as empty dicts to avoid default mutable
         if text_kwargs is None:
             text_kwargs = {}
@@ -177,19 +176,18 @@ class AlignProcessor(ProcessorMixin):
             images_kwargs = {}
         if common_kwargs is None:
             common_kwargs = {}
-
         # Init with default values if they exist
-        text_kwargs = AlignProcessorKwargs._defaults.get("text_kwargs", {}).copy()
+        default_text_kwargs = AlignProcessorKwargs._defaults.get("text_kwargs", {}).copy()
 
         # then override with tokenizer-level arguments passed
-        text_kwargs.update(
+        default_text_kwargs.update(
             {k: v for k, v in self.tokenizer.init_kwargs.items() if k in AlignProcessorKwargs.text_kwargs}
         )
         # then get passed per-modality dictionaries if they exist
-
-        text_kwargs.update(kwargs.pop("text_kwargs", {}))
+        text_kwargs = {**default_text_kwargs, **text_kwargs, **kwargs.pop("text_kwargs", {})}
         images_kwargs.update(kwargs.pop("images_kwargs", {}))
         common_kwargs.update(kwargs.pop("common_kwargs", {}))
+
         # then merge kwargs by name
         for text_key in AlignProcessorKwargs.text_kwargs.keys():
             text_kwarg_value = kwargs.pop(text_key, None)
