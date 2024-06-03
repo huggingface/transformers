@@ -19,9 +19,8 @@ Processor class for Blip.
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
 class BlipProcessor(ProcessorMixin):
@@ -46,25 +45,32 @@ class BlipProcessor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+        self.processing_kwargs: ProcessingKwargs = {
+            "common_kwargs": {"return_tensors": None},
+            "text_kwargs": {
+                "add_special_tokens": True,
+                "padding": False,
+                "truncation": None,
+                "max_length": None,
+                "stride": 0,
+                "pad_to_multiple_of": None,
+                "return_attention_mask": None,
+                "return_overflowing_tokens": False,
+                "return_special_tokens_mask": False,
+                "return_offsets_mapping": False,
+                "return_token_type_ids": False,
+                "return_length": False,
+                "verbose": True,
+            },
+            "images_kwargs": {},
+        }
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -72,62 +78,49 @@ class BlipProcessor(ProcessorMixin):
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+        Args:
+            images (`ImageInput`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                    - `'tf'`: Return TensorFlow `tf.constant` objects.
+                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                    - `'np'`: Return NumPy `np.ndarray` objects.
+                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        # Get only text
-        if images is None:
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
-
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+        text_encoding = None
 
         if text is not None:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
+            text_kwargs = {
+                **self.processing_kwargs["text_kwargs"],
+                **self.processing_kwargs["common_kwargs"],
                 **kwargs,
-            )
-        else:
-            text_encoding = None
+            }
+            text_encoding = self.tokenizer(text, **text_kwargs)
 
-        if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
+        # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
+        # else, return the text encoding.
 
-        return encoding_image_processor
+        if images is not None:
+            images_kwargs = {
+                **self.processing_kwargs["images_kwargs"],
+                **self.processing_kwargs["common_kwargs"],
+                **kwargs,
+            }
+            encoding_image_processor = self.image_processor(images, **images_kwargs)
+            if text_encoding is not None:
+                encoding_image_processor.update(text_encoding)
+            return encoding_image_processor
+
+        return text_encoding
 
     def batch_decode(self, *args, **kwargs):
         """
