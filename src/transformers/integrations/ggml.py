@@ -516,14 +516,13 @@ class GGUFTokenizerSkeleton:
         for k, v in dict_.items():
             setattr(self, k, v)
 
-        if (not hasattr(self, "tokens") or not hasattr(self, "scores")) and not hasattr(self, "merges"):
-            raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer to be instantiated.")
-        elif not hasattr(self, "merges"):
+        if not hasattr(self, "merges"):
+            if not hasattr(self, "tokens") or not hasattr(self, "scores"):
+                raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer without merges to be instantiated.")
             tokens = self.tokens
             scores = self.scores
             vocab = {t: scores[i] for i, t in enumerate(tokens)}
 
-        if not hasattr(self, "merges"):
             logger.warning("Merges were not in checkpoint, building merges on the fly.")
             merges = []
             for merge, piece_score in tqdm(vocab.items()):
@@ -609,7 +608,6 @@ class GGUFQwen2Converter(Qwen2Converter):
 
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
-    "mistral": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
 }
 
