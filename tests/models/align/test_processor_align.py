@@ -23,7 +23,7 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_vision, require_torch
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
 
@@ -218,6 +218,7 @@ class AlignProcessorTest(unittest.TestCase):
 
         self.assertEqual(len(inputs["input_ids"]), 117)
 
+    @require_torch
     def test_structured_kwargs(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
