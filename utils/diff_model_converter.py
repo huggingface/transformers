@@ -241,12 +241,12 @@ class SuperTransformer(cst.CSTTransformer):
         existing_nodes = set()
         for node in new_statements:
             code = self.python_module.code_for_node(node)
-            comment_less_code = re.sub(r'#.*', '', code).strip()
-            comment_less_code = re.sub(r'\ *\n', '\n', comment_less_code).strip()
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             existing_nodes.add(comment_less_code)
         for stmt in existing_body:
-            comment_less_code = re.sub(r'#.*', '',self.python_module.code_for_node(stmt)).strip()
-            comment_less_code = re.sub(r'\ *\n', '\n', comment_less_code).strip()
+            comment_less_code = re.sub(r"#.*", "", self.python_module.code_for_node(stmt)).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
             if comment_less_code not in existing_nodes:
                 if m.matches(stmt, DOCSTRING_NODE) and self.has_docstring:
                     continue
