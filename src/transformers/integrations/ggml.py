@@ -518,7 +518,9 @@ class GGUFTokenizerSkeleton:
 
         if not hasattr(self, "merges"):
             if not hasattr(self, "tokens") or not hasattr(self, "scores"):
-                raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer without merges to be instantiated.")
+                raise ValueError(
+                    "tokens and scores need to be passed for a LLaMa tokenizer without merges to be instantiated."
+                )
             tokens = self.tokens
             scores = self.scores
             vocab = {t: scores[i] for i, t in enumerate(tokens)}
