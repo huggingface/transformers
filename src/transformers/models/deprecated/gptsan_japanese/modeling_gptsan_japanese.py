@@ -45,7 +45,6 @@ _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 ####################################################
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
@@ -66,7 +65,6 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -140,7 +138,6 @@ class GPTSanJapaneseDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSanJapanese
 class GPTSanJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
@@ -234,7 +231,6 @@ class GPTSanJapaneseTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->GPTSanJapanese
 class GPTSanJapaneseSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
@@ -345,7 +341,6 @@ class GPTSanJapaneseLayerDenseFF(nn.Module):
         return output
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->GPTSanJapanese
 class GPTSanJapaneseAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -749,7 +744,6 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
                 module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
                 module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -1298,17 +1292,14 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
             "past_key_values": None,
         }
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.prepare_decoder_input_ids_from_labels with SwitchTransformers->GPTSanJapanese
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration.resize_token_embeddings with MBart->GPTSanJapanese
     def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
         return new_embeddings
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration._resize_final_logits_bias with MBart->GPTSanJapanese
     def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
         old_num_tokens = self.final_logits_bias.shape[-1]
         if new_num_tokens <= old_num_tokens:
@@ -1324,15 +1315,12 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.set_output_embeddings with SwitchTransformers->GPTSanJapanese
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.get_output_embeddings with SwitchTransformers->GPTSanJapanese
     def get_output_embeddings(self):
         return self.lm_head
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits with SwitchTransformers->GPTSanJapanese
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []
         total_expert_indexes = []
