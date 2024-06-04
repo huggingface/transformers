@@ -192,16 +192,13 @@ class TvpVisualInputEmbedding(nn.Module):
         resolution images (high resolution videos).
 
         """
+        h0 = w0 = 1
         # if height dimension is to be interpolated
         if height > self.max_grid_row_position_embeddings:
             h0 = height / self.max_grid_row_position_embeddings
-        else:
-            h0 = 1
         # if width dimension is to be interpolated
         if width > self.max_grid_col_position_embeddings:
             w0 = width / self.max_grid_col_position_embeddings
-        else:
-            w0 = 1
         embedding = embedding.permute(0, 3, 1, 2)  # (batch_size, hidden_dim, height, width)
         embedding = nn.functional.interpolate(
             embedding,
@@ -628,7 +625,7 @@ TVP_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained image pad prompter encodings.
+            Whether to interpolate the pre-trained image pad prompter encodings and positional encodings.
 """
 
 
@@ -714,7 +711,7 @@ class TvpFramePadPrompter(nn.Module):
 
     def interpolate_pad_encoding(self, prompt: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained pad weights , to be able to use the model on collection of high
+        This method allows to interpolate the pre-trained pad weights, to be able to use the model on collection of high
         resolution images (high resolution videos).
 
         """
@@ -736,10 +733,10 @@ class TvpFramePadPrompter(nn.Module):
         prompt = prompt.reshape(batch, num_frames, channels, height, width)
         return prompt
 
-    def forward(self, pixel_values, interpolate_pos_encoding: bool = False):
+    def forward(self, pixel_values, interpolate_pad_encoding: bool = False):
         height, width = (
             (pixel_values.shape[-2], pixel_values.shape[-1])
-            if interpolate_pos_encoding
+            if interpolate_pad_encoding
             else (self.max_img_size, self.max_img_size)
         )
         if self.visual_prompter_apply not in ("add", "remove", "replace"):
@@ -753,12 +750,9 @@ class TvpFramePadPrompter(nn.Module):
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])
-            if interpolate_pos_encoding:
-                pixel_values = pixel_values + self.interpolate_pad_encoding(prompt, height, width).to(
-                    pixel_values.dtype
-                )
-            else:
-                pixel_values = pixel_values + prompt.to(pixel_values.dtype)
+            if interpolate_pad_encoding:
+                prompt = self.interpolate_pad_encoding(prompt, height, width)
+            pixel_values = pixel_values + prompt.to(pixel_values.dtype)
         return pixel_values
 
 
@@ -834,7 +828,7 @@ class TvpModel(TvpPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
         pixel_values = self.vision_model(
-            self.visual_prompter(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+            self.visual_prompter(pixel_values, interpolate_pad_encoding=interpolate_pos_encoding)
         )
         # (batch_size, sequence_length, hidden_size)
         text_embedding_output = self.embeddings(input_ids=input_ids)
