@@ -16,7 +16,6 @@
 
 URL: https://github.com/microsoft/CvT"""
 
-
 import argparse
 import json
 from collections import OrderedDict

@@ -5,7 +5,6 @@ on:
     branches: [ main ]
 
 env:
-  IS_GITHUB_CI: "1"
   OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache 
@@ -86,7 +85,7 @@ jobs:
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
-          pytest -rs -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rsfE -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
@@ -97,7 +96,7 @@ jobs:
       
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
@@ -108,7 +107,7 @@ jobs:
         id: run_integration_tests
         if: always()
         run:
-          pytest -rs -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
+          pytest -rsfE -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
       
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
@@ -119,7 +118,7 @@ jobs:
 
       - name: Post to Slack
         if: always()
-        uses: ./.github/actions/post-slack
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main 
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}

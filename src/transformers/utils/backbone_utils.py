@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Collection of utils to be used by backbones and their components."""
+"""Collection of utils to be used by backbones and their components."""
 
 import enum
 import inspect
@@ -47,8 +47,8 @@ def verify_out_features_out_indices(
             )
 
     if out_indices is not None:
-        if not isinstance(out_indices, (list, tuple)):
-            raise ValueError(f"out_indices must be a list or tuple, got {type(out_indices)}")
+        if not isinstance(out_indices, list):
+            raise ValueError(f"out_indices must be a list, got {type(out_indices)}")
         # Convert negative indices to their positive equivalent: [-1,] -> [len(stage_names) - 1,]
         positive_indices = tuple(idx % len(stage_names) if idx < 0 else idx for idx in out_indices)
         if any(idx for idx in positive_indices if idx not in range(len(stage_names))):
@@ -58,7 +58,7 @@ def verify_out_features_out_indices(
             msg += f"(equivalent to {positive_indices}))" if positive_indices != out_indices else ""
             raise ValueError(msg)
         if positive_indices != tuple(sorted(positive_indices)):
-            sorted_negative = tuple(idx for _, idx in sorted(zip(positive_indices, out_indices), key=lambda x: x[0]))
+            sorted_negative = [idx for _, idx in sorted(zip(positive_indices, out_indices), key=lambda x: x[0])]
             raise ValueError(
                 f"out_indices must be in the same order as stage_names, expected {sorted_negative} got {out_indices}"
             )
@@ -122,6 +122,7 @@ def get_aligned_output_features_output_indices(
         out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
         stage_names (`List[str]`): The names of the stages of the backbone.
     """
+    out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
     verify_out_features_out_indices(out_features=out_features, out_indices=out_indices, stage_names=stage_names)
     output_features, output_indices = _align_output_features_output_indices(
@@ -147,7 +148,10 @@ class BackboneMixin:
         # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
         self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
         self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
-        out_indices = self._backbone.feature_info.out_indices
+
+        # In some timm versions, out_indices reflects the input type of out_indices on the `create_model` call,
+        # in later versions >= 1, it is always a tuple
+        out_indices = list(self._backbone.feature_info.out_indices)
         out_features = self._backbone.feature_info.module_name()
 
         # We verify the out indices and out features are valid

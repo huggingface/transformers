@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Jamba model. """
+"""Testing suite for the PyTorch Jamba model."""
+
 import math
 import tempfile
 import unittest
@@ -501,6 +502,10 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
+
+    @unittest.skip("Jamba has its own special cache type")  # FIXME: @gante
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
 
     @require_flash_attn
     @require_torch_gpu

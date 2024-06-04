@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import copy
 import inspect
 import tempfile
 import unittest
@@ -26,6 +27,8 @@ from transformers import is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
+    require_auto_gptq,
+    require_quanto,
     require_torch,
     require_torch_multi_accelerator,
     slow,
@@ -44,6 +47,7 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
+        AutoProcessor,
         AutoTokenizer,
         BartForCausalLM,
         BartForConditionalGeneration,
@@ -53,7 +57,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         SpeechEncoderDecoderModel,
     )
-    from transformers.cache_utils import DynamicCache
+    from transformers.cache_utils import DynamicCache, QuantoQuantizedCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -64,6 +68,7 @@ if is_torch_available():
         GenerateBeamEncoderDecoderOutput,
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
+        GenerationConfig,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
         LogitsProcessorList,
@@ -74,6 +79,8 @@ if is_torch_available():
         SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
+        WatermarkDetector,
+        WatermarkingConfig,
     )
     from transformers.generation.utils import _speculative_sampling
 
@@ -168,7 +175,9 @@ class GenerationTesterMixin:
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
-        input_ids = torch.zeros_like(input_ids[:, :1]) + model._get_decoder_start_token_id()
+        generation_config = copy.deepcopy(model.generation_config)
+        model._prepare_special_tokens(generation_config)
+        input_ids = torch.zeros_like(input_ids[:, :1]) + generation_config.decoder_start_token_id
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -1647,6 +1656,39 @@ class GenerationTesterMixin:
                         )
                     )
 
+    @require_quanto
+    def test_generate_with_quant_cache(self):
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_quantized_cache:
+                self.skipTest("This model does not support the quantized cache format")
+
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_new_tokens": 5,
+                "cache_implementation": "quantized",
+                # careful with group size, should be divisor of model's hidden size
+                "cache_config": {"backend": "quanto", "nbits": 2, "q_group_size": 8, "residual_length": 128},
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            self.assertTrue(isinstance(results.past_key_values, QuantoQuantizedCache))
+
+            # passing past key values of different type should raise Error
+            with self.assertRaises(ValueError):
+                model.generate(
+                    input_ids, attention_mask=attention_mask, past_key_valyes=DynamicCache(), **generation_kwargs
+                )
+
+            # setting incorrect cache_config args should raise an Error, i.e. nbits=60 does not make sense
+            generation_kwargs["cache_config"] = {"nbits": 60, "q_group_size": 8, "residual_length": 128}
+            with self.assertRaises(ValueError):
+                model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
@@ -2096,6 +2138,38 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @slow
+    def test_watermark_generation(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2").to(torch_device)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I will be", return_tensors="pt").to(torch_device)
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        # generation should work with both input types: WatermarkingConfig or Dict, so let's check it here :)
+        watermark_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+        _ = model.generate(**model_inputs, watermarking_config=watermark_config, do_sample=False, max_length=15)
+
+        # We will not check watermarked text, since we check it in `logits_processors` tests
+        # Checking if generated ids are as expected fails on different hardware
+        args = {
+            "bias": 2.0,
+            "context_width": 1,
+            "seeding_scheme": "selfhash",
+            "greenlist_ratio": 0.25,
+            "hashing_key": 15485863,
+        }
+        output = model.generate(**model_inputs, do_sample=False, max_length=15)
+        output_selfhash = model.generate(**model_inputs, watermarking_config=args, do_sample=False, max_length=15)
+
+        # Check that the detector is detecting watermarked text
+        detector = WatermarkDetector(model_config=model.config, device=torch_device, watermarking_config=args)
+        detection_out_watermarked = detector(output_selfhash[:, input_len:], return_dict=True)
+        detection_out = detector(output[:, input_len:], return_dict=True)
+
+        self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
+        self.assertListEqual(detection_out.prediction.tolist(), [False])
+
+    @slow
     def test_beam_search_example_integration(self):
         # PT-only test: TF doesn't have a BeamSearchScorer
         # exactly the example provided in the docstrings of beam search, which previously
@@ -2434,6 +2508,35 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         outputs_batched_ids = bart_model.generate(input_ids, decoder_start_token_id=decoder_start_token_id_batch)
 
         self.assertListEqual(outputs.tolist(), outputs_batched_ids.tolist())
+
+    def test_decoder_start_id_from_config(self):
+        # Refer to: (#30899)
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        input_ids = bart_tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
+        decoder_start_token_id = bart_model.generation_config.decoder_start_token_id
+
+        # we should be able to take `decoder_start_token_id` from model's generation config if user passes a `GenerationConfig` type
+        outputs = bart_model.generate(input_ids, generation_config=GenerationConfig(do_sample=False))
+
+        # If the generatoin config has no `decoder_start_token_id` or `bos_token_id`, we will raise an error unless user passes it in config
+        bart_model.generation_config.decoder_start_token_id = None
+        bart_model.generation_config.bos_token_id = None
+        outputs_with_user_id = bart_model.generate(
+            input_ids,
+            generation_config=GenerationConfig(do_sample=False, decoder_start_token_id=decoder_start_token_id),
+        )
+
+        self.assertListEqual(outputs.tolist(), outputs_with_user_id.tolist())
+
+        with self.assertRaises(ValueError):
+            outputs = bart_model.generate(input_ids, generation_config=GenerationConfig(do_sample=False))
 
     def test_contrastive_search_batched(self):
         # PT-only test: TF doesn't have constrained beam search
@@ -2846,6 +2949,67 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
         self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
 
+    @slow
+    def test_validate_assistant(self):
+        # Generate a random sample:
+        inputs = np.random.rand(160000)
+
+        # Load a main encoder-decoder model:
+        model_id = "openai/whisper-large-v2"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        )
+        model.to(torch_device)
+
+        # process the input:
+        features = processor(inputs, return_tensors="pt").to(torch_device)
+
+        # Load an encoder-decoder assistant with same encoder as the main model:
+        assistant_distil_model_id = "distil-whisper/distil-large-v2"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_seq_to_seq).sum())
+
+        # Load its decoder only version:
+        assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
+            assistant_distil_model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_causal_lm).sum())
+
+        # Load an encoder-decoder assistant with a different encoder than the main model:
+        assistant_distil_model_id = "openai/whisper-tiny"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+            use_safetensors=True,
+        ).to(torch_device)
+        self.assertTrue(model.generate(**features, assistant_model=assistant_seq_to_seq).sum())
+
+        # Load its decoder only version:
+        assistant_causal_lm = AutoModelForCausalLM.from_pretrained(
+            assistant_distil_model_id,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        ).to(torch_device)
+        # It will raise an error as the encoder of the main and assistant model are not compatible:
+        with self.assertRaises(ValueError):
+            model.generate(**features, assistant_model=assistant_causal_lm)
+
+        # Load an encoder-decoder model with a different tokenizer than the main model:
+        assistant_distil_model_id = "hf-internal-testing/tiny-random-SeamlessM4Tv2ForSpeechToText"
+        assistant_seq_to_seq = AutoModelForSpeechSeq2Seq.from_pretrained(
+            assistant_distil_model_id,
+        ).to(torch_device)
+        # This should raise an error as the main and assistant model don't use the same tokenizer:
+        with self.assertRaises(ValueError):
+            model.generate(**features, assistant_model=assistant_seq_to_seq)
+
     def test_compare_unprocessed_logit_scores(self):
         # Get unprocessed logit scores back from model generate function.
         # Assert that unprocessed logits from generate() are same as those from modal eval()
@@ -2902,6 +3066,43 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+
+@require_torch
+class TokenHealingTestCase(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (
+                "square_bracket",
+                'An example ["like this"] and another example [',
+                'An example ["like this"] and another example ["',
+            ),
+            ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
+            # aggressive_healing: "http" shouldn't be replaced with "https"
+            ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
+            ("trailing_whitespace", "I read a book about ", "I read a book about"),
+            ("nothing_to_heal", "I read a book about", "I read a book about"),
+            ("single_token", "I", "I"),
+            ("empty_prompt", "", ""),
+        ]
+    )
+    @require_auto_gptq
+    def test_prompts(self, name, input, expected):
+        model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+        completion_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            device_map="auto",
+            trust_remote_code=False,
+            revision="main",
+            use_cache=True,
+        )
+        input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
+
+        healed_ids = completion_model.heal_tokens(input_ids)
+        predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(predicted, expected)
 
     def test_generate_from_inputs_embeds_with_bos_token_id_is_none(self):
         article = "Today a dragon flew over Paris."

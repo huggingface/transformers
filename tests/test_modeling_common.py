@@ -26,6 +26,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
+from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -34,6 +35,7 @@ from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
+    AutoTokenizer,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -70,9 +72,11 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_safetensors,
     require_torch,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
     slow,
@@ -475,6 +479,8 @@ class ModelTesterMixin:
                 self._check_save_load_low_cpu_mem_usage(model_class, saved_model_path)
 
     def _check_save_load_low_cpu_mem_usage(self, model_class, saved_model_path):
+        from accelerate.utils.modeling import named_module_tensors
+
         # Load the low usage and the normal models.
         model_low_usage, loading_info = model_class.from_pretrained(
             saved_model_path,
@@ -489,15 +495,12 @@ class ModelTesterMixin:
         # The low_cpu_mem_usage=True causes the model params to be initialized with device=meta, and then
         # subsequently loaded with the correct values and onto the correct device. We check if there are any
         # remaining params that were not properly loaded.
-        for name, param in model_low_usage.named_parameters():
+        for name, tensor in named_module_tensors(model_low_usage, recurse=True):
             self.assertNotEqual(
-                param.device,
+                tensor.device,
                 torch.device("meta"),
-                "Parameter '" + name + "' has not been properly loaded and has device=meta.",
+                "Tensor '" + name + "' has not been properly loaded and has device=meta.",
             )
-
-        # Tests moving the model to a device other than meta.
-        model_low_usage.to(torch_device)
 
         # Check that the parameters are equal.
         for p1, p2 in zip(model_low_usage.parameters(), model_non_low_usage.parameters()):
@@ -2784,7 +2787,9 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = model_class.from_pretrained(
+                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
+                    )
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
@@ -3005,8 +3010,11 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
+            elif param_device in ["mps"]:
+                self.assertEqual(param.device, torch.device("mps"))
             else:
-                self.assertEqual(param.device, torch.device(param_device))
+                # when loaded with device_map, `param_device` are integer values for cuda/xpu/npu/mlu
+                self.assertEqual(param.device, torch.device(f"{torch_device}:{param_device}"))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3125,7 +3133,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3151,7 +3159,6 @@ class ModelTesterMixin:
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
                     # Making sure part of the model will actually end up offloaded
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
-
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
                     torch.manual_seed(0)
@@ -3720,6 +3727,11 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
+            # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
+            # This means that the class needs to be instantiated much later, after `use_mask` is set, which means a significant refactor of the code.
+            # However masking there is not done at any layers that matters (i.e self-attention), therefore we can safely deactivate it.
+            deactivate_mask = "use_mask_token" in inspect.signature(model_class).parameters
 
             is_encoder_decoder = model.config.is_encoder_decoder
 
@@ -3753,176 +3765,209 @@ class ModelTesterMixin:
                 if not has_sdpa and model_sdpa.config.model_type != "falcon":
                     raise ValueError("The SDPA model should have SDPA attention layers")
 
-                # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
+                # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
                 fail_cases = []
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
-                        for batch_size in [1, 5]:
-                            dummy_input = inputs_dict[model.main_input_name]
+                        for output_attentions in [True, False]:
+                            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+                            if not (self.has_attentions and can_output_attn) and output_attentions:
+                                continue
+                            for batch_size in [1, 5]:
+                                dummy_input = inputs_dict[model.main_input_name]
 
-                            if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                dummy_input = dummy_input.to(torch_dtype)
-
-                            dummy_input = dummy_input[:batch_size]
-                            if dummy_input.shape[0] != batch_size:
                                 if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                    extension = torch.rand(
-                                        batch_size - dummy_input.shape[0],
-                                        *dummy_input.shape[1:],
-                                        dtype=torch_dtype,
-                                        device=torch_device,
-                                    )
-                                    dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
-                                else:
-                                    extension = torch.randint(
-                                        high=5,
-                                        size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                        dtype=dummy_input.dtype,
-                                        device=torch_device,
-                                    )
-                                    dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+                                    dummy_input = dummy_input.to(torch_dtype)
 
-                            if not use_mask:
-                                dummy_attention_mask = None
-                            else:
-                                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-                                if dummy_attention_mask is None:
-                                    if is_encoder_decoder:
-                                        seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
-                                    else:
-                                        seqlen = dummy_input.shape[-1]
-                                    dummy_attention_mask = (
-                                        torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
-                                    )
-
-                                dummy_attention_mask = dummy_attention_mask[:batch_size]
-                                if dummy_attention_mask.shape[0] != batch_size:
-                                    extension = torch.ones(
-                                        batch_size - dummy_attention_mask.shape[0],
-                                        *dummy_attention_mask.shape[1:],
-                                        dtype=dummy_attention_mask.dtype,
-                                        device=torch_device,
-                                    )
-                                    dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
-                                    dummy_attention_mask = dummy_attention_mask.to(torch_device)
-
-                                dummy_attention_mask[:] = 1
-                                if padding_side == "left":
-                                    dummy_attention_mask[-1, :-1] = 1
-                                    dummy_attention_mask[-1, -4:] = 0
-                                elif padding_side == "right":
-                                    dummy_attention_mask[-1, 1:] = 1
-                                    dummy_attention_mask[-1, :3] = 0
-
-                            for enable_kernels in [False, True]:
-                                failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
-                                if is_encoder_decoder:
-                                    decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size]
-                                    if decoder_input_ids.shape[0] != batch_size:
-                                        extension = torch.ones(
-                                            batch_size - decoder_input_ids.shape[0],
-                                            *decoder_input_ids.shape[1:],
-                                            dtype=decoder_input_ids.dtype,
+                                dummy_input = dummy_input[:batch_size]
+                                if dummy_input.shape[0] != batch_size:
+                                    if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                        extension = torch.rand(
+                                            batch_size - dummy_input.shape[0],
+                                            *dummy_input.shape[1:],
+                                            dtype=torch_dtype,
                                             device=torch_device,
                                         )
-                                        decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
-                                        decoder_input_ids = decoder_input_ids.to(torch_device)
-
-                                    # TODO: never an `attention_mask` arg here?
-                                    processed_inputs = {
-                                        model.main_input_name: dummy_input,
-                                        "decoder_input_ids": decoder_input_ids,
-                                        "decoder_attention_mask": dummy_attention_mask,
-                                        "output_hidden_states": True,
-                                    }
-                                else:
-                                    processed_inputs = {
-                                        model.main_input_name: dummy_input,
-                                        "output_hidden_states": True,
-                                    }
-
-                                    # Otherwise fails for e.g. WhisperEncoderModel
-                                    if "attention_mask" in inspect.signature(model_eager.forward).parameters:
-                                        processed_inputs["attention_mask"] = dummy_attention_mask
-
-                                # TODO: test gradients as well (& for FA2 as well!)
-                                with torch.no_grad():
-                                    with torch.backends.cuda.sdp_kernel(
-                                        enable_flash=enable_kernels,
-                                        enable_math=True,
-                                        enable_mem_efficient=enable_kernels,
-                                    ):
-                                        prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                                        outputs_eager = model_eager(**prepared_inputs)
-                                        outputs_sdpa = model_sdpa(**prepared_inputs)
-
-                                logits_eager = (
-                                    outputs_eager.hidden_states[-1]
-                                    if not is_encoder_decoder
-                                    else outputs_eager.decoder_hidden_states[-1]
-                                )
-                                logits_sdpa = (
-                                    outputs_sdpa.hidden_states[-1]
-                                    if not is_encoder_decoder
-                                    else outputs_sdpa.decoder_hidden_states[-1]
-                                )
-
-                                if torch_device in ["cpu", "cuda"]:
-                                    atol = atols[torch_device, enable_kernels, torch_dtype]
-                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
-                                else:
-                                    atol = 1e-7
-                                    rtol = 1e-4
-
-                                # Masked tokens output slightly deviates - we don't mind that.
-                                if use_mask:
-                                    if padding_side == "left":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        sub_sdpa = logits_sdpa[-1, :-4]
-                                        sub_eager = logits_eager[-1, :-4]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, -4:]
-                                        # sub_eager = logits_eager[-1, -4:]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-                                    elif padding_side == "right":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        sub_sdpa = logits_sdpa[-1, 3:]
-                                        sub_eager = logits_eager[-1, 3:]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, :3]
-                                        # sub_eager = logits_eager[-1, :3]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                else:
-                                    if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                        fail_cases.append(
-                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+                                    else:
+                                        extension = torch.randint(
+                                            high=5,
+                                            size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
+                                            dtype=dummy_input.dtype,
+                                            device=torch_device,
                                         )
+                                        dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
+
+                                if not use_mask:
+                                    dummy_attention_mask = None
+                                else:
+                                    dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                                    if dummy_attention_mask is None:
+                                        if is_encoder_decoder:
+                                            seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
+                                        else:
+                                            seqlen = dummy_input.shape[-1]
+                                        dummy_attention_mask = (
+                                            torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
+                                        )
+
+                                    dummy_attention_mask = dummy_attention_mask[:batch_size]
+                                    if dummy_attention_mask.shape[0] != batch_size:
+                                        extension = torch.ones(
+                                            batch_size - dummy_attention_mask.shape[0],
+                                            *dummy_attention_mask.shape[1:],
+                                            dtype=dummy_attention_mask.dtype,
+                                            device=torch_device,
+                                        )
+                                        dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
+                                        dummy_attention_mask = dummy_attention_mask.to(torch_device)
+
+                                    dummy_attention_mask[:] = 1
+                                    if padding_side == "left":
+                                        dummy_attention_mask[-1, :-1] = 1
+                                        dummy_attention_mask[-1, -4:] = 0
+                                    elif padding_side == "right":
+                                        dummy_attention_mask[-1, 1:] = 1
+                                        dummy_attention_mask[-1, :3] = 0
+
+                                for enable_kernels in [False, True]:
+                                    failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
+                                    if is_encoder_decoder:
+                                        decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[
+                                            :batch_size
+                                        ]
+                                        if decoder_input_ids.shape[0] != batch_size:
+                                            extension = torch.ones(
+                                                batch_size - decoder_input_ids.shape[0],
+                                                *decoder_input_ids.shape[1:],
+                                                dtype=decoder_input_ids.dtype,
+                                                device=torch_device,
+                                            )
+                                            decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
+                                            decoder_input_ids = decoder_input_ids.to(torch_device)
+
+                                        # TODO: never an `attention_mask` arg here?
+                                        processed_inputs = {
+                                            model.main_input_name: dummy_input,
+                                            "decoder_input_ids": decoder_input_ids,
+                                            "decoder_attention_mask": dummy_attention_mask,
+                                            "output_hidden_states": True,
+                                        }
+                                    else:
+                                        processed_inputs = {
+                                            model.main_input_name: dummy_input,
+                                            "output_hidden_states": True,
+                                        }
+
+                                        # Otherwise fails for e.g. WhisperEncoderModel
+                                        if "attention_mask" in inspect.signature(model_eager.forward).parameters:
+                                            processed_inputs["attention_mask"] = dummy_attention_mask
+
+                                        if (
+                                            self.has_attentions
+                                            and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+                                        ):
+                                            processed_inputs["output_attentions"] = output_attentions
+                                    if not deactivate_mask and (
+                                        "bool_masked_pos" in inspect.signature(model_eager.forward).parameters
+                                    ):
+                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
+
+                                        # In case of additional token (like class) we define a custom `mask_length`
+                                        if hasattr(self.model_tester, "mask_length"):
+                                            mask_length = self.model_tester.mask_length - dummy_mask.size(0)
+                                        else:
+                                            mask_length = self.model_tester.seq_length - dummy_mask.size(0)
+                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
+                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
+                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+
+                                    if "noise" in inspect.signature(model_eager.forward).parameters:
+                                        np.random.seed(2)
+                                        num_patches = int(
+                                            (self.model_tester.image_size // self.model_tester.patch_size) ** 2
+                                        )
+                                        noise = np.random.uniform(size=(batch_size, num_patches))
+                                        processed_inputs["noise"] = torch.from_numpy(noise)
+
+                                    # TODO: test gradients as well (& for FA2 as well!)
+                                    with torch.no_grad():
+                                        with torch.backends.cuda.sdp_kernel(
+                                            enable_flash=enable_kernels,
+                                            enable_math=True,
+                                            enable_mem_efficient=enable_kernels,
+                                        ):
+                                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
+                                            outputs_eager = model_eager(**prepared_inputs)
+                                            outputs_sdpa = model_sdpa(**prepared_inputs)
+
+                                    logits_eager = (
+                                        outputs_eager.hidden_states[-1]
+                                        if not is_encoder_decoder
+                                        else outputs_eager.decoder_hidden_states[-1]
+                                    )
+                                    logits_sdpa = (
+                                        outputs_sdpa.hidden_states[-1]
+                                        if not is_encoder_decoder
+                                        else outputs_sdpa.decoder_hidden_states[-1]
+                                    )
+
+                                    if torch_device in ["cpu", "cuda"]:
+                                        atol = atols[torch_device, enable_kernels, torch_dtype]
+                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    else:
+                                        atol = 1e-7
+                                        rtol = 1e-4
+
+                                    # Masked tokens output slightly deviates - we don't mind that.
+                                    if use_mask:
+                                        if padding_side == "left":
+                                            sub_sdpa = logits_sdpa[:-1]
+                                            sub_eager = logits_eager[:-1]
+                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                                fail_cases.append(
+                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
+                                                )
+
+                                            sub_sdpa = logits_sdpa[-1, :-4]
+                                            sub_eager = logits_eager[-1, :-4]
+                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                                fail_cases.append(
+                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
+                                                )
+
+                                            # Testing the padding tokens is not really meaningful but anyway
+                                            # sub_sdpa = logits_sdpa[-1, -4:]
+                                            # sub_eager = logits_eager[-1, -4:]
+                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
+                                        elif padding_side == "right":
+                                            sub_sdpa = logits_sdpa[:-1]
+                                            sub_eager = logits_eager[:-1]
+                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                                fail_cases.append(
+                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
+                                                )
+
+                                            sub_sdpa = logits_sdpa[-1, 3:]
+                                            sub_eager = logits_eager[-1, 3:]
+                                            if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                                fail_cases.append(
+                                                    get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
+                                                )
+
+                                            # Testing the padding tokens is not really meaningful but anyway
+                                            # sub_sdpa = logits_sdpa[-1, :3]
+                                            # sub_eager = logits_eager[-1, :3]
+                                            # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
+                                            #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
+
+                                    else:
+                                        if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
+                                            fail_cases.append(
+                                                get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                            )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
@@ -3942,8 +3987,12 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["llava", "llava_next", "vipllava"]:
+            if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
                 self.skipTest("Llava-like models currently (transformers==4.39.1) requires an attention_mask input")
+            if config.model_type in ["paligemma"]:
+                self.skipTest(
+                    "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
+                )
             if config.model_type in ["idefics"]:
                 self.skipTest("Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
             model = model_class(config)
@@ -3961,6 +4010,47 @@ class ModelTesterMixin:
                         inputs_dict[name] = inp.to(torch.float16)
 
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                    _ = model(**inputs_dict)
+
+    @require_torch_sdpa
+    @require_torch_gpu
+    @slow
+    def test_sdpa_can_compile_dynamic(self):
+        compute_capability = torch.cuda.get_device_capability()
+        major, _ = compute_capability
+
+        if not torch.version.cuda or major < 8:
+            self.skipTest("This test requires an NVIDIA GPU with compute capability >= 8.0")
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            if config.model_type in ["dbrx"]:
+                self.skipTest(
+                    "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
+                )
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa")
+                model.to(torch_device)
+
+                # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
+                # on input tensors will be required. `mark_dynamic` currently raises inconsistent shape errors.
+                model = torch.compile(model, dynamic=True)
+
+                inputs_dict.pop("attention_mask", None)
+                inputs_dict.pop("decoder_attention_mask", None)
+                for name, inp in inputs_dict.items():
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                        inputs_dict[name] = inp.to(torch.float16)
+
+                # use no_grad to save some memory
+                with torch.no_grad():
                     _ = model(**inputs_dict)
 
     @require_torch_sdpa
@@ -4276,6 +4366,114 @@ class ModelTesterMixin:
                         break
 
                 self.assertFalse(fa2_correctly_converted)
+
+    def _get_custom_4d_mask_test_data(self):
+        # Sequence in which all but the last token is the same
+        input_ids = torch.tensor(
+            [[10, 11, 12, 13], [10, 11, 12, 14], [10, 11, 12, 15]], device=torch_device, dtype=torch.int64
+        )
+        position_ids = torch.tensor([[0, 1, 2, 3]] * 3, device=torch_device, dtype=torch.int64)
+
+        # Combining common prefix with the unique ending tokens:
+        input_ids_shared_prefix = torch.cat([input_ids[0][:-1], input_ids[:, -1]]).unsqueeze(0)
+
+        # Creating a 4D mask where each of the last 3 tokens do not attend to each other.
+        mask_shared_prefix = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0],
+                        [1, 1, 1, 0, 1, 0],
+                        [1, 1, 1, 0, 0, 1],
+                    ]
+                ]
+            ],
+        )
+        # inverting the attention mask
+        mask_dtype = torch.float32
+        min_dtype = torch.finfo(mask_dtype).min
+        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=mask_dtype, device=torch_device) * min_dtype
+
+        # Creating a position_ids tensor. note the repeating figures in the end.
+        position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
+
+        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
+
+    def test_custom_4d_attention_mask(self):
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest("Model architecture has no generative classes, and thus not necessarily supporting 4D masks")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            if getattr(config, "sliding_window", 0) > 0:
+                self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                position_ids,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                position_ids_shared_prefix,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(input_ids, position_ids=position_ids).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids_shared_prefix,
+                attention_mask=mask_shared_prefix,
+                position_ids=position_ids_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing greedily-chosen tokens:
+            assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+    # For now, Let's focus only on GPU for `torch.compile`
+    @slow
+    @require_torch_gpu
+    @require_read_token
+    def test_torch_compile(self):
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest("This test requires torch >= 2.3 to run.")
+
+        if not hasattr(self, "_torch_compile_test_ckpt"):
+            self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_test_ckpt`.")
+        ckpt = self._torch_compile_test_ckpt
+
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        batch_size = 1
+        n_iter = 3
+
+        tokenizer = AutoTokenizer.from_pretrained(ckpt)
+        model = AutoModelForCausalLM.from_pretrained(ckpt, torch_dtype=torch.float16).to(torch_device)
+
+        model.generation_config.max_new_tokens = 4
+        model.generation_config.max_new_tokens = 4
+
+        model.generation_config.cache_implementation = "static"
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+
+        input_text = "Why dogs are cute?"
+        input_ids = tokenizer([input_text] * batch_size, return_tensors="pt").to(torch_device)
+
+        for i in range(n_iter):
+            _ = model.generate(**input_ids, do_sample=False)
 
 
 global_rng = random.Random()

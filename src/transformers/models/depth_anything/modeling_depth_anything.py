@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Depth Anything model."""
-
+"""PyTorch Depth Anything model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -37,9 +36,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
-
-
-from ..deprecated._archive_maps import DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 DEPTH_ANYTHING_START_DOCSTRING = r"""

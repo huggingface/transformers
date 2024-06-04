@@ -199,3 +199,21 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip("LlavaNextImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):
         pass
+
+    def test_nested_input(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+
+        # Test batched as a list of images
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = (7, 1445, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+        # Test batched as a nested list of images, where each sublist is one batch
+        image_inputs_nested = [image_inputs[:3], image_inputs[3:]]
+        encoded_images_nested = image_processing(image_inputs_nested, return_tensors="pt").pixel_values
+        expected_output_image_shape = (7, 1445, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
+
+        # Image processor should return same pixel values, independently of ipnut format
+        self.assertTrue((encoded_images_nested == encoded_images).all())

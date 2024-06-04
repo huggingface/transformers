@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViTMatte model."""
+"""PyTorch ViTMatte model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -28,7 +28,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
-from ..deprecated._archive_maps import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 from .configuration_vitmatte import VitMatteConfig
 
 

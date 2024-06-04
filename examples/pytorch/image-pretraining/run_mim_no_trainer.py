@@ -17,7 +17,6 @@ import argparse
 import logging
 import math
 import os
-import warnings
 from pathlib import Path
 
 import datasets
@@ -54,7 +53,7 @@ Any model supported by the AutoModelForMaskedImageModeling API can be used.
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.41.0.dev0")
+check_min_version("4.42.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -195,12 +194,6 @@ def parse_args():
             "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
             "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
         ),
-    )
-    parser.add_argument(
-        "--use_auth_token",
-        type=bool,
-        default=None,
-        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
     )
     parser.add_argument(
         "--trust_remote_code",
@@ -383,15 +376,6 @@ def collate_fn(examples):
 
 def main():
     args = parse_args()
-
-    if args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        args.token = args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.

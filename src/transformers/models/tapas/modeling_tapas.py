@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch TAPAS model."""
 
-
 import enum
 import math
 import os
@@ -55,9 +54,6 @@ if not is_torch_greater_or_equal_than_1_12:
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
-
-
-from ..deprecated._archive_maps import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 EPSILON_ZERO_DIVISION = 1e-10

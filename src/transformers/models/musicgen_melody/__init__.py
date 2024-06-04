@@ -23,7 +23,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_musicgen_melody": [
-        "MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MusicgenMelodyConfig",
         "MusicgenMelodyDecoderConfig",
     ],
@@ -36,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_musicgen_melody"] = [
-        "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MusicgenMelodyForConditionalGeneration",
         "MusicgenMelodyForCausalLM",
         "MusicgenMelodyModel",
@@ -55,7 +53,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_musicgen_melody import (
-        MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MusicgenMelodyConfig,
         MusicgenMelodyDecoderConfig,
     )
@@ -67,7 +64,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_musicgen_melody import (
-            MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenMelodyForCausalLM,
             MusicgenMelodyForConditionalGeneration,
             MusicgenMelodyModel,

@@ -25,7 +25,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_blenderbot_small": [
-        "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
         "BlenderbotSmallOnnxConfig",
     ],
@@ -47,7 +46,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_blenderbot_small"] = [
-        "BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BlenderbotSmallForCausalLM",
         "BlenderbotSmallForConditionalGeneration",
         "BlenderbotSmallModel",
@@ -80,7 +78,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_blenderbot_small import (
-        BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotSmallConfig,
         BlenderbotSmallOnnxConfig,
     )
@@ -101,7 +98,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_blenderbot_small import (
-            BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlenderbotSmallForCausalLM,
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,

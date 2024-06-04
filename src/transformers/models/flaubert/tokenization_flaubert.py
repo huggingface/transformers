@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Flaubert."""
 
-
 import json
 import os
 import re

@@ -14,7 +14,6 @@
 # limitations under the License.
 """TF 2.0 LayoutLMv3 model."""
 
-
 from __future__ import annotations
 
 import collections
@@ -56,9 +55,6 @@ _DUMMY_BBOX = [
     [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],
     [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
 ]
-
-
-from ..deprecated._archive_maps import TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LARGE_NEGATIVE = -1e8

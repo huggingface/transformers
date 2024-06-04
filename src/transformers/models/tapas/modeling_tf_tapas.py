@@ -14,7 +14,6 @@
 # limitations under the License.
 """TF 2.0 TAPAS model."""
 
-
 from __future__ import annotations
 
 import enum
@@ -82,9 +81,6 @@ else:
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
-
-
-from ..deprecated._archive_maps import TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 EPSILON_ZERO_DIVISION = 1e-10

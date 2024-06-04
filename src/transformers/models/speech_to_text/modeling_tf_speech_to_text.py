@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Speech2Text model."""
-
+"""TensorFlow Speech2Text model."""
 
 from __future__ import annotations
 
@@ -54,9 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
-
-
-from ..deprecated._archive_maps import TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
 
 
 LARGE_NEGATIVE = -1e8

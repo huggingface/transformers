@@ -119,6 +119,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             warmup_steps=0,
             eval_steps=2,
             logging_steps=2,
+            report_to="none",
         )
 
         # instantiate trainer
@@ -152,7 +153,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             "google-t5/t5-small", max_length=None, min_length=None, max_new_tokens=256, min_new_tokens=1, num_beams=5
         )
 
-        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True)
+        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, report_to="none")
 
         trainer = Seq2SeqTrainer(
             model=model,
@@ -191,7 +192,9 @@ class Seq2seqTrainerTester(TestCasePlus):
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
         gen_config = GenerationConfig(do_sample=False, top_p=0.9)  # bad: top_p is not compatible with do_sample=False
 
-        training_args = Seq2SeqTrainingArguments(".", predict_with_generate=True, generation_config=gen_config)
+        training_args = Seq2SeqTrainingArguments(
+            ".", predict_with_generate=True, generation_config=gen_config, report_to="none"
+        )
         with self.assertRaises(ValueError) as exc:
             _ = Seq2SeqTrainer(
                 model=model,

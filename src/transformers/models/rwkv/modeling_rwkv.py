@@ -45,9 +45,6 @@ _CHECKPOINT_FOR_DOC = "RWKV/rwkv-4-169m-pile"
 _CONFIG_FOR_DOC = "RwkvConfig"
 
 
-from ..deprecated._archive_maps import RWKV_PRETRAINED_MODEL_ARCHIVE_LIST  # noqa: F401, E402
-
-
 rwkv_cuda_kernel = None
 
 

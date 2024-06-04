@@ -18,10 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_patchtst": [
-        "PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PatchTSTConfig",
-    ],
+    "configuration_patchtst": ["PatchTSTConfig"],
 }
 
 try:
@@ -31,7 +28,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_patchtst"] = [
-        "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PatchTSTModel",
         "PatchTSTPreTrainedModel",
         "PatchTSTForPrediction",
@@ -42,7 +38,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
+    from .configuration_patchtst import PatchTSTConfig
 
     try:
         if not is_torch_available():
@@ -51,7 +47,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_patchtst import (
-            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTForClassification,
             PatchTSTForPrediction,
             PatchTSTForPretraining,
