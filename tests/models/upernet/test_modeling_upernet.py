@@ -19,7 +19,14 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ConvNextConfig, UperNetConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device, require_timm
+from transformers.testing_utils import (
+    require_timm,
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
