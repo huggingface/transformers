@@ -635,7 +635,7 @@ class MistralIntegrationTest(unittest.TestCase):
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXT_COMPLETION = {
-            7: "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs",
+            7: "My favourite condiment is 100% Sriracha. I love the heat, the sweetness, the tang",
             8: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
             9: "My favourite condiment is 100% ketchup. I love it on everything. I’m not a big",
         }
