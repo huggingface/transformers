@@ -424,6 +424,28 @@ class DeiTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
+    def test_inference_interpolate_pos_encoding(self):
+        model = DeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224").to(
+            torch_device
+        )
+
+        image_processor = self.default_image_processor
+
+        # image size is {"height": 480, "width": 640}
+        image = prepare_img()
+        image_processor.size = {"height": 480, "width": 640}
+        # center crop set to False so image is not center cropped to 224x224
+        inputs = image_processor(images=image, return_tensors="pt", do_center_crop=False).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+    @slow
     @require_accelerate
     @require_torch_accelerator
     @require_torch_fp16
