@@ -179,7 +179,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        image_pairs,
+        images,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -194,8 +194,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         Preprocess an image or batch of images.
 
         Args:
-            image_pairs (`ImageInput`):
-                Image pairs to preprocess. Expects either a list of 2 images or a list of 2 images list with pixel values ranging from 0 to 255. If
+            images (`ImageInput`):
+                Image pairs to preprocess. Expects either a list of 2 images or a list of list of 2 images list with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
@@ -238,6 +238,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        image_pairs = images
 
         if not isinstance(image_pairs, list) or len(image_pairs) < 2:
             raise ValueError(
@@ -293,10 +295,6 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
         # Checking if image is RGB or grayscale
         for i in range(len(images)):
