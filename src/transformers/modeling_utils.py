@@ -120,7 +120,7 @@ if is_accelerate_available():
     )
 
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
-    if accelerate_version > version.parse("0.31.1"):
+    if accelerate_version >= version.parse("0.31"):
         from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_safetensors_available():
