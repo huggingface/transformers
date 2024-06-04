@@ -21,6 +21,7 @@ import time
 from typing import Dict
 
 from get_ci_error_statistics import get_jobs
+from huggingface_hub import HfApi
 from notification_service import (
     Message,
     handle_stacktraces,
@@ -29,7 +30,6 @@ from notification_service import (
     retrieve_artifact,
     retrieve_available_artifacts,
 )
-from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
