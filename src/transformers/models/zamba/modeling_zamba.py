@@ -713,7 +713,6 @@ class ZambaMambaMixer(nn.Module):
             * 2
             / self.time_step_rank**0.5
         )  # (h d dt_rank)
-        ### self.dt_proj_bias = nn.Parameter(dt_proj.bias.clone().detach().reshape(self.n_mamba_heads, self.intermediate_size//self.n_mamba_heads))
         self.dt_proj_bias = nn.Parameter(
             torch.zeros(self.n_mamba_heads, self.intermediate_size // self.n_mamba_heads)
         )  # (h d)
@@ -961,6 +960,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        x_orig: torch.Tensor,
         layer_id_num: int,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -973,6 +973,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
+            
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
@@ -985,6 +986,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
         """
+        hidden_states = torch.concatenate([hidden_states, x_orig], dim=-1)
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1268,7 +1270,6 @@ class ZambaModel(ZambaPreTrainedModel):
 
         x_orig = torch.clone(inputs_embeds)
         # x_orig: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
-        # see fig. xx of xx
 
         if use_cache and past_key_values is None:
             logger.warning_once(
@@ -1294,11 +1295,11 @@ class ZambaModel(ZambaPreTrainedModel):
 
         for layer_id_num, layer_type in enumerate(self.layers_block_type):
             if layer_type == "attention+mamba":
-                hidden_states = torch.concatenate([hidden_states, x_orig], dim=-1)
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         self.block.__call__,
                         hidden_states,
+                        x_orig,
                         layer_id_num,
                         causal_mask,
                         position_ids,
@@ -1310,6 +1311,7 @@ class ZambaModel(ZambaPreTrainedModel):
                 else:
                     layer_outputs = self.block(
                         hidden_states,
+                        x_orig=x_orig,
                         layer_id_num=layer_id_num,
                         attention_mask=causal_mask,
                         position_ids=position_ids,
