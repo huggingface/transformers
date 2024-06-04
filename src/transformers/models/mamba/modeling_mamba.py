@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union, List
 
 import torch
 import torch.utils.checkpoint
@@ -68,8 +68,9 @@ class MambaCache:
     Attributes:
         seqlen_offset: int
         dtype: torch.dtype
-        conv_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, conv_kernel_size]
-        ssm_states: Dict[int, torch.Tensor] # layer_idx -> [batch_size, intermediate_size, ssm_state_size]
+        conv_state_cache: List[torch.Tensor] # layer_idx -> [batch_size, intermediate_size, conv_kernel_size]
+        ssm_state_cache: List[torch.Tensor] # layer_idx -> [batch_size, intermediate_size, ssm_state_size]
+        is_cache_initialized: List[bool]
     """
 
     def __init__(
@@ -81,14 +82,47 @@ class MambaCache:
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
 
-        self.conv_states = {
-            i: torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
-            for i in range(config.num_hidden_layers)
-        }
-        self.ssm_states = {
-            i: torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
-            for i in range(config.num_hidden_layers)
-        }
+        self.conv_state_cache : List[torch.Tensor] = []
+        self.ssm_state_cache : List[torch.Tensor] = []
+
+        self.is_cache_initialized = [False for _ in range(config.num_hidden_layers)]
+        
+        for i in range(config.num_hidden_layers):
+            new_layer_conv_cache = torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
+            new_layer_ssm_cache = torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+            torch._dynamo.mark_static_address(new_layer_conv_cache)
+            torch._dynamo.mark_static_address(new_layer_ssm_cache)
+            self.conv_state_cache.append(new_layer_conv_cache)
+            self.ssm_state_cache.append(new_layer_ssm_cache)
+
+    def update_conv_state(self, layer_idx : int, hidden_states : torch.Tensor) -> torch.Tensor:
+        seq_len = hidden_states.shape[-1]
+        if seq_len > 1:
+            self.conv_state_cache[layer_idx] += hidden_states
+            return self.conv_state_cache[layer_idx]
+        
+        # decoding phase
+        conv_state = self.conv_state_cache[layer_idx]
+        new_conv_state = conv_state.roll(shifts=-1, dims=-1)
+        new_conv_state[:, :, -1] = hidden_states[:, :, 0]
+        self.conv_state_cache[layer_idx].zero_()
+        self.conv_state_cache[layer_idx] += new_conv_state
+        return self.conv_state_cache[layer_idx]
+
+    def get_conv_sate(self, layer_idx):
+        return self.conv_state_cache[layer_idx]
+
+    def update_ssm_state(self, layer_idx : int, new_ssm_state : torch.Tensor):
+        self.ssm_state_cache[layer_idx].zero_()
+        self.ssm_state_cache[layer_idx] += new_ssm_state
+        self.is_cache_initialized[layer_idx] = True
+        return self.ssm_state_cache[layer_idx]
+
+    def get_ssm_sate(self, layer_idx):
+        return self.ssm_state_cache[layer_idx]
+    
+    def is_initialized(self, layer_idx):
+        return self.is_cache_initialized[layer_idx]
 
 
 class MambaMixer(nn.Module):
@@ -243,13 +277,12 @@ class MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            # ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            ssm_state = cache_params.get_ssm_sate(self.layer_idx).clone()
             ssm_state = ssm_state.to(hidden_states.device)
-            if cache_params.seqlen_offset > 0:
-                conv_state = cache_params.conv_states[self.layer_idx]                   # [batch, intermediate_size, conv_kernel_size]
-                conv_state = torch.roll(conv_state, shifts=-1, dims=-1)
-                conv_state[:, :, -1] = hidden_states[:, :, 0]
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+
+            if cache_params.is_initialized(self.layer_idx):
+                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
                     hidden_states += self.conv1d.bias
@@ -259,7 +292,7 @@ class MambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                cache_params.conv_states[self.layer_idx].copy_(conv_state)
+                cache_params.update_conv_state(self.layer_idx, conv_state)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
         else:
             ssm_state = torch.zeros(
@@ -294,7 +327,7 @@ class MambaMixer(nn.Module):
         scan_output = (scan_output * self.act(gate))
 
         if cache_params is not None:
-            cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+            cache_params.update_ssm_state(self.layer_idx, ssm_state)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
@@ -579,8 +612,6 @@ class MambaModel(MambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if use_cache:
-            cache_params.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.norm_f(hidden_states)
 
@@ -633,10 +664,10 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, attention_mask=None, **kwargs
+        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, **kwargs
     ):
         # only last token for inputs_ids if the state is passed along.
-        if cache_params is not None:
+        if cache_params is not None and cache_params.is_initialized(0):
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
         if inputs_embeds is not None and cache_params is None:
