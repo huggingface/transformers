@@ -202,7 +202,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         truncate_before_pattern: Optional[List[str]] = None,
         **kwargs,
     ) -> str:
@@ -217,9 +216,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             truncate_before_pattern (`List[str]`, *optional*, defaults to `None`):
                 A list of regular expression strings that will be used to truncate the returned string. This can be
                 used to remove extra pieces of code (e.g. truncate if observing a comment symbol "#" at the beginning
@@ -234,7 +230,6 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         decoded_text = super().decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 

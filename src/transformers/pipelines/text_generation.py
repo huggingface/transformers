@@ -125,7 +125,6 @@ class TextGenerationPipeline(Pipeline):
         return_tensors=None,
         return_text=None,
         return_type=None,
-        clean_up_tokenization_spaces=None,
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
@@ -182,8 +181,6 @@ class TextGenerationPipeline(Pipeline):
             return_type = ReturnType.TENSORS
         if return_type is not None:
             postprocess_params["return_type"] = return_type
-        if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
 
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
@@ -355,7 +352,7 @@ class TextGenerationPipeline(Pipeline):
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
         return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
-    def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
+    def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
@@ -369,7 +366,6 @@ class TextGenerationPipeline(Pipeline):
                 text = self.tokenizer.decode(
                     sequence,
                     skip_special_tokens=True,
-                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
                 # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
@@ -380,7 +376,6 @@ class TextGenerationPipeline(Pipeline):
                         self.tokenizer.decode(
                             input_ids[0],
                             skip_special_tokens=True,
-                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
 

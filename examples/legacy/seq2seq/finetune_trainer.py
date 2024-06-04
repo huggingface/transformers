@@ -355,7 +355,7 @@ def main():
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
-                    test_output.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                    test_output.predictions, skip_special_tokens=True
                 )
                 test_preds = lmap(str.strip, test_preds)
                 write_txt_file(test_preds, os.path.join(training_args.output_dir, "test_generations.txt"))

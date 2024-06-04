@@ -132,7 +132,7 @@ def complete_code(accelerator, model, tokenizer, dataloader, n_tasks, batch_size
     code_gens = [[] for _ in range(n_tasks)]
     for task, generated_tokens in gen_token_dict.items():
         for s in generated_tokens:
-            gen_code = tokenizer.decode(s, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            gen_code = tokenizer.decode(s, skip_special_tokens=True)
             code_gens[task].append(remove_last_block(gen_code))
     return code_gens
 

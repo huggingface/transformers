@@ -1475,7 +1475,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             early_stopping=True,
         )
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True)
         self.assertListEqual(
             expected_summaries,
             decoded,
@@ -1495,7 +1495,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
         input_ids = input_ids.to(torch_device)
         output = model.generate(input_ids)
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
         self.assertEqual(translation, expected_translation)
 
     @slow
@@ -1521,7 +1521,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
         new_truncated_translation = (
             "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre "
             "un "
@@ -1542,7 +1542,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
         inputs = tok(model.config.prefix + en_text, return_tensors="pt").to(torch_device)
         output = model.generate(**inputs)
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
         self.assertEqual(translation, expected_translation)
 
     @slow

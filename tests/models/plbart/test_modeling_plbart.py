@@ -462,9 +462,7 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
         outputs = self.model.generate(
             inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id[src_lan], num_beams=1
         )
-        prediction: str = self.tokenizer.batch_decode(
-            outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )[0]
+        prediction: str = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
         self.assertEqual(prediction, "0 0 the 0 the 0 the 0 the 0 the 0 the 0 the 0 the")
 
 

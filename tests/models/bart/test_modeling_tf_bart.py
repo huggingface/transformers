@@ -669,7 +669,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         )
 
         assert hypotheses_batch[:, 1].numpy().tolist() == [0, 0, 0, 0]  # test force_bos_token_to_be_generated
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True)
         expected_batch = [
             EXPECTED_SUMMARY_FRANCE,
             EXPECTED_SUMMARY_SHORTER,

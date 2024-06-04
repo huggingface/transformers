@@ -1492,7 +1492,7 @@ FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING = r"""
 
     >>> # Generate Reply
     >>> reply_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5, early_stopping=True).sequences
-    >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
+    >>> print([tokenizer.decode(g, skip_special_tokens=True) for g in reply_ids])
     ```
 """
 

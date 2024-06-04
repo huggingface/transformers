@@ -1202,9 +1202,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             "Bronx on Friday. If convicted, she faces up to four years in prison.",
         ]
 
-        generated_summaries = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated_summaries = tok.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated_summaries == EXPECTED
 
     @slow

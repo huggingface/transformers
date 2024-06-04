@@ -330,7 +330,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
         assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
         generated_ids = self.model.generate(**model_inputs)[0]
-        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
         assert reply in (
             "i don't know. i just feel like i'm going to throw up. it's not fun.",
@@ -343,9 +343,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
         generated_utterances = self.model.generate(**model_inputs)
 
-        clean_txt = self.tokenizer.decode(
-            generated_utterances[0], skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
+        clean_txt = self.tokenizer.decode(generated_utterances[0], skip_special_tokens=True)
         assert clean_txt in (
             "have you ever been to a sam club? it's a great club in the south.",
             "have you ever heard of sam harris? he's an american singer, songwriter, and actor.",

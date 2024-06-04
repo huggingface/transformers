@@ -65,7 +65,7 @@ class ModelEvalTester(unittest.TestCase):
             num_beams=8,
         )
         decoded_sentences = tokenizer.batch_decode(
-            outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            outputs, skip_special_tokens=True
         )
         scores = calculate_bleu(decoded_sentences, tgt_sentences)
         print(scores)

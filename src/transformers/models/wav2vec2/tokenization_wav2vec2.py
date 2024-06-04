@@ -404,7 +404,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
         output_word_offsets: Optional[bool] = False,
@@ -435,14 +434,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         text = string_output["text"]
 
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
-
         if output_word_offsets or output_char_offsets:
             return Wav2Vec2CTCTokenizerOutput(
                 text=text,
@@ -459,7 +450,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -510,7 +500,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             self.decode(
                 seq,
                 skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 output_char_offsets=output_char_offsets,
                 output_word_offsets=output_word_offsets,
                 **kwargs,
@@ -529,7 +518,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -624,7 +612,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return self._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             output_char_offsets=output_char_offsets,
             output_word_offsets=output_word_offsets,
             **kwargs,
@@ -870,7 +857,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> str:
         """
@@ -890,16 +876,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         text = self.convert_tokens_to_string(result)
 
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
+        return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

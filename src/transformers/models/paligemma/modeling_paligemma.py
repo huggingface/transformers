@@ -397,7 +397,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "answer en Where is the cow standing?\nbeach"
         ```"""
 

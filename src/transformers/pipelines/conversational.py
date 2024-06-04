@@ -239,7 +239,7 @@ class ConversationalPipeline(Pipeline):
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def _sanitize_parameters(self, min_length_for_response=None, clean_up_tokenization_spaces=None, **generate_kwargs):
+    def _sanitize_parameters(self, min_length_for_response=None, **generate_kwargs):
         preprocess_params = {}
         forward_params = {}
         postprocess_params = {}
@@ -250,8 +250,6 @@ class ConversationalPipeline(Pipeline):
         if "max_length" in generate_kwargs:
             forward_params["max_length"] = generate_kwargs["max_length"]
             # self.max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-        if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
 
         if generate_kwargs:
             forward_params.update(generate_kwargs)
@@ -310,12 +308,11 @@ class ConversationalPipeline(Pipeline):
             start_position = n
         return {"output_ids": output_ids[:, start_position:], "conversation": conversation}
 
-    def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
+    def postprocess(self, model_outputs):
         output_ids = model_outputs["output_ids"]
         answer = self.tokenizer.decode(
             output_ids[0],
             skip_special_tokens=True,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
         conversation = model_outputs["conversation"]
         conversation.add_message({"role": "assistant", "content": answer})

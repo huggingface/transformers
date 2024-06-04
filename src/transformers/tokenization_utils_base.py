@@ -1534,9 +1534,6 @@ INIT_TOKENIZER_DOCSTRING = r"""
             A tuple or a list of additional special tokens. Add them here to ensure they are skipped when decoding with
             `skip_special_tokens` is set to True. If they are not part of the vocabulary, they will be added at the end
             of the vocabulary.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should cleanup the spaces that were added when splitting the input text during the
-            tokenization process.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not the special tokens should be split during the tokenization process. Passing will affect the
             internal state of the tokenizer. The default behavior is to not split special tokens. This means that if
@@ -1590,9 +1587,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
-
-        # By default, cleaning tokenization spaces for both fast and slow tokenizers
-        self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
@@ -1663,7 +1657,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
+            f" special_tokens={self.special_tokens_map}, "
             " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}"
         )
 
@@ -2461,7 +2455,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
+        target_keys.update(["model_max_length"])
 
         for k in target_keys:
             if hasattr(self, k):
@@ -3789,7 +3783,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -3800,9 +3793,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -3813,7 +3803,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             self.decode(
                 seq,
                 skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 **kwargs,
             )
             for seq in sequences
@@ -3823,7 +3812,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> str:
         """
@@ -3837,9 +3825,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
+
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the underlying model specific decode method.
 
@@ -3852,7 +3838,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return self._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -3860,7 +3845,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         **kwargs,
     ) -> str:
         raise NotImplementedError
@@ -3895,31 +3879,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
 
         return special_tokens_mask
-
-    @staticmethod
-    def clean_up_tokenization(out_string: str) -> str:
-        """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
-
-        Args:
-            out_string (`str`): The text to clean up.
-
-        Returns:
-            `str`: The cleaned-up string.
-        """
-        out_string = (
-            out_string.replace(" .", ".")
-            .replace(" ?", "?")
-            .replace(" !", "!")
-            .replace(" ,", ",")
-            .replace(" ' ", "'")
-            .replace(" n't", "n't")
-            .replace(" 'm", "'m")
-            .replace(" 's", "'s")
-            .replace(" 've", "'ve")
-            .replace(" 're", "'re")
-        )
-        return out_string
 
     def _eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
         """

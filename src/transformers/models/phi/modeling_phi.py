@@ -1155,7 +1155,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
         'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
         ```"""
 

@@ -655,9 +655,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
             " superposition of two well -"
         ]
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tok.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == EXPECTED
 
 

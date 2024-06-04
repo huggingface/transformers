@@ -393,7 +393,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         return out_vocab_file, out_merge_file
 
-    # def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
+    # def decode(self, token_ids, skip_special_tokens=False):
     #     filtered_tokens = ' '.join(self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens))
     #     tokens_generated_so_far = re.sub('(@@ )', '', string=filtered_tokens)
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)

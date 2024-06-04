@@ -591,7 +591,5 @@ class LEDModelIntegrationTests(unittest.TestCase):
             " and also with the classical parish - littlewood model. "
         )
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tok.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == [EXPECTED_LEP, EXPECTED_MAGNET]

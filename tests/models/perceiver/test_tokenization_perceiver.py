@@ -62,7 +62,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         toks = []
         for i in range(len(tokenizer)):
             try:
-                tok = tokenizer.decode([i], clean_up_tokenization_spaces=False)
+                tok = tokenizer.decode([i])
             except UnicodeDecodeError:
                 pass
             toks.append((i, tok))
@@ -78,13 +78,9 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         toks_ids = [t[0] for t in toks]
 
         # Ensure consistency
-        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        output_txt = tokenizer.decode(toks_ids)
         if " " not in output_txt and len(toks_ids) > 1:
-            output_txt = (
-                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
-                + " "
-                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
-            )
+            output_txt = tokenizer.decode([toks_ids[0]]) + " " + tokenizer.decode(toks_ids[1:])
         if with_prefix_space:
             output_txt = " " + output_txt
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)

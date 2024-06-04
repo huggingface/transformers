@@ -321,7 +321,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
         FASTER_GEN_KWARGS = {"num_beams": 1, "early_stopping": True, "min_length": 15, "max_length": 25}
-        TOK_DECODE_KW = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
+        TOK_DECODE_KW = {"skip_special_tokens": True}
 
         backend_empty_cache(torch_device)
         model = BlenderbotForConditionalGeneration.from_pretrained(self.ckpt).half().to(torch_device)

@@ -473,7 +473,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=80)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "USER:  Why is this video funny? ASSISTANT: The video is funny because the baby is playing with a Wii remote while sitting on the floor, and the baby is wearing glasses.Ъ. The baby's actions are amusing because it is a young child trying to interact with a video game, which is not a typical activity for a"
 
         >>> # to generate from image and video mix
@@ -487,7 +487,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=50)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)
         ['USER:   How many cats do you see? ASSISTANT: There are two cats visible in the image. (or three, if you count the one in the background).', 'USER:  Why is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and playing with a Wii remote.Ъ. The baby is holding the remote']
         ```
         """

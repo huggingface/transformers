@@ -221,14 +221,12 @@ class FNetTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
         text = super()._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )
