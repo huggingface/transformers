@@ -723,6 +723,7 @@ class GenerationMixin:
     def _get_logits_warper(
         self,
         generation_config: GenerationConfig,
+        device: str,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -765,7 +766,9 @@ class GenerationMixin:
             )
         if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
             warpers.append(
-                EtaLogitsWarper(epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep)
+                EtaLogitsWarper(
+                    epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
+                )
             )
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -818,7 +821,8 @@ class GenerationMixin:
         ):
             processors.append(
                 EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
+                    penalty=generation_config.encoder_repetition_penalty,
+                    encoder_input_ids=encoder_input_ids,
                 )
             )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
@@ -830,18 +834,30 @@ class GenerationMixin:
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
             processors.append(
-                EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
+                EncoderNoRepeatNGramLogitsProcessor(
+                    generation_config.encoder_no_repeat_ngram_size,
+                    encoder_input_ids,
+                )
             )
         if generation_config.bad_words_ids is not None:
             processors.append(
-                NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
+                NoBadWordsLogitsProcessor(
+                    generation_config.bad_words_ids,
+                    generation_config.eos_token_id,
+                )
             )
         if (
             generation_config.min_length is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_length > 0
         ):
-            processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+            processors.append(
+                MinLengthLogitsProcessor(
+                    generation_config.min_length,
+                    generation_config.eos_token_id,
+                    device=device,
+                )
+            )
         if (
             generation_config.min_new_tokens is not None
             and generation_config.eos_token_id is not None
@@ -849,20 +865,32 @@ class GenerationMixin:
         ):
             processors.append(
                 MinNewTokensLengthLogitsProcessor(
-                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                    input_ids_seq_length,
+                    generation_config.min_new_tokens,
+                    generation_config.eos_token_id,
+                    device=device,
                 )
             )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
-                    prefix_allowed_tokens_fn, generation_config.num_beams // generation_config.num_beam_groups
+                    prefix_allowed_tokens_fn,
+                    generation_config.num_beams // generation_config.num_beam_groups,
                 )
             )
         if generation_config.forced_bos_token_id is not None:
-            processors.append(ForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))
+            processors.append(
+                ForcedBOSTokenLogitsProcessor(
+                    generation_config.forced_bos_token_id,
+                )
+            )
         if generation_config.forced_eos_token_id is not None:
             processors.append(
-                ForcedEOSTokenLogitsProcessor(generation_config.max_length, generation_config.forced_eos_token_id)
+                ForcedEOSTokenLogitsProcessor(
+                    generation_config.max_length,
+                    generation_config.forced_eos_token_id,
+                    device=device,
+                )
             )
         if generation_config.remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
@@ -875,7 +903,12 @@ class GenerationMixin:
                 )
             )
         if generation_config.suppress_tokens is not None:
-            processors.append(SuppressTokensLogitsProcessor(generation_config.suppress_tokens))
+            processors.append(
+                SuppressTokensLogitsProcessor(
+                    generation_config.suppress_tokens,
+                    device=device,
+                )
+            )
         if generation_config.begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = (
@@ -887,7 +920,11 @@ class GenerationMixin:
                 # generation starts after the last token that is forced
                 begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
-                SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
+                SuppressTokensAtBeginLogitsProcessor(
+                    generation_config.begin_suppress_tokens,
+                    begin_index,
+                    device=device,
+                )
             )
         if generation_config.forced_decoder_ids is not None:
             # TODO(Sanchit): deprecate in v4.40 by removing this logic
@@ -1779,7 +1816,12 @@ class GenerationMixin:
 
             # 12. prepare logits warper (if `do_sample` is `True`)
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(
+                    generation_config,
+                    device=input_ids.device,
+                )
+                if generation_config.do_sample
+                else None
             )
 
             # 13. run assisted generate
@@ -1812,7 +1854,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1838,7 +1882,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. prepare beam search scorer
