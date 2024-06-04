@@ -2644,7 +2644,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map:
-                if accelerate_version < version.parse("0.31.1"):
+                if accelerate_version < version.parse("0.31"):
                     raise ImportError(
                         f"You need accelerate version to be greater or equal than 0.31 to save models with offloaded parameters. Detected version {accelerate_version}. "
                         f"Please upgrade accelerate with `pip install -U accelerate`"
