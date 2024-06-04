@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import ResNetConfig, TvpConfig
+from transformers import ResNetConfig, TimmBackboneConfig, TvpConfig
 from transformers.testing_utils import require_timm, require_torch, require_vision, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -223,23 +223,25 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if model.__class__.__name__ == "TvpModel":
                     self.assertEqual(len(model.vision_model.backbone.out_indices), 2)
                 elif model.__class__.__name__ == "TvpForVideoGrounding":
-                    self.assertEqual(len(model.model.vision_model.backbone.backbone.out_indices), 2)
+                    self.assertEqual(len(model.model.vision_model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_pretrained_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
         # Force load_backbone path
         config.is_hybrid = False
 
+        # We load through configs, as the modeling file assumes config.backbone_config is always set
+        config.use_pretrained_backbone = False
+        config.backbone_kwargs = None
+
         # Load a timm backbone
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        # We hack adding hidden_sizes to the config to test the backbone loading
+        backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
+        config.backbone_config = backbone_config
         _validate_backbone_init()
 
         # Load a HF backbone
-        config.backbone = "facebook/dinov2-small"
-        config.use_timm_backbone = False
+        backbone_config = ResNetConfig.from_pretrained("facebook/dinov2-small", out_indices=[-2, -1])
+        config.backbone_config = backbone_config
         _validate_backbone_init()
 
 
