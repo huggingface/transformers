@@ -43,9 +43,8 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
-from .modeling_resnet_rt_detr import load_rt_detr_backbone
+from .modeling_resnet_rt_detr import RTDetrResNetBackbone
 
 
 if is_scipy_available():
@@ -549,7 +548,7 @@ def get_contrastive_denoising_training_group(
 
 class RTDetrConvEncoder(nn.Module):
     """
-    Convolutional backbone using the AutoBackbone API.
+    Convolutional backbone using the modeling_resnet_rt_detr.py.
 
     nn.BatchNorm2d layers are replaced by RTDetrFrozenBatchNorm2d as defined above.
     https://github.com/lyuwenyu/RT-DETR/blob/main/rtdetr_pytorch/src/nn/backbone/presnet.py#L142
@@ -558,10 +557,7 @@ class RTDetrConvEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        if config.backbone in ["resnet18d", "resnet34d"]:
-            backbone = load_rt_detr_backbone(config)
-        else:
-            backbone = load_backbone(config)
+        backbone = RTDetrResNetBackbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():

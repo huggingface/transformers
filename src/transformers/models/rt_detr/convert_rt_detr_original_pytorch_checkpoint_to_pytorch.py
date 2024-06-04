@@ -44,33 +44,28 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.label2id = {v: k for k, v in id2label.items()}
 
     if model_name == "rtdetr_r18vd":
-        config.backbone = "resnet18d"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r34vd":
-        config.backbone = "resnet34d"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
     elif model_name == "rtdetr_r50vd_m":
         pass
     elif model_name == "rtdetr_r50vd":
-        config.backbone = "resnet50d"
+        pass
     elif model_name == "rtdetr_r101vd":
-        config.backbone = "resnet101d"
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
     elif model_name == "rtdetr_r18vd_coco_o365":
-        config.backbone = "resnet18d"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r50vd_coco_o365":
-        config.backbone = "resnet50d"
+        pass
     elif model_name == "rtdetr_r101vd_coco_o365":
-        config.backbone = "resnet101d"
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
@@ -86,97 +81,80 @@ def create_rename_keys(config):
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
-    rename_keys.append(("backbone.conv1.conv1_1.conv.weight", "model.backbone.model._backbone.conv1.0.weight"))
-    for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_1.norm.{last}", f"model.backbone.model._backbone.conv1.1.{last}"))
-
-    rename_keys.append(("backbone.conv1.conv1_2.conv.weight", "model.backbone.model._backbone.conv1.3.weight"))
-    for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_2.norm.{last}", f"model.backbone.model._backbone.conv1.4.{last}"))
-
-    rename_keys.append(("backbone.conv1.conv1_3.conv.weight", "model.backbone.model._backbone.conv1.6.weight"))
-    for last in last_key:
-        rename_keys.append((f"backbone.conv1.conv1_3.norm.{last}", f"model.backbone.model._backbone.bn1.{last}"))
-
-    # stages
-    if config.backbone == "resnet18d":
-        layer = [2,2,2,2]
-    elif config.backbone == "resnet34d":
-        layer = [3,4,6,3]
-    elif config.backbone == "resnet50d":
-        layer = [3,4,6,3]
-    elif config.backbone == "resnet101d":
-        layer = [3,4,23,3]
+    for level in range(3):
+        rename_keys.append((f"backbone.conv1.conv1_{level+1}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
+        for last in last_key:
+            rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
     for stage_idx in range(4):
-        for layer_idx in range(layer[stage_idx]):
+        for layer_idx in range(config.depths[stage_idx]):
             # shortcut
             if layer_idx == 0:
                 if stage_idx == 0:
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.weight",
-                            f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.1.weight",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.convolution.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.norm.{last}",
-                                f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.2.{last}",
+                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.normalization.{last}",
                             )
                         )
                 else:
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.conv.weight",
-                            f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.1.weight",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.convolution.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.norm.{last}",
-                                f"model.backbone.model._backbone.layer{stage_idx+1}.0.downsample.2.{last}",
+                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.normalization.{last}",
                             )
                         )
 
             rename_keys.append(
                 (
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.conv.weight",
-                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv1.weight",
+                    f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.0.convolution.weight",
                 )
             )
             for last in last_key:
                 rename_keys.append((
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2a.norm.{last}",
-                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn1.{last}",
+                    f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.0.normalization.{last}",
                     ))
 
             rename_keys.append(
                 (
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.conv.weight",
-                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv2.weight",
+                    f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.1.convolution.weight",
                 )
             )
             for last in last_key:
                 rename_keys.append((
                     f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2b.norm.{last}",
-                    f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn2.{last}",
+                    f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.1.normalization.{last}",
                     ))
 
             # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
-            if config.backbone not in ["resnet34d", "resnet18d", "rtdetr_r18vd_coco_o365"]:
+            if config.layer_type != "basic":
                 rename_keys.append(
                     (
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
-                        f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.conv3.weight",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.2.convolution.weight",
                     )
                 )
                 for last in last_key:
                     rename_keys.append((
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.norm.{last}",
-                        f"model.backbone.model._backbone.layer{stage_idx+1}.{layer_idx}.bn3.{last}",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.2.normalization.{last}",
                         ))
     # fmt: on
 
@@ -248,7 +226,7 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
-    block_levels = 3 if config.backbone not in ["resnet34d", "resnet18d", "rtdetr_r18vd_coco_o365"] else 4
+    block_levels = 3 if config.layer_type != "basic" else 4
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
@@ -591,9 +569,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # for two_stage
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
-        # special delete for r34vd and r18d
-        # if key.startswith("model.backbone.model._backbone.layer1.0.downsample") and config.backbone in ["resnet34d", "resnet18d"]:
-        #     del state_dict[key]
 
     # finally, create HuggingFace model and load state dict
     model = RTDetrForObjectDetection(config)
@@ -749,6 +724,12 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
+
+    print(outputs.logits[0, :3, :3])
+    print(expected_slice_logits)
+
+    print(outputs.pred_boxes[0, :3, :3])
+    print(expected_slice_boxes)
 
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
