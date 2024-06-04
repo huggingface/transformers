@@ -72,7 +72,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __call__(
         self,
-        image: Union["Image.Image", str, List["Image.Image"], List[str], KeyDataset],
+        image: Union["Image.Image", str, List["Image.Image"], List[str]],
         question: Union[str, List[str]] = None,
         **kwargs,
     ):
