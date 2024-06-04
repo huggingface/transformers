@@ -188,7 +188,7 @@ class ShapeAdaptiveCroppingModule:
                 np.repeat(np.arange(anchor[1])[np.newaxis, :], anchor[0], axis=0)[:, :, np.newaxis]
             ], axis=2)
             patch_position = patch_position.reshape(-1, 2)  # num_patch, (ph, pw)
-            return image_patches_list #, patch_position, patch_position.shape[0]
+            return image_patches_list, patch_position, patch_position.shape[0]
 
 class MPLUGDocOwlImageProcessor(BaseImageProcessor):
     r"""
@@ -475,11 +475,12 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
-        #breakpoint()
+            
         if do_shape_adaptive_cropping:
-            patch_images = [self.adaptive_crop(image) for image in patch_images]
-            images.extend(patch_images[0])
-            #breakpoint()
+            output = [self.adaptive_crop(image) for image in patch_images][0]
+            patch_images, patch_positions, num_patches = output[0], output[1], output[2]
+            images.extend(patch_images)
+        #breakpoint()
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
@@ -497,11 +498,11 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
 
             # call the module
 
-        data = {"pixel_values": images}
+        data = {"pixel_values": images, "patch_positions": patch_positions, "num_patches": num_patches}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-#image_processor = MPLUGDocOwlImageProcessor()
-#image = Image.open("/home/dana_aubakirova/test_image.tif")
-#pixel_values = image_processor(image, do_rescale=True, do_convert_rgb=True, do_shape_adaptive_cropping=True, #do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)["pixel_values"]
-#breakpoint()
-#print(pixel_values)
+image_processor = MPLUGDocOwlImageProcessor()
+image = Image.open("/home/dana_aubakirova/test_image.tif")
+pixel_values = image_processor(image, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)["pixel_values"]
+breakpoint()
+print(pixel_values)
