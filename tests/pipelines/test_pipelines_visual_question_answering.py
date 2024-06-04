@@ -172,6 +172,50 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
 
+    @require_torch
+    def test_small_model_pt_image_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        images = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000004016.png",
+        ]
+
+        outputs = vqa_pipeline(image=images, question="How many cats are there?", top_k=1)
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "answer": ANY(str)}], [{"score": ANY(float), "answer": ANY(str)}]]
+        )
+
+    @require_torch
+    def test_small_model_pt_question_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        questions = ["How many cats are there?", "Are there any dogs?"]
+
+        outputs = vqa_pipeline(image=image, question=questions, top_k=1)
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "answer": ANY(str)}], [{"score": ANY(float), "answer": ANY(str)}]]
+        )
+
+    @require_torch
+    def test_small_model_pt_both_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        images = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000004016.png",
+        ]
+        questions = ["How many cats are there?", "Are there any dogs?"]
+
+        outputs = vqa_pipeline(image=images, question=questions, top_k=1)
+        self.assertEqual(
+            outputs,
+            [
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+            ],
+        )
+
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
