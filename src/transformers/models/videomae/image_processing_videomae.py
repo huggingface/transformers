@@ -360,7 +360,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
             for video in videos
         ]
 
-        # Speeds up tensor conversion - see: https://github.com/huggingface/transformers/pull/28221/files
+        print(f"return_tensors {return_tensors}")
         data = {"pixel_values": np.asarray(videos) if return_tensors is not None else videos}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
