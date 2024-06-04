@@ -535,10 +535,6 @@ class MistralIntegrationTest(unittest.TestCase):
             out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4
         )
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
     @slow
     @require_bitsandbytes
     def test_model_7b_generation(self):
@@ -558,10 +554,6 @@ class MistralIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @require_bitsandbytes
     @slow
@@ -586,11 +578,6 @@ class MistralIntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     @require_torch_sdpa
@@ -653,10 +640,6 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
     @slow
     @require_read_token
@@ -725,10 +708,6 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
 
 
 @slow
