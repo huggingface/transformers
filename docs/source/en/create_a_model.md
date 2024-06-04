@@ -327,9 +327,9 @@ For example, to load a [ResNet](../model_doc/resnet) backbone into a [MaskFormer
 Set `use_pretrained_backbone=True` to load pretrained ResNet weights for the backbone.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=True) # backbone and neck config
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=True) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
 ```
 
@@ -339,9 +339,9 @@ model = MaskFormerForInstanceSegmentation(config) # head
 Set `use_pretrained_backbone=False` to randomly initialize a ResNet backbone.
 
 ```py
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=False) # backbone and neck config
+config = MaskFormerConfig(backbone="microsoft/resnet-50", use_pretrained_backbone=False) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
 ```
 
@@ -363,18 +363,18 @@ model = MaskFormerForInstanceSegmentation(config)
 Use `use_timm_backbone=True` and `use_pretrained_backbone=True` to load pretrained timm weights for the backbone.
 
 ```python
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="resnet-50", use_pretrained_backbone=True, use_timm_backbone=True) # backbone and neck config
+config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=True, use_timm_backbone=True) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
 ```
 
 Set `use_timm_backbone=True` and `use_pretrained_backbone=False` to load a randomly initialized timm backbone.
 
 ```python
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
 
-config = MaskFormerConfig(backbone="resnet-50", use_pretrained_backbone=False, use_timm_backbone=True) # backbone and neck config
+config = MaskFormerConfig(backbone="resnet50", use_pretrained_backbone=False, use_timm_backbone=True) # backbone and neck config
 model = MaskFormerForInstanceSegmentation(config) # head
 ```
 
