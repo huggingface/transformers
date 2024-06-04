@@ -14,6 +14,7 @@
 
 import itertools
 import os
+import subprocess
 import unittest
 from copy import deepcopy
 from functools import partial
@@ -275,6 +276,18 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         for log, log1 in zip(logs, logs_resume):
             if "learning_rate" in log:
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+
+    @require_torch_multi_accelerator
+    @slow
+    def test_fsdp_cpu_offloading(self):
+        try:
+            subprocess.run(
+                "accelerate launch tests/fsdp/fsdp_cpu_offloading.py --config tests/fsdp/dummy_fsdp_config.yml",
+                shell=True,
+                check=True,
+            )
+        except:  # noqa
+            raise AssertionError("CPU offloading failed with FSDP!")
 
     def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
         if not use_accelerate:
