@@ -10,12 +10,16 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES,
+    )
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
+@add_end_docstrings(
+    build_pipeline_init_args(has_tokenizer=True, has_image_processor=True)
+)
 class VisualQuestionAnsweringPipeline(Pipeline):
     """
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
@@ -55,7 +59,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs):
+    def _sanitize_parameters(
+        self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs
+    ):
         preprocess_params, postprocess_params = {}, {}
         if padding is not None:
             preprocess_params["padding"] = padding
@@ -94,6 +100,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 broadcasted to multiple questions.
             question (`str`, `List[str]`):
                 The question(s) asked. If given a single question, it can be broadcasted to multiple images.
+                If multiple images and questions given, each and every question will be broadcast to all images
+                (same effect as a Cartesian product)
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
@@ -106,14 +114,24 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-        is_image_batch = isinstance(image, list) and all(isinstance(item, (Image.Image, str)) for item in image)
-        is_question_batch = isinstance(question, list) and all(isinstance(item, str) for item in question)
+        is_image_batch = isinstance(image, list) and all(
+            isinstance(item, (Image.Image, str)) for item in image
+        )
+        is_question_batch = isinstance(question, list) and all(
+            isinstance(item, str) for item in question
+        )
         if isinstance(image, (Image.Image, str)) and isinstance(question, str):
             inputs = {"image": image, "question": question}
         elif is_image_batch and isinstance(question, str):
             inputs = [{"image": im, "question": question} for im in image]
         elif isinstance(image, (Image.Image, str)) and is_question_batch:
             inputs = [{"image": image, "question": q} for q in question]
+        elif is_question_batch and is_image_batch:
+            question_image_pairs = []
+            for q in question:
+                for im in image:
+                    question_image_pairs.append({"image": im, "question": question})
+            inputs = question_image_pairs
         else:
             """
             Supports the following format
@@ -133,7 +151,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             padding=padding,
             truncation=truncation,
         )
-        image_features = self.image_processor(images=image, return_tensors=self.framework)
+        image_features = self.image_processor(
+            images=image, return_tensors=self.framework
+        )
         model_inputs.update(image_features)
         return model_inputs
 
@@ -147,7 +167,11 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def postprocess(self, model_outputs, top_k=5):
         if self.model.can_generate():
             return [
-                {"answer": self.tokenizer.decode(output_ids, skip_special_tokens=True).strip()}
+                {
+                    "answer": self.tokenizer.decode(
+                        output_ids, skip_special_tokens=True
+                    ).strip()
+                }
                 for output_ids in model_outputs
             ]
         else:
@@ -162,4 +186,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
             scores = scores.tolist()
             ids = ids.tolist()
-            return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+            return [
+                {"score": score, "answer": self.model.config.id2label[_id]}
+                for score, _id in zip(scores, ids)
+            ]
