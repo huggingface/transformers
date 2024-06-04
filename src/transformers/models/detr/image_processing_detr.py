@@ -1215,7 +1215,7 @@ class DetrImageProcessor(BaseImageProcessor):
             padded_images.append(padded_image)
             padded_annotations.append(padded_annotation)
 
-        data = {"pixel_values": padded_images}
+        data = {"pixel_values": np.array(padded_images) if return_tensors is not None else padded_images}
 
         if return_pixel_mask:
             masks = [
@@ -1490,7 +1490,10 @@ class DetrImageProcessor(BaseImageProcessor):
                 to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
                 for image in images
             ]
-            encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+            encoded_inputs = BatchFeature(
+                data={"pixel_values": np.array(images) if return_tensors is not None else images},
+                tensor_type=return_tensors,
+            )
             if annotations is not None:
                 encoded_inputs["labels"] = [
                     BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
