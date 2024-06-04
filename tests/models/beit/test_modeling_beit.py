@@ -545,6 +545,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((160, 160))
         self.assertEqual(segmentation[0].shape, expected_shape)
 
+    @slow
     def test_inference_interpolate_pos_encoding(self):
         model_name = "microsoft/beit-base-patch16-224-pt22k"
         model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
