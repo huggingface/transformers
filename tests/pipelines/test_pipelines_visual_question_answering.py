@@ -16,6 +16,7 @@ import unittest
 
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
+from transformers.pipelines.pt_utils import KeyDataset
 from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
@@ -27,6 +28,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from datasets import load_dataset
 
 from .test_pipelines_common import ANY
 
@@ -211,6 +213,21 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
             [
                 [{"score": ANY(float), "answer": ANY(str)}],
                 [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_dataset(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        dataset = load_dataset("hf-internal-testing/dummy_image_text_data", split="train[:2]")
+        question = "What's in the image?"
+
+        outputs = vqa_pipeline(image=KeyDataset(dataset, "image"), question=question, top_k=1)
+        self.assertEqual(
+            outputs,
+            [
                 [{"score": ANY(float), "answer": ANY(str)}],
                 [{"score": ANY(float), "answer": ANY(str)}],
             ],
