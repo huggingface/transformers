@@ -749,7 +749,6 @@ DEIT_INPUTS_DOCSTRING = r"""
             Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
 """
 
 
