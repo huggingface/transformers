@@ -1,7 +1,5 @@
 from typing import List, Union
 
-from transformers.pipelines.pt_utils import KeyDataset
-
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
@@ -15,6 +13,7 @@ if is_torch_available():
     from ..models.auto.modeling_auto import (
         MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES,
     )
+    from .pt_utils import KeyDataset
 
 logger = logging.get_logger(__name__)
 
