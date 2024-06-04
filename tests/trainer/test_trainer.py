@@ -4304,3 +4304,24 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             param = next(model.parameters())
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
+
+
+@require_torch
+class TestTrainingArgumentsTorchDtypeToJson(unittest.TestCase):
+    def test_torch_dtype_to_json(self):
+
+        @dataclasses.dataclass
+        class TorchDtypeTrainingArguments(TrainingArguments):
+            torch_dtype: torch.dtype = dataclasses.field(
+                default=torch.float32,
+            )
+
+        for dtype in ["float32", "float64", "complex64", "complex128", "float16", "bfloat16", "uint8", "int8", "int16", "int32", "int64", "bool"]:
+            torch_dtype = getattr(torch, dtype)
+            print(torch_dtype, dtype)
+            args = TorchDtypeTrainingArguments(output_dir=".", torch_dtype=torch_dtype)
+
+            args_dict = args.to_dict()
+            self.assertIn("torch_dtype", args_dict)
+            self.assertEqual(args_dict["torch_dtype"], dtype)
+
