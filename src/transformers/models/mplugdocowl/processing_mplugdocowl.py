@@ -93,7 +93,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = "MPLUGDocOwlImageProcessor"
     tokenizer_class = ("AutoTokenizer")#, "AutoTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
@@ -153,8 +153,10 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        #image_processor = MPLUGDocOwlImageProcessor()
+   
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+            pixel_values = self.image_processor(images, do_rescale=True, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=return_tensors,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)["pixel_values"]
         else:
             pixel_values = None
         text_inputs = self.tokenizer(
