@@ -296,7 +296,7 @@ class SwitchTransformersSparseMLP(nn.Module):
         next_states = hidden_states.clone()
 
         router_mask = router_mask.bool()
-        batch_size, seq_len, num_experts= router_mask.shape
+        batch_size, seq_len, num_experts = router_mask.shape
         idx_mask = router_mask.transpose(1, 2).reshape(batch_size * seq_len, num_experts).sum(dim=0)
         idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
             0
