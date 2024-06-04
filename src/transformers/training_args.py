@@ -464,8 +464,8 @@ class TrainingArguments:
             Use in conjunction with `load_best_model_at_end` and `metric_for_best_model` to specify if better models
             should have a greater metric or not. Will default to:
 
-            - `True` if `metric_for_best_model` is set to a value that isn't `"loss"` or `"eval_loss"`.
-            - `False` if `metric_for_best_model` is not set, or set to `"loss"` or `"eval_loss"`.
+            - `True` if `metric_for_best_model` is set to a value that doesn't end in `"loss"`.
+            - `False` if `metric_for_best_model` is not set, or set to a value that ends in `"loss"`.
         ignore_data_skip (`bool`, *optional*, defaults to `False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
@@ -771,6 +771,9 @@ class TrainingArguments:
             rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
             summary statistics from the batch-level summary statistics you've accumulated over the evaluation set.
+
+        eval_on_start(`bool`, *optional*, defaults to `False`):
+            Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
     """
 
     framework = "pt"
@@ -1454,6 +1457,13 @@ class TrainingArguments:
         metadata={"help": "Break eval metrics calculation into batches to save memory."},
     )
 
+    eval_on_start: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
+        },
+    )
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1582,7 +1592,7 @@ class TrainingArguments:
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
+            self.greater_is_better = not (self.metric_for_best_model.endswith("loss"))
         if self.run_name is None:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
