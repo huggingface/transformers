@@ -279,6 +279,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_multi_accelerator
     @slow
+    @require_fsdp
     def test_fsdp_cpu_offloading(self):
         try:
             subprocess.run(

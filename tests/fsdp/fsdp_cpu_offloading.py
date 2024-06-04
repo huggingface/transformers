@@ -2,18 +2,20 @@
 # Dummy testing script to test transformers + FSDP + CPU offloading
 # works correctly
 from functools import partial
+
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
 
 # verify we have FSDP activation support ready by importing:
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    checkpoint_wrapper,
     CheckpointImpl,
     apply_activation_checkpointing,
+    checkpoint_wrapper,
 )
 
+from transformers import AutoModelForCausalLM
 from transformers.models.llama.modeling_llama import LlamaDecoderLayer
+
 
 model_id = "HuggingFaceM4/tiny-random-Llama3ForCausalLM"
 
@@ -25,7 +27,7 @@ model.gradient_checkpointing_enable()
 accelerator = Accelerator()
 model = accelerator.prepare(model)
 
-check_fn = lambda submodule: isinstance(submodule, LlamaDecoderLayer)
+check_fn = lambda submodule: isinstance(submodule, LlamaDecoderLayer)  # noqa
 
 non_reentrant_wrapper = partial(
     checkpoint_wrapper,
@@ -33,9 +35,7 @@ non_reentrant_wrapper = partial(
     checkpoint_impl=CheckpointImpl.NO_REENTRANT,
 )
 
-apply_activation_checkpointing(
-    model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
-)
+apply_activation_checkpointing(model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn)
 
 rand_input = torch.LongTensor([[0, 1, 0, 1]]).to(0)
 
