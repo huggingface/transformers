@@ -60,9 +60,10 @@ class SuperGlueImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return 2, self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False, pairs=True):
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False, pairs=True, batch_size=None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         image_inputs = prepare_image_inputs(
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             num_channels=self.num_channels,
             min_resolution=self.min_resolution,
             max_resolution=self.max_resolution,
@@ -212,3 +213,18 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             image_processing(image_pairs, return_tensors="pt").pixel_values
+
+    def test_image_processor_with_list_of_two_images(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+
+        image_pairs = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, numpify=True, batch_size=2, pairs=False
+        )
+        self.assertEqual(len(image_pairs), 2)
+        self.assertTrue(isinstance(image_pairs[0], np.ndarray))
+        self.assertTrue(isinstance(image_pairs[1], np.ndarray))
+
+        expected_batch_size = 1
+        encoded_images = image_processing(image_pairs, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_pairs[0])
+        self.assertEqual(tuple(encoded_images.shape), (expected_batch_size, *expected_output_image_shape))
