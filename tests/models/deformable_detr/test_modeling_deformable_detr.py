@@ -558,7 +558,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         config.backbone_config = None
         config.use_timm_backbone = False
         config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
 
         for model_class in self.all_model_classes:
             model = model_class(config)
