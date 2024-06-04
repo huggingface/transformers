@@ -237,6 +237,6 @@ class AlignProcessorTest(unittest.TestCase):
         all_kwargs = {"images_kwargs": images_kwargs, "text_kwargs": text_kwargs, "common_kwargs": common_kwargs}
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEquals(inputs["pixel_values"].shape[2], 214)
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
