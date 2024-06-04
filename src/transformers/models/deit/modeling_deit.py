@@ -73,7 +73,7 @@ class DeiTEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
+        self.patch_size = config.patch_size
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -94,8 +94,8 @@ class DeiTEmbeddings(nn.Module):
         dist_pos_embed = self.position_embeddings[:, 1, :]
         patch_pos_embed = self.position_embeddings[:, 2:, :]
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
+        h0 = height // self.patch_size
+        w0 = width // self.patch_size
         # # we add a small number to avoid floating point error in the interpolation
         # # see discussion at https://github.com/facebookresearch/dino/issues/8
         h0, w0 = h0 + 0.1, w0 + 0.1
@@ -171,10 +171,6 @@ class DeiTPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        # if height != self.image_size[0] or width != self.image_size[1]:
-        #     raise ValueError(
-        #         f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-        #     )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
