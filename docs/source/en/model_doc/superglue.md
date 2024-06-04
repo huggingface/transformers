@@ -68,9 +68,9 @@ import torch
 from PIL import Image
 import requests
 
-url_image_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url_image_1 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur1.jpg?raw=true"
 image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
-url_image_2 = "http://images.cocodataset.org/test-stuff2017/000000000568.jpg"
+url_image_2 = "https://github.com/cvg/LightGlue/blob/main/assets/sacre_coeur2.jpg?raw=true"
 image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
 
 images = [image_1, image_2]
