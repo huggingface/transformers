@@ -241,7 +241,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
         image_pairs = images
 
-        if not isinstance(image_pairs, list) or len(image_pairs) < 2:
+        if not isinstance(image_pairs, list):
             raise ValueError(
                 "Input images must be a list containing at least 2 images because SuperGlue takes pairs of images."
             )
