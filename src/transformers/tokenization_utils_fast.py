@@ -193,7 +193,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if type(self) == PreTrainedTokenizerFast and all(item in kwargs for item in ["add_bos_token", "add_eos_token", "eos_token", "bos_token"]):
             self.add_bos_token = kwargs.get("add_bos_token")
             self.add_eos_token = kwargs.get("add_eos_token")
-            self.update_post_processor_pretrained()
+            self.update_post_processor()
 
         if len(tokens_to_add) > 0:
             # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
