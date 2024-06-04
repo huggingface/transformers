@@ -116,6 +116,7 @@ from .utils import (
     is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_deterministic,
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
@@ -941,6 +942,15 @@ def require_torch_bf16_cpu(test_case):
         is_torch_bf16_cpu_available(),
         "test requires torch>=1.10, using CPU",
     )(test_case)
+
+
+def require_deterministic_for_xpu(test_case):
+    if is_torch_xpu_available():
+        return unittest.skipUnless(is_torch_deterministic(), "test requires torch to use deterministic algorithms")(
+            test_case
+        )
+    else:
+        return test_case
 
 
 def require_torch_tf32(test_case):

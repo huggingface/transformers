@@ -204,7 +204,7 @@ Pass your text to the tokenizer:
 The tokenizer returns a dictionary containing:
 
 * [input_ids](./glossary#input-ids): numerical representations of your tokens.
-* [attention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
+* [attention_mask](./glossary#attention-mask): indicates which tokens should be attended to.
 
 A tokenizer can also accept a list of inputs, and pad and truncate the text to return a batch with uniform length:
 

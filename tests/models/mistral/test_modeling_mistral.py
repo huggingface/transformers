@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
@@ -658,11 +659,15 @@ class MistralIntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
             self.skipTest("This test requires torch >= 2.3 to run.")
+
+        if self.cuda_compute_capability_major_version == 7:
+            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = {
@@ -729,15 +734,24 @@ class MistralIntegrationTest(unittest.TestCase):
 @slow
 @require_torch_gpu
 class Mask4DTestHard(unittest.TestCase):
+    model_name = "mistralai/Mistral-7B-v0.1"
+    _model = None
+
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
+    @property
+    def model(self):
+        if self.__class__._model is None:
+            self.__class__._model = MistralForCausalLM.from_pretrained(
+                self.model_name, torch_dtype=self.model_dtype
+            ).to(torch_device)
+        return self.__class__._model
+
     def setUp(self):
-        model_name = "mistralai/Mistral-7B-v0.1"
-        self.model_dtype = torch.float32
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        self.model = MistralForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model_dtype = torch.float16
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
 
     def get_test_data(self):
         template = "my favorite {}"

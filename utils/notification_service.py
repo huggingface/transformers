@@ -636,7 +636,7 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
-    def get_new_model_failure_blocks(self, with_header=True):
+    def get_new_model_failure_blocks(self, with_header=True, to_truncate=True):
         if self.prev_ci_artifacts is None:
             return {}
 
@@ -675,6 +675,8 @@ class Message:
                         all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
 
         MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        if not to_truncate:
+            MAX_ERROR_TEXT = float("inf")
         failure_text = ""
         for line, devices in all_failure_lines.items():
             new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
@@ -759,6 +761,13 @@ class Message:
             )
 
             time.sleep(1)
+
+        # To save the list of new model failures
+        blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        failure_text = blocks[-1]["text"]["text"]
+        file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):

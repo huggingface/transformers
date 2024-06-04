@@ -122,7 +122,9 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
     return None
 
 
-def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
+def _pad_to_max_length(
+    current_segments, pad_token_id, device, padding="right", bos_token_tensor=None, cut_off_length=None
+):
     max_total_length = 0
     sequences = []
     if padding not in ["right", "left"]:
@@ -143,7 +145,7 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
         elif bos_token_tensor is not None:
             sequences.append(bos_token_tensor)
         else:
-            sequences.append(torch.tensor([]))
+            sequences.append(torch.tensor([], device=device))
 
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
@@ -735,7 +737,9 @@ class WhisperGenerationMixin:
             if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
-        sequences = _pad_to_max_length(final_segments, generation_config.pad_token_id, padding="right")
+        sequences = _pad_to_max_length(
+            final_segments, generation_config.pad_token_id, device=self.device, padding="right"
+        )
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -786,11 +790,11 @@ class WhisperGenerationMixin:
                     del generate_kwargs[key]
             seek_outputs = super().generate(
                 segment_input,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
@@ -1510,6 +1514,7 @@ class WhisperGenerationMixin:
             prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
+                device=device,
                 padding="left",
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
