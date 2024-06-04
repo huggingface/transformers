@@ -204,7 +204,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
                 `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
-            resample (`int`, *optional*, defaults to `self.resample`):
+            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of `PILImageResampling`, filters. Only
                 has an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
