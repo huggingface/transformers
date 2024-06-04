@@ -3073,7 +3073,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 commit_hash = getattr(config, "_commit_hash", None)
 
-        _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None) if adapter_kwargs is not None elese None
+        _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None) if adapter_kwargs is not None else None
         if not is_peft_available() and _adapter_model_path is not None:
             logger.warning(
                 f"Adapters detected within {pretrained_model_name_or_path} but PEFT is not installed in your environment, make sure to have"
