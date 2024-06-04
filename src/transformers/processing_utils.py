@@ -607,6 +607,111 @@ class ProcessorMixin(PushToHubMixin):
         else:
             return processor
 
+    def _merge_kwargs(
+        self,
+        ModelProcessorKwargs: ProcessingKwargs,
+        text_kwargs: Optional[TextKwargs] = None,
+        images_kwargs: Optional[ImagesKwargs] = None,
+        common_kwargs: Optional[CommonKwargs] = None,
+        videos_kwargs: Optional[VideosKwargs] = None,
+        audio_kwargs: Optional[AudioKwargs] = None,
+        tokenizer_init_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ) -> Dict[str, Dict]:
+        """
+        Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
+        The order of operations is as follows:
+            1) kwargs passed as before have highest priority to preserve BC. They mix modalities and may not result in
+            correct behaviour.
+                ```python
+                high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
+                processor(..., **high_priority_kwargs)
+                ```
+            2) kwargs specified as a dictionary and passed to the processor __call__ have second highest priority.
+            This is the recommended API.
+                ```python
+                recommended_priority_kwargs = {"text_kwargs": {"padding":"max_length"}, "images_kwargs": {"crop_size": (224, 224)}}
+                processor(..., **recommended_priority_kwargs)
+                ```
+            3) kwargs passed as modality-specific kwargs have third priority.
+                ```python
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
+                ```
+            4) kwargs passed during instantiation of a modality processor have fourth priority.
+                ```python
+                tokenizer = tokenizer_class(..., {"padding": "max_length"})
+                image_processor = image_processor_class(...)
+                processor(tokenizer, image_processor) # will pass max_length unless overriden by kwargs at call
+                ```
+            5) defaults kwargs specified at processor level have lowest priority.
+
+        Args:
+            ModelProcessorKwargs (`ProcessingKwargs`):
+                Typed dictionary of kwargs specifically required by the model passed.
+            text_kwargs (`TextKwargs`, *optional*):
+                Typed dictionary of kwargs inputs applied to the text modality processor, i.e. the tokenizer.
+            images_kwargs (`ImagesKwargs`, *optional*):
+                Typed dictionary of kwargs inputs applied to the images modality processor.
+            videos_kwargs (`VideosKwargs`, *optional*):
+                Typed dictionary of kwargs inputs applied to the videos modality processor.
+            audio_kwargs (`AudioKwargs`, *optional*):
+                Typed dictionary of kwargs inputs applied to the audio modality processor.
+            tokenizer_init_kwargs (`Dict`, *optional*):
+                Dictionary of kwargs the tokenizer was instantiated with and need to take precedence over other kwargs.
+
+        Returns:
+            output_kwargs (`Dict`):
+                Dictionary of per-modality kwargs to be passed to each modality-specific processor.
+
+        """
+
+        # Initialize dictionaries
+        output_kwargs = {
+            "text_kwargs": text_kwargs or {},
+            "images_kwargs": images_kwargs or {},
+            "audio_kwargs": audio_kwargs or {},
+            "videos_kwargs": videos_kwargs or {},
+            "common_kwargs": common_kwargs or {},
+        }
+
+        default_kwargs = {
+            "text_kwargs": {},
+            "images_kwargs": {},
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+            "common_kwargs": {},
+        }
+
+        # get defaults from set model processor kwargs if they exist
+        for modality in default_kwargs:
+            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+        # then override with tokenizer-level arguments passed
+        if tokenizer_init_kwargs:
+            default_kwargs["text_kwargs"].update(
+                {k: v for k, v in tokenizer_init_kwargs.items() if k in ModelProcessorKwargs.text_kwargs}
+            )
+
+        # then get passed per-modality dictionaries if they exist
+        for modality in output_kwargs:
+            output_kwargs[modality] = {
+                **default_kwargs[modality],
+                **output_kwargs[modality],
+                **kwargs.pop(modality, {}),
+            }
+            # then merge kwargs by name
+            for modality_key in ModelProcessorKwargs[modality].__annotations__.keys():
+                modality_kwarg_value = kwargs.pop(modality_key, None)
+                if modality_kwarg_value is not None:
+                    output_kwargs[modality] = modality_kwarg_value
+
+        # if something remains in kwargs, it belongs to common
+        output_kwargs["common_kwargs"].update(kwargs)
+        # all modality-specific kwargs are updated with common kwargs
+        for modality in output_kwargs:
+            output_kwargs[modality].update(output_kwargs["common_kwargs"])
+
+        return output_kwargs
+
     @classmethod
     def from_pretrained(
         cls,
