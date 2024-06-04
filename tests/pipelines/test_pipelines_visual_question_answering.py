@@ -14,6 +14,8 @@
 
 import unittest
 
+from datasets import load_dataset
+
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
 from transformers.pipelines.pt_utils import KeyDataset
@@ -28,7 +30,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from datasets import load_dataset
 
 from .test_pipelines_common import ANY
 

@@ -1,9 +1,9 @@
-from typing import Union, List
+from typing import List, Union
+
+from transformers.pipelines.pt_utils import KeyDataset
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
-
-from transformers.pipelines.pt_utils import KeyDataset
 
 
 if is_vision_available():
@@ -97,7 +97,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images. If given a single image, it can be
                 broadcasted to multiple questions.
                 For dataset: the passed in dataset must be of type `transformers.pipelines.pt_utils.KeyDataset`
-                
                 Example:
                 ```python
                 >>> from transformers.pipelines.pt_utils import KeyDataset
