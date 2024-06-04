@@ -739,7 +739,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 MODEL_FOR_IMAGE_MAPPING = None
 
 
-MODEL_FOR_IMAGE_MATCHING_MAPPING = None
+MODEL_FOR_KEYPOINT_MATCHING_MAPPING = None
 
 
 MODEL_FOR_IMAGE_SEGMENTATION_MAPPING = None
@@ -937,6 +937,13 @@ class AutoModelForInstanceSegmentation(metaclass=DummyObject):
 
 
 class AutoModelForKeypointDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForKeypointMatching(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
