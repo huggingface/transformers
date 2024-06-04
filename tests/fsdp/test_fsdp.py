@@ -285,7 +285,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_fsdp_cpu_offloading(self):
         try:
             subprocess.run(
-                "accelerate launch tests/fsdp/fsdp_cpu_offloading.py --config tests/fsdp/dummy_fsdp_config.yml",
+                "accelerate launch utils/testing_scripts/fsdp_cpu_offloading.py --config utils/testing_scripts/dummy_fsdp_config.yml",
                 shell=True,
                 check=True,
             )
