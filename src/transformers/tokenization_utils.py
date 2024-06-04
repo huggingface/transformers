@@ -607,7 +607,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         f" to the tokenizer. This means that it is not an `AddedToken` but a {type(tok_extended)}"
                     )
         # ["This is something", "<special_token_1>", "else"]
-        import json
         tokenized_text = []
         for token in tokens:
             # Need to skip eventual empty (fully stripped) tokens
