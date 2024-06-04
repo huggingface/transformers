@@ -215,7 +215,7 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_convert_list2ndarray(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        video_sequences = list([(np.random.rand(200, 200, 3)*255).astype(np.uint8)]*128)
+        video_sequences = list([(np.random.rand(200, 200, 3) * 255).astype(np.uint8)] * 128)
 
         model_inputs = image_processing(images=video_sequences, input_data_format="channels_last", return_tensors="pt")
         self.assertEqual(model_inputs["pixel_values"].size(), torch.Size([1, 128, 3, 18, 18]))

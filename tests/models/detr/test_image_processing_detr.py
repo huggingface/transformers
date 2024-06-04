@@ -648,8 +648,9 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
 
     def test_convert_list2ndarray(self):
         import numpy as np
+
         image_processor = DetrImageProcessor(size={"longest_edge": 200, "shortest_edge": 200}, return_tensors="pt")
-        image_list = list([(np.random.rand(200, 200, 3)*255).astype(np.uint8)]*128)
+        image_list = list([(np.random.rand(200, 200, 3) * 255).astype(np.uint8)] * 128)
 
         inputs = image_processor(images=image_list, input_data_format="channels_last", return_tensors="pt")
         self.assertEqual(inputs["pixel_values"].size(), torch.Size([128, 3, 200, 200]))
