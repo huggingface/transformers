@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import ast
+import datetime
 import json
 import os
 import sys
@@ -28,9 +29,11 @@ from notification_service import (
     retrieve_artifact,
     retrieve_available_artifacts,
 )
+from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
+api = HfApi()
 client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
 
@@ -248,6 +251,19 @@ if __name__ == "__main__":
 
     with open(f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8") as fp:
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
+
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
+    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
+
+    # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
+    if is_scheduled_ci_run:
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/quantization_results.json",
+            path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/quantization_results.json",
+            repo_id="hf-internal-testing/transformers_daily_ci",
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
 
     message = QuantizationMessage(
         title,
