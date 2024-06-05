@@ -22,14 +22,16 @@ from . import ExplicitEnum
 
 
 class Action(ExplicitEnum):
-    RAISE = "raise"
+    NONE = "none"
     NOTIFY = "notify"
+    RAISE = "raise"
 
 
 def deprecate_kwarg(
     old_name: str,
     version: str,
     new_name: Optional[str] = None,
+    warn_if_greater_or_equal_version: bool = False,
     raise_if_greater_or_equal_version: bool = False,
     raise_if_both_names: bool = False,
     additional_message: Optional[str] = None,
@@ -46,8 +48,10 @@ def deprecate_kwarg(
             Version when the keyword argument was (will be) deprecated.
         new_name (`Optional[str]`, *optional*):
             New name of the keyword argument.
-        raise_if_ge_version (`bool`, *optional*, defaults to `False`):
-            Weather to raise `ValueError` if deprecated version is greater or equal to the current version.
+        warn_if_greater_or_equal_version (`bool`, *optional*, defaults to `False`):
+            Weather to show warning if current `transformers` version is greater or equal to the deprecated version.
+        raise_if_greater_or_equal_version (`bool`, *optional*, defaults to `False`):
+            Weather to raise `ValueError` if current `transformers` version is greater or equal to the deprecated version.
         raise_if_both_names (`bool`, *optional*, defaults to `False`):
             Weather to raise `ValueError` if both deprecated and new keyword arguments are set.
         additional_message (`Optional[str]`, *optional*):
@@ -95,12 +99,14 @@ def deprecate_kwarg(
             # update minimum_action if raise_if_greater_or_equal_version is set
             if minimum_action == Action.NOTIFY and raise_if_greater_or_equal_version and is_already_deprecated:
                 minimum_action = Action.RAISE
+            elif minimum_action == Action.NOTIFY and not warn_if_greater_or_equal_version and is_already_deprecated:
+                minimum_action = Action.NONE
 
             # raise error or notify user
             if minimum_action == Action.RAISE:
                 raise ValueError(message)
             elif minimum_action == Action.NOTIFY:
-                warnings.warn(message, FutureWarning)
+                warnings.warn(message, DeprecationWarning)
 
             return func(*args, **kwargs)
 
