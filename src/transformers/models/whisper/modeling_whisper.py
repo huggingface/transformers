@@ -306,7 +306,7 @@ class WhisperAttention(nn.Module):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None and is_cross_attention else hidden_states
+        current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and (
                 past_key_value is not None
                 and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
@@ -405,7 +405,7 @@ class WhisperFlashAttention2(WhisperAttention):
         past_key_value = getattr(self, "past_key_value", past_key_value)
 
         # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None and is_cross_attention else hidden_states
+        current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and (
                 past_key_value is not None
                 and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
@@ -608,8 +608,9 @@ class WhisperSdpaAttention(WhisperAttention):
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
         past_key_value = getattr(self, "past_key_value", past_key_value)
+
         # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None and is_cross_attention else hidden_states
+        current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and (
                 past_key_value is not None
                 and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
