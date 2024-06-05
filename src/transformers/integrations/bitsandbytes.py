@@ -332,7 +332,7 @@ def get_keys_to_not_convert(model):
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: torch.nn.Parameter, state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
