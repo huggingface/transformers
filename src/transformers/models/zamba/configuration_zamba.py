@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Zamba model configuration"""
+"""Zamba model configuration"""
+
 import math
 
 from ...configuration_utils import PretrainedConfig
@@ -36,7 +37,7 @@ class ZambaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Zamba model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ZambaModel`]
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
         hidden_size (`int`, *optional*, defaults to 3712):
@@ -47,13 +48,14 @@ class ZambaConfig(PretrainedConfig):
             Number of hidden layers in the model.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to None):
+        num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf).
+        n_mamba_heads (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder.
         hidden_mamba_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -77,6 +79,7 @@ class ZambaConfig(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 2):
             The id of the "end-of-sequence" token.
+        unk_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `None`.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -84,7 +87,7 @@ class ZambaConfig(PretrainedConfig):
             used with. It can be used with longer sequences, but performance may degrade.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        attn_layer_period (`int`, *optional*, defaults to 8):
+        attn_layer_period (`int`, *optional*, defaults to 6):
             Once in this many layers, we will have a shared attention layer
         attn_layer_offset (`int`, *optional*, defaults to 4):
             Offset of the shared attention layer
@@ -104,6 +107,7 @@ class ZambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        rope_theta (`<fill_type>`, *optional*, defaults to 10000): <fill_docstring>
 
     """
 
@@ -194,9 +198,12 @@ class ZambaConfig(PretrainedConfig):
         )
 
     def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
-        layers = ["mamba", "mamba", "attention+mamba",] + \
-            [
-                "attention+mamba" if i % attn_layer_period == attn_layer_offset else "mamba"
-                for i in range(num_hidden_layers - 3)
-            ]
+        layers = [
+            "mamba",
+            "mamba",
+            "attention+mamba",
+        ] + [
+            "attention+mamba" if i % attn_layer_period == attn_layer_offset else "mamba"
+            for i in range(num_hidden_layers - 3)
+        ]
         return layers

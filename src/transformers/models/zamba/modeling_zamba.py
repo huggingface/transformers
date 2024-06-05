@@ -30,7 +30,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache  # we need __iter__ and __len__ of pkv
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -141,7 +141,6 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    # Adapted from transformers.models.jamba.modeling_llama.HybridMambaAttentionDynamicCache
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
@@ -224,14 +223,13 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
         raise NotImplementedError("HybridMambaAttentionDynamicCache does not have a legacy cache equivalent.")
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
-# Also, the input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
-# The extra factor of 2 comes from the input being the concatenation of x_orig with the output of the previous (mamba) layer.
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
+# The input dimension here is twice the hidden_size, and head_dim = 2 * hidden_size // num_heads.
+# The extra factor of 2 comes from the input being the concatenation of x_orig with the output of the previous (mamba) layer
+# (see fig. 2 in https://arxiv.org/pdf/2405.16712).
 # Additionally, replaced
 # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
 # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
-
-
 class ZambaAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -322,9 +320,8 @@ class ZambaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
-# Also:
-# added softmax_scale = 1 / (query_states.shape[-1]/2)**0.5 to the arguments of self._flash_attention_forward
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
+# Added softmax_scale = 1 / (query_states.shape[-1]/2)**0.5 to the arguments of self._flash_attention_forward
 # dropped use_sliding_windows from the arguments of self._flash_attention_forward
 class ZambaFlashAttention2(ZambaAttention):
     """
@@ -566,8 +563,7 @@ class ZambaFlashAttention2(ZambaAttention):
         )
 
 
-# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Zamba.
-# Also:
+# Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
 # added scale = 1 / (query_states.shape[-1]/2)**0.5 to the arguments of torch.nn.functional.scaled_dot_product_attention
 class ZambaSdpaAttention(ZambaAttention):
     """
@@ -576,7 +572,6 @@ class ZambaSdpaAttention(ZambaAttention):
     SDPA API.
     """
 
-    # Adapted from ZambaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -929,7 +924,6 @@ class ZambaMambaMixer(nn.Module):
         return self.slow_forward(hidden_states, cache_params)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Zamba
 class ZambaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -973,7 +967,7 @@ class ZambaAttentionDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            
+            x_orig (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`HybridMambaAttentionDynamicCache`, *optional*): cached past key and value projection states
@@ -1050,6 +1044,8 @@ class ZambaMambaDecoderLayer(nn.Module):
 
         residual = hidden_states
 
+        # `from_tf` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+        # `from_tf` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
         hidden_states = hidden_states + from_tf if from_tf is not None else hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1660,7 +1656,7 @@ class ZambaForSequenceClassification(ZambaPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
