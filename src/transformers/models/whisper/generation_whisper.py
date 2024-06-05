@@ -117,9 +117,10 @@ def _dynamic_time_warping(matrix: np.ndarray):
 
 
 def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
-    logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
-    if logit_processor:
-        return getattr(logit_processor, attribute_name, None)
+    if logits_processor is not None: 
+        logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
+        if logit_processor:
+            return getattr(logit_processor, attribute_name, None)
     return None
 
 
@@ -550,7 +551,6 @@ class WhisperGenerationMixin:
             condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config
         )
 
-
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
         temperature = temperatures[0]
 
@@ -602,16 +602,10 @@ class WhisperGenerationMixin:
                 batch_idx_map=batch_idx_map,
             )
 
-            # 6.3 prepare decoder input ids
-            if logits_processor is not None: 
-                suppress_tokens = _get_attr_from_logit_processors(
+            # 6.3 prepare decoder input ids 
+            suppress_tokens = _get_attr_from_logit_processors(
                     logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
                 )
-            else: 
-                suppress_tokens = None
-
-            # Remove decoder_input_ids if present in kwargs:
-            decoder_input_ids = kwargs.pop("decoder_input_ids", None)
 
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
@@ -1523,6 +1517,12 @@ class WhisperGenerationMixin:
         suppress_tokens,
         kwargs,
     ):
+        
+        if "decoder_input_ids" in kwargs:
+            decoder_input_ids = kwargs.pop("decoder_input_ids")
+
+            return decoder_input_ids, kwargs
+
         cut_off_length = config.max_target_positions // 2 - 1
 
         decoder_input_ids = init_tokens[batch_idx_map]
