@@ -1149,7 +1149,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
-                    # raise ValueError
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
