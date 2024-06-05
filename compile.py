@@ -46,15 +46,14 @@ def run_compile(model, tokenizer, max_new_tokens=20, verbose=True):
     cache_config = QuantizedCacheConfig(
         backend="HQQ",
         nbits=4,
-        axis_key=1,
-        axis_value=1,
-        residual_length=6, # small to catch errors early
+        axis_key=0,
+        axis_value=0,
         compute_dtype=torch.float16,
         device=model.device
     )
     cache = HQQQuantizedCacheStatic(
         config=model.config, cache_config=cache_config, max_batch_size=inputs.input_ids.shape[0],
-        prefill_length=inputs.input_ids.shape[1], max_cache_len=inputs.input_ids.shape[1] + max_new_tokens
+        max_cache_len=inputs.input_ids.shape[1] + max_new_tokens
     )
     model._cache = cache
     #model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)

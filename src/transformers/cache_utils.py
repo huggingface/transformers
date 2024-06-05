@@ -2,7 +2,6 @@ import copy
 import importlib.metadata
 import json
 import os
-from math import floor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -546,11 +545,11 @@ class HQQQuantizedCache(QuantizedCache):
         if self.axis_value not in [0, 1]:
             raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
-        #HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key==0 and self.axis_value==0) else HQQBackend.PYTORCH)
-        #HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, mode="reduce-overhead", fullgraph=True)
+        # HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key==0 and self.axis_value==0) else HQQBackend.PYTORCH)
+        # HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, mode="reduce-overhead", fullgraph=True)
         self.quantizer = HQQQuantizer
 
-    #@torch.compile
+    # @torch.compile
     def _quantize(self, tensor, axis):
         qtensor, meta = self.quantizer.quantize(
             tensor,
@@ -570,7 +569,7 @@ class HQQQuantizedCache(QuantizedCache):
                 ).contiguous()
         return qtensor, meta
 
-    #@torch.compile
+    # @torch.compile
     def _dequantize(self, qtensor):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
@@ -787,7 +786,7 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
-        
+
         self.quantizer = HQQQuantizer
         self._quantized_key_cache: List[torch.Tensor] = [0 for i in range(10)]
         self._quantized_value_cache: List[torch.Tensor] = [0 for i in range(10)]
@@ -843,7 +842,7 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
-    
+
     def _quantize(self, tensor):
         qtensor, meta = self.quantizer.quantize(
             tensor,
@@ -989,7 +988,6 @@ class SlidingWindowCache(Cache):
         self.value_cache.zero_()
 
 
-
 class HQQQuantizedCacheStatic(QuantizedCache):
     """
     Quantized Cache class that uses `HQQ` as a backend to perform quantization. Current implementation supports `int2`, `int4`, `int8` dtypes.
@@ -999,12 +997,15 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             A configuration containing all the arguments to be used by the quantizer, including axis, qtype and group size.
     """
 
-    def __init__(self, cache_config, config, prefill_length: int, max_cache_len: int, max_batch_size: int=1) -> None:
+    def __init__(self, cache_config, config, max_cache_len: int, max_batch_size: int = 1) -> None:
         super().__init__(cache_config)
         if self.nbits not in [1, 2, 3, 4, 8]:
             raise ValueError(
                 f"`nbits` for `HQQ` backend has to be one of [`1`, `2`, `3`, `4`, `8`] but got {self.nbits}"
             )
+
+        if (self.axis_key == 1 or self.axis_value == 1) and self.nbits != 8:
+            raise ValueError("QuantizedStaticCache suports inly int8 for `axis=1`")
 
         if self.axis_key not in [0, 1]:
             raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
@@ -1012,8 +1013,14 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         if self.axis_value not in [0, 1]:
             raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
+        if self.axis_key == 0 and self.axis_value == 0:
+            HQQLinear.set_backend(HQQBackend.ATEN)
+        else:
+            HQQLinear.set_backend(HQQBackend.PYTORCH)
+            #HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, fullgraph=True, mode="reduce-overhead")
+            HQQQuantizer.quantize = torch.compile(HQQQuantizer.quantize, fullgraph=True, mode="reduce-overhead")
+        
         self.quantizer = HQQQuantizer
-        self.prefill_length = prefill_length
 
         self.max_batch_size = max_batch_size
         self.max_cache_len = max_cache_len
@@ -1028,15 +1035,19 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         self._scales_keys, self._scales_values = [], []
         self._zeros_keys, self._zeros_values = [], []
 
-        self.pack_shape = 1 #8 // self.nbits
+        # if axis=0 we pack along group size dim, so no need to pack along num of groups dim
+        self.pack_shape = 1 if (self.axis_key == 0 and self.axis_value == 0) else 8 // self.nbits
         self.reshaped_size = max_batch_size * self.num_key_value_heads * self.head_dim
         self.quant_length = (max_batch_size * self.num_key_value_heads * self.head_dim) // self.q_group_size
 
-        self.max_quant_cache_len = (max_batch_size * self.num_key_value_heads * self.head_dim * max_cache_len) // self.q_group_size
-        quant_cache_shape = (self.max_quant_cache_len // self.pack_shape, self.q_group_size / 2)
-        scale_shape = (self.max_quant_cache_len, 1)
-
-        dummy_full_cache = torch.zeros(max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim, device=self.device)
+        dummy_full_cache = torch.zeros(
+            self.max_batch_size,
+            self.num_key_value_heads,
+            self.max_cache_len,
+            self.head_dim,
+            dtype=self.compute_dtype,
+            device=self.device,
+        )
         for _ in range(config.num_hidden_layers):
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
@@ -1044,32 +1055,22 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             new_layer_key_cache_quant, meta_key = self._quantize(dummy_full_cache, axis=self.axis_key)
             new_layer_value_cache_quant, meta_value = self._quantize(dummy_full_cache, axis=self.axis_value)
 
-            #new_layer_key_cache_quant = torch.zeros(quant_cache_shape, dtype=torch.uint8, device=self.device)
-            #new_layer_value_cache_quant = torch.zeros(quant_cache_shape, dtype=torch.uint8, device=self.device)
             torch._dynamo.mark_static_address(new_layer_key_cache_quant)
             torch._dynamo.mark_static_address(new_layer_value_cache_quant)
             self._quantized_key_cache.append(new_layer_key_cache_quant)
             self._quantized_value_cache.append(new_layer_value_cache_quant)
 
-            #new_layer_scale_key = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
-            #new_layer_scale_value = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
             new_layer_scale_key, new_layer_scale_value = meta_key["scale"], meta_value["scale"]
             torch._dynamo.mark_static_address(new_layer_scale_key)
             torch._dynamo.mark_static_address(new_layer_scale_value)
             self._scales_keys.append(new_layer_scale_key)
             self._scales_values.append(new_layer_scale_value)
 
-            #new_layer_zero_key = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
-            #new_layer_zero_value = torch.zeros(scale_shape, dtype=self.compute_dtype, device=self.device)
             new_layer_zero_key, new_layer_zero_value = meta_key["zero"], meta_value["zero"]
             torch._dynamo.mark_static_address(new_layer_zero_key)
             torch._dynamo.mark_static_address(new_layer_zero_value)
             self._zeros_keys.append(new_layer_zero_key)
             self._zeros_values.append(new_layer_zero_value)
-
-        HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key==0 and self.axis_value==0) else HQQBackend.PYTORCH)
-        #HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, mode="reduce-overhead", fullgraph=True)
-        self.quantizer = HQQQuantizer
 
 
     def update(
@@ -1079,7 +1080,6 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-
         if cache_kwargs["cache_position"].shape[0] > 1:
             seen_tokens = torch.tensor(cache_kwargs["cache_position"].shape[0], dtype=torch.int, device=self.device)
             quant_position, scale_position = self._get_quant_position(seen_tokens)
@@ -1087,30 +1087,36 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             # assume we always get one new token and init arange for that one token only
             # add prev cache position where we stopped to continue filling in the static cache
             seen_tokens = cache_kwargs["cache_position"]
-            prev_length = ((self.reshaped_size * cache_kwargs["cache_position"]) // self.q_group_size)
+            prev_length = (self.reshaped_size * cache_kwargs["cache_position"]) // self.q_group_size
             scale_position = torch.arange(self.quant_length, device=self.device) + prev_length
-            quant_position = torch.arange(self.quant_length // self.pack_shape, device=self.device) + (prev_length // self.pack_shape)
+            quant_position = torch.arange(self.quant_length // self.pack_shape, device=self.device) + (
+                prev_length // self.pack_shape
+            )
 
-        #if layer_idx == 0:
-        #    print(key_states.shape, quant_position.tolist())
+        # ugly hack :(
+        if self.axis_key == 0:
+            self._quantized_key_cache[layer_idx][:, quant_position], meta_keys = self._quantize(
+                key_states, axis=self.axis_key
+            )
+            self._quantized_value_cache[layer_idx][:, quant_position], meta_values = self._quantize(
+                value_states, axis=self.axis_value
+            )
+            self._scales_keys[layer_idx][:, scale_position] = meta_keys["scale"]
+            self._scales_values[layer_idx][:, scale_position] = meta_values["scale"]
+            self._zeros_keys[layer_idx][:, scale_position] = meta_keys["zero"]
+            self._zeros_values[layer_idx][:, scale_position] = meta_values["zero"]
+        else:
+            self._quantized_key_cache[layer_idx][quant_position], meta_keys = self._quantize(
+                key_states, axis=self.axis_key
+            )
+            self._quantized_value_cache[layer_idx][quant_position], meta_values = self._quantize(
+                value_states, axis=self.axis_value
+            )
+            self._scales_keys[layer_idx][scale_position] = meta_keys["scale"]
+            self._scales_values[layer_idx][scale_position] = meta_values["scale"]
+            self._zeros_keys[layer_idx][scale_position] = meta_keys["zero"]
+            self._zeros_values[layer_idx][scale_position] = meta_values["zero"]
 
-        self._quantized_key_cache[layer_idx][quant_position], meta_keys = self._quantize(key_states, axis=self.axis_key)
-        self._quantized_value_cache[layer_idx][quant_position], meta_values = self._quantize(value_states, axis=self.axis_value)
-
-        self._scales_keys[layer_idx][scale_position] = meta_keys["scale"]
-        self._scales_values[layer_idx][scale_position] = meta_values["scale"]
-        self._zeros_keys[layer_idx][scale_position] = meta_keys["zero"]
-        self._zeros_values[layer_idx][scale_position] = meta_values["zero"] 
-
-        # prev_length = self.prefill_length + seen_tokens
-        # quant_length = (self.reshaped_size * prev_length) // self.q_group_size
-# 
-        # range = torch.arange(self.max_quant_cache_len, dtype=torch.int, device=self.device)
-        # scale_position = range[range < quant_length]
-# 
-        # range = torch.arange(self.max_quant_cache_len // self.pack_shape, dtype=torch.int, device=self.device)
-        # quant_position = range[range < (quant_length // self.pack_shape)]
-        
         keys_to_return, values_to_return = key_states, value_states
         if cache_kwargs["cache_position"].shape[0] == 1:
             dequant_key = self._dequantize(
@@ -1118,31 +1124,34 @@ class HQQQuantizedCacheStatic(QuantizedCache):
                 self._scales_keys[layer_idx],
                 self._zeros_keys[layer_idx],
                 axis=self.axis_key,
-                shape=[-1, self.head_dim],
+                shape=[self.q_group_size, -1] if self.axis_key == 0 else [-1, self.head_dim],
             )
             dequant_value = self._dequantize(
                 self._quantized_value_cache[layer_idx],
                 self._scales_values[layer_idx],
                 self._zeros_values[layer_idx],
                 axis=self.axis_value,
-                shape=[-1, self.head_dim],
+                shape=[self.q_group_size, -1] if self.axis_value == 0 else [-1, self.head_dim],
             )
 
             keys_to_return, values_to_return = dequant_key, dequant_value
 
         return keys_to_return, values_to_return
 
-
     def _get_quant_position(self, length):
         quant_length = (self.reshaped_size * length) // self.q_group_size
         quant_position = torch.arange(quant_length // self.pack_shape, dtype=torch.int, device=self.device)
-        scale_position = torch.arange(quant_length, dtype=torch.int, device=self.device)  
-        return quant_position, scale_position 
+        scale_position = torch.arange(quant_length, dtype=torch.int, device=self.device)
+        return quant_position, scale_position
 
     def _quantize(self, tensor, axis):
         # (2, 0, 1, 3) -> (1, 2, 0, 3)
         # (2, 1, 0, 3) -> (2, 1, 0, 3)
-        tensor = tensor.permute(2, 0, 1, 3).reshape(-1, self.head_dim) # needed to concat quant tensors
+        tensor = tensor.permute(2, 0, 1, 3).reshape(-1, self.head_dim)  # needed to concat quant tensors
+        
+        # transpose to use axis=0 and that way pack along group_size dim
+        if axis == 0:
+            tensor = tensor.reshape(-1, self.q_group_size).t()
         qtensor, meta = self.quantizer.quantize(
             tensor,
             axis=axis,
@@ -1166,7 +1175,7 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         meta = {
             "nbits": self.nbits,
             "group_size": self.q_group_size,
-            "packing": "2bit_u8" if self.nbits==2 else "4bit_u8",
+            "packing": self.quantizer.bit_to_packing[self.nbits],
             "unpack_view_dtype": "torch.uint8",
             "view_as_float": False,
             "scale": scales,
@@ -1175,21 +1184,23 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             "shape": shape,
         }
         tensor = self.quantizer.dequantize(qtensor, meta)
+        if axis == 0:
+            tensor = tensor.t()
+
         tensor = tensor.reshape(-1, self.max_batch_size, self.num_key_value_heads, self.head_dim).permute(1, 2, 0, 3)
         return tensor
-
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
-        return self._seen_tokens # (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
+        return self._seen_tokens # TODO raushan (return actual length from static tensor)
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
         return self.max_cache_len
-    
+
     def reset(self):
         """Resets the cache values while preserving the objects"""
         for layer_idx in range(len(self.key_cache)):
