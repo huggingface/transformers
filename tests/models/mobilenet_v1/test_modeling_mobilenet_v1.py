@@ -214,7 +214,7 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         model = MobileNetV1Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @is_flaky
+    @is_flaky("is_flaky https://github.com/huggingface/transformers/pull/31258")
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 
