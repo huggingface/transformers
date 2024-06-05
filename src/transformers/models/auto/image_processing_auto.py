@@ -429,6 +429,11 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         if image_processor_class is not None:
+            # Update class name to reflect the use_fast option. If class is not found, None is returned.
+            if use_fast and not image_processor_class.endswith("Fast"):
+                image_processor_class += "Fast"
+            elif not use_fast and image_processor_class.endswith("Fast"):
+                image_processor_class = image_processor_class[:-4]
             image_processor_class = image_processor_class_from_name(image_processor_class)
 
         has_remote_code = image_processor_auto_map is not None
