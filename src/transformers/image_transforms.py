@@ -849,4 +849,6 @@ class NumpyToTensor:
     """
 
     def __call__(self, image: np.ndarray):
-        return torch.from_numpy(image)
+        # Same as in PyTorch, we assume incoming numpy images are in HWC format
+        # c.f. https://github.com/pytorch/vision/blob/61d97f41bc209e1407dcfbd685d2ee2da9c1cdad/torchvision/transforms/functional.py#L154
+        return torch.from_numpy(image.transpose(2, 0, 1)).contiguous()
