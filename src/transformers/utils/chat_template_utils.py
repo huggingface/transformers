@@ -19,8 +19,11 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union, get_args, get_or
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
+# Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
+# Extracts the Args: block from the docstring
 args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+# Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
@@ -30,6 +33,7 @@ args_split_re = re.compile(
 """,
     re.DOTALL | re.VERBOSE,
 )
+# Extracts the Returns: block from the docstring, if present. Note that most chat templates ignore the return type/doc!
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
