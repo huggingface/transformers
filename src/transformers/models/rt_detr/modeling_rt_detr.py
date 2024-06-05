@@ -1513,7 +1513,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
                 reference_points = new_reference_points.detach()
 
             intermediate += (hidden_states,)
-            intermediate_reference_points += (reference_points,)
+            intermediate_reference_points += (new_reference_points,)
 
             if self.class_embed is not None:
                 logits = self.class_embed[idx](hidden_states)
