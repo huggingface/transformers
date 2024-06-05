@@ -2862,7 +2862,6 @@ class Trainer:
                 if not metric_to_check.startswith("eval_"):
                     metric_to_check = f"eval_{metric_to_check}"
                 metric_value = metrics[metric_to_check]
-
                 operator = np.greater if self.args.greater_is_better else np.less
                 if (
                     self.state.best_metric is None
