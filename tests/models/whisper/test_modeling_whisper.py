@@ -1540,6 +1540,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
     def test_beam_sample_generate_dict_output(self):
+        # We overwrite test_beam_sample_generate_dict_output in test_utils as 
+        # we can only perform beam search if the temperature is set to 0 in Whisper. 
+        # In the method in test_utils.py, temperature is set to 0.7. 
         
         config, input_ids, attention_mask = self._get_input_ids_and_config()
 

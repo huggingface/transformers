@@ -621,16 +621,7 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
-            max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
-            if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
-                raise ValueError(
-                    f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
-                    f"is {max_new_tokens}. Thus, the combined length of "
-                    f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
-                    f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
-                    "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-                    f"so that their combined length is less than {self.config.max_target_positions}."
-                )
+
 
             # 6.4 set max new tokens or max length
             self._set_max_new_tokens_and_length(
@@ -704,7 +695,6 @@ class WhisperGenerationMixin:
             return {"sequences": sequences, "segments": final_segments}
 
         if is_shortform: 
-            sequences = torch.cat([decoder_input_ids.to(sequences.device), sequences], dim=-1)
             # add eos token:
             if generation_config.max_new_tokens is None:
                 sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
@@ -873,9 +863,12 @@ class WhisperGenerationMixin:
 
     def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform):
         # remove all previously passed decoder input ids
-        if isinstance(seek_outputs, torch.Tensor):
-            seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
-            return seek_outputs, seek_outputs
+        if isinstance(seek_outputs, torch.Tensor):  
+            if not is_shortform: 
+                seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
+                return seek_outputs, seek_outputs
+            else: 
+                return seek_outputs, seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
@@ -885,7 +878,9 @@ class WhisperGenerationMixin:
             if not is_shortform:
                 seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
 
-        seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
+        if not is_shortform:
+            seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
+
 
         def split_by_batch_index(values, key, batch_idx, generation_config):
             
@@ -1562,8 +1557,19 @@ class WhisperGenerationMixin:
 
         return decoder_input_ids, kwargs
 
-    @staticmethod
-    def _set_max_new_tokens_and_length(config, decoder_input_ids, generation_config):
+    def _set_max_new_tokens_and_length(self, config, decoder_input_ids, generation_config):
+
+        max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
+        if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
+            raise ValueError(
+                f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+                f"is {max_new_tokens}. Thus, the combined length of "
+                f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+                f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+                "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+                f"so that their combined length is less than {self.config.max_target_positions}."
+            )
+
         num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1] - 1)
 
         # Make sure we don't get larger than `max_length`
