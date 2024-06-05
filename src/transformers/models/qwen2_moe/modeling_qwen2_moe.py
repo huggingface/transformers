@@ -1296,11 +1296,12 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel):
         )
 
         hidden_states = outputs[0]
+        # Casting of the logits to float will happen in generate() in inference mode to save memory
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
