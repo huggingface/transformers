@@ -122,9 +122,7 @@ def _get_attr_from_logit_processors(logits_processor, logit_processor_class, att
     return None
 
 
-def _pad_to_max_length(
-    current_segments, pad_token_id, device, padding="right", bos_token_tensor=None, cut_off_length=None
-):
+def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
     max_total_length = 0
     sequences = []
     if padding not in ["right", "left"]:
@@ -145,7 +143,7 @@ def _pad_to_max_length(
         elif bos_token_tensor is not None:
             sequences.append(bos_token_tensor)
         else:
-            sequences.append(torch.tensor([], device=device))
+            sequences.append(torch.tensor([]))
 
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
@@ -211,15 +209,11 @@ class WhisperGenerationMixin:
             # 2. num_frames is different, compute the DTW matrix for each sample sequentially
 
             # we're using np.unique because num_frames can be int/list/tuple
-            if isinstance(num_frames, int):
+            if len(np.unique(num_frames)) == 1:
+                # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
+                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
+
                 weights = weights[..., : num_frames // 2]
-
-            elif isinstance(num_frames, (list, tuple, np.ndarray)) and len(np.unique(num_frames)) == 1:
-                weights = weights[..., : num_frames[0] // 2]
-
-            elif isinstance(num_frames, (torch.Tensor)) and len(torch.unique(num_frames)) == 1:
-                weights = weights[..., : num_frames[0] // 2]
-
             else:
                 # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
                 repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
@@ -237,7 +231,7 @@ class WhisperGenerationMixin:
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray, torch.Tensor)):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
@@ -481,7 +475,6 @@ class WhisperGenerationMixin:
                 "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
                 FutureWarning,
             )
-
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -548,15 +541,13 @@ class WhisperGenerationMixin:
         self._check_decoder_input_ids(kwargs=kwargs)
 
         # 3. Retrieve logits processors
-        device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
             is_shortform=is_shortform,
-            num_beams=kwargs.get("num_beams", 1),
-            device=device,
+            num_beams=generation_config.num_beams,
         )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
@@ -594,6 +585,13 @@ class WhisperGenerationMixin:
                 decoder_input_ids=decoder_input_ids,
                 **kwargs,
             )
+
+            print('DEBUG_LOG!!!!:', outputs.keys())
+            print('DEBUG whisper gen: sequences', outputs['sequences'])
+            print(len(outputs['scores']))
+            print('TYPE of SCORES:', type(outputs['scores']))
+            print('SCORES[0] SHAPE:', outputs['scores'][0].shape)
+            outputs['scores'] = torch.stack(outputs['scores'])
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
                 outputs["token_timestamps"] = self._extract_token_timestamps(
@@ -737,9 +735,7 @@ class WhisperGenerationMixin:
             if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
-        sequences = _pad_to_max_length(
-            final_segments, generation_config.pad_token_id, device=self.device, padding="right"
-        )
+        sequences = _pad_to_max_length(final_segments, generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -790,11 +786,11 @@ class WhisperGenerationMixin:
                     del generate_kwargs[key]
             seek_outputs = super().generate(
                 segment_input,
-                generation_config=generation_config,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
-                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                synced_gpus=synced_gpus,
+                generation_config,
+                logits_processor,
+                stopping_criteria,
+                prefix_allowed_tokens_fn,
+                synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
@@ -1139,12 +1135,12 @@ class WhisperGenerationMixin:
             forced_decoder_ids = config.forced_decoder_ids
 
         if forced_decoder_ids is not None and task is not None:
-            logger.warning_once(
+            logger.info(
                 f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of task={task}."
             )
             forced_decoder_ids = None
         elif forced_decoder_ids is not None and language is not None:
-            logger.warning_once(
+            logger.info(
                 f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of language={language}."
             )
             forced_decoder_ids = None
@@ -1402,9 +1398,7 @@ class WhisperGenerationMixin:
 
         return max_frames, seek
 
-    def _retrieve_logit_processors(
-        self, generation_config, logits_processor, begin_index, is_shortform, num_beams, device
-    ):
+    def _retrieve_logit_processors(self, generation_config, logits_processor, begin_index, is_shortform, num_beams):
         if generation_config.return_timestamps is True:
             timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
@@ -1412,7 +1406,7 @@ class WhisperGenerationMixin:
             )
 
         if generation_config.suppress_tokens is not None:
-            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens, device=device)
+            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens)
             logits_processor = (
                 [suppress_tokens_processor]
                 if logits_processor is None
@@ -1422,7 +1416,7 @@ class WhisperGenerationMixin:
 
         if generation_config.begin_suppress_tokens is not None:
             begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(
-                generation_config.begin_suppress_tokens, begin_index=begin_index, device=device
+                generation_config.begin_suppress_tokens, begin_index=begin_index
             )
             logits_processor = (
                 [begin_suppress_processor]
@@ -1514,7 +1508,6 @@ class WhisperGenerationMixin:
             prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
-                device=device,
                 padding="left",
                 bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,

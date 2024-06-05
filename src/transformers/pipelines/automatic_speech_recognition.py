@@ -67,7 +67,8 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         if dtype is not None:
             processed = processed.to(dtype=dtype)
         _stride_left = 0 if chunk_start_idx == 0 else stride_left
-        is_last = chunk_end_idx >= inputs_len
+        # all right strides must be full, otherwise it is the last item
+        is_last = chunk_end_idx > inputs_len if stride_right > 0 else chunk_end_idx >= inputs_len
         _stride_right = 0 if is_last else stride_right
 
         chunk_len = chunk.shape[0]
@@ -442,18 +443,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     return_tensors="pt",
                 )
             else:
-                if self.type == "seq2seq_whisper" and stride is None:
-                    processed = self.feature_extractor(
-                        inputs,
-                        sampling_rate=self.feature_extractor.sampling_rate,
-                        return_tensors="pt",
-                        return_token_timestamps=True,
-                    )
-                    extra["num_frames"] = processed.pop("num_frames")
-                else:
-                    processed = self.feature_extractor(
-                        inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-                    )
+                processed = self.feature_extractor(
+                    inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+                if stride is None:
+                    extra["segment_size"] = len(inputs)
 
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
@@ -467,14 +461,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
-        # return_scores = model_inputs.pop("scores", None)
-        num_frames = model_inputs.pop("num_frames", None)
+        segment_size = model_inputs.pop("segment_size", None)
         is_last = model_inputs.pop("is_last")
 
-        if stride is not None and num_frames is not None:
-            raise ValueError("num_frames must be used only when stride is None")
+        if stride is not None and segment_size is not None:
+            raise ValueError("segment_size must be used only when stride is None")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
+            encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
             if "input_features" in model_inputs:
@@ -499,14 +493,23 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                             generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
                         else:
                             generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
+
                     else:
-                        generate_kwargs["num_frames"] = num_frames
+                        if isinstance(segment_size, int):
+                            generate_kwargs["num_frames"] = segment_size // self.feature_extractor.hop_length
+                        else:
+                            generate_kwargs["num_frames"] = segment_size[0] // self.feature_extractor.hop_length
+
+            if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
+                generate_kwargs["input_features"] = inputs
+            else:
+                generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
 
             tokens = self.model.generate(
-                inputs=inputs,
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )
+            # raise ValueError #REMOVe
             # whisper longform generation stores timestamps in "segments"
             if return_timestamps == "word" and self.type == "seq2seq_whisper":
                 if "segments" not in tokens:
@@ -524,7 +527,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = stride
                 if 'output_scores' in generate_kwargs.keys():
                     out["output_scores"] = tokens['scores']
-                
 
         else:
             inputs = {
@@ -549,11 +551,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = rescale_stride(stride, ratio)
         # Leftover
         extra = model_inputs
+
+        print(f'len()')
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
         self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None, return_language=None
     ):
+        raise ValueError
+        print('DEBUG automatic_speech_recognition: model_outputs[0] keys:', model_outputs[0].keys())
+        print('DEBUG len(model_outputs)', len(model_outputs))
+        print('DEBUG len(model_outputs[0]["output_scores"])', len(model_outputs[0]["output_scores"][0].shape))
+        # raise ValueError
         # Optional return types
         optional = {}
 
@@ -632,6 +641,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})
             optional["chunks"] = chunks
 
+        # raise ValueError
         extra = defaultdict(list)
         for output in model_outputs:
             output.pop("tokens", None)

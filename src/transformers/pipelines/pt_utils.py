@@ -267,6 +267,7 @@ class PipelinePackIterator(PipelineIterator):
 
         while not is_last:
             processed = self.infer(next(self.iterator), **self.params)
+            print(f'pt_utils.py processed keys:', processed.keys())
             if self.loader_batch_size is not None:
                 if isinstance(processed, torch.Tensor):
                     first_tensor = processed
