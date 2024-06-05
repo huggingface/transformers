@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_rt_detr_config(model_name: str) -> RTDetrConfig:
-    config = RTDetrConfig()
+    config = RTDetrConfig(out_indices=[2, 3, 4])
 
     config.num_labels = 80
     repo_id = "huggingface/label-files"

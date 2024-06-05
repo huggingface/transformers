@@ -44,7 +44,7 @@ _CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
 _EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer
+# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer -> RTDetrResNetConvLayer
 class RTDetrResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
@@ -109,7 +109,7 @@ class RTDetrResNetEmbeddings(nn.Module):
         return embedding
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut
+# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut -> RTDetrResNetChortCut
 class RTDetrResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
@@ -133,15 +133,23 @@ class RTDetrResNetBasicLayer(nn.Module):
     See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L34.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", should_apply_shortcut: bool = False):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+        should_apply_shortcut: bool = False,
+    ):
         super().__init__()
         if in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                *[
-                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
-                ]
-            ) if should_apply_shortcut else nn.Identity()
+            self.shortcut = (
+                nn.Sequential(
+                    *[nn.AvgPool2d(2, 2, 0, ceil_mode=True), RTDetrResNetShortCut(in_channels, out_channels, stride=1)]
+                )
+                if should_apply_shortcut
+                else nn.Identity()
+            )
         else:
             self.shortcut = (
                 RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
@@ -245,7 +253,9 @@ class RTDetrResNetStage(nn.Module):
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True)
+            first_layer = layer(
+                in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True
+            )
         self.layers = nn.Sequential(
             first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
         )
@@ -257,7 +267,6 @@ class RTDetrResNetStage(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder
 class RTDetrResNetEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
@@ -299,7 +308,6 @@ class RTDetrResNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -309,7 +317,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     config_class = RTDetrConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
+    _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):

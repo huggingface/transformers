@@ -18,7 +18,7 @@ import inspect
 import math
 import unittest
 
-from transformers import ResNetConfig, RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
+from transformers import RTDetrConfig, RTDetrImageProcessor, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, torch_device
 from transformers.utils import cached_property
 
@@ -48,16 +48,20 @@ class RTDetrModelTester:
         use_labels=True,
         n_targets=3,
         num_labels=10,
-        num_channels=3,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
-        use_timm_backbone=False,
-        backbone_config=None,
-        backbone="resnet18d",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
+        num_channels=3,
+        embedding_size=64,
+        hidden_sizes=[256, 512, 1024, 2048],
+        depths=[3, 4, 6, 3],
+        layer_type="bottleneck",
+        hidden_act="relu",
+        downsample_in_first_stage=False,
+        downsample_in_bottleneck=False,
+        out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         # encoder HybridEncoder
         encoder_hidden_dim=32,
         encoder_in_channels=[128, 256, 512],
@@ -99,15 +103,20 @@ class RTDetrModelTester:
         self.use_labels = use_labels
         self.n_targets = n_targets
         self.num_labels = num_labels
-        self.num_channels = num_channels
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
+        self.num_channels = num_channels
+        self.embedding_size = embedding_size
+        self.hidden_sizes = hidden_sizes
+        self.depths = depths
+        self.layer_type = layer_type
+        self.hidden_act = hidden_act
+        self.downsample_in_first_stage = downsample_in_first_stage
+        self.downsample_in_bottleneck = downsample_in_bottleneck
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self.out_features = out_features
+        self.out_indices = out_indices
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
@@ -166,26 +175,12 @@ class RTDetrModelTester:
 
     def get_config(self):
         hidden_sizes = [10, 20, 30, 40]
-        resnet_config = ResNetConfig(
-            num_channels=3,
-            embeddings_size=10,
+        return RTDetrConfig(
+            embedding_size=10,
             hidden_sizes=hidden_sizes,
             depths=[1, 1, 2, 1],
-            hidden_act="relu",
-            num_labels=3,
-            out_features=["stage2", "stage3", "stage4"],
-            out_indices=[2, 3, 4],
-        )
-        use_timm_backbone = False
-        return RTDetrConfig(
-            initializer_range=self.initializer_range,
-            layer_norm_eps=self.layer_norm_eps,
-            batch_norm_eps=self.batch_norm_eps,
-            use_timm_backbone=use_timm_backbone,
-            backbone_config=resnet_config,
-            backbone=None,
-            use_pretrained_backbone=False,
-            backbone_kwargs=self.backbone_kwargs,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
             feat_strides=self.feat_strides,
