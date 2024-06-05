@@ -42,6 +42,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
+    COMPRESSED_TENSORS = "compressed_tensors"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1038,3 +1039,55 @@ class EetqConfig(QuantizationConfigMixin):
         accepted_weights = ["int8"]
         if self.weights not in accepted_weights:
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights}")
+
+
+@dataclass
+class CompressedTensorsConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class that handles compressed-tensors quantization config options.
+    It is a wrapper around `compressed_tensors.QuantizationConfig`
+
+    Args:
+        weights (`str`, *optional*, defaults to `"int8"`):
+            The target dtype for the weights. Supported value is only "int8"
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+    """
+
+    def __init__(
+        self,
+        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,
+        quant_method: str = "sparseml",
+        format: str = "fakequant",
+        quantization_status: "QuantizationStatus" = "initialized",
+        global_compression_ratio: Optional[float] = None,
+        ignore: Optional[List[str]] = None,
+        sparsity_config: Dict[str, Any] = None,
+        **kwargs,
+    ):
+        from compressed_tensors import QuantizationConfig
+        from compressed_tensors.config import SparsityCompressionConfig
+
+        self.quantization_config = None
+        self.sparsity_configq = None
+
+        # parse from dict to load nested QuantizationScheme objects
+        if config_groups:
+            self.quantization_config = QuantizationConfig.parse_obj(
+                dict(
+                    config_groups=config_groups,
+                    quant_method=quant_method,
+                    format=format,
+                    quantization_status=quantization_status,
+                    global_compression_ratio=global_compression_ratio,
+                    ignore=ignore,
+                )
+            )
+
+        if sparsity_config:
+            self.sparsity_config = SparsityCompressionConfig.load_from_registry(
+                sparsity_config.get("format"), **sparsity_config
+            )
+
+        super().__init__(quant_method=QuantizationMethod.COMPRESSED_TENSORS)
