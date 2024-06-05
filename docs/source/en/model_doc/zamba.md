@@ -12,7 +12,7 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 
 ## Quick start
 
-### Presequities
+### Prerequities
 
 Zamba requires you use `transformers` version 4.39.0 or higher:
 ```bash
