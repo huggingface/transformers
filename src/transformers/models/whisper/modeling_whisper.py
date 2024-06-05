@@ -617,15 +617,14 @@ class WhisperSdpaAttention(WhisperAttention):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
         past_key_value = getattr(self, "past_key_value", past_key_value)
-        if is_cross_attention:
-            # decoder cross-attention
-            if (
+        # use key_value_states if cross attention
+        current_states = key_value_states if key_value_states is not None and is_cross_attention else hidden_states
+        if is_cross_attention and (
                 past_key_value is not None
                 and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
                 or past_key_value.get_seq_length(self.layer_idx)
@@ -633,26 +632,12 @@ class WhisperSdpaAttention(WhisperAttention):
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
-            else:
-                # compute cross_attentions
-                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-                if past_key_value is not None:
-                    # save all cross attention key/value_states to cache
-                    # further calls to cross_attention layer can then reuse all cross-attention
-                    cache_position = torch.arange(key_states.size(2), device=key_states.device)
-                    key_states, value_states = past_key_value.update(
-                        key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                    )
         else:
-            # either encoder self-attention or decoder self-attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self._shape(self.k_proj(current_states), -1, bsz)
+            value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
-                # save all previous decoder key/value_states to cache
-                # further calls to uni-directional self-attention can concat previous decoder
-                # key/value_states to current projected key/value_state
-                # note: if encoder bi-directional self-attention `past_key_value` is always `None`
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = torch.arange(key_states.size(2), device=key_states.device) if is_cross_attention else cache_position
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
