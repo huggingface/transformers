@@ -74,7 +74,11 @@ class MambaCache:
     """
 
     def __init__(
-        self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self,
+        config: MambaConfig,
+        batch_size: int,
+        dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
@@ -95,16 +99,15 @@ class MambaCache:
             self.conv_state_cache.append(new_layer_conv_cache)
             self.ssm_state_cache.append(new_layer_ssm_cache)
 
-    def update_conv_state(self, layer_idx : int, hidden_states : torch.Tensor) -> torch.Tensor:
-        seq_len = hidden_states.shape[-1]
-        if seq_len > 1:
-            self.conv_state_cache[layer_idx] += hidden_states
+    def update_conv_state(self, layer_idx : int, conv_states : torch.Tensor) -> torch.Tensor:
+        if not self.is_initialized(layer_idx):
+            self.conv_state_cache[layer_idx] += conv_states
             return self.conv_state_cache[layer_idx]
         
         # decoding phase
         conv_state = self.conv_state_cache[layer_idx]
         new_conv_state = conv_state.roll(shifts=-1, dims=-1)
-        new_conv_state[:, :, -1] = hidden_states[:, :, 0]
+        new_conv_state[:, :, -1] = conv_states[:, :, 0]
         self.conv_state_cache[layer_idx].zero_()
         self.conv_state_cache[layer_idx] += new_conv_state
         return self.conv_state_cache[layer_idx]
@@ -120,9 +123,16 @@ class MambaCache:
 
     def get_ssm_sate(self, layer_idx):
         return self.ssm_state_cache[layer_idx]
-    
+
     def is_initialized(self, layer_idx):
         return self.is_cache_initialized[layer_idx]
+
+    def reset(self):
+        for conv_state, ssm_state in zip(self.conv_state_cache, self.ssm_state_cache):
+            # In-place ops prevent breaking the static address
+            conv_state.zero_()
+            ssm_state.zero_()
+        self.is_cache_initialized = [False for _ in range(len(self.is_cache_initialized))]
 
 
 class MambaMixer(nn.Module):
@@ -204,10 +214,10 @@ class MambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.seqlen_offset > 0:
+            if cache_params is not None and cache_params.is_initialized(0):
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.conv_states[self.layer_idx],
+                    cache_params.get_conv_sate(self.layer_idx),
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -218,7 +228,7 @@ class MambaMixer(nn.Module):
                     conv_states = nn.functional.pad(
                         hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
-                    cache_params.conv_states[self.layer_idx].copy_(conv_states)
+                    cache_params.update_conv_state(self.layer_idx, conv_states)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -234,9 +244,9 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.seqlen_offset > 0:
+            if cache_params is not None and cache_params.is_initialized(0):
                 scan_outputs = selective_state_update(
-                    cache_params.ssm_states[self.layer_idx],
+                    cache_params.get_ssm_sate(self.layer_idx),
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -261,7 +271,7 @@ class MambaMixer(nn.Module):
                     return_last_state=True,
                 )
                 if ssm_state is not None and cache_params is not None:
-                    cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+                    cache_params.update_ssm_state(self.layer_idx, ssm_state)
 
             # 4. Final linear projection
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
@@ -666,14 +676,22 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, **kwargs
     ):
+        if cache_params is None and (self.config.use_cache or kwargs.get('use_cache', False)):
+            # will construct a cache for a different generation
+            cache_params = MambaCache(
+                self.config,
+                input_ids.shape[0],
+                dtype=self.backbone.embeddings.weight.dtype,
+                device=self.backbone.embeddings.weight.device,
+            )
         # only last token for inputs_ids if the state is passed along.
-        if cache_params is not None and cache_params.is_initialized(0):
+        elif cache_params is not None and cache_params.is_initialized(0):
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
         if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            model_inputs = {"input_ids": input_ids.contiguous()}
 
         model_inputs["cache_params"] = cache_params
         return model_inputs
