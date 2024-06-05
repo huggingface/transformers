@@ -44,10 +44,15 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.label2id = {v: k for k, v in id2label.items()}
 
     if model_name == "rtdetr_r18vd":
+        config.depths = [2, 2, 2, 2]
+        config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r34vd":
+        config.hidden_sizes = [64, 128, 256, 512]
+        config.depths = [3, 4, 6, 3]
+        config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
@@ -56,16 +61,20 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     elif model_name == "rtdetr_r50vd":
         pass
     elif model_name == "rtdetr_r101vd":
+        config.depths = [3, 4, 23, 3]
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
     elif model_name == "rtdetr_r18vd_coco_o365":
+        config.depths = [2, 2, 2, 2]
+        config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r50vd_coco_o365":
         pass
     elif model_name == "rtdetr_r101vd_coco_o365":
+        config.depths = [3, 4, 23, 3]
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
@@ -86,7 +95,9 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
-    for stage_idx in range(4):
+    infix_shortcut = ".1" if config.layer_type == "bottleneck" else ""
+
+    for stage_idx in range(len(config.depths)):
         for layer_idx in range(config.depths[stage_idx]):
             # shortcut
             if layer_idx == 0:
@@ -108,14 +119,14 @@ def create_rename_keys(config):
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.conv.weight",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.convolution.weight",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut{infix_shortcut}.convolution.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.norm.{last}",
-                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.normalization.{last}",
+                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut{infix_shortcut}.normalization.{last}",
                             )
                         )
 

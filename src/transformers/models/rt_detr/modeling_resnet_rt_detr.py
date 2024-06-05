@@ -135,9 +135,21 @@ class RTDetrResNetBasicLayer(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
         super().__init__()
         should_apply_shortcut = True
-        self.shortcut = (
-            RTDetrResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
-        )
+        if stride == 2:
+            self.shortcut = nn.Sequential(
+                *[
+                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
+                    if should_apply_shortcut
+                    else nn.Identity(),
+                ]
+            )
+        else:
+            self.shortcut = (
+                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
+                if should_apply_shortcut
+                else nn.Identity()
+            )
         self.layer = nn.Sequential(
             RTDetrResNetConvLayer(in_channels, out_channels, stride=stride),
             RTDetrResNetConvLayer(out_channels, out_channels, activation=None),
@@ -160,6 +172,7 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
     `downsample_in_bottleneck` is true, downsample will be in the first layer instead of the second layer.
+    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L34.
     """
 
     def __init__(
@@ -174,9 +187,21 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        self.shortcut = (
-            RTDetrResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
-        )
+        if stride == 2:
+            self.shortcut = nn.Sequential(
+                *[
+                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
+                    if should_apply_shortcut
+                    else nn.Identity(),
+                ]
+            )
+        else:
+            self.shortcut = (
+                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
+                if should_apply_shortcut
+                else nn.Identity()
+            )
         self.layer = nn.Sequential(
             RTDetrResNetConvLayer(
                 in_channels, reduces_channels, kernel_size=1, stride=stride if downsample_in_bottleneck else 1
@@ -235,6 +260,7 @@ class RTDetrResNetStage(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder
 class RTDetrResNetEncoder(nn.Module):
     def __init__(self, config: RTDetrConfig):
         super().__init__()
@@ -276,6 +302,7 @@ class RTDetrResNetEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -391,8 +418,4 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
                 output += (outputs.hidden_states,)
             return output
 
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
-        )
+        retu
