@@ -23,7 +23,6 @@ class DeprecationDecoratorTester(unittest.TestCase):
     INFINITE_VERSION = "9999.0.0"
 
     def test_rename_kwarg(self):
-
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
@@ -51,9 +50,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
             self.assertEqual(value, "new_value")
             self.assertIsNone(other_value)
 
-
     def test_rename_multiple_kwargs(self):
-
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
@@ -80,9 +77,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
             self.assertIsNone(value2)
             self.assertEqual(other_value, "other_value")
 
-
     def test_warnings(self):
-
         # Test warning is raised for future version
         @deprecate_kwarg("deprecated_name", new_name="new_name", version=self.INFINITE_VERSION)
         def dummy_function(new_name=None, other_name=None):
@@ -109,7 +104,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
         @deprecate_kwarg("deprecated_name", version="0.0.0", warn_if_greater_or_equal_version=True)
         def dummy_function(deprecated_name=None):
             return deprecated_name
-        
+
         with self.assertWarns(DeprecationWarning):
             value = dummy_function(deprecated_name="deprecated_value")
         self.assertEqual(value, "deprecated_value")
@@ -123,14 +118,14 @@ class DeprecationDecoratorTester(unittest.TestCase):
             value = dummy_function(deprecated_name="deprecated_value")
         self.assertEqual(value, "deprecated_value")
 
-
     def test_raises(self):
-
         # Test if deprecated name and new name are both passed and raise_if_both_names is set -> raise error
-        @deprecate_kwarg("deprecated_name", new_name="new_name", version=self.INFINITE_VERSION, raise_if_both_names=True)
+        @deprecate_kwarg(
+            "deprecated_name", new_name="new_name", version=self.INFINITE_VERSION, raise_if_both_names=True
+        )
         def dummy_function(new_name=None, other_name=None):
             return new_name, other_name
-        
+
         with self.assertRaises(ValueError):
             dummy_function(deprecated_name="old_value", new_name="new_value")
 
@@ -138,7 +133,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
         @deprecate_kwarg("deprecated_name", version=__version__, raise_if_greater_or_equal_version=True)
         def dummy_function(deprecated_name=None):
             return deprecated_name
-        
+
         with self.assertRaises(ValueError):
             dummy_function(deprecated_name="old_value")
 
@@ -146,17 +141,16 @@ class DeprecationDecoratorTester(unittest.TestCase):
         @deprecate_kwarg("deprecated_name", version="0.0.0", raise_if_greater_or_equal_version=True)
         def dummy_function(deprecated_name=None):
             return deprecated_name
-        
+
         with self.assertRaises(ValueError):
             dummy_function(deprecated_name="old_value")
 
     def test_additional_message(self):
-        
         # Test additional message is added to the warning
         @deprecate_kwarg("deprecated_name", version=self.INFINITE_VERSION, additional_message="Additional message")
         def dummy_function(deprecated_name=None):
             return deprecated_name
-        
+
         with warnings.catch_warnings(record=True) as raised_warnings:
             warnings.simplefilter("always")
             dummy_function(deprecated_name="old_value")
