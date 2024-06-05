@@ -1858,9 +1858,10 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
         if decoder_attention_mask is not None:
             decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
 
+        past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values[0], Cache):
-                past_length = past_key_values[0].get_seq_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values[0].get_seq_length()
             else:
                 past_length = past_key_values[0][0].shape[2]
 
@@ -1876,12 +1877,12 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
 
-            if cache_position is None:
-                cache_position = torch.arange(
-                    past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device
-                )
-            elif use_cache:
-                cache_position = cache_position[-decoder_input_ids.shape[1] :]
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_length, past_length + decoder_input_ids.shape[1], device=decoder_input_ids.device
+            )
+        elif use_cache:
+            cache_position = cache_position[-decoder_input_ids.shape[1]:]
 
         return {
             "encoder_outputs": encoder_outputs,
