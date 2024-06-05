@@ -66,4 +66,4 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def is_serializable(self):
-        return True
+        return False
