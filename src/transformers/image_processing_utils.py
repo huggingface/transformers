@@ -415,6 +415,11 @@ class ImageProcessingMixin(PushToHubMixin):
         if "crop_size" in kwargs and "crop_size" in image_processor_dict:
             image_processor_dict["crop_size"] = kwargs.pop("crop_size")
 
+        # This parameters are used to get image_processor/processor class,
+        # but they are not image_processor's init parameters, so we pop them out.
+        image_processor_dict.pop("processor_class", None)
+        image_processor_dict.pop("image_processor_type", None)
+
         image_processor = cls(**image_processor_dict)
 
         # Update image_processor with kwargs if needed
