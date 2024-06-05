@@ -1463,7 +1463,7 @@ class GenerationMixin:
             generation_config.eos_token_id, self.generation_config.eos_token_id, device=device
         )
         pad_token_id = _tensor_or_none(
-            generation_config.pad_token_id, self.generation_config.eos_token_id, device=device
+            generation_config.pad_token_id, self.generation_config.pad_token_id, device=device
         )
         decoder_start_token_id = _tensor_or_none(
             generation_config.decoder_start_token_id, self.generation_config.decoder_start_token_id, device=device
