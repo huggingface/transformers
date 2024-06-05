@@ -636,25 +636,23 @@ class MambaForCausalLM(MambaPreTrainedModel):
         self,
         input_ids,
         inputs_embeds=None,
-        attention_mask=None,
         use_cache=None,
-        past_key_values: Optional[MambaCache] = None,
+        cache_params: Optional[MambaCache] = None,
         **kwargs,
     ):
         # only last token for inputs_ids if the state is passed along.
-        if past_key_values is not None:
+        if cache_params is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        if inputs_embeds is not None and past_key_values is None:
+        if inputs_embeds is not None and cache_params is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
         model_inputs.update(
             {
-                "cache_params": past_key_values,
+                "cache_params": cache_params,
                 "use_cache": use_cache,
-                "attention_mask": attention_mask,
             }
         )
         return model_inputs
