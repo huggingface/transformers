@@ -53,48 +53,35 @@ def _parse_type_hint(hint: str) -> Dict:
     args = get_args(hint)
 
     if origin is None:
-        return _get_json_schema_type(hint)
+        try:
+            return _get_json_schema_type(hint)
+        except KeyError:
+            raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
-    if origin is Union:
-        # If it's a union of basic types, we can express that as a simple list in the schema
-        if all(t in BASIC_TYPES for t in args):
-            return_dict = {"type": [_get_json_schema_type(t)["type"] for t in args if t not in (type(None), ...)]}
-            if len(return_dict["type"]) == 1:
-                return_dict["type"] = return_dict["type"][0]
+    elif origin is Union:
+        # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
+        subtypes = [_parse_type_hint(t) for t in args if t != type(None)]
+        if len(subtypes) == 1:
+            # A single non-null type can be expressed directly
+            return_dict = subtypes[0]
+        elif all(isinstance(subtype["type"], str) for subtype in subtypes):
+            # A union of basic types can be expressed as a list in the schema
+            return_dict = {"type": [subtype["type"] for subtype in subtypes]}
         else:
-            # A union of more complex types requires us to recurse into each subtype
-            return_dict = {
-                "anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)],
-            }
-            if len(return_dict["anyOf"]) == 1:
-                return_dict = return_dict["anyOf"][0]
+            # A union of more complex types requires "anyOf"
+            return_dict = {"anyOf": subtypes}
         if type(None) in args:
             return_dict["nullable"] = True
         return return_dict
 
-    if origin is list:
+    elif origin is list:
         if not args:
             return {"type": "array"}
-
-        # Similarly to unions, a list of basic types can be expressed as a list in the schema
-        if all(t in BASIC_TYPES for t in args):
-            items = {"type": [_get_json_schema_type(t)["type"] for t in args if t != type(None)]}
-            if len(items["type"]) == 1:
-                items["type"] = items["type"][0]
         else:
-            # And a list of more complex types requires us to recurse into each subtype again
-            items = {"anyOf": [_parse_type_hint(t) for t in args if t not in (type(None), ...)]}
-            if len(items["anyOf"]) == 1:
-                items = items["anyOf"][0]
+            # Lists can only have a single type argument, so recurse into it
+            return {"type": "array", "items": _parse_type_hint(args[0])}
 
-        return_dict = {"type": "array", "items": items}
-
-        if type(None) in args:
-            return_dict["nullable"] = True
-
-        return return_dict
-
-    if origin is tuple:
+    elif origin is tuple:
         if not args:
             return {"type": "array"}
         if len(args) == 1:
@@ -113,7 +100,7 @@ def _parse_type_hint(hint: str) -> Dict:
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
 
-    if origin is dict:
+    elif origin is dict:
         # The JSON equivalent to a dict is 'object', which mandates that all keys are strings
         # However, we can specify the type of the dict values with "additionalProperties"
         out = {"type": "object"}
