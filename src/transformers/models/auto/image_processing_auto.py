@@ -267,6 +267,13 @@ def get_image_processor_config(
         return json.load(reader)
 
 
+def _warning_fast_image_processor_available(fast_class):
+    logger.warning(
+        f"Fast image processor class {fast_class} is available for this model. "
+        "Using slow image processor class. To use the fast image processor class set `use_fast=True`."
+    )
+
+
 class AutoImageProcessor:
     r"""
     This is a generic image processor class that will be instantiated as one of the image processor classes of the
@@ -414,6 +421,9 @@ class AutoImageProcessor:
             image_processor_auto_map = (image_processor_auto_map, None)
 
         if has_remote_code and trust_remote_code:
+            if not use_fast and image_processor_auto_map[1] is not None:
+                _warning_fast_image_processor_available(image_processor_auto_map[1])
+
             if use_fast and image_processor_auto_map[1] is not None:
                 class_ref = image_processor_auto_map[1]
             else:
@@ -430,6 +440,9 @@ class AutoImageProcessor:
             image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]
 
             image_processor_class_py, image_processor_class_fast = image_processor_tuple
+
+            if not use_fast and image_processor_class_fast is not None:
+                _warning_fast_image_processor_available(image_processor_class_fast)
 
             if image_processor_class_fast and (use_fast or image_processor_class_py is None):
                 return image_processor_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
