@@ -467,6 +467,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
+        # return_scores = model_inputs.pop("scores", None)
         num_frames = model_inputs.pop("num_frames", None)
         is_last = model_inputs.pop("is_last")
 
@@ -521,6 +522,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
+                if 'output_scores' in generate_kwargs.keys():
+                    out["output_scores"] = tokens['scores']
+                
 
         else:
             inputs = {
