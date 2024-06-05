@@ -44,6 +44,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.label2id = {v: k for k, v in id2label.items()}
 
     if model_name == "rtdetr_r18vd":
+        config.hidden_sizes = [64, 128, 256, 512]
         config.depths = [2, 2, 2, 2]
         config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
@@ -66,6 +67,7 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
     elif model_name == "rtdetr_r18vd_coco_o365":
+        config.hidden_sizes = [64, 128, 256, 512]
         config.depths = [2, 2, 2, 2]
         config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
@@ -95,8 +97,6 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
-    infix_shortcut = ".1" if config.layer_type == "bottleneck" else ""
-
     for stage_idx in range(len(config.depths)):
         for layer_idx in range(config.depths[stage_idx]):
             # shortcut
@@ -119,14 +119,14 @@ def create_rename_keys(config):
                     rename_keys.append(
                         (
                             f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.conv.weight",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut{infix_shortcut}.convolution.weight",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.1.convolution.weight",
                         )
                     )
                     for last in last_key:
                         rename_keys.append(
                             (
                                 f"backbone.res_layers.{stage_idx}.blocks.0.short.conv.norm.{last}",
-                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut{infix_shortcut}.normalization.{last}",
+                                f"model.backbone.model.encoder.stages.{stage_idx}.layers.0.shortcut.1.normalization.{last}",
                             )
                         )
 
@@ -735,12 +735,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
     else:
         raise ValueError(f"Unknown rt_detr_name: {model_name}")
-
-    print(outputs.logits[0, :3, :3])
-    print(expected_slice_logits)
-
-    print(outputs.pred_boxes[0, :3, :3])
-    print(expected_slice_boxes)
 
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)

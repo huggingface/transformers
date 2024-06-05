@@ -130,20 +130,18 @@ class RTDetrResNetShortCut(nn.Module):
 class RTDetrResNetBasicLayer(nn.Module):
     """
     A classic ResNet's residual layer composed by two `3x3` convolutions.
+    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L34.
     """
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", should_apply_shortcut: bool = False):
         super().__init__()
-        should_apply_shortcut = True
-        if stride == 2:
+        if in_channels != out_channels:
             self.shortcut = nn.Sequential(
                 *[
                     nn.AvgPool2d(2, 2, 0, ceil_mode=True),
                     RTDetrResNetShortCut(in_channels, out_channels, stride=1)
-                    if should_apply_shortcut
-                    else nn.Identity(),
                 ]
-            )
+            ) if should_apply_shortcut else nn.Identity()
         else:
             self.shortcut = (
                 RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
@@ -172,7 +170,6 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
     `downsample_in_bottleneck` is true, downsample will be in the first layer instead of the second layer.
-    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L34.
     """
 
     def __init__(
@@ -248,7 +245,7 @@ class RTDetrResNetStage(nn.Module):
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act)
+            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True)
         self.layers = nn.Sequential(
             first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
         )
@@ -418,4 +415,8 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
                 output += (outputs.hidden_states,)
             return output
 
-        retu
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )
