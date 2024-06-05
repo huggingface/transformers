@@ -23,10 +23,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-COGVLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "THUDM/cogvlm-chat-hf": "https://huggingface.co/THUDM/cogvlm-chat-hf/resolve/main/config.json",
-}
-
 
 class CogvlmVisionConfig(PretrainedConfig):
     r"""
