@@ -3452,7 +3452,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 default=torch.float32,
             )
 
-        for dtype in ["float32", "float64", "complex64", "complex128", "float16", "bfloat16", "uint8", "int8", "int16", "int32", "int64", "bool"]:
+        for dtype in [
+            "float32",
+            "float64",
+            "complex64",
+            "complex128",
+            "float16",
+            "bfloat16",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "bool",
+        ]:
             torch_dtype = getattr(torch, dtype)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 args = TorchDtypeTrainingArguments(output_dir=tmp_dir, torch_dtype=torch_dtype)
@@ -4320,4 +4333,3 @@ class OptimizerAndModelInspectionTest(unittest.TestCase):
             param = next(model.parameters())
             group = trainer.get_optimizer_group(param)
             self.assertIn(param, group["params"])
-
