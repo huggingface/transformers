@@ -1148,8 +1148,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
-                    print(f'base.py model_outputs:', model_outputs.keys())
-                    print(f'base.py model_outputs["output_scores"]:', model_outputs['output_scores'])
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
                     # raise ValueError
             else:

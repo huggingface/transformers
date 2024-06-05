@@ -586,11 +586,6 @@ class WhisperGenerationMixin:
                 **kwargs,
             )
 
-            print('DEBUG_LOG!!!!:', outputs.keys())
-            print('DEBUG whisper gen: sequences', outputs['sequences'])
-            print(len(outputs['scores']))
-            print('TYPE of SCORES:', type(outputs['scores']))
-            print('SCORES[0] SHAPE:', outputs['scores'][0].shape)
             outputs['scores'] = torch.stack(outputs['scores'])
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
