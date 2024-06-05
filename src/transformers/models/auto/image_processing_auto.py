@@ -487,7 +487,7 @@ class AutoImageProcessor:
         ):
             raise ValueError(
                 "The fast processor class you are passing has a `slow_image_processor_class` attribute that is not "
-                "consistent with the slow tokenizer class you passed (fast tokenizer has "
+                "consistent with the slow processor class you passed (fast tokenizer has "
                 f"{fast_image_processor_class.slow_image_processor_class} and you passed {slow_image_processor_class}. Fix one of those "
                 "so they match!"
             )
