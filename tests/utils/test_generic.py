@@ -218,26 +218,31 @@ class ValidationDecoratorTester(unittest.TestCase):
             # include extra kwarg
             @filter_out_non_signature_kwargs(extra=["extra_arg"])
             def func2(a, **kwargs):
-                return kwargs
+                return a, kwargs
 
-            kwargs = func2(1)
+            a, kwargs = func2(1)
+            self.assertEqual(a, 1)
             self.assertEqual(kwargs, {})
 
-            kwargs = func2(1, extra_arg=2)
+            a, kwargs = func2(1, extra_arg=2)
+            self.assertEqual(a, 1)
             self.assertEqual(kwargs, {"extra_arg": 2})
 
             # multiple extra kwargs
             @filter_out_non_signature_kwargs(extra=["extra_arg", "extra_arg2"])
             def func3(a, **kwargs):
-                return kwargs
+                return a, kwargs
 
-            kwargs = func3(1)
+            a, kwargs = func3(2)
+            self.assertEqual(a, 2)
             self.assertEqual(kwargs, {})
 
-            kwargs = func3(1, extra_arg2=3)
+            a, kwargs = func3(3, extra_arg2=3)
+            self.assertEqual(a, 3)
             self.assertEqual(kwargs, {"extra_arg2": 3})
 
-            kwargs = func3(1, extra_arg=2, extra_arg2=3)
+            a, kwargs = func3(1, extra_arg=2, extra_arg2=3)
+            self.assertEqual(a, 1)
             self.assertEqual(kwargs, {"extra_arg": 2, "extra_arg2": 3})
 
             # Check that no warnings were raised
