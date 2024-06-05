@@ -454,6 +454,16 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
+    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.to_dict
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. This method calls the superclass method and then removes the
+        `_max_size` attribute from the dictionary.
+        """
+        image_processor_dict = super().to_dict()
+        image_processor_dict.pop("_max_size", None)
+        return image_processor_dict
+
     @deprecate_kwarg("max_size", version="4.27.0")
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.resize with get_maskformer_resize_output_image_size->get_mask2former_resize_output_image_size
     def resize(
