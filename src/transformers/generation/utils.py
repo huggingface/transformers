@@ -1361,20 +1361,19 @@ class GenerationMixin:
             generation_config = self.generation_config
 
         # `torch.compile` can't compile `copy.deepcopy`, arguments in `kwargs` that are part of `generation_config`
-        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` is disabled.
-        if is_torchdynamo_compiling():
-            model_kwargs = kwargs
-            generate_attributes_in_kwargs = [
-                key for key, value in kwargs.items() if getattr(generation_config, key, None) != value
-            ]
-            if len(generate_attributes_in_kwargs) > 0:
-                raise ValueError(
-                    "`torch.compile` exception: all generation configuration attributes must be passed within a "
-                    f"`generation_config` instance passed to `generate` (found: {generate_attributes_in_kwargs})."
-                )
-        else:
+        # will mutate the object with `.update`. As such, passing these arguments through `kwargs` will raise a warning.
+        model_kwargs = kwargs
+        generate_attributes_in_kwargs = [
+            key for key, value in kwargs.items() if getattr(generation_config, key, None) != value
+        ]
+        if not is_torchdynamo_compiling() or len(generate_attributes_in_kwargs) > 0:
             generation_config = copy.deepcopy(generation_config)
             model_kwargs = generation_config.update(**kwargs)
+            if is_torchdynamo_compiling():
+                warnings.warn(
+                    "`torch.compile` graph break: generation configuration attributes should be passed within a "
+                    f"`generation_config` instance passed to `generate` (found: {generate_attributes_in_kwargs})."
+                )
 
         return generation_config, model_kwargs
 
