@@ -220,28 +220,32 @@ class DPTConfig(PretrainedConfig):
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
+            # We only use load_backbone when config.is_hydrid is False
+            verify_backbone_config_arguments(
+                use_timm_backbone=use_timm_backbone,
+                use_pretrained_backbone=use_pretrained_backbone,
+                backbone=backbone,
+                backbone_config=backbone_config,
+                backbone_kwargs=backbone_kwargs,
+            )
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
         self.backbone_kwargs = backbone_kwargs
-        self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
-        self.num_attention_heads = None if use_autobackbone else num_attention_heads
-        self.intermediate_size = None if use_autobackbone else intermediate_size
-        self.hidden_dropout_prob = None if use_autobackbone else hidden_dropout_prob
-        self.attention_probs_dropout_prob = None if use_autobackbone else attention_probs_dropout_prob
-        self.layer_norm_eps = None if use_autobackbone else layer_norm_eps
-        self.image_size = None if use_autobackbone else image_size
-        self.patch_size = None if use_autobackbone else patch_size
-        self.num_channels = None if use_autobackbone else num_channels
-        self.qkv_bias = None if use_autobackbone else qkv_bias
+
+        # ViT parameters used if not using a hybrid backbone
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.qkv_bias = qkv_bias
+        self.use_autobackbone = use_autobackbone
         self.backbone_out_indices = None if use_autobackbone else backbone_out_indices
 
         if readout_type not in ["ignore", "add", "project"]:
