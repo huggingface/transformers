@@ -40,6 +40,7 @@ else:
     ]
     _import_structure["modeling_resnet_rt_detr"] = [
         "RTDetrResNetBackbone",
+        "RTDetrResNetPreTrainedModel",
     ]
 
 
@@ -62,9 +63,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_resnet_rt_detr import (
             RTDetrResNetBackbone,
+            RTDetrResNetPreTrainedModel,
         )
         from .modeling_rt_detr import (
-            RTDETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             RTDetrForObjectDetection,
             RTDetrModel,
             RTDetrPreTrainedModel,

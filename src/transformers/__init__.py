@@ -3001,6 +3001,7 @@ else:
             "RTDetrModel",
             "RTDetrPreTrainedModel",
             "RTDetrResNetBackbone",
+            "RTDetrResNetPreTrainedModel",
         ]
     )
     _import_structure["models.rwkv"].extend(
@@ -7293,6 +7294,7 @@ if TYPE_CHECKING:
             RTDetrModel,
             RTDetrPreTrainedModel,
             RTDetrResNetBackbone,
+            RTDetrResNetPreTrainedModel,
         )
         from .models.rwkv import (
             RwkvForCausalLM,

@@ -76,7 +76,7 @@ results = image_processing.post_process_object_detection(outputs, target_sizes=t
 [[autodoc]] RTDetrForObjectDetection
     - forward
 
-## RTDetrTimmbackbone
+## RTDetrResNetBackbone
 
-[[autodoc]] RTDetrTimmbackbone
+[[autodoc]] RTDetrResNetBackbone
     - forward
