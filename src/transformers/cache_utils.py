@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 
 from .configuration_utils import PretrainedConfig
-from .utils import is_hqq_available, is_quanto_available, logging, is_torch_xla_available
+from .utils import is_hqq_available, is_quanto_available, logging
 
 if is_quanto_available():
     from quanto import QBitsTensor, qint2, qint4
@@ -790,23 +790,6 @@ class StaticCache(Cache):
         cache_position = cache_kwargs.get("cache_position")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
-
-        if is_torch_xla_available(): # If torch_xla is available, do out-of-place operation on KV_Cache and create a new list
-            k_out = k_out.index_copy(2, cache_position, key_states)
-            v_out = v_out.index_copy(2, cache_position, value_states)
-
-            updated_key_cache = [
-                k_out if i == layer_idx else self.key_cache[i] for i in range(len(self.key_cache))
-            ]
-
-            updated_value_cache = [
-                v_out if i == layer_idx else self.value_cache[i] for i in range(len(self.value_cache))
-            ]
-
-            self.key_cache = updated_key_cache
-            self.value_cache = updated_value_cache
-
-            return k_out, v_out
 
         k_out.index_copy_(2, cache_position, key_states)
         v_out.index_copy_(2, cache_position, value_states)
