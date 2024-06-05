@@ -133,3 +133,8 @@ jobs:
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           waitForSSH: true
+
+  benchmark:
+    name: Benchmark workflow
+    uses: ./.github/workflows/benchmark.yml
+    secrets: inherit
