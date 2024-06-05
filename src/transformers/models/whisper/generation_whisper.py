@@ -501,7 +501,7 @@ class WhisperGenerationMixin:
             logprob_threshold=logprob_threshold,
             generation_config=generation_config,
         )
-        self._set_return_timestamps(
+        timestamp_begin = self._set_return_timestamps(
             return_timestamps=return_timestamps, is_shortform=is_shortform, generation_config=generation_config
         )
         self._set_language_and_task(
@@ -550,10 +550,6 @@ class WhisperGenerationMixin:
             condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config
         )
 
-        if hasattr(generation_config, 'no_timestamps_token_id'):
-            timestamp_begin = generation_config.no_timestamps_token_id + 1
-        else:
-            timestamp_begin = None
 
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
         temperature = temperatures[0]
@@ -1059,8 +1055,7 @@ class WhisperGenerationMixin:
 
         generation_config.return_dict_in_generate = return_dict_in_generate
 
-    @staticmethod
-    def _set_return_timestamps(return_timestamps, is_shortform, generation_config):
+    def _set_return_timestamps(self, return_timestamps, is_shortform, generation_config):
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
@@ -1079,6 +1074,13 @@ class WhisperGenerationMixin:
             )
 
         generation_config.return_timestamps = return_timestamps
+
+        if hasattr(generation_config, 'no_timestamps_token_id'):
+            timestamp_begin = generation_config.no_timestamps_token_id + 1
+        else:
+            timestamp_begin = self.config.vocab_size + 1
+
+        return timestamp_begin
 
     @staticmethod
     def _set_language_and_task(language, task, is_multilingual, generation_config):
@@ -1620,10 +1622,7 @@ class WhisperGenerationMixin:
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-        if timestamp_begin is not None:
-            timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-        else:
-            timestamp_tokens: torch.Tensor = torch.full((seek_sequence.shape[0],), False, dtype=torch.bool).to(seek_sequence.device)
+        timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
 
         single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
         timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
