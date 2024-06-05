@@ -1490,7 +1490,7 @@ class GenerationMixin:
         # we can't infer attn mask if pad token is set to be eos token in model's generation config
         if eos_token_id is not None and torch.isin(elements=eos_token_id, test_elements=pad_token_id).any():
             if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                logger.warning(
+                logger.warning_once(
                     "The attention mask is not set and cannot be inferred from input because pad token is same as eos token."
                     "As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` "
                     "to obtain reliable results."
