@@ -122,6 +122,9 @@ class PipelineIterator(IterableDataset):
 
         # We're out of items within a batch
         item = next(self.iterator)
+        print(f'pt_utils __next__: item len: {len(item)}')
+        print(f'pt_utils __next__: item [0]: {item[0]}')
+        # raise ValueError
         processed = self.infer(item, **self.params)
         # We now have a batch of "inferred things".
         if self.loader_batch_size is not None:
@@ -268,6 +271,8 @@ class PipelinePackIterator(PipelineIterator):
         while not is_last:
             processed = self.infer(next(self.iterator), **self.params)
             print(f'pt_utils.py processed keys:', processed.keys())
+            print(f'pt_utils.py output scores:', processed['output_scores'])
+            
             if self.loader_batch_size is not None:
                 if isinstance(processed, torch.Tensor):
                     first_tensor = processed
@@ -279,16 +284,16 @@ class PipelinePackIterator(PipelineIterator):
                 else:
                     observed_batch_size = first_tensor.shape[0]
                 if 0 < observed_batch_size < self.loader_batch_size:
-                    # could be last batch so we can't unroll as many
-                    # elements.
                     self.loader_batch_size = observed_batch_size
                 self._loader_batch_data = processed
                 self._loader_batch_index = 0
                 while self._loader_batch_index < self.loader_batch_size:
                     item = self.loader_batch_item()
-                    is_last = item.pop("is_last")
+                    is_last = item.pop("is_last")      
                     accumulator.append(item)
                     if is_last:
+                        print(f'pt_utils.py accumulator len:', len(accumulator))
+                        print(f'pt_utils.py accumulator:', accumulator)
                         return accumulator
             else:
                 item = processed

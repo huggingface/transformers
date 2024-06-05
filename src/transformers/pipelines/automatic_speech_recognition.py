@@ -558,7 +558,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def postprocess(
         self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None, return_language=None
     ):
-        raise ValueError
+        # raise ValueError
         print('DEBUG automatic_speech_recognition: model_outputs[0] keys:', model_outputs[0].keys())
         print('DEBUG len(model_outputs)', len(model_outputs))
         print('DEBUG len(model_outputs[0]["output_scores"])', len(model_outputs[0]["output_scores"][0].shape))
