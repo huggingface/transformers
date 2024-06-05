@@ -166,7 +166,6 @@ class CogvlmVisionAttention(nn.Module):
         values = values.transpose(1, 2)
 
         queries = queries * self.scale
-        keys = keys
         attention_scores = queries @ keys.transpose(-2, -1)
 
         # PyTorch already accumulates softmax on fp32 (Reference: https://github.com/pytorch/pytorch/pull/103167)
