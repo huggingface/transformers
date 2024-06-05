@@ -16,7 +16,7 @@
 Image/Text processor class for ALIGN
 """
 
-from typing import List, Union
+from typing import List, Union, Unpack
 
 from ...image_utils import ImageInput
 from ...processing_utils import (
@@ -37,7 +37,7 @@ if is_torch_available():
     import torch  # noqa: F401
 
 
-class AlignProcessorKwargs(ProcessingKwargs, total=False):
+class AlignProcessorKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
     """
     Inherits from `ProcessingKwargs` to provide:
         1) Additional keys that this model requires to process inputs.
@@ -45,30 +45,17 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
     New keys have to be defined as follows to ensure type hinting is done correctly.
 
     ```python
-    common_kwargs: CommonKwargs = {
-            **CommonKwargs.__annotations__,
-        }
-        text_kwargs: TextKwargs = {
-            **TextKwargs.__annotations__,
-            "a_new_text_boolean_key": Optional[bool],
-        }
-        images_kwargs: ImagesKwargs = {
-            **ImagesKwargs.__annotations__,
-            "a_new_image_processing_key": Optional[int]
-        }
+    images_kwargs: ImagesKwargs = {"new_image_kwarg": Optional[bool]}
+
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "max_length": 64,
+        },
+    }
+
     ```
-
     """
-
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
-    text_kwargs: TextKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    images_kwargs: ImagesKwargs = {
-        **ImagesKwargs.__annotations__,
-    }
 
     _defaults = {
         "text_kwargs": {
@@ -106,9 +93,10 @@ class AlignProcessor(ProcessorMixin):
 
         processor(images=your_pil_image, text=["What is that?"], **all_kwargs)
 
-        # passing directly any number of kwargs is also supported, but not recommended
+        # passing directly any number of kwargs flattened is also supported
 
-        processor(images=your_pil_image, text=["What is that?"], padding="do_not_pad)
+        all_kwargs = {"return_tensors": "pt", "crop_size": {"height": 214, "width": 214}, "padding": "max_length", "max_length": 76}
+        processor(images=your_pil_image, text=["What is that?"], **all_kwargs)
         ```
 
     Args:
@@ -132,10 +120,7 @@ class AlignProcessor(ProcessorMixin):
         images: ImageInput = None,
         audio=None,
         videos=None,
-        text_kwargs: AlignProcessorKwargs.text_kwargs = None,
-        images_kwargs: AlignProcessorKwargs.images_kwargs = None,
-        common_kwargs: AlignProcessorKwargs.common_kwargs = None,
-        **kwargs: AlignProcessorKwargs,
+        **kwargs: Unpack[AlignProcessorKwargs],
     ) -> BatchEncoding:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
@@ -171,9 +156,6 @@ class AlignProcessor(ProcessorMixin):
             raise ValueError("You must specify either text or images.")
         output_kwargs = self._merge_kwargs(
             AlignProcessorKwargs,
-            text_kwargs=text_kwargs,
-            images_kwargs=images_kwargs,
-            common_kwargs=common_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
