@@ -73,7 +73,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chinese(self):
         tokenizer = RoCBertBasicTokenizer()
 
-        self.assertListEqual(tokenizer.tokenize("ah\u535A\u63A8zz"), ["ah", "\u535A", "\u63A8", "zz"])
+        self.assertListEqual(tokenizer.tokenize("ah\u535a\u63a8zz"), ["ah", "\u535a", "\u63a8", "zz"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower(self):
@@ -82,7 +82,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["hello", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_false with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_false(self):
@@ -91,7 +91,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["h\u00e9llo"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_true with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_true(self):
@@ -100,7 +100,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_default with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_default(self):
@@ -109,7 +109,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hallo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00e9llo"), ["hello"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_no_lower with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_no_lower(self):
@@ -164,7 +164,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(_is_whitespace("\t"))
         self.assertTrue(_is_whitespace("\r"))
         self.assertTrue(_is_whitespace("\n"))
-        self.assertTrue(_is_whitespace("\u00A0"))
+        self.assertTrue(_is_whitespace("\u00a0"))
 
         self.assertFalse(_is_whitespace("A"))
         self.assertFalse(_is_whitespace("-"))
