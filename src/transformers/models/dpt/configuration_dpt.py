@@ -180,19 +180,20 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
+        if backbone_config is None and backbone is None:
+            logger.info("Initializing the config with a `BiT` backbone.")
+            backbone_config = {
+                "global_padding": "same",
+                "layer_type": "bottleneck",
+                "depths": [3, 4, 9],
+                "out_features": ["stage1", "stage2", "stage3"],
+                "embedding_dynamic_padding": True,
+            }
+            backbone_config = BitConfig(**backbone_config)
+
         use_autobackbone = False
         if self.is_hybrid:
-            if backbone_config is None and backbone is None:
-                logger.info("Initializing the config with a `BiT` backbone.")
-                backbone_config = {
-                    "global_padding": "same",
-                    "layer_type": "bottleneck",
-                    "depths": [3, 4, 9],
-                    "out_features": ["stage1", "stage2", "stage3"],
-                    "embedding_dynamic_padding": True,
-                }
-                backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, dict):
+            if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, PretrainedConfig):
@@ -208,18 +209,13 @@ class DPTConfig(PretrainedConfig):
             if readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
 
-        elif backbone_config is not None:
+        else:
             use_autobackbone = True
-
             if isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
-            self.backbone_config = backbone_config
-            self.backbone_featmap_shape = None
-            self.neck_ignore_stages = []
-        else:
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
