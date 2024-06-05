@@ -47,10 +47,6 @@ from .agent_types import handle_agent_inputs, handle_agent_outputs
 logger = logging.get_logger(__name__)
 
 
-if is_vision_available():
-    import PIL.Image
-    import PIL.ImageOps
-
 if is_torch_available():
     import torch
 
@@ -634,7 +630,7 @@ def launch_gradio_demo(tool_class: Tool):
         else:
             error_message = f"Input type '{input_type}' not supported."
             raise ValueError(error_message)
-        
+
     gradio_output = tool_class.output_type
     assert gradio_output in ["text", "image", "audio"], f"Output type '{gradio_output}' not supported."
 
