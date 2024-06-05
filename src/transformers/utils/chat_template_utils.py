@@ -15,7 +15,7 @@
 import inspect
 import json
 import re
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -33,7 +33,7 @@ args_split_re = re.compile(
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
-def _get_json_schema_type(param_type):
+def _get_json_schema_type(param_type: str) -> Dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -44,7 +44,7 @@ def _get_json_schema_type(param_type):
     return type_mapping.get(param_type, {"type": "object"})
 
 
-def _parse_type_hint(hint):
+def _parse_type_hint(hint: str) -> Dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
@@ -120,7 +120,7 @@ def _parse_type_hint(hint):
     raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
-def _convert_type_hints_to_json_schema(func):
+def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
     required = []
@@ -141,7 +141,7 @@ def _convert_type_hints_to_json_schema(func):
     return schema
 
 
-def parse_google_format_docstring(docstring):
+def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -174,7 +174,7 @@ def parse_google_format_docstring(docstring):
     return description, args_dict, returns
 
 
-def get_json_schema(func):
+def get_json_schema(func: Callable) -> Dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of

@@ -233,7 +233,7 @@ The sun.</s>
 
 From here, just continue training like you would with a standard language modelling task, using the `formatted_chat` column.
 
-## Extra inputs to chat templates
+## Advanced: Extra inputs to chat templates
 
 The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
 argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
@@ -246,7 +246,7 @@ we have some opinionated recommendations about what the names and formats of the
 described in the sections below. We encourage model authors to make their chat templates compatible with this format,
 to make it easy to transfer tool-calling code between models.
 
-## Tool use / function calling
+## Advanced: Tool use / function calling
 
 "Tool use" LLMs can choose to call functions as external tools before generating an answer. When passing tools
 to a tool-use model, you can simply pass a list of functions to the `tools` argument:
@@ -283,11 +283,12 @@ correctly as tools. Specifically, you should follow these rules:
 - Every argument must have a type hint
 - The function must have a docstring in the standard Google style (in other words, an initial function description  
   followed by an `Args:` block that describes the arguments, unless the function does not have any arguments. 
-  Do not include types in the `Args:` block - put them in the type hints in the function header instead.
+- Do not include types in the `Args:` block. In other words, write `a: The first number to multiply`, not
+  `a (int): The first number to multiply`. Type hints should go in the function header instead.
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
   because most tool-use models ignore them.
 
-### Passing tool results to the model
+### Advanced: Passing tool results to the model
 
 The sample code above is enough to list the available tools for your model, but what happens if it wants to actually use
 one? If that happens, you should:
@@ -299,7 +300,7 @@ one? If that happens, you should:
 
 Here is an example conversation, containing tool calls:
 
-# TODO example goes here
+# TODO example goes here after we update all the templates
 
 
 ### Advanced: Understanding tool schemas
