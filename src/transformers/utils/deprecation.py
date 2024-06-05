@@ -53,7 +53,7 @@ def deprecate_kwarg(
         additional_message (`Optional[str]`, *optional*):
             Additional message that will be appended to the default message.
 
-    Raises:        
+    Raises:
         ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True.
     """
 
