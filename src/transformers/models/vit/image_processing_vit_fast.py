@@ -139,7 +139,6 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             transforms.append(PILToTensor())
 
         elif image_type == ImageType.NUMPY:
-            # Do we want to permute the channels here?
             transforms.append(NumpyToTensor())
 
         if do_resize:
