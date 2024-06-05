@@ -36,7 +36,6 @@ _CONFIG_FOR_DOC = "Speech2Text2Config"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-wav2vec2-large-en-de"
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Speech2Text2
 class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -107,7 +106,6 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text2
 class Speech2Text2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

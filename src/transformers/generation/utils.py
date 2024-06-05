@@ -42,6 +42,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
+from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     is_accelerate_available,
@@ -722,6 +723,7 @@ class GenerationMixin:
     def _get_logits_warper(
         self,
         generation_config: GenerationConfig,
+        device: str,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsWarper`] instances
@@ -764,7 +766,9 @@ class GenerationMixin:
             )
         if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
             warpers.append(
-                EtaLogitsWarper(epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep)
+                EtaLogitsWarper(
+                    epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
+                )
             )
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -817,7 +821,8 @@ class GenerationMixin:
         ):
             processors.append(
                 EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
+                    penalty=generation_config.encoder_repetition_penalty,
+                    encoder_input_ids=encoder_input_ids,
                 )
             )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
@@ -829,18 +834,30 @@ class GenerationMixin:
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
             processors.append(
-                EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
+                EncoderNoRepeatNGramLogitsProcessor(
+                    generation_config.encoder_no_repeat_ngram_size,
+                    encoder_input_ids,
+                )
             )
         if generation_config.bad_words_ids is not None:
             processors.append(
-                NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
+                NoBadWordsLogitsProcessor(
+                    generation_config.bad_words_ids,
+                    generation_config.eos_token_id,
+                )
             )
         if (
             generation_config.min_length is not None
             and generation_config.eos_token_id is not None
             and generation_config.min_length > 0
         ):
-            processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+            processors.append(
+                MinLengthLogitsProcessor(
+                    generation_config.min_length,
+                    generation_config.eos_token_id,
+                    device=device,
+                )
+            )
         if (
             generation_config.min_new_tokens is not None
             and generation_config.eos_token_id is not None
@@ -848,20 +865,32 @@ class GenerationMixin:
         ):
             processors.append(
                 MinNewTokensLengthLogitsProcessor(
-                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                    input_ids_seq_length,
+                    generation_config.min_new_tokens,
+                    generation_config.eos_token_id,
+                    device=device,
                 )
             )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
-                    prefix_allowed_tokens_fn, generation_config.num_beams // generation_config.num_beam_groups
+                    prefix_allowed_tokens_fn,
+                    generation_config.num_beams // generation_config.num_beam_groups,
                 )
             )
         if generation_config.forced_bos_token_id is not None:
-            processors.append(ForcedBOSTokenLogitsProcessor(generation_config.forced_bos_token_id))
+            processors.append(
+                ForcedBOSTokenLogitsProcessor(
+                    generation_config.forced_bos_token_id,
+                )
+            )
         if generation_config.forced_eos_token_id is not None:
             processors.append(
-                ForcedEOSTokenLogitsProcessor(generation_config.max_length, generation_config.forced_eos_token_id)
+                ForcedEOSTokenLogitsProcessor(
+                    generation_config.max_length,
+                    generation_config.forced_eos_token_id,
+                    device=device,
+                )
             )
         if generation_config.remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
@@ -874,7 +903,12 @@ class GenerationMixin:
                 )
             )
         if generation_config.suppress_tokens is not None:
-            processors.append(SuppressTokensLogitsProcessor(generation_config.suppress_tokens))
+            processors.append(
+                SuppressTokensLogitsProcessor(
+                    generation_config.suppress_tokens,
+                    device=device,
+                )
+            )
         if generation_config.begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = (
@@ -886,7 +920,11 @@ class GenerationMixin:
                 # generation starts after the last token that is forced
                 begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
-                SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
+                SuppressTokensAtBeginLogitsProcessor(
+                    generation_config.begin_suppress_tokens,
+                    begin_index,
+                    device=device,
+                )
             )
         if generation_config.forced_decoder_ids is not None:
             # TODO(Sanchit): deprecate in v4.40 by removing this logic
@@ -1367,18 +1405,15 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        if cache_implementation == "sliding_window":
+            max_cache_len = min(self.config.sliding_window, max_cache_len)
+
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size < max_batch_size
+            or self._cache.max_batch_size != max_batch_size
+            or self._cache.max_cache_len < max_cache_len
         )
-        if cache_implementation == "sliding_window":
-            need_new_cache = need_new_cache or (
-                self._cache.sliding_window_size < self._cache.model_sliding_window_size
-                and max_cache_len > self._cache.max_cache_len
-            )
-        elif cache_implementation == "static":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
@@ -1581,6 +1616,8 @@ class GenerationMixin:
             else:
                 synced_gpus = False
 
+        tokenizer = kwargs.pop("tokenizer", None)
+
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
@@ -1642,6 +1679,9 @@ class GenerationMixin:
             )
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
+
+        if generation_config.token_healing:
+            input_ids = self.heal_tokens(input_ids, tokenizer)
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -1766,7 +1806,12 @@ class GenerationMixin:
 
             # 12. prepare logits warper (if `do_sample` is `True`)
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(
+                    generation_config,
+                    device=input_ids.device,
+                )
+                if generation_config.do_sample
+                else None
             )
 
             # 13. run assisted generate
@@ -1799,7 +1844,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1825,7 +1872,9 @@ class GenerationMixin:
         elif generation_mode in (GenerationMode.BEAM_SAMPLE, GenerationMode.BEAM_SEARCH):
             # 11. prepare logits warper
             prepared_logits_warper = (
-                self._get_logits_warper(generation_config) if generation_config.do_sample else None
+                self._get_logits_warper(generation_config, device=input_ids.device)
+                if generation_config.do_sample
+                else None
             )
 
             # 12. prepare beam search scorer
@@ -1978,6 +2027,75 @@ class GenerationMixin:
         elif this_peer_finished:
             return False
         return True
+
+    def heal_tokens(
+        self, input_ids: torch.LongTensor, tokenizer: Optional["PreTrainedTokenizerBase"] = None
+    ) -> torch.LongTensor:
+        r"""
+        Generates sequences of token ids for models with a language modeling head.
+        Parameters:
+            input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
+            tokenizer (`PreTrainedTokenizerBase`, *optional*): The tokenizer used to decode the input ids.
+        Return:
+            `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
+        """
+        if tokenizer is None:
+            raise ValueError(
+                " When generating with token healing, you must pass the model's tokenizer to the `tokenizer` "
+                "argument of `generate`."
+            )
+
+        bos_token_id, pad_token_id = tokenizer.bos_token_id, tokenizer.pad_token_id
+        vocab_trie = ExtensionsTrie(tokenizer.get_vocab())
+        generation_config = GenerationConfig(max_new_tokens=1, pad_token_id=pad_token_id)
+
+        # assumption: leading/trailing whitespace is not meaningful, so the prompts are
+        # stripped before re-tokenizing to desensitize generation to whitespace artefacts
+        prompts = [p.strip() for p in tokenizer.batch_decode(input_ids, skip_special_tokens=True)]
+        input_ids = tokenizer(
+            prompts,
+            return_tensors="pt",
+            padding=True,
+        ).input_ids.to(input_ids.device)
+
+        # replace bos with pad to not condition healing on it
+        input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
+
+        tail_ids = input_ids[:, -1].tolist()
+        space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
+        # tail tokens are used for a prefix search, thus, whitespaces are replaced with
+        # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
+        tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+
+        for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
+            batch_ids = input_ids[batch_idx]
+            if torch.all(batch_ids == pad_token_id).item():
+                continue  # skip empty sequences (all pad ids)
+
+            # apply bias for alternatives (extensions) to the tail token
+            seq_bias = {(alt_tok,): 10.0 for alt_tok in vocab_trie.values(prefix=tail_tok)}
+            if len(seq_bias) == 1:
+                continue  # skip if there are no token alternatives to heal with
+
+            # slightly favor original token to limit aggressive healing e.g. 'http' -> 'https'
+            seq_bias[(tail_id,)] += 1.0
+            generation_config.update(sequence_bias=seq_bias)
+
+            trimmed_ids = batch_ids[:-1]
+            # if the prompt is a single (non-pad) token, regenerate from bos
+            if len(batch_ids[batch_ids != pad_token_id]) == 1:
+                trimmed_ids[-1] = bos_token_id
+
+            input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=generation_config)
+
+        return input_ids
+
+    def contrastive_search(self, *args, **kwargs):
+        logger.warning_once(
+            "Calling `contrastive_search` directly is deprecated and will be removed in v4.41. Use `generate` or a "
+            "custom generation loop instead.",
+        )
+        return self._contrastive_search(*args, **kwargs)
 
     @torch.no_grad()
     def _contrastive_search(

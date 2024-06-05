@@ -355,3 +355,28 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         run_command(self._launch_args + testargs)
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["test_map"], 0.10)
+
+    @slow
+    @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
+    def test_run_instance_segmentation_no_trainer(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            {self.examples_dir}/pytorch/instance-segmentation/run_instance_segmentation_no_trainer.py
+            --model_name_or_path qubvel-hf/finetune-instance-segmentation-ade20k-mini-mask2former
+            --output_dir {tmp_dir}
+            --dataset_name qubvel-hf/ade20k-nano
+            --do_reduce_labels
+            --image_height 256
+            --image_width 256
+            --num_train_epochs 1
+            --per_device_train_batch_size 2
+            --per_device_eval_batch_size 1
+            --seed 1234
+        """.split()
+
+        run_command(self._launch_args + testargs)
+        result = get_results(tmp_dir)
+        self.assertGreaterEqual(result["test_map"], 0.1)

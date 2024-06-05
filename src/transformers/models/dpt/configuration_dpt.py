@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
@@ -179,9 +180,6 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
         use_autobackbone = False
         if self.is_hybrid:
             if backbone_config is None and backbone is None:
@@ -226,11 +224,13 @@ class DPTConfig(PretrainedConfig):
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
-        if use_autobackbone and backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
