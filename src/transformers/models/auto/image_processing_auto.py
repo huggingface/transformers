@@ -467,7 +467,7 @@ class AutoImageProcessor:
             if slow_image_processor_class is not None:
                 raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
             warnings.warn(
-                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use slow_image_processor_class, or fast_image_processor_class instead",
+                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
                 FutureWarning,
             )
             slow_image_processor_class = image_processor_class
