@@ -291,7 +291,7 @@ def get_json_schema(func: Callable) -> Dict:
     if (return_dict := json_schema["properties"].pop("return", None)) is not None:
         if return_doc is not None:  # We allow a missing return docstring since most templates ignore it
             return_dict["description"] = return_doc
-    for arg in json_schema["properties"]:
+    for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise ValueError(
                 f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
@@ -299,9 +299,9 @@ def get_json_schema(func: Callable) -> Dict:
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            json_schema["properties"][arg]["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            schema["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
-        json_schema["properties"][arg]["description"] = desc
+        schema["description"] = desc
 
     output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
