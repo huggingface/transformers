@@ -3435,11 +3435,10 @@ class Trainer:
                 is_main_process=self.args.should_save,
                 save_function=xm.save,
                 safe_serialization=self.args.save_safetensors,
-                state_dict=xm._maybe_convert_to_cpu(model.state_dict())
+                state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
-
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
