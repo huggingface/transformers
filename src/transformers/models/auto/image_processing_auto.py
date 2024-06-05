@@ -151,6 +151,8 @@ for model_type, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
     # If the fast image processor is not defined, or torchvision is not available, we set it to None
     if not fast_image_processor_class or fast_image_processor_class[0] is None or not is_torchvision_available():
         fast_image_processor_class = None
+    else:
+        fast_image_processor_class = fast_image_processor_class[0]
 
     IMAGE_PROCESSOR_MAPPING_NAMES[model_type] = (slow_image_processor_class, fast_image_processor_class)
 
