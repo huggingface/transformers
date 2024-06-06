@@ -447,10 +447,9 @@ class MambaIntegrationTests(unittest.TestCase):
 
         model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16)
         model.to(device)
-        model.config.use_cache = True
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
-        out = model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=10)
         output_sentence = tokenizer.decode(out[0, :])
         self.assertEqual(output_sentence, "Hey how are you doing?\n\nI'm so glad you're here.")
 

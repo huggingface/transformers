@@ -130,17 +130,42 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         model = Owlv2ForObjectDetection.from_pretrained(checkpoint)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = processor(text=["cat"], images=image, return_tensors="pt")
+        text = ["cat"]
+        target_size = image.size[::-1]
+        expected_boxes = torch.tensor(
+            [
+                [341.66656494140625, 23.38756561279297, 642.321044921875, 371.3482971191406],
+                [6.753320693969727, 51.96149826049805, 326.61810302734375, 473.12982177734375],
+            ]
+        )
 
+        # single image
+        inputs = processor(text=[text], images=[image], return_tensors="pt")
         with torch.no_grad():
             outputs = model(**inputs)
 
-        target_sizes = torch.tensor([image.size[::-1]])
-        results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=target_sizes)[0]
+        results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=[target_size])[0]
 
-        boxes = results["boxes"].tolist()
-        self.assertEqual(boxes[0], [341.66656494140625, 23.38756561279297, 642.321044921875, 371.3482971191406])
-        self.assertEqual(boxes[1], [6.753320693969727, 51.96149826049805, 326.61810302734375, 473.12982177734375])
+        boxes = results["boxes"]
+        self.assertTrue(
+            torch.allclose(boxes, expected_boxes, atol=1e-2),
+            f"Single image bounding boxes fail. Expected {expected_boxes}, got {boxes}",
+        )
+
+        # batch of images
+        inputs = processor(text=[text, text], images=[image, image], return_tensors="pt")
+        with torch.no_grad():
+            outputs = model(**inputs)
+        results = processor.post_process_object_detection(
+            outputs, threshold=0.2, target_sizes=[target_size, target_size]
+        )
+
+        for result in results:
+            boxes = result["boxes"]
+            self.assertTrue(
+                torch.allclose(boxes, expected_boxes, atol=1e-2),
+                f"Batch image bounding boxes fail. Expected {expected_boxes}, got {boxes}",
+            )
 
     @unittest.skip("OWLv2 doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):

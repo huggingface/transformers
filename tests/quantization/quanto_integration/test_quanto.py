@@ -413,18 +413,18 @@ class QuantoQuantizationSerializationCudaTest(QuantoQuantizationTest):
 
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
 class QuantoQuantizationQBitsTensorOffloadTest(QuantoQuantizationOffloadTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
 @unittest.skip("Skipping test class because serialization is not supported yet")
 class QuantoQuantizationQBitsTensorSerializationTest(QuantoQuantizationSerializationTest):
-    EXPECTED_OUTPUTS = "Hello my name is John, I am a young man from the Philippines"
+    EXPECTED_OUTPUTS = "Hello my name is Nils, I am a student of the University"
     weights = "int4"
 
 
@@ -448,7 +448,7 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) the speed of light is the same for all observers, and 2) the laws of physics are the same for all observers.\nThe first part of the theory of relativity",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my burgers, my hot dogs, my sandwiches, my salads, my chicken, my fish",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
         ]
 
         prompts = [

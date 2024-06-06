@@ -118,8 +118,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
-            fast_tokenizer = convert_gguf_tokenizer(tokenizer_dict)
+            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            architecture = gguf_param["config"]["model_type"]
+            tokenizer_dict = gguf_param["tokenizer"]
+            fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
@@ -162,6 +164,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+
+        # Set the splitting mode for special tokens for the tokenizer to be used throughout the class.
+        self._tokenizer.encode_special_tokens = self.split_special_tokens
 
         # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
@@ -494,6 +499,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
     ) -> BatchEncoding:
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
             raise TypeError(
@@ -508,6 +514,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
+
+        if self._tokenizer.encode_special_tokens != split_special_tokens:
+            self._tokenizer.encode_special_tokens = split_special_tokens
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -578,6 +587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
         batched_input = [(text, text_pair)] if text_pair else [text]
@@ -598,6 +608,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
             verbose=verbose,
+            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 
