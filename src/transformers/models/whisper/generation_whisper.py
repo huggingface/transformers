@@ -908,7 +908,7 @@ class WhisperGenerationMixin:
             if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']:
                 outputs[key] = tuple(torch.stack([v[key][i] for v in seek_outputs]) for i in range(len(seek_outputs[0][key])))
             if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
-                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
+                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
             if key == 'past_keys': 
                 outputs[key] = None 
 
