@@ -795,6 +795,10 @@ _import_structure = {
     "models.xmod": ["XmodConfig"],
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
+    "models.yuan2_m32": [
+        "Yuan2M32Config",
+        "YuanTokenizer",
+    ],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -3527,6 +3531,14 @@ else:
             "YosoPreTrainedModel",
         ]
     )
+    _import_structure["models.yuan2_m32"].extend(
+        [
+            "YuanForCausalLM",
+            "YuanForSequenceClassification",
+            "YuanModel",
+            "YuanPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -5423,6 +5435,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
+    from .models.yuan2_m32 import Yuan2M32Config
 
     # Pipelines
     from .pipelines import (
@@ -7688,7 +7701,12 @@ if TYPE_CHECKING:
             YosoModel,
             YosoPreTrainedModel,
         )
-
+        from .models.yuan2_m32 import (
+            YuanForCausalLM,
+            YuanForSequenceClassification,
+            YuanModel,
+            YuanPreTrainedModel,
+        )
         # Optimization
         from .optimization import (
             Adafactor,

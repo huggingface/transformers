@@ -265,6 +265,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("yuan2_m32", "YuanModel"),
     ]
 )
 
@@ -508,6 +509,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlnet", "XLNetLMHeadModel"),
         ("xmod", "XmodForCausalLM"),
+        ("yuan2_m32", "YuanForCausalLM"),
     ]
 )
 

@@ -259,4 +259,5 @@ from . import (
     xmod,
     yolos,
     yoso,
+    yuan2_m32,
 )

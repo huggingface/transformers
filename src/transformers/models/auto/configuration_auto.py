@@ -286,6 +286,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("yuan2_m32", "Yuan2M32Config"),
     ]
 )
 
@@ -578,6 +579,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("yuan2_m32", "Yuan2M32"),
     ]
 )
 
