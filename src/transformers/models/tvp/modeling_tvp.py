@@ -143,8 +143,18 @@ class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.backbone = load_backbone(config)
+
+        if config.backbone_config is not None:
+            in_channels = config.backbone_config.hidden_sizes[-1]
+        elif hasattr(self.backbone, "config") and hasattr(self.backbone.config, "hidden_sizes"):
+            in_channels = self.backbone.config.hidden_sizes[-1]
+        elif hasattr(self.backbone, "config") and hasattr(self.backbone.config, "hidden_size"):
+            in_channels = self.backbone.config.hidden_size
+        else:
+            raise ValueError("Backbone config not found")
+
         self.grid_encoder_conv = nn.Conv2d(
-            config.backbone_config.hidden_sizes[-1],
+            in_channels,
             config.hidden_size,
             kernel_size=3,
             stride=1,

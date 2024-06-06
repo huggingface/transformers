@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import ResNetConfig, TvpConfig
-from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers import ResNetConfig, TimmBackboneConfig, TvpConfig
+from transformers.testing_utils import require_timm, require_torch, require_vision, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
@@ -210,6 +210,39 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         delta=1.0,
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    @require_timm
+    def test_backbone_selection(self):
+        def _validate_backbone_init():
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                # Confirm out_indices propogated to backbone
+                if model.__class__.__name__ == "TvpModel":
+                    self.assertEqual(len(model.vision_model.backbone.out_indices), 2)
+                elif model.__class__.__name__ == "TvpForVideoGrounding":
+                    self.assertEqual(len(model.model.vision_model.backbone.out_indices), 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Force load_backbone path
+        config.is_hybrid = False
+
+        # We load through configs, as the modeling file assumes config.backbone_config is always set
+        config.use_pretrained_backbone = False
+        config.backbone_kwargs = None
+
+        # Load a timm backbone
+        # We hack adding hidden_sizes to the config to test the backbone loading
+        backbone_config = TimmBackboneConfig("resnet18", out_indices=[-2, -1], hidden_sizes=[64, 128])
+        config.backbone_config = backbone_config
+        _validate_backbone_init()
+
+        # Load a HF backbone
+        backbone_config = ResNetConfig.from_pretrained("facebook/dinov2-small", out_indices=[-2, -1])
+        config.backbone_config = backbone_config
+        _validate_backbone_init()
 
 
 # We will verify our results on an image of cute cats
