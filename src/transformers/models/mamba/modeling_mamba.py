@@ -674,9 +674,13 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return model_kwargs
 
     def prepare_inputs_for_generation(
-        self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        inputs_embeds=None,
+        use_cache=None,
+        cache_params: Optional[MambaCache] = None,
+        **kwargs,
     ):
-        use_cache = kwargs.get("use_cache", None)
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         if use_cache and self.training and self.gradient_checkpointing:
             use_cache = False
@@ -697,7 +701,12 @@ class MambaForCausalLM(MambaPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}
 
-        model_inputs["cache_params"] = cache_params
+        model_inputs.update(
+            {
+                "cache_params": cache_params,
+                "use_cache": use_cache,
+            }
+        )
         return model_inputs
 
     @add_start_docstrings_to_model_forward(MAMBA_INPUTS_DOCSTRING)
