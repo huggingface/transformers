@@ -879,12 +879,13 @@ class GemmaModel(GemmaPreTrainedModel):
 
         if cache_info is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_info = torch.arange(
+            cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
+            cache_info = CacheInfo(position=cache_position, length=int(cache_position[-1]) + 1)
 
         if position_ids is None:
-            position_ids = cache_info.unsqueeze(0)
+            position_ids = cache_info.position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_info, past_key_values, output_attentions
@@ -1013,7 +1014,7 @@ class GemmaModel(GemmaPreTrainedModel):
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_info.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_info.position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
@@ -1174,7 +1175,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                past_length = cache_info[0] if cache_info is not None else past_key_values.get_seq_length()
+                past_length = cache_info.position[0] if cache_info is not None else past_key_values.get_seq_length()
                 max_cache_length = (
                     torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
                     if past_key_values.get_max_length() is not None
