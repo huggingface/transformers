@@ -183,7 +183,6 @@ class DPTConfig(PretrainedConfig):
         use_autobackbone = False
         if self.is_hybrid:
             if backbone_config is None:
-                logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = {
                     "global_padding": "same",
                     "layer_type": "bottleneck",
@@ -191,7 +190,7 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-                backbone_config = BitConfig(**backbone_config)
+
             if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
