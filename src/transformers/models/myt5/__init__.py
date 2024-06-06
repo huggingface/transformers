@@ -14,50 +14,16 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-)
+from typing import TYPE_CHECKING
+
+from ...utils import _LazyModule
 
 
-_import_structure = {"configuration_myt5": ["MyT5Config", "MyT5OnnxConfig"]}
+_import_structure = {"tokenization_myt5": ["MyT5Tokenizer"]}
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_myt5"] = ["MyT5Tokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_myt5_fast"] = ["MyT5Tokenizer"]
 
 if TYPE_CHECKING:
-    from .configuration_myt5 import MyT5Config, MyT5OnnxConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_myt5 import MyT5Tokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_myt5_fast import MyT5Tokenizer
+    from .tokenization_myt5 import MyT5Tokenizer
 
 else:
     import sys

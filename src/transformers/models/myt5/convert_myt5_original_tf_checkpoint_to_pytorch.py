@@ -16,7 +16,7 @@
 
 import argparse
 
-from transformers import MyT5Config, MyT5ForConditionalGeneration, load_tf_weights_in_myt5
+from transformers import T5Config, T5ForConditionalGeneration, load_tf_weights_in_t5
 from transformers.utils import logging
 
 
@@ -25,12 +25,12 @@ logging.set_verbosity_info()
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = MyT5Config.from_json_file(config_file)
+    config = T5Config.from_json_file(config_file)
     print(f"Building PyTorch model from configuration: {config}")
-    model = MyT5ForConditionalGeneration(config)
+    model = T5ForConditionalGeneration(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_myt5(model, config, tf_checkpoint_path)
+    load_tf_weights_in_t5(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
