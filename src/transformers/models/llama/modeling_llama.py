@@ -1236,6 +1236,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         inputs_embeds=None,
         cache_position=None,
         use_cache=True,
+        num_logits_to_keep=None,
         **kwargs,
     ):
         past_length = 0
@@ -1298,7 +1299,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "num_logits_to_keep": kwargs["num_logits_to_keep"] if "num_logits_to_keep" in kwargs else None,
+                "num_logits_to_keep": num_logits_to_keep,
             }
         )
         return model_inputs
