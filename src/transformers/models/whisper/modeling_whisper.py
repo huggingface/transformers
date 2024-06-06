@@ -309,12 +309,10 @@ class WhisperAttention(nn.Module):
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and (
                 past_key_value is not None
-                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
-                or past_key_value.get_seq_length(self.layer_idx)
+                and (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
             ):
-                # reuse k,v, cross_attentions
-                key_states = past_key_value.key_cache[self.layer_idx]
-                value_states = past_key_value.value_cache[self.layer_idx]
+                key_states = self._shape(self.k_proj(current_states), -1, bsz)
+                value_states = self._shape(self.v_proj(current_states), -1, bsz)
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
@@ -1883,6 +1881,9 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             )
         elif use_cache:
             cache_position = cache_position[-decoder_input_ids.shape[1]:]
+
+        print(f"decoder_input_ids.shape: {decoder_input_ids.shape}")
+        print(f"decoder_input_ids.strides: {decoder_input_ids.stride()}")
 
         return {
             "encoder_outputs": encoder_outputs,
