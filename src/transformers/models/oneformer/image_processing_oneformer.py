@@ -426,7 +426,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
-    @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
+    @filter_out_non_signature_kwargs(extra=["max_size", "metadata", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
         do_resize: bool = True,
