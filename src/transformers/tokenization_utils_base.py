@@ -1853,6 +1853,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise TemplateError(message)
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.policies["json.dumps_kwargs"]["ensure_ascii"] = False
         jinja_env.globals["raise_exception"] = raise_exception
         return jinja_env.from_string(chat_template)
 
@@ -2284,11 +2285,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             # We keep this new value and ignore the one stored in the special_tokens_map_file
                             continue
                         if isinstance(value, dict):
-                            value = AddedToken(**value, special=True)
+                            value["special"] = True
+                            value = AddedToken(**value)
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             additional_special_tokens = init_kwargs.pop("additional_special_tokens", []) or []
                             for token in value:
-                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
+                                if isinstance(token, dict):
+                                    token["special"] = True
+                                    token = AddedToken(**token)
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
                             value = additional_special_tokens

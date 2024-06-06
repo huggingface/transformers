@@ -63,7 +63,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
-                "and the latest version of bitsandbytes: `pip install -i https://pypi.org/simple/ bitsandbytes`"
+                "and the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
