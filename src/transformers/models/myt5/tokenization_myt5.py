@@ -113,6 +113,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
+        vocab_file (`str`): The file containing the byte rewriting rules.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
