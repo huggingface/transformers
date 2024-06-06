@@ -2651,7 +2651,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
-                for module_name in state_dict.keys():
+                for module_name in shard:
                     module = module_map[module_name]
                     # update state dict with onloaded parameters
                     state_dict = get_state_dict_from_offload(module, module_name, state_dict)
