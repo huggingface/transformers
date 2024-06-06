@@ -707,6 +707,7 @@ _import_structure = {
     "models.swinv2": ["Swinv2Config"],
     "models.switch_transformers": ["SwitchTransformersConfig"],
     "models.t5": ["T5Config"],
+    "models.myt5": ["MyT5Config"],
     "models.table_transformer": ["TableTransformerConfig"],
     "models.tapas": [
         "TapasConfig",
@@ -966,6 +967,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.myt5"].append("MyT5Tokenizer")
     _import_structure["models.udop"].append("UdopTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -1046,6 +1048,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.myt5"].append("MyT5Tokenizer")
     _import_structure["models.udop"].append("UdopTokenizerFast")
     _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
@@ -3189,6 +3192,18 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
+    _import_structure["models.myt5"].extend(
+        [
+            "MyT5EncoderModel",
+            "MyT5ForConditionalGeneration",
+            "MyT5ForQuestionAnswering",
+            "MyT5ForSequenceClassification",
+            "MyT5ForTokenClassification",
+            "MyT5Model",
+            "MyT5PreTrainedModel",
+            "load_tf_weights_in_myt5",
+        ]
+    )
     _import_structure["models.table_transformer"].extend(
         [
             "TableTransformerForObjectDetection",
@@ -4157,6 +4172,14 @@ else:
             "TFT5PreTrainedModel",
         ]
     )
+    _import_structure["models.myt5"].extend(
+        [
+            "TFMyT5EncoderModel",
+            "TFMyT5ForConditionalGeneration",
+            "TFMyT5Model",
+            "TFMyT5PreTrainedModel",
+        ]
+    )
     _import_structure["models.tapas"].extend(
         [
             "TFTapasForMaskedLM",
@@ -4578,6 +4601,14 @@ else:
             "FlaxT5ForConditionalGeneration",
             "FlaxT5Model",
             "FlaxT5PreTrainedModel",
+        ]
+    )
+    _import_structure["models.myt5"].extend(
+        [
+            "FlaxMyT5EncoderModel",
+            "FlaxMyT5ForConditionalGeneration",
+            "FlaxMyT5Model",
+            "FlaxMyT5PreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
@@ -5318,6 +5349,7 @@ if TYPE_CHECKING:
         SwitchTransformersConfig,
     )
     from .models.t5 import T5Config
+    from .models.myt5 import MyT5Config
     from .models.table_transformer import (
         TableTransformerConfig,
     )
@@ -5594,6 +5626,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
+        from .models.myt5 import MyT5Tokenizer
         from .models.udop import UdopTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -5667,6 +5700,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.myt5 import MyT5Tokenizer
         from .models.udop import UdopTokenizerFast
         from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
@@ -7428,6 +7462,16 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
+        from .models.myt5 import (
+            MyT5EncoderModel,
+            MyT5ForConditionalGeneration,
+            MyT5ForQuestionAnswering,
+            MyT5ForSequenceClassification,
+            MyT5ForTokenClassification,
+            MyT5Model,
+            MyT5PreTrainedModel,
+            load_tf_weights_in_myt5,
+        )
         from .models.table_transformer import (
             TableTransformerForObjectDetection,
             TableTransformerModel,
@@ -8218,6 +8262,12 @@ if TYPE_CHECKING:
             TFT5Model,
             TFT5PreTrainedModel,
         )
+        from .models.myt5 import (
+            TFMyT5EncoderModel,
+            TFMyT5ForConditionalGeneration,
+            TFMyT5Model,
+            TFMyT5PreTrainedModel,
+        )
         from .models.tapas import (
             TFTapasForMaskedLM,
             TFTapasForQuestionAnswering,
@@ -8569,6 +8619,12 @@ if TYPE_CHECKING:
             FlaxT5ForConditionalGeneration,
             FlaxT5Model,
             FlaxT5PreTrainedModel,
+        )
+        from .models.myt5 import (
+            FlaxMyT5EncoderModel,
+            FlaxMyT5ForConditionalGeneration,
+            FlaxMyT5Model,
+            FlaxMyT5PreTrainedModel,
         )
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
