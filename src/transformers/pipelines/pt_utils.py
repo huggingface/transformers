@@ -283,10 +283,10 @@ class PipelinePackIterator(PipelineIterator):
                 self._loader_batch_index = 0
                 while self._loader_batch_index < self.loader_batch_size:
                     item = self.loader_batch_item()
-                    is_last = item.pop("is_last")      
+                    is_last = item.pop("is_last")
                     #Added exception for output_scores, i.e, Whisper output logits as it has no correlation with batch size
                     if 'output_scores' in item.keys():
-                        item['output_scores'] = processed['output_scores']       
+                        item['output_scores'] = processed['output_scores']
                     accumulator.append(item)
                     if is_last:
                         return accumulator

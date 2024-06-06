@@ -523,7 +523,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = stride
                 if 'output_scores' in generate_kwargs.keys():
                     out["output_scores"] = tokens['scores']
-                
 
         else:
             inputs = {
