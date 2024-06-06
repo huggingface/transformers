@@ -1038,6 +1038,9 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _set_return_timestamps(return_timestamps, is_shortform, generation_config):
+        if return_timestamps is None and hasattr(generation_config, "return_timestamps"):
+            return_timestamps = generation_config.return_timestamps
+
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
