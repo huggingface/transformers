@@ -971,10 +971,10 @@ class WhisperGenerationMixin:
             batch_size = len(batch_idx_map)
             cur_bsz = len(batch_idx_map)
             do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
-            input_features = torch.stack([input_features[i // generation_config.num_return_sequences]  for i in range(len(batch_idx_map))]).to(input_features.device)
-            seek = torch.tensor([seek[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            max_frames = torch.tensor([max_frames[i // generation_config.num_return_sequences] for i in range(len(batch_idx_map))])
-            init_tokens = torch.tensor([init_tokens[i //generation_config.num_return_sequences] for i in range(len(batch_idx_map))]).unsqueeze(1).to(init_tokens.device)
+            input_features = input_features.repeat_interleave(generation_config.num_return_sequences, dim=0)
+            seek = seek.repeat_interleave(generation_config.num_return_sequences, dim=0)
+            max_frames = max_frames.repeat_interleave(generation_config.num_return_sequences, dim=0)
+            init_tokens = init_tokens.repeat_interleave(generation_config.num_return_sequences, dim=0)
             generation_config.num_return_sequences = 1
         else: 
             cur_bsz = batch_size
