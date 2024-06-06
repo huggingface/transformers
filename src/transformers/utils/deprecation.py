@@ -36,29 +36,58 @@ def deprecate_kwarg(
     raise_if_both_names: bool = False,
     additional_message: Optional[str] = None,
 ):
-    """Function or method decorator to notify user about deprecated keyword argument and replace it with new name if specified.
-    If new name is specified, deprecated keyword argument will be replaced with it.
-    If new name is not specified, only notification will be shown.
-    If raise_error is set to True, ValueError will be raised when deprecated keyword argument is used.
+    """
+    Function or method decorator to notify users about deprecated keyword arguments, replacing them with a new name if specified.
+
+    This decorator allows you to:
+    - Notify users when a keyword argument is deprecated.
+    - Automatically replace deprecated keyword arguments with new ones.
+    - Raise an error if deprecated arguments are used, depending on the specified conditions.
 
     Parameters:
         old_name (`str`):
             Name of the deprecated keyword argument.
         version (`str`):
-            Version when the keyword argument was (will be) deprecated.
+            The version in which the keyword argument was (or will be) deprecated.
         new_name (`Optional[str]`, *optional*):
-            New name of the keyword argument.
+            The new name for the deprecated keyword argument. If specified, the deprecated keyword argument will be replaced with this new name.
         warn_if_greater_or_equal_version (`bool`, *optional*, defaults to `False`):
-            Weather to show warning if current `transformers` version is greater or equal to the deprecated version.
+            Whether to show warning if current `transformers` version is greater or equal to the deprecated version.
         raise_if_greater_or_equal_version (`bool`, *optional*, defaults to `False`):
-            Weather to raise `ValueError` if current `transformers` version is greater or equal to the deprecated version.
+            Whether to raise `ValueError` if current `transformers` version is greater or equal to the deprecated version.
         raise_if_both_names (`bool`, *optional*, defaults to `False`):
-            Weather to raise `ValueError` if both deprecated and new keyword arguments are set.
+            Whether to raise `ValueError` if both deprecated and new keyword arguments are set.
         additional_message (`Optional[str]`, *optional*):
-            Additional message that will be appended to the default message.
+            An additional message to append to the default deprecation message.
 
     Raises:
-        ValueError: raised when deprecated keyword argument is used and `raise_error` is set to True.
+        ValueError:
+            If raise_if_greater_or_equal_version is True and the current version is greater than or equal to the deprecated version, or if raise_if_both_names is True and both old and new keyword arguments are provided.
+
+    Returns:
+        Callable:
+            A wrapped function that handles the deprecated keyword arguments according to the specified parameters.
+
+    Example usage with renaming argument:
+
+        ```python
+        @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="6.0.0")
+        def my_function(do_reduce_labels):
+            print(do_reduce_labels)
+
+        my_function(reduce_labels=True)  # Will show a deprecation warning and use do_reduce_labels=True
+        ```
+
+    Example usage without renaming argument:
+
+        ```python
+        @deprecate_kwarg("max_size", version="6.0.0")
+        def my_function(max_size):
+            print(max_size)
+
+        my_function(max_size=1333)  # Will show a deprecation warning
+        ```
+
     """
 
     deprecated_version = packaging.version.parse(version)
@@ -106,7 +135,8 @@ def deprecate_kwarg(
             if minimum_action == Action.RAISE:
                 raise ValueError(message)
             elif minimum_action == Action.NOTIFY:
-                warnings.warn(message, DeprecationWarning)
+                # DeprecationWarning is ignored by default, so we use FutureWarning instead
+                warnings.warn(message, FutureWarning, stacklevel=2)
 
             return func(*args, **kwargs)
 

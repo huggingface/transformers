@@ -754,8 +754,32 @@ def infer_framework(model_class):
 
 
 def filter_out_non_signature_kwargs(extra: Optional[list] = None):
-    """Filter out named arguments that are not in the function signature."""
+    """
+    Decorator to filter out named arguments that are not in the function signature.
 
+    This decorator ensures that only the keyword arguments that match the function's signature, or are specified in the
+    `extra` list, are passed to the function. Any additional keyword arguments are filtered out and a warning is issued.
+
+    Parameters:
+        extra (`Optional[list]`, *optional*):
+            A list of extra keyword argument names that are allowed even if they are not in the function's signature.
+
+    Returns:
+        Callable:
+            A decorator that wraps the function and filters out invalid keyword arguments.
+
+    Example usage:
+
+        ```python
+        @filter_out_non_signature_kwargs(extra=["allowed_extra_arg"])
+        def my_function(arg1, arg2, **kwargs):
+            print(arg1, arg2, kwargs)
+
+        my_function(arg1=1, arg2=2, allowed_extra_arg=3, invalid_arg=4)
+        # This will print: 1 2 {"allowed_extra_arg": 3}
+        # And issue a warning: "The following named arguments are not valid for `my_function` and were ignored: 'invalid_arg'"
+        ```
+    """
     extra = extra or []
     extra_params_to_pass = set(extra)
 
@@ -780,7 +804,8 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
                     invalid_kwargs[k] = v
 
             if invalid_kwargs:
-                invalid_kwargs_names = ", ".join(invalid_kwargs.keys())
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = ", ".join(invalid_kwargs_names)
 
                 # Get the class name for better warning message
                 if is_instance_method:
@@ -792,7 +817,9 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
 
                 warnings.warn(
                     f"The following named arguments are not valid for `{cls_prefix}{func.__name__}`"
-                    f" and were ignored: {invalid_kwargs_names}"
+                    f" and were ignored: {invalid_kwargs_names}",
+                    UserWarning,
+                    stacklevel=2,
                 )
 
             return func(*args, **valid_kwargs)
