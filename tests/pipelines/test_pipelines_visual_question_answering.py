@@ -14,6 +14,8 @@
 
 import unittest
 
+from datasets import load_dataset
+
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
@@ -33,6 +35,8 @@ from .test_pipelines_common import ANY
 
 if is_torch_available():
     import torch
+
+    from transformers.pipelines.pt_utils import KeyDataset
 
 
 if is_vision_available():
@@ -171,6 +175,65 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
+
+    @require_torch
+    def test_small_model_pt_image_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        images = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000004016.png",
+        ]
+
+        outputs = vqa_pipeline(image=images, question="How many cats are there?", top_k=1)
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "answer": ANY(str)}], [{"score": ANY(float), "answer": ANY(str)}]]
+        )
+
+    @require_torch
+    def test_small_model_pt_question_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        questions = ["How many cats are there?", "Are there any dogs?"]
+
+        outputs = vqa_pipeline(image=image, question=questions, top_k=1)
+        self.assertEqual(
+            outputs, [[{"score": ANY(float), "answer": ANY(str)}], [{"score": ANY(float), "answer": ANY(str)}]]
+        )
+
+    @require_torch
+    def test_small_model_pt_both_list(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        images = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000004016.png",
+        ]
+        questions = ["How many cats are there?", "Are there any dogs?"]
+
+        outputs = vqa_pipeline(image=images, question=questions, top_k=1)
+        self.assertEqual(
+            outputs,
+            [
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+            ],
+        )
+
+    @require_torch
+    def test_small_model_pt_dataset(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa")
+        dataset = load_dataset("hf-internal-testing/dummy_image_text_data", split="train[:2]")
+        question = "What's in the image?"
+
+        outputs = vqa_pipeline(image=KeyDataset(dataset, "image"), question=question, top_k=1)
+        self.assertEqual(
+            outputs,
+            [
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+            ],
+        )
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
