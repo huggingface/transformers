@@ -627,18 +627,22 @@ class GenerationMixin:
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past_key_values = None
+        cache_name = "past_key_values"
         if "past_key_values" in outputs:
             past_key_values = outputs.past_key_values
         elif "mems" in outputs:
             past_key_values = outputs.mems
         elif "past_buckets_states" in outputs:
             past_key_values = outputs.past_buckets_states
+        elif "cache_params" in outputs:
+            past_key_values = outputs.cache_params
+            cache_name = "cache_params"
 
         # Bloom fix: standardizes the cache format when requested
         if standardize_cache_format and hasattr(self, "_convert_to_standard_cache"):
             batch_size = outputs.logits.shape[0]
             past_key_values = self._convert_to_standard_cache(past_key_values, batch_size=batch_size)
-        return past_key_values
+        return cache_name, past_key_values
 
     def _update_model_kwargs_for_generation(
         self,
@@ -648,10 +652,11 @@ class GenerationMixin:
         standardize_cache_format: bool = False,
         num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
-        # update past_key_values
-        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
+        # update past_key_values keeping its naming used in model code
+        cache_name, cache = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
+        model_kwargs[cache_name] = cache
         if getattr(outputs, "state", None) is not None:
             model_kwargs["state"] = outputs.state
 
@@ -1431,23 +1436,6 @@ class GenerationMixin:
             self._cache.reset()
         return self._cache
 
-    def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
-    ) -> int:
-        decoder_start_token_id = (
-            decoder_start_token_id
-            if decoder_start_token_id is not None
-            else self.generation_config.decoder_start_token_id
-        )
-        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
-
-        if decoder_start_token_id is not None:
-            return decoder_start_token_id
-        elif bos_token_id is not None:
-            return bos_token_id
-        else:
-            return
-
     def _supports_default_dynamic_cache(self) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
@@ -1473,25 +1461,32 @@ class GenerationMixin:
         function). However, if called outside `generate`, consider creating a copy of `generation_config` first.
         """
 
-        # Convert special tokens to tensors (if they exist)
-        def _tensor_or_none(token, device=None):
+        # Convert special tokens to tensors (if they exist either in kwargs or in self.config)
+        def _tensor_or_none(token_kwargs, token_self, device=None):
             if device is None:
                 device = self.device
 
+            token = token_kwargs if token_kwargs is not None else token_self
             if token is None or isinstance(token, torch.Tensor):
                 return token
             return torch.tensor(token, device=device, dtype=torch.long)
 
-        # for BC we also try to get `decoder_start_token_id` from model's generation config (#30892)
-        if self.config.is_encoder_decoder:
-            generation_config.decoder_start_token_id = self._get_decoder_start_token_id(
-                generation_config.decoder_start_token_id, generation_config.bos_token_id
-            )
+        bos_token_id = _tensor_or_none(
+            generation_config.bos_token_id, self.generation_config.bos_token_id, device=device
+        )
+        eos_token_id = _tensor_or_none(
+            generation_config.eos_token_id, self.generation_config.eos_token_id, device=device
+        )
+        pad_token_id = _tensor_or_none(
+            generation_config.pad_token_id, self.generation_config.pad_token_id, device=device
+        )
+        decoder_start_token_id = _tensor_or_none(
+            generation_config.decoder_start_token_id, self.generation_config.decoder_start_token_id, device=device
+        )
 
-        bos_token_id = _tensor_or_none(generation_config.bos_token_id, device=device)
-        eos_token_id = _tensor_or_none(generation_config.eos_token_id, device=device)
-        pad_token_id = _tensor_or_none(generation_config.pad_token_id, device=device)
-        decoder_start_token_id = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
+        # for BC we also try to get `decoder_start_token_id` or `bos_token_id` (#30892)
+        if self.config.is_encoder_decoder:
+            decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         # We can have more than one eos token. Always treat it as a 1D tensor (when it exists).
         if eos_token_id is not None and eos_token_id.ndim == 0:
@@ -1506,6 +1501,15 @@ class GenerationMixin:
                 )
             pad_token_id = eos_token_id[0]
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{pad_token_id} for open-end generation.")
+
+        # we can't infer attn mask if pad token is set to be eos token in model's generation config
+        if eos_token_id is not None and torch.isin(elements=eos_token_id, test_elements=pad_token_id).any():
+            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+                logger.warning_once(
+                    "The attention mask is not set and cannot be inferred from input because pad token is same as eos token."
+                    "As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` "
+                    "to obtain reliable results."
+                )
 
         # Sanity checks/warnings
         if self.config.is_encoder_decoder and decoder_start_token_id is None:
@@ -2401,7 +2405,7 @@ class GenerationMixin:
                 next_past_key_values = selected_outputs["past_key_values"]
 
             else:
-                next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
+                _, next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
                 # Do it in-place layer per layer to save memory
                 if isinstance(next_past_key_values, DynamicCache):
                     next_past_key_values.batch_select_indices(augmented_idx)
