@@ -1205,7 +1205,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             if num_logits_to_keep is None:
                 logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
             else:
-                logits = [F.linear(hidden_states[:, -num_logits_to_keep:, :], lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+                logits = [
+                    F.linear(hidden_states[:, -num_logits_to_keep:, :], lm_head_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ]
             logits = torch.cat(logits, dim=-1)
         else:
             # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
