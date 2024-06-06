@@ -1881,11 +1881,33 @@ class Trainer:
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                self._load_from_checkpoint(resume_from_checkpoint)
-            # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
-            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
-                self._train_batch_size = state.train_batch_size
+                while resume_from_checkpoint is not None:
+                    try:
+                        self._load_from_checkpoint(resume_from_checkpoint)
+                        break
+                    except Exception as e:
+                        warnings.warn(
+                            f"loading model from {resume_from_checkpoint}: {e}. Trying an even older checkpoint.",
+                            RuntimeWarning,
+                        )
+                        if not args.ignore_checkpoint_errors:
+                            warnings.warn(
+                                "If you want to ignore this error, you can set `--ignore_checkpoint_errors`.",
+                                RuntimeWarning,
+                            )
+                            raise e
+                        if not os.path.isdir(os.path.join(args.output_dir, "corrupted_checkpoints")):
+                            os.makedirs(os.path.join(args.output_dir, "corrupted_checkpoints"))
+                        shutil.move(
+                            resume_from_checkpoint, os.path.join(args.output_dir, "corrupted_checkpoints", resume_from_checkpoint)
+                        )
+                        resume_from_checkpoint = get_last_checkpoint(args.output_dir)
+
+                if resume_from_checkpoint is not None:
+                    # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
+                    state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+                    if state.train_batch_size is not None:
+                        self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
