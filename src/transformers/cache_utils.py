@@ -545,11 +545,9 @@ class HQQQuantizedCache(QuantizedCache):
         if self.axis_value not in [0, 1]:
             raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
-        # HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key==0 and self.axis_value==0) else HQQBackend.PYTORCH)
-        # HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, mode="reduce-overhead", fullgraph=True)
+        HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key == 0 and self.axis_value == 0) else HQQBackend.PYTORCH)
         self.quantizer = HQQQuantizer
 
-    # @torch.compile
     def _quantize(self, tensor, axis):
         qtensor, meta = self.quantizer.quantize(
             tensor,
@@ -560,16 +558,9 @@ class HQQQuantizedCache(QuantizedCache):
             group_size=self.q_group_size,
         )
         meta["compute_dtype"] = self.compute_dtype
-        # self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
-        qtensor = qtensor.contiguous()
-        for key in meta:
-            if type(meta[key]) == torch.Tensor:
-                meta[key] = (
-                    meta[key].to(self.compute_dtype) if torch.is_floating_point(meta[key]) else meta[key]
-                ).contiguous()
+        self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
         return qtensor, meta
 
-    # @torch.compile
     def _dequantize(self, qtensor):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
@@ -1004,22 +995,17 @@ class HQQQuantizedCacheStatic(QuantizedCache):
                 f"`nbits` for `HQQ` backend has to be one of [`1`, `2`, `3`, `4`, `8`] but got {self.nbits}"
             )
 
-        if (self.axis_key == 1 or self.axis_value == 1) and self.nbits != 8:
-            raise ValueError("QuantizedStaticCache suports inly int8 for `axis=1`")
+        # there are a bunch of manipulations done to get qtensors concated and dequantized back without modifications
+        # so we don't support "axis" from users
+        self.axis_key = self.axis_value = int(self.nbits == 8)
 
-        if self.axis_key not in [0, 1]:
-            raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
-
-        if self.axis_value not in [0, 1]:
-            raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
-
-        if self.axis_key == 0 and self.axis_value == 0:
+        # for axis=1 compile the "dequantize" operation with torch backend for faster dequantizations every forward
+        if self.axis_key == 0:
             HQQLinear.set_backend(HQQBackend.ATEN)
         else:
             HQQLinear.set_backend(HQQBackend.PYTORCH)
-            #HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, fullgraph=True, mode="reduce-overhead")
-            HQQQuantizer.quantize = torch.compile(HQQQuantizer.quantize, fullgraph=True, mode="reduce-overhead")
-        
+            HQQQuantizer.dequantize = torch.compile(HQQQuantizer.dequantize, fullgraph=True, mode="reduce-overhead")
+
         self.quantizer = HQQQuantizer
 
         self.max_batch_size = max_batch_size
@@ -1035,8 +1021,6 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         self._scales_keys, self._scales_values = [], []
         self._zeros_keys, self._zeros_values = [], []
 
-        # if axis=0 we pack along group size dim, so no need to pack along num of groups dim
-        self.pack_shape = 1 if (self.axis_key == 0 and self.axis_value == 0) else 8 // self.nbits
         self.reshaped_size = max_batch_size * self.num_key_value_heads * self.head_dim
         self.quant_length = (max_batch_size * self.num_key_value_heads * self.head_dim) // self.q_group_size
 
@@ -1072,7 +1056,6 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             self._zeros_keys.append(new_layer_zero_key)
             self._zeros_values.append(new_layer_zero_value)
 
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -1084,14 +1067,12 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             seen_tokens = torch.tensor(cache_kwargs["cache_position"].shape[0], dtype=torch.int, device=self.device)
             quant_position, scale_position = self._get_quant_position(seen_tokens)
         else:
-            # assume we always get one new token and init arange for that one token only
+            # assume we always get one new token and prepare arange for that one token only
             # add prev cache position where we stopped to continue filling in the static cache
             seen_tokens = cache_kwargs["cache_position"]
             prev_length = (self.reshaped_size * cache_kwargs["cache_position"]) // self.q_group_size
             scale_position = torch.arange(self.quant_length, device=self.device) + prev_length
-            quant_position = torch.arange(self.quant_length // self.pack_shape, device=self.device) + (
-                prev_length // self.pack_shape
-            )
+            quant_position = torch.arange(self.quant_length, device=self.device) + prev_length
 
         # ugly hack :(
         if self.axis_key == 0:
@@ -1118,6 +1099,8 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             self._zeros_values[layer_idx][scale_position] = meta_values["zero"]
 
         keys_to_return, values_to_return = key_states, value_states
+
+        # in decoding phase dequantize all past tensors and return
         if cache_kwargs["cache_position"].shape[0] == 1:
             dequant_key = self._dequantize(
                 self._quantized_key_cache[layer_idx],
@@ -1140,18 +1123,19 @@ class HQQQuantizedCacheStatic(QuantizedCache):
 
     def _get_quant_position(self, length):
         quant_length = (self.reshaped_size * length) // self.q_group_size
-        quant_position = torch.arange(quant_length // self.pack_shape, dtype=torch.int, device=self.device)
+        quant_position = torch.arange(quant_length, dtype=torch.int, device=self.device)
         scale_position = torch.arange(quant_length, dtype=torch.int, device=self.device)
         return quant_position, scale_position
 
     def _quantize(self, tensor, axis):
-        # (2, 0, 1, 3) -> (1, 2, 0, 3)
-        # (2, 1, 0, 3) -> (2, 1, 0, 3)
+        # (2, 0, 1, 3) -> (1, 2, 0, 3) permute back and forth for concatenations
         tensor = tensor.permute(2, 0, 1, 3).reshape(-1, self.head_dim)  # needed to concat quant tensors
-        
-        # transpose to use axis=0 and that way pack along group_size dim
+
+        # transpose to quantize along axis=0 which allows to pack along group_size dim
+        # in fact the tensor is quantized along axis=1, but we did reshapes to use axis=0 only for bitpacking
         if axis == 0:
             tensor = tensor.reshape(-1, self.q_group_size).t()
+
         qtensor, meta = self.quantizer.quantize(
             tensor,
             axis=axis,
@@ -1161,6 +1145,9 @@ class HQQQuantizedCacheStatic(QuantizedCache):
             bitpack=True,
             group_size=self.q_group_size,
         )
+
+        # we can't use the HQQ `cude()` as it sets `.to(device)` causing compile graph breaks
+        # self.quantizer.cuda(qtensor, meta=meta, device=self.device)  # Move to device and cast to dtype
         meta["compute_dtype"] = self.compute_dtype
         qtensor = qtensor.contiguous()
         for key in meta:
@@ -1195,7 +1182,9 @@ class HQQQuantizedCacheStatic(QuantizedCache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
-        return self._seen_tokens # TODO raushan (return actual length from static tensor)
+        return (
+            self._seen_tokens
+        )  # TODO raushan (return actual length from static tensor, tho it's not used anywhere in generate now)
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
