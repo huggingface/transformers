@@ -83,7 +83,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
         def dummy_function(new_name=None, other_name=None):
             return new_name, other_name
 
-        with self.assertWarns(DeprecationWarning):
+        with self.assertWarns(FutureWarning):
             dummy_function(deprecated_name="old_value")
 
         # Test warning is not raised for past version, but arg is still renamed
@@ -105,7 +105,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
         def dummy_function(deprecated_name=None):
             return deprecated_name
 
-        with self.assertWarns(DeprecationWarning):
+        with self.assertWarns(FutureWarning):
             value = dummy_function(deprecated_name="deprecated_value")
         self.assertEqual(value, "deprecated_value")
 
@@ -114,7 +114,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
         def dummy_function(deprecated_name=None):
             return deprecated_name
 
-        with self.assertWarns(DeprecationWarning):
+        with self.assertWarns(FutureWarning):
             value = dummy_function(deprecated_name="deprecated_value")
         self.assertEqual(value, "deprecated_value")
 
