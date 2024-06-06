@@ -1601,6 +1601,15 @@ class GenerationMixin:
                 else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
 
+    def _supports_num_logits_to_keep(self) -> bool:
+        """
+        Return True if the current model supports the keyword argument `num_logits_to_keep` in forward()
+        to save memory. Checking it in this way allows to avoid using a new model attribute.
+        """
+        # Dummy call to check if `num_logits_to_keep` is present in output dict
+        dummy = self.prepare_inputs_for_generation(input_ids=torch.ones(1))
+        return "num_logits_to_keep" in dummy
+
     def _prepare_special_tokens(
         self,
         generation_config: GenerationConfig,
@@ -1876,6 +1885,13 @@ class GenerationMixin:
             inputs_tensor=inputs_tensor,
             input_ids_length=input_ids_length,
         )
+
+        # If the model supports `num_logits_to_keep` in forward(), set it to 1 to avoid computing the whole
+        # logit matrix. This can save a lot of memory during the first forward pass. Note that assisted decoding
+        # dynamically overrides this value as it can need more than the last token logits
+        if self._supports_num_logits_to_keep():
+            model_kwargs["num_logits_to_keep"] = 1
+            
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. Prepare the cache.
