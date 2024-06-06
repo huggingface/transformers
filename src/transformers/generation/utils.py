@@ -3658,6 +3658,7 @@ class GenerationMixin:
         """
         # init values
         do_sample = logits_warper is not None
+        eos_token_id = generation_config.eos_token_id
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -3696,11 +3697,22 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
-            candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
-
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
+
+            # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
+            # accept eos and the rest as valid, thus not stopping generation after "eos"
+            # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
+            mask = torch.isin(candidate_input_ids[:, -candidate_length:], eos_token_id)
+            match_indices = torch.nonzero(mask, as_tuple=True)[1]
+            if match_indices.numel() > 0:
+                first_eos_index = match_indices[0].item() + input_ids.shape[1]
+                candidate_input_ids = candidate_input_ids[:, :first_eos_index]
+                candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
+                if candidate_logits is not None:
+                    candidate_logits = candidate_logits[:, :first_eos_index]
+            candidate_input_ids = candidate_input_ids.to(self.device)
             is_done_candidate = stopping_criteria(candidate_input_ids, None)
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
