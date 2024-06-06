@@ -53,7 +53,7 @@ class Cache:
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
+        # TODO: deprecate this function in favor of `cache_info`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
     def get_max_length(self) -> Optional[int]:
@@ -82,7 +82,7 @@ class Cache:
     @property
     def seen_tokens(self):
         logger.warning_once(
-            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
+            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_info` "
             "model input instead."
         )
         if hasattr(self, "_seen_tokens"):
@@ -363,7 +363,7 @@ class DynamicCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
+        # TODO: deprecate this function in favor of `cache_info`
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
@@ -614,7 +614,7 @@ class SinkCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
+        # TODO: deprecate this function in favor of `cache_info`
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
             return 0
@@ -782,18 +782,18 @@ class StaticCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
+                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_info` input
                 to know how where to write in the cache.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        cache_position = cache_kwargs.get("cache_position")
+        cache_info = cache_kwargs.get("cache_info")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        k_out[:, :, cache_info.position] = key_states
+        v_out[:, :, cache_info.position] = value_states
 
         return k_out, v_out
 
@@ -801,7 +801,7 @@ class StaticCache(Cache):
         """Returns the sequence length of the cached states that were seen by the model."""
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
-        # TODO: deprecate this function in favor of `cache_position`
+        # TODO: deprecate this function in favor of `cache_info`
         return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
 
     def get_max_length(self) -> Optional[int]:
@@ -819,7 +819,7 @@ class StaticCache(Cache):
 class SlidingWindowCache(Cache):
     """
     Sliding Window Cache class to be used with `torch.compile` for models like Mistral that support sliding window attention.
-    Every time when we try to update the cache, we compute the `indices` based on `cache_position >= self.config.sliding_window_size - 1`,
+    Every time when we try to update the cache, we compute the `indices` based on `cache_info >= self.config.sliding_window_size - 1`,
     if true(which means the cache can not hold all the old key value states and new states together because of the sliding window constraint),
     we need to do a cycle shift based on `indices` to replace the oldest states by the new key value states passed in.
 
@@ -831,7 +831,7 @@ class SlidingWindowCache(Cache):
         37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
         55, 56, 57, 58, 59, 60, 61, 62, 63,  0])
 
-    We overwrite the cache using these, then we always write at cache_position (clamped to `sliding_window_size`)
+    We overwrite the cache using these, then we always write at cache_info (clamped to `sliding_window_size`)
 
     Parameters:
         config (`PretrainedConfig):
@@ -892,12 +892,12 @@ class SlidingWindowCache(Cache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
-        cache_position = cache_kwargs.get("cache_position")
+        cache_info = cache_kwargs.get("cache_info")
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
         # assume this only happens in prefill phase when prompt length > sliding_window_size
-        if cache_position.shape[0] > self.sliding_window_size:
+        if cache_info.shape[0] > self.sliding_window_size:
             k_out = key_states[:, :, -self.sliding_window_size :, :]
             v_out = value_states[:, :, -self.sliding_window_size :, :]
             self.key_cache[layer_idx] = k_out
@@ -907,15 +907,15 @@ class SlidingWindowCache(Cache):
             return key_states, value_states
 
         slicing = torch.ones(self.sliding_window_size, dtype=torch.long, device=value_states.device).cumsum(0)
-        cache_position = cache_position.clamp(0, self.sliding_window_size - 1)
-        to_shift = cache_position >= self.sliding_window_size - 1
+        cache_info = cache_info.clamp(0, self.sliding_window_size - 1)
+        to_shift = cache_info >= self.sliding_window_size - 1
         indices = (slicing + to_shift[-1].int() - 1) % self.sliding_window_size
 
         k_out = k_out[:, :, indices]
         v_out = v_out[:, :, indices]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        k_out[:, :, cache_info] = key_states
+        v_out[:, :, cache_info] = value_states
 
         self.key_cache[layer_idx] = k_out
         self.value_cache[layer_idx] = v_out
