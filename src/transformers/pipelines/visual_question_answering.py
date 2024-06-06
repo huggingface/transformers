@@ -10,9 +10,7 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import (
-        MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES,
-    )
+    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
     from .pt_utils import KeyDataset
 
 logger = logging.get_logger(__name__)
@@ -72,7 +70,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __call__(
         self,
-        image: Union["Image.Image", str, List["Image.Image"], List[str]],
+        image: Union["Image.Image", str, List["Image.Image"], List[str], "KeyDataset"],
         question: Union[str, List[str]] = None,
         **kwargs,
     ):
