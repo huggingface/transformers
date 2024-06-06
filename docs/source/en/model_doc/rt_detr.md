@@ -60,6 +60,10 @@ results = image_processing.post_process_object_detection(outputs, target_sizes=t
 
 [[autodoc]] RTDetrConfig
 
+## RTDetrResNetConfig
+
+[[autodoc]] RTDetrResNetConfig
+
 ## RTDetrImageProcessor
 
 [[autodoc]] RTDetrImageProcessor
