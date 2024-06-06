@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import CohereTokenizerFast
-from transformers.testing_utils import require_jinja, require_torch_multi_gpu, require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers, require_torch_multi_gpu
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
