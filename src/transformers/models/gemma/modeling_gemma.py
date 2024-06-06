@@ -575,10 +575,10 @@ class GemmaSdpaAttention(GemmaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        if _length > 0:
-            key_states = key_states[:, :, :_length, :]
-            value_states = value_states[:, :, :_length, :]
-            causal_mask = causal_mask[:, :, :, :_length] if causal_mask is not None else causal_mask
+        if cache_position._length > 0:
+            key_states = key_states[:, :, :cache_position._length, :]
+            value_states = value_states[:, :, :cache_position._length, :]
+            causal_mask = causal_mask[:, :, :, :cache_position._length] if causal_mask is not None else causal_mask
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1221,6 +1221,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         elif use_cache:
             cache_position = cache_position[-input_length:]
 
+        cache_position._length = int(cache_position[-1]) + 1
         model_inputs.update(
             {
                 "position_ids": position_ids,
