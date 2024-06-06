@@ -1607,7 +1607,7 @@ class GenerationMixin:
         to save memory. Checking it in this way allows to avoid using a new model attribute.
         """
         # Dummy call to check if `num_logits_to_keep` is present in output dict
-        dummy = self.prepare_inputs_for_generation(torch.ones(1), attention_mask=None)
+        dummy = self.prepare_inputs_for_generation(torch.ones(1, 1), attention_mask=None)
         return "num_logits_to_keep" in dummy
 
     def _prepare_special_tokens(
