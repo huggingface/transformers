@@ -1759,7 +1759,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
             )
 
 
