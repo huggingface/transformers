@@ -298,10 +298,100 @@ one? If that happens, you should:
 3. Call the corresponding function with those arguments.
 4. Add the result to the conversation, in the format `{"role": "tool", "content": tool_results}`
 
-Here is an example conversation, containing tool calls:
+### Advanced: A complete tool use example
 
-# TODO example goes here after we update all the templates
+Let's walk through a tool use example, step by step. For this example, we will use an 8B `Hermes-2-Pro` model,
+as it is one of the highest-performing tool-use models in its size category at the time of writing. If you have the
+memory, you can consider using a larger model instead, like [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+or [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1), both of which also support tool use.
 
+First, let's load our model and tokenizer:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+checkpoint = "NousResearch/Hermes-2-Pro-Llama-3-8B"
+
+tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision="pr/13")
+model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+```
+
+Next, let's define a list of tools. For simplicity, we'll just have a single tool in this example:
+
+```python
+def get_current_temperature(location: str, unit: str) -> float:
+    """
+    Get the current temperature at a location.
+    
+    Args:
+        location: The location to get the temperature for, in the format "City, Country"
+        unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
+    Returns:
+        The current temperature in the specified units, as a float.
+    """
+    return 22.  # Your real function should probably actually get the temperature!
+
+tools = [get_current_temperature]
+```
+
+Now, let's set up a conversation for our bot:
+
+```python
+messages = [
+  {"role": "system", "content": "You are a bot that responds to temperature queries. You should choose the unit used in the queried location."},
+  {"role": "user", "content": "Hey, what's the temperature in Paris right now?"}
+]
+```
+
+Now, let's apply the chat template and generate a response:
+
+```python
+inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
+out = model.generate(**inputs, max_new_tokens=128)
+print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
+```
+
+And we get:
+
+```text
+<tool_call>
+{"arguments": {"location": "Paris, France", "unit": "celsius"}, "name": "get_current_temperature"}
+</tool_call><|im_end|>
+```
+
+The model has called the function with valid arguments, in the format requested by the function docstring. It has
+inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
+the temperature in France should certainly be displayed in Celsius.
+
+Let's append the model's tool call to the conversation, followed by the result of calling the tool. Remember, in 
+reality this is the point where you'd actually call the function, rather than just using a dummy
+result!
+
+```python
+messages.append({"role": "assistant", "tool_calls": [{"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}]})
+messages.append({"role": "tool", "name": "get_current_temperature", "content": 22.})
+```
+
+Finally, let's let the assistant read the function outputs and continue chatting with the user:
+
+```python
+inputs = tokenizer.apply_chat_template(messages, chat_template="tool_use", tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
+out = model.generate(**inputs, max_new_tokens=128)
+print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
+```
+
+And we get:
+
+```text
+The current temperature in Paris, France is 22.0°C (71.6°F).
+```
+
+Although this was a simple demo with only a single call, the same technique works with 
+multiple tools and longer conversations. This can be a powerful ways to extend the capabilities of conversational
+agents with real-time information, computational tools like calculators, or access to large databases.
 
 ### Advanced: Understanding tool schemas
 
