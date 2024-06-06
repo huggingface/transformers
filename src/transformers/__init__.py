@@ -1148,6 +1148,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.mplugdocowl"].extend(["MPLUGDocOwlImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")

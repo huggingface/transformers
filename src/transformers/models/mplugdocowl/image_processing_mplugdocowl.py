@@ -14,10 +14,10 @@
 # limitations under the License.
 """Image processor class for MPLUGDocOwl."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
-
+#FIXME change the import from transformers to import from ...
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
     convert_to_rgb,
@@ -88,8 +88,7 @@ GRID_DICT = {
         (2, 9), (3, 6), (6, 3), (9, 2), 
         (2, 10), (4, 5), (5, 4), (10, 2)]
 }
-
-
+#FIXME write the documentation for these functions
 def box_area(boxes):
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
@@ -123,72 +122,60 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
     shape_iou = np.diag(shape_iou)  # Get diagonal for self-comparison
     index = np.argmax(shape_iou * 100 + iou)
     return index
+#FIXME add this into shape adaptive cropping module
 
-class AnchorResize:
-    def __init__(self, image_size, anchors, interpolation=Image.BICUBIC, antialias=False):
-        # xyxy
-        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
-        self.anchors = np.array(
-            [[0, 0, anchor[1] * image_size[1], anchor[0] * image_size[0]]
+def anchor_resize(img, anchors, size, interpolation=Image.BICUBIC):
+        # Convert anchors to xyxy format
+  
+        anchors = np.array(
+            [[0, 0, anchor[1] * size, anchor[0] * size]
              for anchor in anchors]
         )
-        self.anchor_areas = box_area(self.anchors)
-        self.interpolation = interpolation
-        self.antialias = antialias
+        anchor_areas = box_area(anchors)
         
-
-    def __call__(self, img, skip_resize=False):
         # Resize image based on selected anchor
-        #input_image_size = (img.height, img.width)
-        selected_anchor = anchor_rank(self.anchors, self.anchor_areas, (img.size[1], img.size[0]))
-        target_size = self.anchors[selected_anchor][2:].astype(int)  # target width, height
-        if skip_resize:
-            return selected_anchor  # For debug purposes
-        resized_img = img.resize((target_size[0], target_size[1]), resample=self.interpolation)
+        selected_anchor = anchor_rank(anchors, anchor_areas, (img.size[1], img.size[0]))
+        target_size = anchors[selected_anchor][2:].astype(int)  # target width, height
+        resized_img = img.resize((target_size[0], target_size[1]), resample=interpolation)
+
         return resized_img, selected_anchor
+def shape_adaptive_cropping(image: ImageInput,
+                            size: Dict[str, int] = None, 
+                            anchors: str = 'grid_9', 
+                            grid_dict: Dict[str, List[Tuple[int, int]]] = GRID_DICT,
+                            add_global_img: bool = True, 
+                            interpolation: PILImageResampling = PILImageResampling.BICUBIC):
+    
+        anchors = [tuple(_) for _ in grid_dict[anchors]] 
+        size = size['shortest_edge']
+        #self.anchors = [tuple(_) for _ in grid_dict[anchors]]
+        anchor_max = max(max(_) for _ in anchors)
+        image_patches, selected_anchor = anchor_resize(image, anchors, size, interpolation)
+        image_patches = image_patches.convert("RGB")
 
-    def __repr__(self):
-        detail = f"AnchorResize(image_size={self.image_size}, anchor={self.anchors}, interpolation={self.interpolation}, antialias={self.antialias})"
-        return detail
+        h, w = image_patches.size[0],image_patches.size[1]
+        image_patches = np.array(image_patches).reshape(w,h,3)
+    
+        anchor_size = anchors[selected_anchor]
+        #resized_image = np.array(image.resize(new_size, Image.BICUBIC))
 
-class ShapeAdaptiveCroppingModule:
-    def __init__(self, image_size=(224,224), anchors='grid_9', grid_dict=GRID_DICT, add_global_img: bool = True, 
-                 add_textual_crop_indicator=False):
-        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
-        self.anchors = [tuple(_) for _ in grid_dict[anchors]]
-        self.anchor_max = max(max(_) for _ in self.anchors)
-        self.anchors_areas = [box_area(np.array([[0, 0, w*self.image_size[1], h*self.image_size[0]]])) for w, h in self.anchors]
-        self.add_global_img = add_global_img
-        self.resizer = AnchorResize(image_size=image_size, anchors=self.anchors)
-    def shape_adaptive_crop(self, image: ImageInput):
-
-            image_patches, selected_anchor = self.resizer(image)
-            image_patches = image_patches.convert("RGB")
-
-            h, w = image_patches.size[0],image_patches.size[1]
-            image_patches = np.array(image_patches).reshape(w,h,3)
+        # Reshape the image
+        num_h, num_w = anchor_size
+        #image_input = np.array(image_patches)
+        image_input = image_patches.reshape(3, num_h, size, num_w, size)
         
-            anchor_size = self.anchors[selected_anchor]
-            new_size = (int(anchor_size[1] * image.size[1]), int(anchor_size[0] * image.size[0]))
-            #resized_image = np.array(image.resize(new_size, Image.BICUBIC))
-
-            # Reshape the image
-            num_h, num_w = anchor_size
-            #image_input = np.array(image_patches)
-            image_input = image_patches.reshape(3, num_h, self.image_size[0], num_w, self.image_size[1])
-          
-            # Step 2: Transpose to get the correct order
-            image_input = image_input.transpose(1, 3, 0, 2, 4)
-            image_input = image_input.reshape((-1, self.image_size[0],self.image_size[1],3))
-            image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
-        
-            anchor = self.anchors[selected_anchor]  # w,h
-            patch_position = np.concatenate([
-                np.repeat(np.arange(anchor[0])[:, np.newaxis], anchor[1], axis=1)[:, :, np.newaxis],
-                np.repeat(np.arange(anchor[1])[np.newaxis, :], anchor[0], axis=0)[:, :, np.newaxis]
-            ], axis=2)
-            patch_position = patch_position.reshape(-1, 2)  # num_patch, (ph, pw)
-            return image_patches_list, patch_position, patch_position.shape[0]
+        # Step 2: Transpose to get the correct order
+        image_input = image_input.transpose(1, 3, 0, 2, 4)
+        image_input = image_input.reshape((-1, size, size,3))
+        image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
+    
+        anchor = anchors[selected_anchor]  # w,h
+        patch_position = np.concatenate([
+            np.repeat(np.arange(anchor[0])[:, np.newaxis], anchor[1], axis=1)[:, :, np.newaxis],
+            np.repeat(np.arange(anchor[1])[np.newaxis, :], anchor[0], axis=0)[:, :, np.newaxis]
+        ], axis=2)
+        patch_position = patch_position.reshape(-1, 2)  # num_patch, (ph, pw)
+        return image_patches_list, patch_position, patch_position.shape[0], anchor_max
 
 class MPLUGDocOwlImageProcessor(BaseImageProcessor):
     r"""
@@ -282,13 +269,15 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-        self.adaptive_cropping_module = ShapeAdaptiveCroppingModule()
+        #self.adaptive_cropping_module = ShapeAdaptiveCroppingModule()
 
     def adaptive_crop(
             self,
             image: ImageInput,
+            size: Dict[str, int] = None,
+            interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         ):
-        return self.adaptive_cropping_module.shape_adaptive_crop(image=image)
+        return shape_adaptive_cropping(image=image, size=size)
 
     def resize(
         self,
@@ -477,8 +466,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             ]
             
         if do_shape_adaptive_cropping:
-            output = [self.adaptive_crop(image) for image in patch_images][0]
-            patch_images, patch_positions, num_patches = output[0], output[1], output[2]
+            output = [self.adaptive_crop(image=image, size=size) for image in patch_images][0]
+            patch_images, patch_positions, num_patches, anchor_max = output[0], output[1], output[2], output[3]
             images.extend(patch_images)
         #breakpoint()
         if is_scaled_image(images[0]) and do_rescale:
@@ -498,11 +487,11 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
 
             # call the module
 
-        data = {"pixel_values": images, "patch_positions": patch_positions, "num_patches": num_patches}
+        data = {"pixel_values": images, "patch_positions": patch_positions, "num_patches": num_patches, "anchor_max": anchor_max}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-image_processor = MPLUGDocOwlImageProcessor()
-image = Image.open("/home/dana_aubakirova/test_image.tif")
-pixel_values = image_processor(image, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)["pixel_values"]
-breakpoint()
-print(pixel_values)
+#image_processor = MPLUGDocOwlImageProcessor()
+#image = Image.open("/home/dana_aubakirova/test_image.tif")
+#pixel_values = image_processor(image, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)
+#breakpoint()
+#print(pixel_values)

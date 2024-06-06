@@ -17,14 +17,15 @@ Processor class for MPLUGDocOwl.
 """
 
 
-from typing import List, Optional, Union
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
-
+from typing import List, Optional, Union, Tuple
+#FIXME change the import from transformers to import from ...
+from transformers.feature_extraction_utils import BatchFeature
+from transformers.image_utils import ImageInput
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from transformers.utils import TensorType
+#FIXME need to add image processing class name
+#from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 import numpy as np
 
 def box_area(boxes):
@@ -95,7 +96,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "MPLUGDocOwlImageProcessor"
     tokenizer_class = ("AutoTokenizer")#, "AutoTokenizerFast")
-
+    
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
@@ -103,6 +104,7 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
+        add_textual_crop_indicator: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
@@ -153,17 +155,45 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        #image_processor = MPLUGDocOwlImageProcessor()
-   
+        #FIXME need to add image processing class name properly
+        
         if images is not None:
-            pixel_values = self.image_processor(images, do_rescale=True, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=return_tensors,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)["pixel_values"]
+            pixel_values = self.image_processor(images, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=return_tensors,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)
         else:
             pixel_values = None
+        #text prpeocessing
+        breakpoint()
+        media_token = '<|image|>'
+        assert media_token in text
+        patch_positions = pixel_values['patch_positions']
+        num_patches = pixel_values['num_patches']
+        anchor_max = pixel_values['anchor_max']
+        text_list = text.split(media_token)
+        text = text_list[0]
+        image_token_ptr = 0
+        for next_text in text_list[1:]:
+            if add_textual_crop_indicator:
+                # generate image placeholders with interleaved texutual crop indicator
+                # e.g. <global_img><|image|><crop_img_row0_col0><|image|><crop_img_row0_col1><|image|>...
+                for patch_pos in patch_positions.tolist():
+                    # global non-crop image
+                    if patch_pos[0] == anchor_max and patch_pos[1] == anchor_max:
+                        text += '<global_img><|image|>'
+                    else:
+                        row_col = 'row'+str(patch_pos[0])+'_col'+str(patch_pos[1])
+                        text += '<crop_img_'+row_col+'><|image|>'
+            else: 
+                # generate successive image placeholders for a image, 1 crop img == 1 <|image|>
+                breakpoint()
+                text += '<|image|>'*num_patches
+            text += next_text
+            image_token_ptr += 1
+
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values['pixel_values']})
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -184,3 +214,23 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+#test the code
+'''
+from PIL import Image
+from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
+from transformers import AutoTokenizer, AddedToken
+image_processor = MPLUGDocOwlImageProcessor()
+tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-hf')
+tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
+tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
+#add tokens for shape-adaptive cropping module related textual crop indicators
+new_tokens = [f'<crop_img_row{i}_col{j}>' for i in range(10) for j in range(10)]
+tokenizer.add_tokens(new_tokens, special_tokens=True)
+processor = MPLUGDocOwlProcessor(image_processor, tokenizer)
+image = Image.open("/home/dana_aubakirova/test_image.tif")
+query = "<|image|>How are you?"
+output = processor(images=image, text=query)
+breakpoint()
+'''

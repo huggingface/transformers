@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -21,6 +21,13 @@ _import_structure = {
     "processing_mplugdocowl": ["MPLUGDocOwlProcessor"],
 }
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_mplugdocowl"] = ["MPLUGDocOwlImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -37,6 +44,13 @@ else:
 if TYPE_CHECKING:
     from .configuration_mplugdocowl import MPLUGDocOwlConfig
     from .processing_mplugdocowl import MPLUGDocOwlProcessor
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 
     try:
         if not is_torch_available():
@@ -48,6 +62,7 @@ if TYPE_CHECKING:
             MPLUGDocOwlForConditionalGeneration,
             MPLUGDocOwlPreTrainedModel,
         )
+
 
 else:
     import sys

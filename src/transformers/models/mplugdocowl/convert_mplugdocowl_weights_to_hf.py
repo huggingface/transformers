@@ -28,7 +28,7 @@ from transformers import (
     MPLUGDocOwlProcessor,
 )
 
-
+from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/mplugdocowl/convert_mplugdocowl_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/mplugdocowl-v1.5-7b-conv --old_state_dict_id liuhaotian/mplugdocowl-v1.5-7b
 
@@ -90,8 +90,11 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
+    #add tokens for shape-adaptive cropping module related textual crop indicators
+    new_tokens = [f'<crop_img_row{i}_col{j}>' for i in range(10) for j in range(10)]
+    tokenizer.add_tokens(new_tokens, special_tokens=True)
     image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
-
+    image_processor = MPLUGDocOwlImageProcessor()
     processor = MPLUGDocOwlProcessor(tokenizer=tokenizer, image_processor=image_processor)
     config = MPLUGDocOwlConfig(text_config=text_config)
     config.pad_token_id = 32001
@@ -130,9 +133,9 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
-
-    model.push_to_hub(output_hub_path)
-    processor.push_to_hub(output_hub_path)
+    breakpoint()
+    #model.push_to_hub(output_hub_path)
+    #processor.push_to_hub(output_hub_path)
 
 
 def main():

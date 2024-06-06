@@ -79,7 +79,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
         ("llava", "CLIPImageProcessor"),
-        ("mplugdocowl", "CLIPImageProcessor"),
+        ("mplugdocowl", "MPLUGDocOwlImageProcessor"),
         ("llava_next", "LlavaNextImageProcessor"),
         ("mask2former", "Mask2FormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
