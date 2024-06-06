@@ -44,6 +44,9 @@ def deprecate_kwarg(
     - Automatically replace deprecated keyword arguments with new ones.
     - Raise an error if deprecated arguments are used, depending on the specified conditions.
 
+    By default, the decorator notifies the user about the deprecated argument while the `transformers.__version__` < specified `version`
+    in the decorator. To keep notifications with any version `warn_if_greater_or_equal_version=True` can be set.
+
     Parameters:
         old_name (`str`):
             Name of the deprecated keyword argument.
