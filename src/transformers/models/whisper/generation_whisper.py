@@ -32,7 +32,6 @@ from ...generation.logits_process import (
     WhisperTimeStampLogitsProcessor,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
-from ...generation.utils import GenerateEncoderDecoderOutput
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
@@ -635,7 +634,7 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.6 Run generate with fallback
-            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(
+            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, model_output_type = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
@@ -706,7 +705,7 @@ class WhisperGenerationMixin:
                 
             if generation_config.return_dict_in_generate:
                 
-                outputs = self._stack_split_outputs(seek_outputs)
+                outputs = self._stack_split_outputs(seek_outputs, model_output_type)
 
                 if num_return_sequences > 1:
                     outputs.encoder_attentions = tuple(outputs.encoder_attentions[i][::num_return_sequences] for i in range(len(outputs.encoder_attentions)))
@@ -770,6 +769,8 @@ class WhisperGenerationMixin:
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
+
+            model_output_type = type(seek_outputs)
 
             # post-process sequence tokens and outputs to be in list form
             seek_sequences, seek_outputs = self._postprocess_outputs(
@@ -844,7 +845,7 @@ class WhisperGenerationMixin:
             if "decoder_attention_mask" in kwargs:
                 kwargs["decoder_attention_mask"] = torch.stack(new_decoder_attention_mask)
 
-        return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
+        return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, model_output_type
 
     @staticmethod
     def _prepare_segments(prompt_ids, batch_size, generation_config):
@@ -899,7 +900,7 @@ class WhisperGenerationMixin:
 
         return sequence_tokens, seek_outputs
     
-    def _stack_split_outputs(self, seek_outputs):
+    def _stack_split_outputs(self, seek_outputs, model_output_type):
         outputs = {}
         for key in seek_outputs[0].keys():
             if key == 'sequences': 
@@ -910,7 +911,8 @@ class WhisperGenerationMixin:
                 outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
             if key == 'past_keys': 
                 outputs[key] = None 
-        return outputs
+
+        return model_output_type(**outputs)
 
     def _need_fallback(
         self,
