@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_rt_detr_config(model_name: str) -> RTDetrConfig:
-    config = RTDetrConfig(out_indices=[2, 3, 4])
+    config = RTDetrConfig()
 
     config.num_labels = 80
     repo_id = "huggingface/label-files"
@@ -44,16 +44,16 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     config.label2id = {v: k for k, v in id2label.items()}
 
     if model_name == "rtdetr_r18vd":
-        config.hidden_sizes = [64, 128, 256, 512]
-        config.depths = [2, 2, 2, 2]
-        config.layer_type = "basic"
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.depths = [2, 2, 2, 2]
+        config.backbone_config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r34vd":
-        config.hidden_sizes = [64, 128, 256, 512]
-        config.depths = [3, 4, 6, 3]
-        config.layer_type = "basic"
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.depths = [3, 4, 6, 3]
+        config.backbone_config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 4
@@ -62,21 +62,21 @@ def get_rt_detr_config(model_name: str) -> RTDetrConfig:
     elif model_name == "rtdetr_r50vd":
         pass
     elif model_name == "rtdetr_r101vd":
-        config.depths = [3, 4, 23, 3]
+        config.backbone_config.depths = [3, 4, 23, 3]
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
     elif model_name == "rtdetr_r18vd_coco_o365":
-        config.hidden_sizes = [64, 128, 256, 512]
-        config.depths = [2, 2, 2, 2]
-        config.layer_type = "basic"
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.depths = [2, 2, 2, 2]
+        config.backbone_config.layer_type = "basic"
         config.encoder_in_channels = [128, 256, 512]
         config.hidden_expansion = 0.5
         config.decoder_layers = 3
     elif model_name == "rtdetr_r50vd_coco_o365":
         pass
     elif model_name == "rtdetr_r101vd_coco_o365":
-        config.depths = [3, 4, 23, 3]
+        config.backbone_config.depths = [3, 4, 23, 3]
         config.encoder_ffn_dim = 2048
         config.encoder_hidden_dim = 384
         config.decoder_in_channels = [384, 384, 384]
@@ -97,8 +97,8 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
-    for stage_idx in range(len(config.depths)):
-        for layer_idx in range(config.depths[stage_idx]):
+    for stage_idx in range(len(config.backbone_config.depths)):
+        for layer_idx in range(config.backbone_config.depths[stage_idx]):
             # shortcut
             if layer_idx == 0:
                 if stage_idx == 0:
@@ -155,7 +155,7 @@ def create_rename_keys(config):
                     ))
 
             # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/nn/backbone/presnet.py#L171
-            if config.layer_type != "basic":
+            if config.backbone_config.layer_type != "basic":
                 rename_keys.append(
                     (
                         f"backbone.res_layers.{stage_idx}.blocks.{layer_idx}.branch2c.conv.weight",
@@ -237,7 +237,7 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
-    block_levels = 3 if config.layer_type != "basic" else 4
+    block_levels = 3 if config.backbone_config.layer_type != "basic" else 4
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts

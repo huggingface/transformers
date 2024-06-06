@@ -31,13 +31,13 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
-from .configuration_rt_detr import RTDetrConfig
+from .configuration_rt_detr_resnet import RTDetrResNetConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "RTDetrConfig"
+_CONFIG_FOR_DOC = "RTDetrResNetConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
@@ -68,7 +68,7 @@ class RTDetrResNetEmbeddings(nn.Module):
     ResNet Embeddings (stem) composed of a deep aggressive convolution.
     """
 
-    def __init__(self, config: RTDetrConfig):
+    def __init__(self, config: RTDetrResNetConfig):
         super().__init__()
         self.embedder = nn.Sequential(
             *[
@@ -171,9 +171,10 @@ class RTDetrResNetBasicLayer(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetBottleNeckLayer with ResNet->RTDetrResNet
 class RTDetrResNetBottleNeckLayer(nn.Module):
     """
-    A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
+    A classic RTDetrResNet's bottleneck layer composed by three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
     convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
@@ -192,21 +193,9 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        if stride == 2:
-            self.shortcut = nn.Sequential(
-                *[
-                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
-                    if should_apply_shortcut
-                    else nn.Identity(),
-                ]
-            )
-        else:
-            self.shortcut = (
-                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
-                if should_apply_shortcut
-                else nn.Identity()
-            )
+        self.shortcut = (
+            RTDetrResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+        )
         self.layer = nn.Sequential(
             RTDetrResNetConvLayer(
                 in_channels, reduces_channels, kernel_size=1, stride=stride if downsample_in_bottleneck else 1
@@ -229,12 +218,12 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
 
 class RTDetrResNetStage(nn.Module):
     """
-    A ResNet stage composed by stacked layers.
+    A RTDetrResNet stage composed by stacked layers.
     """
 
     def __init__(
         self,
-        config: RTDetrConfig,
+        config: RTDetrResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 2,
@@ -253,9 +242,7 @@ class RTDetrResNetStage(nn.Module):
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(
-                in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True
-            )
+            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True)
         self.layers = nn.Sequential(
             first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
         )
@@ -267,8 +254,9 @@ class RTDetrResNetStage(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNet->RTDetrResNet
 class RTDetrResNetEncoder(nn.Module):
-    def __init__(self, config: RTDetrConfig):
+    def __init__(self, config: RTDetrResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
@@ -308,16 +296,17 @@ class RTDetrResNetEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->RTDetrResNet
 class RTDetrResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = RTDetrConfig
+    config_class = RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
+    _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
@@ -333,7 +322,7 @@ RESNET_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`RTDetrConfig`]): Model configuration class with all the parameters of the model.
+        config ([`RTDetrResNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """

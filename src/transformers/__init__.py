@@ -654,7 +654,7 @@ _import_structure = {
         "RoFormerConfig",
         "RoFormerTokenizer",
     ],
-    "models.rt_detr": ["RTDetrConfig"],
+    "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -5270,7 +5270,10 @@ if TYPE_CHECKING:
         RoFormerConfig,
         RoFormerTokenizer,
     )
-    from .models.rt_detr import RTDetrConfig
+    from .models.rt_detr import (
+        RTDetrConfig,
+        RTDetrResNetConfig,
+    )
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,

@@ -263,6 +263,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoCBert](model_doc/roc_bert)                       |       ✅        |         ❌         |      ❌      |
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
+|                [RT-DETR-ResNet](model_doc/rt_detr_resnet)                |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |

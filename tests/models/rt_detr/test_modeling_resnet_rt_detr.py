@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import RTDetrConfig
+from transformers import RTDetrResNetConfig
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
@@ -73,7 +73,7 @@ class RTDetrResNetModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return RTDetrConfig(
+        return RTDetrResNetConfig(
             num_channels=self.num_channels,
             embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
@@ -124,7 +124,7 @@ class RTDetrResNetModelTester:
 class RTDetrResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (RTDetrResNetBackbone,) if is_torch_available() else ()
     has_attentions = False
-    config_class = RTDetrConfig
+    config_class = RTDetrResNetConfig
 
     def setUp(self):
         self.model_tester = RTDetrResNetModelTester(self)

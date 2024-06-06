@@ -14,15 +14,18 @@
 # limitations under the License.
 """RT-DETR model configuration"""
 
+from typing import Dict, Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ..auto import CONFIG_MAPPING
+from .configuration_rt_detr_resnet import RTDetrResNetConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class RTDetrConfig(BackboneConfigMixin, PretrainedConfig):
+class RTDetrConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -39,34 +42,8 @@ class RTDetrConfig(BackboneConfigMixin, PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        embedding_size (`int`, *optional*, defaults to 64):
-            Dimensionality (hidden size) for the embedding layer.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
-            Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Depth (number of layers) for each stage.
-        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
-            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
-            `"bottleneck"` (used for larger models like resnet-50 and above).
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
-            are supported.
-        downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
-            If `True`, the first stage will downsample the inputs using a `stride` of 2.
-        downsample_in_bottleneck (`bool`, *optional*, defaults to `False`):
-            If `True`, the first conv 1x1 in ResNetBottleNeckLayer will downsample the inputs using a `stride` of 2.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*, defaults to `[2, 3, 4]`):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
+        backbone_config (`Dict`, *optional*):
+            The configuration passed to the backbone.
         encoder_hidden_dim (`int`, *optional*, defaults to 256):
             Dimension of the layers in hybrid encoder.
         encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -194,16 +171,7 @@ class RTDetrConfig(BackboneConfigMixin, PretrainedConfig):
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
-        num_channels=3,
-        embedding_size=64,
-        hidden_sizes=[256, 512, 1024, 2048],
-        depths=[3, 4, 6, 3],
-        layer_type="bottleneck",
-        hidden_act="relu",
-        downsample_in_first_stage=False,
-        downsample_in_bottleneck=False,
-        out_features=None,
-        out_indices=None,
+        backbone_config: Optional[Dict] = None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -259,20 +227,27 @@ class RTDetrConfig(BackboneConfigMixin, PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
         # backbone
-        if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
-        self.num_channels = num_channels
-        self.embedding_size = embedding_size
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.layer_type = layer_type
-        self.hidden_act = hidden_act
-        self.downsample_in_first_stage = downsample_in_first_stage
-        self.downsample_in_bottleneck = downsample_in_bottleneck
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
+        if backbone_config is None:
+            # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
+            backbone_config = RTDetrResNetConfig(
+                num_channels=3,
+                embedding_size=64,
+                hidden_sizes=[256, 512, 1024, 2048],
+                depths=[3, 4, 6, 3],
+                layer_type="bottleneck",
+                hidden_act="relu",
+                downsample_in_first_stage=False,
+                downsample_in_bottleneck=False,
+                out_features=None,
+                out_indices=[2, 3, 4],
+            )
+
+        if isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        self.backbone_config = backbone_config
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
@@ -330,3 +305,20 @@ class RTDetrConfig(BackboneConfigMixin, PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @classmethod
+    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`RTDetrConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+        configuration.
+
+            Args:
+                backbone_config ([`PretrainedConfig`]):
+                    The backbone configuration.
+
+            Returns:
+                [`RTDetrConfig`]: An instance of a configuration object
+        """
+        return cls(
+            backbone_config=backbone_config,
+            **kwargs,
+        )
