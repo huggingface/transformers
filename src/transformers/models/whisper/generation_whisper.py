@@ -595,7 +595,7 @@ class WhisperGenerationMixin:
                 **kwargs,
             )
 
-            if return_dict_in_generate and outputs is dict and 'scores' in outputs.keys():
+            if return_dict_in_generate and 'scores' in outputs.keys():
                 outputs['scores'] = torch.stack(outputs['scores'])
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
