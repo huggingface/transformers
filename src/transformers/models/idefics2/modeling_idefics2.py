@@ -1591,12 +1591,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        # Casting of the logits to float will happen in generate() in inference mode to save memory
         logits = self.lm_head(hidden_states)
+        logits = logits.float()
 
         loss = None
         if labels is not None:
-            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
