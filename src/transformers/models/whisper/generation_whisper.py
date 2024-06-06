@@ -734,20 +734,22 @@ class WhisperGenerationMixin:
                 outputs = sequences
 
             if generation_config.return_dict_in_generate:
-                outputs = self._stack_split_outputs(seek_outputs, model_output_type, device=sequences.device)
+                dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, device=sequences.device)
 
                 if num_return_sequences > 1:
-                    outputs.encoder_attentions = tuple(
-                        outputs.encoder_attentions[i][::num_return_sequences]
-                        for i in range(len(outputs.encoder_attentions))
-                    )
-                    outputs.encoder_hidden_states = tuple(
-                        outputs.encoder_hidden_states[i][::num_return_sequences]
-                        for i in range(len(outputs.encoder_hidden_states))
+                    if hasattr(dict_outputs, "encoder_attentions") and dict_outputs.encoder_attentions is not None: 
+                        dict_outputs.encoder_attentions = tuple(
+                            dict_outputs.encoder_attentions[i][::num_return_sequences]
+                            for i in range(len(dict_outputs.encoder_attentions))
+                        )
+                if hasattr(dict_outputs, "encoder_hidden_states") and dict_outputs.encoder_hidden_states is not None: 
+                    dict_outputs.encoder_hidden_states = tuple(
+                        dict_outputs.encoder_hidden_states[i][::num_return_sequences]
+                        for i in range(len(dict_outputs.encoder_hidden_states))
                     )
                 if return_token_timestamps:
-                    outputs["token_timestamps"] = outputs["token_timestamps"]
-                return outputs
+                    dict_outputs["token_timestamps"] = outputs["token_timestamps"]
+                return dict_outputs
 
             return outputs
 

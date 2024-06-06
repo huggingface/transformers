@@ -1954,7 +1954,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes, and we are glad to"
+            " classes, and we are glad to<|endoftext|>"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
@@ -1975,7 +1975,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
-            " classes and we are glad"
+            " classes and we are glad<|endoftext|>"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
@@ -2108,10 +2108,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
-                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
-                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
-                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
+                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 50256],
+                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256],
+                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 50256],
+                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 50256]
             ]
 
         )
@@ -2144,7 +2144,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])  # fmt: skip
+        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 50258, 50259, 50359, 50364, 393, 4411, 13, 50514,50257])  # fmt: skip
 
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2155,7 +2155,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season"
                     " of the year, with Christmas and roast beef looming before us, similarly drawn from eating and"
                     " its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins'"
-                    " work is really Greek after all, and"
+                    " work is really Greek after all, and can discover."
                 ),
                 "offsets": [
                     {
@@ -2183,7 +2183,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     },
                     {
                         "text": (
-                            " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
+                            " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and can discover."
                         ),
                         "timestamp": (23.76, 29.44),
                     },
@@ -2210,7 +2210,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, max_length=448, return_timestamps=True).to("cpu")
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702,  1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264,  1064,  11, 365,  5272,   293, 12904,  9256, 450, 10539, 949, 505, 11, 51245, 51287,  1034, 4680, 10117, 490, 3936, 293, 1080,  3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968,  6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50257])
+        EXPECTED_OUTPUT = torch.tensor([50258, 50259, 50360, 50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702,  1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264,  1064,  11, 365,  5272,   293, 12904,  9256, 450, 10539, 949, 505, 11, 51245, 51287,  1034, 4680, 10117, 490, 3936, 293, 1080,  3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968,  6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 50258, 50259, 50360, 50365, 293, 393, 4411, 50430, 50257])
         # fmt: on
         self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
 
@@ -2221,7 +2221,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     " Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive"
                     " season of the year, with Christmas and roast beef looming before us, similes drawn from eating"
                     " and its results occur most readily to the mind. He has grave doubts whether Sir Frederick "
-                    "Leighton's work is really Greek after all,"
+                    "Leighton's work is really Greek after all, and can discover"
                 ),
                 "offsets": [
                     {
@@ -2246,7 +2246,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                     },
                     {
                         "text": (
-                            " He has grave doubts whether Sir Frederick Leighton's work is really Greek after all,"
+                            " He has grave doubts whether Sir Frederick Leighton's work is really Greek after all, and can discover"
                         ),
                         "timestamp": (23.16, 28.68),
                     },
