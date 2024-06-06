@@ -171,7 +171,6 @@ class RTDetrResNetBasicLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetBottleNeckLayer with ResNet->RTDetrResNet
 class RTDetrResNetBottleNeckLayer(nn.Module):
     """
     A classic RTDetrResNet's bottleneck layer composed by three `3x3` convolutions.
@@ -193,9 +192,21 @@ class RTDetrResNetBottleNeckLayer(nn.Module):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        self.shortcut = (
-            RTDetrResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
-        )
+        if stride == 2:
+            self.shortcut = nn.Sequential(
+                *[
+                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
+                    RTDetrResNetShortCut(in_channels, out_channels, stride=1)
+                    if should_apply_shortcut
+                    else nn.Identity(),
+                ]
+            )
+        else:
+            self.shortcut = (
+                RTDetrResNetShortCut(in_channels, out_channels, stride=stride)
+                if should_apply_shortcut
+                else nn.Identity()
+            )
         self.layer = nn.Sequential(
             RTDetrResNetConvLayer(
                 in_channels, reduces_channels, kernel_size=1, stride=stride if downsample_in_bottleneck else 1
