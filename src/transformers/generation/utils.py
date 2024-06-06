@@ -1606,8 +1606,12 @@ class GenerationMixin:
         Return True if the current model supports the keyword argument `num_logits_to_keep` in forward()
         to save memory. Checking it in this way allows to avoid using a new model attribute.
         """
-        # Dummy call to check if `num_logits_to_keep` is present in output dict
-        dummy = self.prepare_inputs_for_generation(torch.ones(1, 1), attention_mask=None)
+        # Dummy call to check if `num_logits_to_keep` is present in output dict (encoder_outputs needs to be passed
+        # for prophetnet model to avoid AssertionError but can be anything except None)
+        if "prophetnet" in self.__class__.__name__.lower():
+            dummy = self.prepare_inputs_for_generation(torch.ones(1, 1), attention_mask=None, encoder_outputs=0)
+        else:
+            dummy = self.prepare_inputs_for_generation(torch.ones(1, 1), attention_mask=None)
         return "num_logits_to_keep" in dummy
 
     def _prepare_special_tokens(
