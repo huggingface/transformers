@@ -1881,6 +1881,7 @@ class Trainer:
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+                # Try to load the checkpoints until we find one valid or we run out of checkpoints
                 while resume_from_checkpoint is not None:
                     try:
                         self._load_from_checkpoint(resume_from_checkpoint)
@@ -1903,11 +1904,11 @@ class Trainer:
                         )
                         resume_from_checkpoint = get_last_checkpoint(args.output_dir)
 
-                if resume_from_checkpoint is not None:
-                    # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
-                    state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-                    if state.train_batch_size is not None:
-                        self._train_batch_size = state.train_batch_size
+            if resume_from_checkpoint is not None:
+                # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
+                state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+                if state.train_batch_size is not None:
+                    self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
