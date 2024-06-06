@@ -621,8 +621,6 @@ class WhisperGenerationMixin:
                 kwargs=kwargs,
             )
 
-
-
             # 6.4 set max new tokens or max length
             self._set_max_new_tokens_and_length(
                 config=self.config,
@@ -637,7 +635,7 @@ class WhisperGenerationMixin:
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.6 Run generate with fallback
-            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form = self.generate_with_fallback(
+            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
@@ -707,12 +705,15 @@ class WhisperGenerationMixin:
                 outputs = sequences
                 
             if generation_config.return_dict_in_generate:
+                
+                outputs = self._stack_split_outputs(seek_outputs)
+
                 if num_return_sequences > 1:
-                    seek_outputs_short_form.encoder_attentions = tuple(seek_outputs_short_form.encoder_attentions[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_attentions)))
-                    seek_outputs_short_form.encoder_hidden_states = tuple(seek_outputs_short_form.encoder_hidden_states[i][::num_return_sequences] for i in range(len(seek_outputs_short_form.encoder_hidden_states)))
+                    outputs.encoder_attentions = tuple(outputs.encoder_attentions[i][::num_return_sequences] for i in range(len(outputs.encoder_attentions)))
+                    outputs.encoder_hidden_states = tuple(outputs.encoder_hidden_states[i][::num_return_sequences] for i in range(len(outputs.encoder_hidden_states)))
                 if return_token_timestamps:
-                    seek_outputs_short_form['token_timestamps'] = outputs['token_timestamps']
-                return seek_outputs_short_form
+                    outputs['token_timestamps'] = outputs['token_timestamps']
+                return outputs
 
             return outputs
 
@@ -769,11 +770,6 @@ class WhisperGenerationMixin:
                 decoder_input_ids=decoder_input_ids,
                 **generate_kwargs,
             )
-
-            if is_shortform and generation_config.return_dict_in_generate:
-                seek_outputs_short_form = seek_outputs.copy()
-            else:
-                seek_outputs_short_form = None
 
             # post-process sequence tokens and outputs to be in list form
             seek_sequences, seek_outputs = self._postprocess_outputs(
@@ -848,7 +844,7 @@ class WhisperGenerationMixin:
             if "decoder_attention_mask" in kwargs:
                 kwargs["decoder_attention_mask"] = torch.stack(new_decoder_attention_mask)
 
-        return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, seek_outputs_short_form
+        return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
 
     @staticmethod
     def _prepare_segments(prompt_ids, batch_size, generation_config):
@@ -882,29 +878,39 @@ class WhisperGenerationMixin:
             seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
 
-        def split_by_batch_index(values, key, batch_idx, generation_config):
+        def split_by_batch_index(values, key, batch_idx):
             
-            if key in ['scores', "encoder_attentions", 'encoder_hidden_states']: 
-                return [v[batch_idx].cpu() for v in values]
-            if key == 'logits': 
+            if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']: 
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
                 return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-
             elif key == "past_key_values":
                 # we don't save `past_key_values` as this is too costly
                 return None 
             
             return values[batch_idx].cpu()
-
+        
         sequence_tokens = seek_outputs["sequences"]
 
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i, generation_config) for k, v in seek_outputs.items()}
+            {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
             for i in range(sequence_tokens.shape[0])
         ]
 
         return sequence_tokens, seek_outputs
+    
+    def _stack_split_outputs(self, seek_outputs):
+        outputs = {}
+        for key in seek_outputs[0].keys():
+            if key == 'sequences': 
+                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0)
+            if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']:
+                outputs[key] = tuple(torch.stack([v[key][i] for v in seek_outputs]) for i in range(len(seek_outputs[0][key])))
+            if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
+                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
+            if key == 'past_keys': 
+                outputs[key] = None 
+        return outputs
 
     def _need_fallback(
         self,
