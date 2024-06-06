@@ -65,7 +65,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer: TapasTokenizer,
         length=5,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [tokenizer.decode([i]) for i in range(len(tokenizer))]
 
         if length == 0:
             data = {}
@@ -81,7 +81,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer: TapasTokenizer,
         length=5,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [tokenizer.decode([i]) for i in range(len(tokenizer))]
         table = self.get_table(tokenizer, length=length - 3)
         query = " ".join(toks[:3])
 
@@ -97,7 +97,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         add_special_tokens: bool = True,
         return_table_and_query: bool = False,
     ):
-        toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
+        toks = [tokenizer.decode([i]) for i in range(len(tokenizer))]
 
         if empty_table:
             table = pd.DataFrame.from_dict({})

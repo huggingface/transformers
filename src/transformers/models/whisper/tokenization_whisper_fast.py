@@ -291,7 +291,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -343,7 +342,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         text = super().decode(
             filtered_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             normalize=normalize,
             basic_normalize=basic_normalize,
             remove_diacritics=remove_diacritics,

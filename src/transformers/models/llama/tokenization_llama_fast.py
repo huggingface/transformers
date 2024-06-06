@@ -76,9 +76,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -128,7 +125,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self,
         vocab_file=None,
         tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
@@ -156,7 +152,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

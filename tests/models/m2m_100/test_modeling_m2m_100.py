@@ -411,9 +411,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
             " communications in France.",
         ]
 
-        generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tokenizer.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == expected_en
 
     @require_flash_attn
@@ -456,7 +454,5 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
             " communications in France.",
         ]
 
-        generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tokenizer.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == expected_en

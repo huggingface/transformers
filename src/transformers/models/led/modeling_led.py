@@ -1509,7 +1509,7 @@ LED_GENERATION_EXAMPLE = r"""
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs, global_attention_mask=global_attention_mask, num_beams=3, max_length=32)
-    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True))
     ```
 """
 

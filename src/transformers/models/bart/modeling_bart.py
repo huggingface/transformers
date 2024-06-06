@@ -929,7 +929,7 @@ BART_GENERATION_EXAMPLE = r"""
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
-    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0]
     'PG&E scheduled the blackouts in response to forecasts for high winds amid dry conditions'
     ```
 

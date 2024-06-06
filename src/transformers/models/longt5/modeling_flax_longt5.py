@@ -2433,7 +2433,7 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"]).sequences
-    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True))
     ```
 """
 

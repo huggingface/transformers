@@ -143,11 +143,6 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # the results, by nature, should be different.
         pass
 
-    @unittest.skip("We disable the test of clean up tokenization spaces as it is not applicable.")
-    def test_clean_up_tokenization_spaces(self):
-        # it only tests bert-base-uncased and clean_up_tokenization_spaces is not applicable to this tokenizer
-        pass
-
     def test_nfc_normalization(self):
         # per https://unicode.org/faq/normalization.html, there are three characters whose normalization forms
         # under NFC, NFD, NFKC, and NFKD are all different

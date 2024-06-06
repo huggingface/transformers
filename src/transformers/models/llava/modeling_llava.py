@@ -397,7 +397,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
         ```"""
 

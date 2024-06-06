@@ -794,7 +794,7 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"])
-    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0]
     "California's largest electricity provider has turned off power to hundreds of thousands of customers."
     ```
 """

@@ -77,7 +77,6 @@ class Text2TextGenerationPipeline(Pipeline):
         return_tensors=None,
         return_text=None,
         return_type=None,
-        clean_up_tokenization_spaces=None,
         truncation=None,
         stop_sequence=None,
         **generate_kwargs,
@@ -93,9 +92,6 @@ class Text2TextGenerationPipeline(Pipeline):
             return_type = ReturnType.TENSORS if return_tensors else ReturnType.TEXT
         if return_type is not None:
             postprocess_params["return_type"] = return_type
-
-        if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
 
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
@@ -196,7 +192,7 @@ class Text2TextGenerationPipeline(Pipeline):
             output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
         return {"output_ids": output_ids}
 
-    def postprocess(self, model_outputs, return_type=ReturnType.TEXT, clean_up_tokenization_spaces=False):
+    def postprocess(self, model_outputs, return_type=ReturnType.TEXT):
         records = []
         for output_ids in model_outputs["output_ids"][0]:
             if return_type == ReturnType.TENSORS:
@@ -206,7 +202,6 @@ class Text2TextGenerationPipeline(Pipeline):
                     f"{self.return_name}_text": self.tokenizer.decode(
                         output_ids,
                         skip_special_tokens=True,
-                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 }
             records.append(record)

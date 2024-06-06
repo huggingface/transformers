@@ -1551,7 +1551,7 @@ FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
 
     >>> # Generate Summary
     >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5).sequences
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True))
     ```
 
     Mask filling example:

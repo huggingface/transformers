@@ -728,7 +728,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
         ```"""
 

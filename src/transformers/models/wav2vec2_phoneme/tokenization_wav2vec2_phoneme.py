@@ -408,7 +408,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
@@ -437,14 +436,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         text = string_output["text"]
 
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
-
         if output_char_offsets:
             return Wav2Vec2PhonemeCTCTokenizerOutput(text=text, char_offsets=string_output["char_offsets"])
         else:
@@ -455,7 +446,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> str:
@@ -499,7 +489,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return self._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             output_char_offsets=output_char_offsets,
             **kwargs,
         )
@@ -511,7 +500,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> List[str]:
@@ -551,7 +539,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             self.decode(
                 seq,
                 skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 output_char_offsets=output_char_offsets,
                 **kwargs,
             )

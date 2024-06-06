@@ -74,7 +74,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         assert tok("sam").input_ids == [1384]
         src_text = "I am a small frog."
         encoded = tok([src_text], padding=False, truncation=False)["input_ids"]
-        decoded = tok.batch_decode(encoded, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        decoded = tok.batch_decode(encoded, skip_special_tokens=True)[0]
         assert src_text != decoded  # I wish it did!
         assert decoded == "i am a small frog ."
 

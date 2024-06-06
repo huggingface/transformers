@@ -448,9 +448,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
             "Auparavant, le PDG de Ring, Jamie Siminoff, a fait remarquer que la société avait commencé lorsque sa sonnette n'était pas audible depuis son magasin dans son garage.",
         ]
 
-        translation = tokenizer.batch_decode(
-            batch_translation.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        translation = tokenizer.batch_decode(batch_translation.tolist(), skip_special_tokens=True)
         assert translation == EXPECTED_FAIRSEQ_TRANSLATION
 
 

@@ -133,29 +133,29 @@ def _build_tf_to_pytorch_map(model, config, tf_weights=None):
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_pool.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_pool.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_pool.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
-            model.segmentation_head.conv_pool.normalization.running_var
-        )
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_pool.normalization.running_var
 
         prefix = "aspp0/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_aspp.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_aspp.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_aspp.normalization.weight
         tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = model.segmentation_head.conv_aspp.normalization.running_mean
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
-            model.segmentation_head.conv_aspp.normalization.running_var
-        )
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_aspp.normalization.running_var
 
         prefix = "concat_projection/"
         tf_to_pt_map[prefix + "weights"] = model.segmentation_head.conv_projection.convolution.weight
         tf_to_pt_map[prefix + "BatchNorm/beta"] = model.segmentation_head.conv_projection.normalization.bias
         tf_to_pt_map[prefix + "BatchNorm/gamma"] = model.segmentation_head.conv_projection.normalization.weight
-        tf_to_pt_map[prefix + "BatchNorm/moving_mean"] = (
-            model.segmentation_head.conv_projection.normalization.running_mean
-        )
-        tf_to_pt_map[prefix + "BatchNorm/moving_variance"] = (
-            model.segmentation_head.conv_projection.normalization.running_var
-        )
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_mean"
+        ] = model.segmentation_head.conv_projection.normalization.running_mean
+        tf_to_pt_map[
+            prefix + "BatchNorm/moving_variance"
+        ] = model.segmentation_head.conv_projection.normalization.running_var
 
         prefix = "logits/semantic/"
         tf_to_pt_map[ema(prefix + "weights")] = model.segmentation_head.classifier.convolution.weight

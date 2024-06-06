@@ -937,9 +937,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
             early_stopping=True,
         )
 
-        decoded = [
-            tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
-        ]
+        decoded = [tok.decode(g, skip_special_tokens=True) for g in hypotheses_batch]
 
         self.assertListEqual(
             expected_summaries,
@@ -971,7 +969,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
 
         self.assertEqual(translation, expected_translation)
 
@@ -1008,7 +1006,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
 
         self.assertEqual(translation, new_truncated_translation)
 
@@ -1035,6 +1033,6 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
-        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        translation = tok.decode(output[0], skip_special_tokens=True)
 
         self.assertEqual(translation, expected_translation)

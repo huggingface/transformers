@@ -152,7 +152,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                 self.assertEqual(len(encoded_special_token), 1)
 
-                text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
+                text = tokenizer.decode(ids + encoded_special_token)
                 encoded = tokenizer.encode(text, add_special_tokens=False)
 
                 input_encoded = tokenizer.encode(input_text, add_special_tokens=False)

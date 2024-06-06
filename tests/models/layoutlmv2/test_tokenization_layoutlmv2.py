@@ -1842,7 +1842,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
-        toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
+        toks = [(i, tokenizer.decode([i])) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(
             filter(
@@ -1860,13 +1860,9 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         toks_ids = [t[0] for t in toks]
 
         # Ensure consistency
-        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        output_txt = tokenizer.decode(toks_ids)
         if " " not in output_txt and len(toks_ids) > 1:
-            output_txt = (
-                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
-                + " "
-                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
-            )
+            output_txt = tokenizer.decode([toks_ids[0]]) + " " + tokenizer.decode(toks_ids[1:])
         if with_prefix_space:
             output_txt = " " + output_txt
         words = output_txt.split(" ")
@@ -1896,7 +1892,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)
                 if abs(len(seq0_tokens["input_ids"]) - len(seq1_tokens["input_ids"])) <= 2:
                     seq1_tokens_input_ids = seq1_tokens["input_ids"] + seq1_tokens["input_ids"]
-                    seq_1 = tokenizer.decode(seq1_tokens_input_ids, clean_up_tokenization_spaces=False)
+                    seq_1 = tokenizer.decode(seq1_tokens_input_ids)
                     seq_1 = seq_1.split(" ")
                     boxes_1 = [[i, i, i, i] for i in range(len(seq_1))]
                 seq1_tokens = tokenizer(seq_1, boxes=boxes_1, add_special_tokens=False)

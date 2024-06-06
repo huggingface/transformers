@@ -1283,7 +1283,7 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
             early_stopping=True,
         )
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True)
         self.assertListEqual(
             self.expected_summary(),
             decoded,

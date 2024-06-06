@@ -121,9 +121,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should cleanup the spaces that were added when splitting the input text during the
-            tokenization process. Not applicable to this tokenizer, since tokenization does not add spaces.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not the special tokens should be split during the tokenization process. The default behavior is
             to not split special tokens. This means that if `<|endoftext|>` is the `eos_token`, then `tokenizer.tokenize("<|endoftext|>") =
@@ -143,7 +140,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         bos_token=None,
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
-        clean_up_tokenization_spaces=False,
         split_special_tokens=False,
         **kwargs,
     ):
@@ -202,7 +198,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             unk_token=unk_token,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             split_special_tokens=split_special_tokens,
             **kwargs,
         )
@@ -290,7 +285,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = False,
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
@@ -299,7 +293,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         return super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,
         )

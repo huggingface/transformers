@@ -667,9 +667,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
             " Bronx on Friday. If convicted, Barrientos faces up to four years in prison.",
         ]
 
-        generated_summaries = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated_summaries = tokenizer.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated_summaries == EXPECTED
 
 

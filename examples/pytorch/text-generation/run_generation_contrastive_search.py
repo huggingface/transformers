@@ -116,14 +116,14 @@ def main():
         generated_sequence = generated_sequence.tolist()
 
         # Decode text
-        text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True, add_special_tokens=False)
+        text = tokenizer.decode(generated_sequence, add_special_tokens=False)
 
         # Remove all text after the stop token
         text = text[: text.find(args.stop_token) if args.stop_token else None]
 
         # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
         total_sequence = (
-            prompt_text + text[len(tokenizer.decode(inputs["input_ids"][0], clean_up_tokenization_spaces=True)) :]
+            prompt_text + text[len(tokenizer.decode(inputs["input_ids"][0])) :]
         )
 
         generated_sequences.append(total_sequence)

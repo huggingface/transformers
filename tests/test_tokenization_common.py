@@ -230,9 +230,7 @@ class TokenizerTesterMixin:
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
         # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
-        toks = [
-            (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
-        ]
+        toks = [(i, tokenizer.decode([i])) for i in set(tokenizer.get_vocab().values())]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], add_special_tokens=False), toks))
         if max_length is not None and len(toks) > max_length:
@@ -244,13 +242,9 @@ class TokenizerTesterMixin:
         toks_ids = [t[0] for t in toks]
 
         # Ensure consistency
-        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        output_txt = tokenizer.decode(toks_ids)
         if " " not in output_txt and len(toks_ids) > 1:
-            output_txt = (
-                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
-                + " "
-                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
-            )
+            output_txt = tokenizer.decode([toks_ids[0]]) + " " + tokenizer.decode(toks_ids[1:])
         if with_prefix_space:
             output_txt = " " + output_txt
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
@@ -956,7 +950,7 @@ class TokenizerTesterMixin:
                 encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                 self.assertEqual(len(encoded_special_token), 1)
 
-                text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
+                text = tokenizer.decode(ids + encoded_special_token)
                 encoded = tokenizer.encode(text, add_special_tokens=False)
 
                 input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
@@ -1332,7 +1326,7 @@ class TokenizerTesterMixin:
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
                 if abs(len(seq0_tokens) - len(seq1_tokens)) <= 2:
                     seq1_tokens = seq1_tokens + seq1_tokens
-                    seq_1 = tokenizer.decode(seq1_tokens, clean_up_tokenization_spaces=False)
+                    seq_1 = tokenizer.decode(seq1_tokens)
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
                 self.assertGreater(len(seq1_tokens), 2 + stride)
@@ -1623,12 +1617,10 @@ class TokenizerTesterMixin:
                             slow_tokenizer.decode(
                                 ids_to_decode,
                                 space_between_special_tokens=False,
-                                clean_up_tokenization_spaces=False,
                             ),
                             rust_tokenizer.decode(
                                 ids_to_decode,
                                 space_between_special_tokens=False,
-                                clean_up_tokenization_spaces=False,
                             ),
                             f"Hint here are the tokens being decoded.: {slow_tokenizer.convert_ids_to_tokens(ids_to_decode)}",
                         )
@@ -4117,52 +4109,6 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-
-    # TODO This is ran for all models but only tests bert...
-    def test_clean_up_tokenization_spaces(self):
-        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        assert tokenizer.clean_up_tokenization_spaces is True
-
-        tokens = tokenizer.encode("This shouldn't be! He'll go.")
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-        assert decoded == tokenizer.decode(tokens, clean_up_tokenization_spaces=False)
-
-        # Fast from slow
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer.save_pretrained(tmp_dir_2)
-            tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
-            del tokenizer
-
-        assert tokenizer_fast.clean_up_tokenization_spaces is False
-        decoded = tokenizer_fast.decode(tokens)
-        # fast and slow don't have the same output when we don't cleanup
-        # tokenization space. Here `be!` vs `be !` and `go.` vs `go .`
-        assert decoded == "[CLS] this shouldn ' t be! he ' ll go. [SEP]"
-
-        tokenizer_fast.clean_up_tokenization_spaces = True
-        assert tokenizer_fast.clean_up_tokenization_spaces is True
-
-        decoded = tokenizer_fast.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        # Slow from fast
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer_fast.clean_up_tokenization_spaces = False
-            tokenizer_fast.save_pretrained(tmp_dir_2)
-            tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
-
-        assert tokenizer.clean_up_tokenization_spaces is False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = True
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:

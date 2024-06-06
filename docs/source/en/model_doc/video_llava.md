@@ -102,7 +102,7 @@ prompt = "USER: <video>Why is this funny? ASSISTANT:"
 inputs = processor(text=prompt, videos=video, return_tensors="pt")
 
 out = model.generate(**inputs, max_new_tokens=60)
-processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+processor.batch_decode(out, skip_special_tokens=True)
 ```
 
 For multiple turns conversation change the prompt format to:
@@ -129,7 +129,7 @@ inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)
-processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+processor.batch_decode(generate_ids, skip_special_tokens=True)
 
 ```
 

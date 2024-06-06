@@ -61,7 +61,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     # overwrite since phonemes require specific creation
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
-        toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
+        toks = [(i, tokenizer.decode([i])) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], do_phonemize=False), toks))
         if max_length is not None and len(toks) > max_length:
             toks = toks[:max_length]
@@ -72,13 +72,9 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         toks_ids = [t[0] for t in toks]
 
         # Ensure consistency
-        output_txt = tokenizer.decode(toks_ids, clean_up_tokenization_spaces=False)
+        output_txt = tokenizer.decode(toks_ids)
         if " " not in output_txt and len(toks_ids) > 1:
-            output_txt = (
-                tokenizer.decode([toks_ids[0]], clean_up_tokenization_spaces=False)
-                + " "
-                + tokenizer.decode(toks_ids[1:], clean_up_tokenization_spaces=False)
-            )
+            output_txt = tokenizer.decode([toks_ids[0]]) + " " + tokenizer.decode(toks_ids[1:])
         if with_prefix_space:
             output_txt = " " + output_txt
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)

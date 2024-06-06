@@ -104,8 +104,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             Whether to add a beginning of sequence token at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether to add an end of sequence token at the end of sequences.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to clean up the tokenization spaces.
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
@@ -130,7 +128,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
-        clean_up_tokenization_spaces=False,
         additional_special_tokens=None,
         use_default_system_prompt=False,
         **kwargs,
@@ -171,7 +168,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             fill_token=fill_token,
             sp_model_kwargs=self.sp_model_kwargs,
             suffix_first=suffix_first,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             additional_special_tokens=additional_special_tokens,
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,

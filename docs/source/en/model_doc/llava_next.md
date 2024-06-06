@@ -132,7 +132,7 @@ inputs = processor(text=prompt, images=[image_stop, image_cats, image_snowman], 
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
-processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+processor.batch_decode(generate_ids, skip_special_tokens=True)
 ```
 
 ## Model optimization

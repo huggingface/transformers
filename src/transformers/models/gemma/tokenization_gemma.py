@@ -73,9 +73,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Gemma should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
@@ -95,7 +92,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
-        clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
         spaces_between_special_tokens=False,
         **kwargs,
@@ -122,7 +118,6 @@ class GemmaTokenizer(PreTrainedTokenizer):
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             **kwargs,

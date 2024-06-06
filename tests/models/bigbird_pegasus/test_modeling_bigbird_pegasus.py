@@ -587,9 +587,7 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
             "in topological insulator bi@xmath0se@xmath1 nanoribbons."
         )
 
-        generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tokenizer.batch_decode(hypotheses_batch.tolist(), skip_special_tokens=True)
 
         self.assertTrue(generated == [EXPECTED_LEP, EXPECTED_MAGNET])
 

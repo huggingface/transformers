@@ -84,7 +84,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_clean_sequence(self, tokenizer):
         input_text, output_text = self.get_input_output_texts(tokenizer)
         ids = tokenizer.encode(output_text, add_special_tokens=False)
-        text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
+        text = tokenizer.decode(ids)
         return text, ids
 
     def test_pretokenized_inputs(self):
