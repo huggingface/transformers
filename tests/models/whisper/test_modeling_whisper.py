@@ -64,10 +64,17 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
+    from transformers.generation import (
+        BeamSampleDecoderOnlyOutput,
+        BeamSampleEncoderDecoderOutput,
+        BeamSearchDecoderOnlyOutput,
+        BeamSearchEncoderDecoderOutput,
+        GenerateBeamDecoderOnlyOutput,
+        GenerateBeamEncoderDecoderOutput,
+        PhrasalConstraint,
+    )
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
-
-    from transformers.generation import GenerateBeamEncoderDecoderOutput, BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput, GenerateBeamDecoderOnlyOutput, BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput, PhrasalConstraint
 
     class DummyTimestampLogitProcessor(LogitsProcessor):
         """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
@@ -369,7 +376,6 @@ class WhisperModelTester:
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
-   
 
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -1540,9 +1546,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
 
     def test_beam_sample_generate_dict_output(self):
-        # We overwrite test_beam_sample_generate_dict_output in test_utils as 
-        # we can only perform beam search if the temperature is set to 0 in Whisper. 
-        
+        # We overwrite test_beam_sample_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
         config, input_ids, attention_mask = self._get_input_ids_and_config()
 
         # disable cache
@@ -1552,8 +1557,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         _, logits_warper_kwargs = self._get_logits_processor_and_warper_kwargs(input_ids.shape[-1])
         beam_kwargs = self._get_beam_kwargs()
 
-        # With Whisper, we can only perform a beam search if the temperature is set to 0. 
-        logits_warper_kwargs['temperature'] = 0
+        # With Whisper, we can only perform a beam search if the temperature is set to 0.
+        logits_warper_kwargs["temperature"] = 0
+        # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+        beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
 
         output_generate = self._beam_sample_generate(
             model=model,
@@ -1578,13 +1585,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Retrocompatibility check
             self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
-        self._check_outputs(
-            output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
-        )
+        self._check_outputs(output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"])
 
     def test_beam_search_generate_dict_output(self):
-        # We overwrite test_beam_search_generate_dict_output in test_utils as 
-        # we can only perform beam search if the temperature is set to 0 in Whisper. 
+        # We overwrite test_beam_search_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
 
@@ -1598,6 +1603,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 config.forced_eos_token_id,
             )
             beam_kwargs = self._get_beam_kwargs()
+
+            # With Whisper, we can only perform a beam search if the temperature is set to 0.
+            logits_process_kwargs["temperature"] = 0
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
             output_generate = self._beam_search_generate(
                 model=model,
                 input_ids=input_ids,
@@ -1622,12 +1633,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        # We overwrite test_beam_search_generate_dict_outputs_use_cache in test_utils as 
-        # we can only perform beam search if the temperature is set to 0 in Whisper. 
+        # We overwrite test_beam_search_generate_dict_outputs_use_cache in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
         for model_class in self.all_generative_model_classes:
             # enable cache
             config, input_ids, attention_mask = self._get_input_ids_and_config()
@@ -1643,6 +1654,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
 
             beam_kwargs = self._get_beam_kwargs()
+
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
 
             config.use_cache = True
             config.is_decoder = True
@@ -1665,12 +1679,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             else:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
             self._check_outputs(
-                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_return_sequences"]
+                output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     def test_group_beam_search_generate_dict_output(self):
-        # We overwrite test_group_beam_search_generate_dict_output in test_utils as 
-        # we can only perform beam search if the temperature is set to 0 in Whisper. 
+        # We overwrite test_group_beam_search_generate_dict_output in test_utils as
+        # we can only perform beam search if the temperature is set to 0 in Whisper.
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask = self._get_input_ids_and_config()
             config.use_cache = False
@@ -1683,6 +1697,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             )
 
             beam_kwargs = self._get_diverse_beam_kwargs()
+
+            # We will return num_beams sequences per input only if num_return_sequences == num_beams:
+            beam_kwargs["num_return_sequences"] = beam_kwargs["num_beams"]
+
             output_generate = self._group_beam_search_generate(
                 model=model,
                 input_ids=input_ids,
@@ -1707,7 +1725,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
             self._check_outputs(
-                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
             )
 
     def test_constrained_beam_search_generate_dict_output(self):

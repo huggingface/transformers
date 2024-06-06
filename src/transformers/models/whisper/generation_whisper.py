@@ -116,7 +116,7 @@ def _dynamic_time_warping(matrix: np.ndarray):
 
 
 def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
-    if logits_processor is not None: 
+    if logits_processor is not None:
         logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
         if logit_processor:
             return getattr(logit_processor, attribute_name, None)
@@ -554,19 +554,31 @@ class WhisperGenerationMixin:
         temperature = temperatures[0]
 
         max_frames, seek = self._retrieve_max_frames_and_seek(
-            batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames, is_shortform=is_shortform
+            batch_size=batch_size,
+            attention_mask=attention_mask,
+            total_input_frames=total_input_frames,
+            is_shortform=is_shortform,
         )
 
         # 5 Prepare running variables, list for generation
         num_return_sequences = generation_config.num_return_sequences
-        batch_size, batch_idx_map, cur_bsz, input_features, seek, max_frames, init_tokens, do_condition_on_prev_tokens = self._expand_variables_for_generation(
-            input_features=input_features, 
-            seek=seek, 
-            max_frames=max_frames, 
+        (
+            batch_size,
+            batch_idx_map,
+            cur_bsz,
+            input_features,
+            seek,
+            max_frames,
+            init_tokens,
+            do_condition_on_prev_tokens,
+        ) = self._expand_variables_for_generation(
+            input_features=input_features,
+            seek=seek,
+            max_frames=max_frames,
             init_tokens=init_tokens,
-            batch_size=batch_size, 
+            batch_size=batch_size,
             condition_on_prev_tokens=condition_on_prev_tokens,
-            generation_config=generation_config
+            generation_config=generation_config,
         )
 
         current_segments = self._prepare_segments(
@@ -601,10 +613,10 @@ class WhisperGenerationMixin:
                 batch_idx_map=batch_idx_map,
             )
 
-            # 6.3 prepare decoder input ids 
+            # 6.3 prepare decoder input ids
             suppress_tokens = _get_attr_from_logit_processors(
-                    logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
-                )
+                logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
+            )
 
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
@@ -628,13 +640,19 @@ class WhisperGenerationMixin:
             )
 
             # 6.5 Set current `begin_index` for all logit processors
-            if logits_processor is not None: 
+            if logits_processor is not None:
                 for proc in logits_processor:
                     if hasattr(proc, "set_begin_index"):
                         proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.6 Run generate with fallback
-            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens, model_output_type = self.generate_with_fallback(
+            (
+                seek_sequences,
+                seek_outputs,
+                should_skip,
+                do_condition_on_prev_tokens,
+                model_output_type,
+            ) = self.generate_with_fallback(
                 segment_input=segment_input,
                 decoder_input_ids=decoder_input_ids,
                 cur_bsz=cur_bsz,
@@ -656,7 +674,7 @@ class WhisperGenerationMixin:
 
             # 6.7 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
-                prev_i = batch_idx_map[i] 
+                prev_i = batch_idx_map[i]
 
                 if should_skip[i]:
                     seek[prev_i] += seek_num_frames[prev_i]
@@ -685,33 +703,50 @@ class WhisperGenerationMixin:
             if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
-        sequences = _pad_to_max_length(final_segments, pad_token_id = generation_config.pad_token_id, padding="right")
+        sequences = _pad_to_max_length(final_segments, pad_token_id=generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
             return {"sequences": sequences, "segments": final_segments}
 
-        if is_shortform: 
+        if is_shortform:
             # add eos token:
             if generation_config.max_new_tokens is None:
-                sequences = torch.cat([sequences, torch.full((sequences.shape[0],1,), generation_config.eos_token_id).to(sequences.device)], dim=-1)
+                sequences = torch.cat(
+                    [
+                        sequences,
+                        torch.full(
+                            (
+                                sequences.shape[0],
+                                1,
+                            ),
+                            generation_config.eos_token_id,
+                        ).to(sequences.device),
+                    ],
+                    dim=-1,
+                )
 
             if return_token_timestamps:
                 outputs = {}
-                outputs['sequences'] = sequences
-                outputs['token_timestamps'] = torch.stack([d['token_timestamps'] for d in seek_outputs], dim=0)
+                outputs["sequences"] = sequences
+                outputs["token_timestamps"] = torch.stack([d["token_timestamps"] for d in seek_outputs], dim=0)
             else:
                 outputs = sequences
-                
+
             if generation_config.return_dict_in_generate:
-                
                 outputs = self._stack_split_outputs(seek_outputs, model_output_type, device=sequences.device)
 
                 if num_return_sequences > 1:
-                    outputs.encoder_attentions = tuple(outputs.encoder_attentions[i][::num_return_sequences] for i in range(len(outputs.encoder_attentions)))
-                    outputs.encoder_hidden_states = tuple(outputs.encoder_hidden_states[i][::num_return_sequences] for i in range(len(outputs.encoder_hidden_states)))
+                    outputs.encoder_attentions = tuple(
+                        outputs.encoder_attentions[i][::num_return_sequences]
+                        for i in range(len(outputs.encoder_attentions))
+                    )
+                    outputs.encoder_hidden_states = tuple(
+                        outputs.encoder_hidden_states[i][::num_return_sequences]
+                        for i in range(len(outputs.encoder_hidden_states))
+                    )
                 if return_token_timestamps:
-                    outputs['token_timestamps'] = outputs['token_timestamps']
+                    outputs["token_timestamps"] = outputs["token_timestamps"]
                 return outputs
 
             return outputs
@@ -798,14 +833,14 @@ class WhisperGenerationMixin:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-                        
+
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-                        
+
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
                     seek_sequence,
@@ -858,13 +893,15 @@ class WhisperGenerationMixin:
 
         return current_segments
 
-    def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform):
+    def _postprocess_outputs(
+        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
+    ):
         # remove all previously passed decoder input ids
-        if isinstance(seek_outputs, torch.Tensor):  
-            if not is_shortform: 
+        if isinstance(seek_outputs, torch.Tensor):
+            if not is_shortform:
                 seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
                 return seek_outputs, seek_outputs
-            else: 
+            else:
                 return seek_outputs, seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
@@ -878,22 +915,20 @@ class WhisperGenerationMixin:
         if not is_shortform:
             seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
-
         def split_by_batch_index(values, key, batch_idx, is_shortform):
-            
-            if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']: 
+            if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
-            if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
+            if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
             elif key == "past_key_values":
-                if not is_shortform: 
+                if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
-                    return None 
-                else :
+                    return None
+                else:
                     return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-            
+
             return values[batch_idx].cpu()
-        
+
         sequence_tokens = seek_outputs["sequences"]
 
         seek_outputs = [
@@ -902,21 +937,35 @@ class WhisperGenerationMixin:
         ]
 
         return sequence_tokens, seek_outputs
-    
+
     def _stack_split_outputs(self, seek_outputs, model_output_type, device):
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key == 'sequences': 
+            if key == "sequences":
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
-            if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']:
-                outputs[key] = tuple(torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key])))
-            if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
-                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
-            if key == 'past_key_values': 
-                if seek_outputs[0][key] is not None: 
-                    outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
-                else: 
-                    outputs[key] = None 
+            if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
+                outputs[key] = tuple(
+                    torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
+                )
+            if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
+                outputs[key] = tuple(
+                    tuple(
+                        torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
+                        for j in range(len(seek_outputs[0][key][0]))
+                    )
+                    for i in range(len(seek_outputs[0][key]))
+                )
+            if key == "past_key_values":
+                if seek_outputs[0][key] is not None:
+                    outputs[key] = tuple(
+                        tuple(
+                            torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
+                            for j in range(len(seek_outputs[0][key][0]))
+                        )
+                        for i in range(len(seek_outputs[0][key]))
+                    )
+                else:
+                    outputs[key] = None
 
         return model_output_type(**outputs)
 
@@ -963,11 +1012,12 @@ class WhisperGenerationMixin:
                 should_skip = True
 
         return needs_fallback, should_skip
-    
-    def _expand_variables_for_generation(self, input_features, seek, max_frames, init_tokens, batch_size, condition_on_prev_tokens, generation_config): 
-        
-        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences>1:
-            batch_idx_map = list(range(batch_size*generation_config.num_return_sequences))
+
+    def _expand_variables_for_generation(
+        self, input_features, seek, max_frames, init_tokens, batch_size, condition_on_prev_tokens, generation_config
+    ):
+        if generation_config.num_return_sequences is not None and generation_config.num_return_sequences > 1:
+            batch_idx_map = list(range(batch_size * generation_config.num_return_sequences))
             batch_size = len(batch_idx_map)
             cur_bsz = len(batch_idx_map)
             do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(len(batch_idx_map))]
@@ -976,12 +1026,21 @@ class WhisperGenerationMixin:
             max_frames = max_frames.repeat_interleave(generation_config.num_return_sequences, dim=0)
             init_tokens = init_tokens.repeat_interleave(generation_config.num_return_sequences, dim=0)
             generation_config.num_return_sequences = 1
-        else: 
+        else:
             cur_bsz = batch_size
             batch_idx_map = list(range(batch_size))
             do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
 
-        return batch_size, batch_idx_map, cur_bsz, input_features, seek, max_frames, init_tokens, do_condition_on_prev_tokens
+        return (
+            batch_size,
+            batch_idx_map,
+            cur_bsz,
+            input_features,
+            seek,
+            max_frames,
+            init_tokens,
+            do_condition_on_prev_tokens,
+        )
 
     @staticmethod
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
@@ -1078,7 +1137,7 @@ class WhisperGenerationMixin:
 
         generation_config.return_timestamps = return_timestamps
 
-        if hasattr(generation_config, 'no_timestamps_token_id'):
+        if hasattr(generation_config, "no_timestamps_token_id"):
             timestamp_begin = generation_config.no_timestamps_token_id + 1
         else:
             timestamp_begin = self.config.vocab_size + 1
@@ -1417,12 +1476,11 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _retrieve_max_frames_and_seek(batch_size, attention_mask, total_input_frames, is_shortform):
-
         if batch_size > 1 and not is_shortform and attention_mask is None:
             raise ValueError(
                 "When doing batched long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
             )
-        elif batch_size > 1 and not is_shortform: 
+        elif batch_size > 1 and not is_shortform:
             max_frames = attention_mask.sum(-1).cpu().to(torch.long)
             seek = torch.zeros((batch_size,), dtype=torch.long)
         else:
@@ -1470,8 +1528,6 @@ class WhisperGenerationMixin:
             no_speech_detector.set_model(self)
 
         return logits_processor
-    
-
 
     @staticmethod
     def _maybe_reduce_batch(input_features, seek, max_frames, cur_bsz, batch_idx_map):
@@ -1491,8 +1547,7 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _get_input_segment(input_features, seek, seek_num_frames, num_segment_frames, cur_bsz, batch_idx_map):
-
-        if input_features is None: 
+        if input_features is None:
             return None
 
         segment_input = []
@@ -1526,7 +1581,6 @@ class WhisperGenerationMixin:
         suppress_tokens,
         kwargs,
     ):
-        
         if "decoder_input_ids" in kwargs:
             decoder_input_ids = kwargs.pop("decoder_input_ids")
 
@@ -1572,7 +1626,6 @@ class WhisperGenerationMixin:
         return decoder_input_ids, kwargs
 
     def _set_max_new_tokens_and_length(self, config, decoder_input_ids, generation_config):
-
         max_new_tokens = generation_config.max_new_tokens if generation_config.max_new_tokens is not None else 0
         if max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions:
             raise ValueError(
