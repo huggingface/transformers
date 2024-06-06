@@ -67,7 +67,7 @@ if is_torch_available():
     from transformers.generation.logits_process import LogitsProcessor
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
 
-    from transformers.generation import GenerateBeamEncoderDecoderOutput, BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput, GenerateBeamDecoderOnlyOutput, BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput
+    from transformers.generation import GenerateBeamEncoderDecoderOutput, BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput, GenerateBeamDecoderOnlyOutput, BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput, PhrasalConstraint
 
     class DummyTimestampLogitProcessor(LogitsProcessor):
         """This processor fakes the correct timestamps tokens pattern [TOK_1] [TOK_2] ... [TOK_N] [TIME_STAMP_TOK_1] [TIME_STAMP_TOK_2] [TOK_N+1] ..."""
@@ -1666,6 +1666,100 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
             self._check_outputs(
                 output_generate, input_ids, model.config, use_cache=True, num_return_sequences=beam_kwargs["num_return_sequences"]
+            )
+
+    def test_group_beam_search_generate_dict_output(self):
+        # We overwrite test_group_beam_search_generate_dict_output in test_utils as 
+        # we can only perform beam search if the temperature is set to 0 in Whisper. 
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+            config.use_cache = False
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+
+            beam_kwargs = self._get_diverse_beam_kwargs()
+            output_generate = self._group_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_return_sequences"]
+            )
+
+    def test_constrained_beam_search_generate_dict_output(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self._get_input_ids_and_config()
+
+            # disable cache
+            config.use_cache = False
+
+            model = model_class(config).to(torch_device).eval()
+            logits_process_kwargs, _ = self._get_logits_processor_and_warper_kwargs(
+                input_ids.shape[-1],
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+            )
+
+            # Sample constraints
+            min_id = 3
+            max_id = model.config.vocab_size
+            force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
+            constraints = [
+                PhrasalConstraint(force_tokens),
+            ]
+
+            beam_kwargs = self._get_constrained_beam_kwargs()
+            output_generate = self._constrained_beam_search_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                constraints=constraints,
+                beam_kwargs=beam_kwargs,
+                logits_process_kwargs=logits_process_kwargs,
+                output_scores=True,
+                output_logits=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateBeamEncoderDecoderOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+            else:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + input_ids.shape[-1])
+                self.assertIsInstance(output_generate, GenerateBeamDecoderOnlyOutput)
+                # Retrocompatibility check
+                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+
+            self._check_outputs(
+                output_generate, input_ids, model.config, num_return_sequences=beam_kwargs["num_beams"]
             )
 
 

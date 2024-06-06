@@ -705,7 +705,7 @@ class WhisperGenerationMixin:
                 
             if generation_config.return_dict_in_generate:
                 
-                outputs = self._stack_split_outputs(seek_outputs, model_output_type)
+                outputs = self._stack_split_outputs(seek_outputs, model_output_type, device=sequences.device)
 
                 if num_return_sequences > 1:
                     outputs.encoder_attentions = tuple(outputs.encoder_attentions[i][::num_return_sequences] for i in range(len(outputs.encoder_attentions)))
@@ -879,38 +879,44 @@ class WhisperGenerationMixin:
             seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
 
-        def split_by_batch_index(values, key, batch_idx):
+        def split_by_batch_index(values, key, batch_idx, is_shortform):
             
             if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']: 
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
                 return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
             elif key == "past_key_values":
-                # we don't save `past_key_values` as this is too costly
-                return None 
+                if not is_shortform: 
+                    # we don't save `past_key_values` as this is too costly for longform
+                    return None 
+                else :
+                    return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
             
             return values[batch_idx].cpu()
         
         sequence_tokens = seek_outputs["sequences"]
 
         seek_outputs = [
-            {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
+            {k: split_by_batch_index(v, k, i, is_shortform) for k, v in seek_outputs.items()}
             for i in range(sequence_tokens.shape[0])
         ]
 
         return sequence_tokens, seek_outputs
     
-    def _stack_split_outputs(self, seek_outputs, model_output_type):
+    def _stack_split_outputs(self, seek_outputs, model_output_type, device):
         outputs = {}
         for key in seek_outputs[0].keys():
             if key == 'sequences': 
-                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0)
+                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             if key in ['scores', "encoder_attentions", 'encoder_hidden_states', 'logits']:
-                outputs[key] = tuple(torch.stack([v[key][i] for v in seek_outputs]) for i in range(len(seek_outputs[0][key])))
+                outputs[key] = tuple(torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key])))
             if key in ["decoder_attentions", "decoder_hidden_states", 'cross_attentions']:
-                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
-            if key == 'past_keys': 
-                outputs[key] = None 
+                outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
+            if key == 'past_key_values': 
+                if seek_outputs[0][key] is not None: 
+                    outputs[key] = tuple(tuple(torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device) for j in range(len(seek_outputs[0][key][0]))) for i in range(len(seek_outputs[0][key])))
+                else: 
+                    outputs[key] = None 
 
         return model_output_type(**outputs)
 
