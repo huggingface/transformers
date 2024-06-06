@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -100,7 +100,7 @@ class BeitImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
-    @filter_out_non_signature_kwargs()
+    @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
     def __init__(
         self,
         do_resize: bool = True,
@@ -114,8 +114,9 @@ class BeitImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
+        **kwargs,
     ) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}

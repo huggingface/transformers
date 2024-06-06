@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
@@ -426,7 +426,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
     @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
-    @filter_out_non_signature_kwargs(extra=["max_size"])
+    @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
     def __init__(
         self,
         do_resize: bool = True,
@@ -445,7 +445,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         num_labels: Optional[int] = None,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
 
         # Deprecated, backward compatibility
         self._max_size = kwargs.pop("max_size", 1333)
