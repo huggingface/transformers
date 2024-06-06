@@ -27,6 +27,23 @@ The abstract from the paper is the following:
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://github.com/openai/whisper).
 
+## Quick usage
+
+You can run Whisper in less than 4 lines of code and transcribe in less than a minute!
+
+```python
+import torch
+from transformers import pipeline
+
+whisper = pipeline("automatic-speech-recognition", "openai/whisper-large-v3", torch_dtype=torch.float16)
+
+transcription = whisper("<audio_file.mp3>")
+
+print(transcription["text"])
+```
+
+Voila! You can swap the model with any [Whisper checkpoints](https://huggingface.co/models?other=whisper&sort=downloads) on the Hugging Face Hub with the same pipeline based on your needs.
+
 ## Usage tips
 
 - The model usually performs well without requiring any finetuning.
