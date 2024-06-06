@@ -15,7 +15,7 @@
 import unittest
 from typing import List, Optional, Tuple, Union
 
-from transformers.utils import get_json_schema
+from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -206,7 +206,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         def fn(x: int):
             return x
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DocstringParsingException):
             get_json_schema(fn)
 
     def test_missing_param_docstring(self):
@@ -216,7 +216,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DocstringParsingException):
             get_json_schema(fn)
 
     def test_missing_type_hint(self):
@@ -229,7 +229,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeHintParsingException):
             get_json_schema(fn)
 
     def test_return_value(self):
@@ -329,7 +329,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         # Single-element tuples should just be the type itself, or List[type] for variable-length inputs
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeHintParsingException):
             get_json_schema(fn)
 
     def test_ellipsis_type_fails(self):
@@ -347,7 +347,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             return x
 
         # Variable length inputs should be specified with List[type], not Tuple[type, ...]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeHintParsingException):
             get_json_schema(fn)
 
     def test_enum_extraction(self):

@@ -37,6 +37,18 @@ args_split_re = re.compile(
 returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL)
 
 
+class TypeHintParsingException(Exception):
+    """Exception raised for errors in parsing type hints to generate JSON schemas"""
+
+    pass
+
+
+class DocstringParsingException(Exception):
+    """Exception raised for errors in parsing docstrings to generate JSON schemas"""
+
+    pass
+
+
 def _get_json_schema_type(param_type: str) -> Dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
@@ -56,7 +68,9 @@ def _parse_type_hint(hint: str) -> Dict:
         try:
             return _get_json_schema_type(hint)
         except KeyError:
-            raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
+            raise TypeHintParsingException(
+                "Couldn't parse this type hint, likely due to a custom class or object: ", hint
+            )
 
     elif origin is Union:
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
@@ -85,7 +99,7 @@ def _parse_type_hint(hint: str) -> Dict:
         if not args:
             return {"type": "array"}
         if len(args) == 1:
-            raise ValueError(
+            raise TypeHintParsingException(
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
@@ -93,7 +107,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "pass the element directly."
             )
         if ... in args:
-            raise ValueError(
+            raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
                 "Use List[] types for variable-length"
                 " inputs instead."
@@ -108,7 +122,7 @@ def _parse_type_hint(hint: str) -> Dict:
             out["additionalProperties"] = _parse_type_hint(args[1])
         return out
 
-    raise ValueError("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
+    raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
 def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
@@ -117,7 +131,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     required = []
     for param_name, param in signature.parameters.items():
         if param.annotation == inspect.Parameter.empty:
-            raise ValueError(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -274,7 +288,9 @@ def get_json_schema(func: Callable) -> Dict:
     """
     doc = inspect.getdoc(func)
     if not doc:
-        raise ValueError(f"Cannot generate JSON schema for {func.__name__} because it has no docstring!")
+        raise DocstringParsingException(
+            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"
+        )
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
@@ -284,7 +300,7 @@ def get_json_schema(func: Callable) -> Dict:
             return_dict["description"] = return_doc
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
-            raise ValueError(
+            raise DocstringParsingException(
                 f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
