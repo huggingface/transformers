@@ -15,6 +15,10 @@ if is_bitsandbytes_available():
     import torch.nn as nn
 
     from ..pytorch_utils import Conv1D
+else:
+    raise ImportError(
+        "The `transformers.integrations.bitsandbytes` module depends on the `bitsandbytes` library, which is not installed."
+    )
 
 if is_accelerate_available():
     import accelerate
