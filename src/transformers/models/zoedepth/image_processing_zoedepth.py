@@ -119,8 +119,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
-            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
+            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
+            both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
+            desired output size. Do note that `ensure_multiple_of` can be used after this.
+            Can be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
             `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
@@ -339,8 +341,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
                 resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
-                Whether to keep the aspect ratio of the image. If False, the image will be resized to (size, size). If
-                True, the image will be resized to keep the aspect ratio and the size will be the maximum possible.
+                If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
+                both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
+                desired output size. Do note that `ensure_multiple_of` can be used after this.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works both with and without
                 `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
