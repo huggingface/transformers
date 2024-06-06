@@ -116,6 +116,19 @@ class AssistedCandidateGenerator(CandidateGenerator):
                     value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
                 )
 
+        # Remove potential default DynamicCache if assistant does not support it
+        if "past_key_values" in assistant_kwargs.keys():
+            if (
+                isinstance(assistant_kwargs["past_key_values"], DynamicCache)
+                and not self.assistant_model._supports_cache_class
+            ):
+                # Cache is empty -> remove it from kwargs
+                if len(assistant_kwargs["past_key_values"]) == 0:
+                    del assistant_kwargs["past_key_values"]
+                # Cache is not empty -> convert to legacy
+                else:
+                    assistant_kwargs["past_key_values"] = assistant_kwargs["past_key_values"].to_legacy_cache()
+
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
         elif assistant_model.config.is_encoder_decoder:
@@ -387,10 +400,7 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
     elif isinstance(past_key_values, DynamicCache):
-        for idx in range(len(past_key_values.key_cache)):
-            if past_key_values.value_cache[idx].shape[-1] != 0:
-                past_key_values.key_cache[idx] = past_key_values.key_cache[idx][:, :, :maximum_length, :]
-                past_key_values.value_cache[idx] = past_key_values.value_cache[idx][:, :, :maximum_length, :]
+        past_key_values.crop(maximum_length)
 
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):

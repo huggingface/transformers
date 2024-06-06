@@ -27,6 +27,7 @@ from transformers import is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
+    require_auto_gptq,
     require_quanto,
     require_torch,
     require_torch_multi_accelerator,
@@ -2148,6 +2149,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         watermark_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
         _ = model.generate(**model_inputs, watermarking_config=watermark_config, do_sample=False, max_length=15)
 
+        # We will not check watermarked text, since we check it in `logits_processors` tests
+        # Checking if generated ids are as expected fails on different hardware
         args = {
             "bias": 2.0,
             "context_width": 1,
@@ -2158,19 +2161,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         output = model.generate(**model_inputs, do_sample=False, max_length=15)
         output_selfhash = model.generate(**model_inputs, watermarking_config=args, do_sample=False, max_length=15)
 
-        # check that the watermarked text is generating what is should
-        self.assertListEqual(
-            output.tolist(), [[40, 481, 307, 262, 717, 284, 9159, 326, 314, 716, 407, 257, 4336, 286, 262]]
-        )
-        self.assertListEqual(
-            output_selfhash.tolist(), [[40, 481, 307, 2263, 616, 640, 284, 651, 616, 1621, 503, 612, 553, 531, 367]]
-        )
-
+        # Check that the detector is detecting watermarked text
         detector = WatermarkDetector(model_config=model.config, device=torch_device, watermarking_config=args)
         detection_out_watermarked = detector(output_selfhash[:, input_len:], return_dict=True)
         detection_out = detector(output[:, input_len:], return_dict=True)
 
-        # check that the detector is detecting watermarked text
         self.assertListEqual(detection_out_watermarked.prediction.tolist(), [True])
         self.assertListEqual(detection_out.prediction.tolist(), [False])
 
@@ -3071,6 +3066,43 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(y_prob > 0.001 and n_prob > 0.001)
         self.assertTrue(y_prob <= 1.0 and n_prob <= 1.0)
+
+
+@require_torch
+class TokenHealingTestCase(unittest.TestCase):
+    @parameterized.expand(
+        [
+            (
+                "square_bracket",
+                'An example ["like this"] and another example [',
+                'An example ["like this"] and another example ["',
+            ),
+            ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
+            # aggressive_healing: "http" shouldn't be replaced with "https"
+            ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
+            ("trailing_whitespace", "I read a book about ", "I read a book about"),
+            ("nothing_to_heal", "I read a book about", "I read a book about"),
+            ("single_token", "I", "I"),
+            ("empty_prompt", "", ""),
+        ]
+    )
+    @require_auto_gptq
+    def test_prompts(self, name, input, expected):
+        model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+        completion_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            device_map="auto",
+            trust_remote_code=False,
+            revision="main",
+            use_cache=True,
+        )
+        input_ids = tokenizer(input, return_tensors="pt").input_ids.to(completion_model.device)
+
+        healed_ids = completion_model.heal_tokens(input_ids)
+        predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(predicted, expected)
 
     def test_generate_from_inputs_embeds_with_bos_token_id_is_none(self):
         article = "Today a dragon flew over Paris."
