@@ -207,7 +207,7 @@ class MambaModelTester:
 
         # create cache
         cache = model(input_ids, use_cache=True).cache_params
-        cache.seqlen_offset = 0
+        cache.reset()
 
         # use cache
         token_emb = model.embeddings(input_ids)
@@ -387,8 +387,8 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
+                        recursive_check(tuple_object.conv_state_cache, dict_object.conv_state_cache)
+                        recursive_check(tuple_object.ssm_state_cache, dict_object.ssm_state_cache)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
@@ -519,4 +519,22 @@ class MambaIntegrationTests(unittest.TestCase):
         output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
 
+        self.assertEqual(output_sentence, expected_output)
+
+    @slow
+    def test_compile(self):
+        expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
+
+        input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        output = model.generate(input_ids, max_new_tokens=20)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+        self.assertEqual(output_sentence, expected_output)
+
+        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
+        output = model.generate(input_ids, max_new_tokens=20)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)

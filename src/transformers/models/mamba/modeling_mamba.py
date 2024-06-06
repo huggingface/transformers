@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union, List
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -74,11 +74,7 @@ class MambaCache:
     """
 
     def __init__(
-        self,
-        config: MambaConfig,
-        batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: Optional[str] = None
+        self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
     ):
         self.seqlen_offset = 0
         self.dtype = dtype
@@ -86,40 +82,45 @@ class MambaCache:
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
 
-        self.conv_state_cache : List[torch.Tensor] = []
-        self.ssm_state_cache : List[torch.Tensor] = []
+        self.conv_state_cache: List[torch.Tensor] = []
+        self.ssm_state_cache: List[torch.Tensor] = []
 
         self.is_cache_initialized = [False for _ in range(config.num_hidden_layers)]
-        
+
         for i in range(config.num_hidden_layers):
-            new_layer_conv_cache = torch.zeros(batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype)
-            new_layer_ssm_cache = torch.zeros(batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype)
+            new_layer_conv_cache = torch.zeros(
+                batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype
+            )
+            new_layer_ssm_cache = torch.zeros(
+                batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype
+            )
             torch._dynamo.mark_static_address(new_layer_conv_cache)
             torch._dynamo.mark_static_address(new_layer_ssm_cache)
             self.conv_state_cache.append(new_layer_conv_cache)
             self.ssm_state_cache.append(new_layer_ssm_cache)
 
-    def update_conv_state(self, layer_idx : int, conv_states : torch.Tensor) -> torch.Tensor:
-        if not self.is_initialized(layer_idx):
-            self.conv_state_cache[layer_idx] += conv_states
-            return self.conv_state_cache[layer_idx]
-        
-        # decoding phase
+    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
         conv_state = self.conv_state_cache[layer_idx]
-        new_conv_state = conv_state.roll(shifts=-1, dims=-1)
-        new_conv_state[:, :, -1] = conv_states[:, :, 0]
+        if not self.is_initialized(layer_idx):
+            conv_state += new_conv_state.to(conv_state.device)
+            return conv_state
+
+        # decoding phase
+        conv_state = conv_state.roll(shifts=-1, dims=-1)
+        conv_state[:, :, -1] = new_conv_state[:, :, 0]
         self.conv_state_cache[layer_idx].zero_()
-        self.conv_state_cache[layer_idx] += new_conv_state
+        self.conv_state_cache[layer_idx] += conv_state
         return self.conv_state_cache[layer_idx]
 
     def get_conv_sate(self, layer_idx):
         return self.conv_state_cache[layer_idx]
 
-    def update_ssm_state(self, layer_idx : int, new_ssm_state : torch.Tensor):
-        self.ssm_state_cache[layer_idx].zero_()
-        self.ssm_state_cache[layer_idx] += new_ssm_state
+    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
+        ssm_state = self.ssm_state_cache[layer_idx]
+        ssm_state.zero_()
+        ssm_state += new_ssm_state.to(ssm_state.device)
         self.is_cache_initialized[layer_idx] = True
-        return self.ssm_state_cache[layer_idx]
+        return ssm_state
 
     def get_ssm_sate(self, layer_idx):
         return self.ssm_state_cache[layer_idx]
@@ -214,7 +215,7 @@ class MambaMixer(nn.Module):
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
-            if cache_params is not None and cache_params.is_initialized(0):
+            if cache_params is not None and cache_params.is_initialized(self.layer_idx):
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
                     cache_params.get_conv_sate(self.layer_idx),
@@ -244,7 +245,7 @@ class MambaMixer(nn.Module):
             A = -torch.exp(self.A_log.float())
             # 3.c perform the recurrence y ← SSM(A, B, C)(x)
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
-            if cache_params is not None and cache_params.is_initialized(0):
+            if cache_params is not None and cache_params.is_initialized(self.layer_idx):
                 scan_outputs = selective_state_update(
                     cache_params.get_ssm_sate(self.layer_idx),
                     hidden_states[..., 0],
@@ -622,7 +623,6 @@ class MambaModel(MambaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-
         hidden_states = self.norm_f(hidden_states)
 
         if output_hidden_states:
@@ -676,13 +676,17 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, cache_params: Optional[MambaCache] = None, inputs_embeds=None, **kwargs
     ):
-        if cache_params is None and (self.config.use_cache or kwargs.get('use_cache', False)):
+        use_cache = kwargs.get("use_cache", None)
+        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
+        if use_cache and self.training and self.gradient_checkpointing:
+            use_cache = False
+        if cache_params is None and use_cache:
             # will construct a cache for a different generation
             cache_params = MambaCache(
                 self.config,
                 input_ids.shape[0],
-                dtype=self.backbone.embeddings.weight.dtype,
-                device=self.backbone.embeddings.weight.device,
+                dtype=self.config.torch_dtype,
+                device=input_ids.device,
             )
         # only last token for inputs_ids if the state is passed along.
         elif cache_params is not None and cache_params.is_initialized(0):
