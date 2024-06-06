@@ -387,7 +387,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         else {}
     )
 
-    model_split_percents = [0.5,0.85,0.95]
+    model_split_percents = [0.5, 0.85, 0.95]
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
