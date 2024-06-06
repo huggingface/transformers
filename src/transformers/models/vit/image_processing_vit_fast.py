@@ -287,9 +287,3 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
 
         data = {"pixel_values": torch.vstack(transformed_images)}
         return BatchFeature(data, tensor_type=return_tensors)
-
-    def to_dict(self) -> Dict[str, Any]:
-        result = super().to_dict()
-        result.pop("_transforms", None)
-        result.pop("_transform_settings", None)
-        return result
