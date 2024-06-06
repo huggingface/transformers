@@ -546,6 +546,7 @@ class HQQQuantizedCache(QuantizedCache):
             raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
         HQQLinear.set_backend(HQQBackend.ATEN if (self.axis_key == 0 and self.axis_value == 0) else HQQBackend.PYTORCH)
+        HQQQuantizer.quantize = torch.compile(HQQQuantizer.quantize, fullgraph=True, mode="reduce-overhead")
         self.quantizer = HQQQuantizer
 
     def _quantize(self, tensor, axis):
@@ -778,9 +779,6 @@ class StaticCache(Cache):
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
-        self.quantizer = HQQQuantizer
-        self._quantized_key_cache: List[torch.Tensor] = [0 for i in range(10)]
-        self._quantized_value_cache: List[torch.Tensor] = [0 for i in range(10)]
 
     def update(
         self,
@@ -833,29 +831,6 @@ class StaticCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
-
-    def _quantize(self, tensor):
-        qtensor, meta = self.quantizer.quantize(
-            tensor,
-            axis=1,
-            device=self.device,
-            compute_dtype=self.dtype,
-            nbits=2,
-            group_size=64,
-        )
-        meta["compute_dtype"] = self.dtype
-        qtensor = qtensor.contiguous()
-        for key in meta:
-            if type(meta[key]) == torch.Tensor:
-                meta[key] = (
-                    meta[key].to(self.dtype) if torch.is_floating_point(meta[key]) else meta[key]
-                ).contiguous()
-        return qtensor, meta
-
-    def _dequantize(self, qtensor):
-        quant_tensor, meta = qtensor
-        tensor = self.quantizer.dequantize(quant_tensor, meta)
-        return tensor
 
 
 class SlidingWindowCache(Cache):
