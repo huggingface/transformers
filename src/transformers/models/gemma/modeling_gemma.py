@@ -81,6 +81,13 @@ def _get_unpad_data(attention_mask):
     )
 
 
+class CacheInfo:
+
+    def __init__(self, position, length):
+        self.position = position
+        self._length = length
+
+
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -1221,8 +1228,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         elif use_cache:
             cache_info = cache_info[-input_length:]
 
-        cache_info.position = cache_info
-        cache_info._length = int(cache_info[-1]) + 1
+        cache_info = CacheInfo(position=cache_info, length=int(cache_info[-1]) + 1)
         model_inputs.update(
             {
                 "position_ids": position_ids,
