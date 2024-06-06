@@ -1236,7 +1236,7 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "_length": int(cache_info[-1]) + 1,
+                "_length": -1,
             }
         )
         return model_inputs
