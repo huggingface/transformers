@@ -58,8 +58,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
     def validate_environment(self, *args, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for quantization.")
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
                 "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
@@ -239,7 +237,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
     def update_device_map(self, device_map):
-        if device_map is None:
+        if device_map is None and torch.cuda.is_available():
             device_map = {"": torch.cuda.current_device()}
             logger.info(
                 "The device_map was not initialized. "
