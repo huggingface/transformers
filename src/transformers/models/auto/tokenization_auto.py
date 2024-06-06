@@ -301,6 +301,7 @@ else:
             ("musicgen", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("musicgen_melody", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
+            ("myt5", ("MyT5Tokenizer", None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "nllb",
@@ -453,12 +454,6 @@ else:
                     "T5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            (
-                "myt5",
-                (
-                    "T5Tokenizer" if is_sentencepiece_available() else None,
-                    "MyT5Tokenizer" if is_tokenizers_available() else None,
-                ),
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),

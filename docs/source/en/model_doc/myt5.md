@@ -32,11 +32,6 @@ Tips:
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
-
-## MyT5Config
-
-[[autodoc]] MyT5Config
-
 ## MyT5Tokenizer
 
 [[autodoc]] MyT5Tokenizer
