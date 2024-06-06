@@ -129,6 +129,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 else:
                     assistant_kwargs["past_key_values"] = assistant_kwargs["past_key_values"].to_legacy_cache()
 
+        # Remove potential default "num_logits_to_keep" key
+        if "num_logits_to_keep" in assistant_kwargs.keys() and not assistant_model._supports_num_logits_to_keep():
+            del assistant_kwargs["num_logits_to_keep"]
+
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
         elif assistant_model.config.is_encoder_decoder:
