@@ -152,14 +152,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             legacy = True
         self.legacy = legacy
 
-        #TODO: ita
-        self.add_prefix_space = add_prefix_space
-        # if add_prefix_space is not None:
-        #     kwargs["from_slow"] = True
-
-        if self.force_from_slow() is True:
-            kwargs["from_slow"] = True
-
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -218,8 +210,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
             if not prepend_normalizer:
                 return True
-
-
 
     @property
     def add_eos_token(self):

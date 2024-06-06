@@ -110,12 +110,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
             additional_special_tokens = extra_tokens
 
-        if add_prefix_space is not None:
-            logger.warning_once(
-                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
-            )
-           # kwargs["from_slow"] = True
-
         self.add_prefix_space = add_prefix_space
 
         super().__init__(

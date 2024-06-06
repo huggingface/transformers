@@ -20,6 +20,7 @@ see tokenization_utils.py
 import copy
 import json
 import os
+import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -102,35 +103,32 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        self.add_prefix_space = kwargs.pop("add_prefix_space", None)
 
-        # TODO:Ita
-        # if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
-        #     raise ValueError(
-        #         "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
-        #         "have sentencepiece installed."
-        #     )
+        if self.force_from_slow() is True:
+            kwargs["from_slow"] = True
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
+        elif fast_tokenizer_file is not None and not from_slow:
+            # We have a serialization from tokenizers which let us directly build the backend
+            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif fast_tokenizer_file is not None:  # and not from_slow:
-            # We have a serialization from tokenizers which let us directly build the backend
+        elif fast_tokenizer_file is not None:
+            # When sentencepiece is not installed, we can't convert a slow tokenizer to a fast one
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
-            fast_tokenizer = convert_gguf_tokenizer(tokenizer_dict)
+            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            architecture = gguf_param["config"]["model_type"]
+            tokenizer_dict = gguf_param["tokenizer"]
+            fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
         elif self.slow_tokenizer_class is not None:
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif slow_tokenizer is not None:
-            # We need to convert a slow tokenizer to build the backend
-            tokenizer_dict = load_gguf_checkpoint(kwargs.get("vocab_file"))["tokenizer"]
-            fast_tokenizer = convert_gguf_tokenizer(tokenizer_dict)
-
         else:
             raise ValueError(
                 "Couldn't instantiate the backend tokenizer from one of: \n"
@@ -142,7 +140,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         self._tokenizer = fast_tokenizer
 
-        self.update_pre_tokenizer()
+        self._update_pre_tokenizer()
 
         if slow_tokenizer is not None:
             kwargs.update(slow_tokenizer.init_kwargs)
@@ -193,7 +191,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if type(self) == PreTrainedTokenizerFast and all(item in kwargs for item in ["add_bos_token", "add_eos_token", "eos_token", "bos_token"]):
             self.add_bos_token = kwargs.get("add_bos_token")
             self.add_eos_token = kwargs.get("add_eos_token")
-            self.update_post_processor()
+            self._update_post_processor()
 
         if len(tokens_to_add) > 0:
             # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
@@ -877,49 +875,87 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
 
+    def force_from_slow(self):
+        if getattr(self, "add_prefix_space", None) is None:
+            if getattr(self, "_tokenizer", None) is None:
+                return True
+            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
+            if not prepend_normalizer:
+                return True
 
-
-    def update_normalizer(self):
+    def _update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = []
-        if getattr(self, "legacy", True):
+        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) is not (normalizers.Sequence or normalizers.Prepend or normalizers.Sequence):
+            return
+        elif getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
                 sequence += [normalizers.Prepend(prepend="▁")]
             sequence += [normalizers.Replace(pattern=" ", content="▁")]
             self._tokenizer.normalizer = normalizers.Sequence(sequence)
 
         elif not getattr(self, "legacy", True):
-            self._tokenizer.normalizer = normalizers.Sequence(sequence) #TODO:ita2
+            self._tokenizer.normalizer = normalizers.Sequence(sequence)
 
 
-    def update_pre_tokenizer(self):
+    def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
-        sequence = []
+
         if getattr(self, "add_prefix_space", None) == None:
-            if getattr(self._tokenizer, "normalizer", None) == None:
-                return
-            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            tokenizer_normalizer = getattr(self._tokenizer, "normalizer", None)
+            if tokenizer_normalizer == None:
+                return # No add_prefix_space to set
+
+            curr_normalizer = json.loads(tokenizer_normalizer.__getstate__().decode('utf-8'))
             if 'normalizers' not in curr_normalizer:
-                return
-            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
-            if prepend_normalizer:
-                self.add_prefix_space = True
+                return # No add_prefix_space to set
+
+            if any(n['type'] == 'Prepend' for n in curr_normalizer['normalizers']):
+                self.add_prefix_space = True # Update add_prefix_space based on the current normalizer
             else:
-                return
-        elif getattr(self, "add_prefix_space") == False:
-            prepend_scheme = "never"
+                return # No add_prefix_space to set
 
         if getattr(self, "add_prefix_space", True):
             prepend_scheme = "always"
             if not getattr(self, "legacy", True):
                 prepend_scheme = "first"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,
-                                                                 split=False)
-        self.update_normalizer()
+
+        elif not getattr(self, "add_prefix_space"):
+            prepend_scheme = "never"
+
+        if isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
+            curr_state = json.loads(self._tokenizer.pre_tokenizer.__getstate__().decode('utf-8'))
+            update_normalizer = True
+
+            for i, pt in enumerate(curr_state['pretokenizers']):
+                if pt['type'] == 'Metaspace':
+                    # Create a new Metaspace pre-tokenizer
+                    new_metaspace = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=False)
+                    curr_state['pretokenizers'][i] = json.loads(new_metaspace.__getstate__().decode('utf-8'))
+                elif pt['type'] == 'ByteLevel':
+                    # Create a new ByteLevel pre-tokenizer
+                    new_bytelevel = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
+                    curr_state['pretokenizers'][i] = json.loads(new_bytelevel.__getstate__().decode('utf-8'))
+                    update_normalizer = False
+
+            new_pretokenizer = pre_tokenizers.Sequence([])
+            new_pretokenizer.__setstate__(json.dumps(curr_state).encode('utf-8'))
+            self._tokenizer.pre_tokenizer = new_pretokenizer
+            self._update_normalizer() if update_normalizer else None
+
+        elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace) or self._tokenizer.pre_tokenizer is None:
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=False)
+            self._update_normalizer()
+
+        elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):
+            self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
+
+        else:
+            warnings.warn(f"{type(self._tokenizer.pre_tokenizer)} does not support `add_prefix_space`. ")
 
 
-
-    def update_post_processor(self):
+    def _update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
         """

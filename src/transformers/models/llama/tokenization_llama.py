@@ -193,7 +193,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy or from_slow:  # no dependency on protobuf
+        if self.add_prefix_space is None and (self.legacy or from_slow):  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
             return tokenizer
 
