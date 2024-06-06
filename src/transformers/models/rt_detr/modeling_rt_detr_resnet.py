@@ -242,7 +242,9 @@ class RTDetrResNetStage(nn.Module):
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
             )
         else:
-            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True)
+            first_layer = layer(
+                in_channels, out_channels, stride=stride, activation=config.hidden_act, should_apply_shortcut=True
+            )
         self.layers = nn.Sequential(
             first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
         )
