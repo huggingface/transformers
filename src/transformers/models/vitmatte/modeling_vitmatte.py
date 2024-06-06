@@ -310,16 +310,16 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not yet supported")
+
         outputs = self.backbone.forward_with_filtered_kwargs(
             pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
         )
 
         features = outputs.feature_maps[-1]
         alphas = self.decoder(features, pixel_values)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not yet supported")
 
         if not return_dict:
             output = (alphas,) + outputs[1:]

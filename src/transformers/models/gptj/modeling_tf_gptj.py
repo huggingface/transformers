@@ -921,6 +921,8 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        if labels is not None and self.config.pad_token_id is None and input_ids.shape[0] != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -963,9 +965,6 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
         loss = None
 
         if labels is not None:
-            if self.config.pad_token_id is None and logits_shape[0] != 1:
-                raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0 : logits_shape[0], sequence_lengths]
 
