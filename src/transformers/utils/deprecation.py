@@ -24,6 +24,7 @@ from . import ExplicitEnum
 class Action(ExplicitEnum):
     NONE = "none"
     NOTIFY = "notify"
+    NOTIFY_ALWAYS = "notify_always"
     RAISE = "raise"
 
 
@@ -95,9 +96,9 @@ def deprecate_kwarg(
 
     deprecated_version = packaging.version.parse(version)
     current_version = packaging.version.parse(__version__)
-    is_already_deprecated = current_version >= deprecated_version
+    is_greater_or_equal_version = current_version >= deprecated_version
 
-    if is_already_deprecated:
+    if is_greater_or_equal_version:
         version_message = f"and removed starting from version {version}"
     else:
         version_message = f"and will be removed in version {version}"
@@ -105,12 +106,12 @@ def deprecate_kwarg(
     def wrapper(func):
         @wraps(func)
         def wrapped_func(*args, **kwargs):
-            minimum_action = None
+            minimum_action = Action.NONE
             message = None
 
             # deprecated kwarg and its new version are set for function call -> replace it with new name
             if old_name in kwargs and new_name in kwargs:
-                minimum_action = Action.RAISE if raise_if_both_names else Action.NOTIFY
+                minimum_action = Action.RAISE if raise_if_both_names else Action.NOTIFY_ALWAYS
                 message = f"Both `{old_name}` and `{new_name}` are set. Using `{new_name}={kwargs[new_name]}` and ignoring deprecated `{old_name}={kwargs[old_name]}`."
                 kwargs.pop(old_name)
 
@@ -128,16 +129,22 @@ def deprecate_kwarg(
             if message is not None and additional_message is not None:
                 message = f"{message} {additional_message}"
 
-            # update minimum_action if raise_if_greater_or_equal_version is set
-            if minimum_action == Action.NOTIFY and raise_if_greater_or_equal_version and is_already_deprecated:
-                minimum_action = Action.RAISE
-            elif minimum_action == Action.NOTIFY and not warn_if_greater_or_equal_version and is_already_deprecated:
-                minimum_action = Action.NONE
+            # update minimum_action if argument is ALREADY deprecated (current version >= deprecated version)
+            if is_greater_or_equal_version:
+                # change to (NOTIFY, NOTIFY_ALWAYS) -> RAISE if specified
+                # in case we want to raise error for already deprecated arguments
+                if raise_if_greater_or_equal_version and minimum_action != Action.NONE:
+                    minimum_action = Action.RAISE
+
+                # change to NOTIFY -> NONE if specified (NOTIFY_ALWAYS can't be changed to NONE)
+                # in case we want to ignore notifications for already deprecated arguments
+                elif not warn_if_greater_or_equal_version and minimum_action == Action.NOTIFY:
+                    minimum_action = Action.NONE
 
             # raise error or notify user
             if minimum_action == Action.RAISE:
                 raise ValueError(message)
-            elif minimum_action == Action.NOTIFY:
+            elif minimum_action in (Action.NOTIFY, Action.NOTIFY_ALWAYS):
                 # DeprecationWarning is ignored by default, so we use FutureWarning instead
                 warnings.warn(message, FutureWarning, stacklevel=2)
 
