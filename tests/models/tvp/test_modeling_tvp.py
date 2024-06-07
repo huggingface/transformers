@@ -256,7 +256,7 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp") if is_vision_available() else None
+        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp")
 
     def test_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
@@ -297,3 +297,41 @@ class TvpModelIntegrationTests(unittest.TestCase):
         assert outputs.logits.shape == expected_shape
         expected_slice = torch.tensor([[0.5061, 0.4988]]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits, expected_slice, atol=1e-4))
+
+    def test_interpolate_inference_no_head(self):
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()  # 480X640
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding, interpolate_pos_encoding=True)
+
+        expected_shape = torch.Size((1, 1212, 128))
+        assert outputs.last_hidden_state.shape == expected_shape
+
+    def test_interpolate_inference_with_head(self):
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()  # 480X640
+        encoding = image_processor(
+            images=image, return_tensors="pt", do_resize=False, do_pad=False, do_center_crop=False
+        )
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+        encoding.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**encoding, interpolate_pos_encoding=True, output_hidden_states=True)
+
+        expected_shape = torch.Size((1, 1212, 128))
+        assert outputs.hidden_states[-1].shape == expected_shape
