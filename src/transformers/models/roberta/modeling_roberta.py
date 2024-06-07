@@ -401,7 +401,7 @@ class RobertaFlashAttention2(RobertaSelfAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in the correct dtype just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
+        # in fp32.
 
         if query_states.dtype == torch.float32:
             if torch.is_autocast_enabled():
