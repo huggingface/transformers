@@ -698,8 +698,14 @@ class ProcessorMixin(PushToHubMixin):
                 if kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
 
-        # if something remains in kwargs, it belongs to common
-        output_kwargs["common_kwargs"].update(kwargs)
+        # if something remains in kwargs, it belongs to common after flattening
+        if set(kwargs) & set(default_kwargs):
+            # here kwargs is dictionary-based since it shares keys with default set
+            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+        else:
+            # here it's a flat dict
+            output_kwargs["common_kwargs"].update(kwargs)
+
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:
             output_kwargs[modality].update(output_kwargs["common_kwargs"])
