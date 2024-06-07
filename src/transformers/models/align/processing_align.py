@@ -26,16 +26,13 @@ except ImportError:
 
 from ...image_utils import ImageInput
 from ...processing_utils import (
-    CommonKwargs,
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
-    TextKwargs,
 )
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
-class AlignProcessorKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
+class AlignProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": "max_length",
