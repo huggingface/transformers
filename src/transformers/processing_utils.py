@@ -539,15 +539,11 @@ class ProcessorMixin(PushToHubMixin):
         **kwargs,
     ) -> str:
         """
-        Overrides the tokenizer's `apply_chat_template` method to apply the IDEFICS2 chat template by default
-        if no chat template is provided.
-
-        By default, the output isn't tokenized. This is because the IDEFICS2 chat template is designed to insert
-        the image token <image> into the sequence according to the message, but does not handle expanding the image
-        tokens to the sequence length or adding the surrounding tokens e.g. <fake_image_token>.
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
 
         Args:
-            conversation (`Union[List[Dict, str, str], "Conversation"]`):
+            conversation (`List[Dict, str, str]`):
                 The conversation to format.
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the default chat template
@@ -555,7 +551,7 @@ class ProcessorMixin(PushToHubMixin):
             tokenize (`bool`, *optional*, defaults to `False`):
                 Whether to tokenize the output or not.
             **kwargs:
-                Additional keyword arguments for the tokenizer's `apply_chat_template` method.
+                Additional keyword arguments
         """
 
         if chat_template is None:
