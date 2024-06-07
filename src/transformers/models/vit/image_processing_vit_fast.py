@@ -15,7 +15,7 @@
 """Fast Image processor class for ViT."""
 
 import functools
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
