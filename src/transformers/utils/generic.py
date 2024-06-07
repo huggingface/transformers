@@ -750,3 +750,15 @@ def infer_framework(model_class):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
+
+
+def safe_int(x):
+    import torch
+
+    return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
+
+
+def safe_float(x):
+    import torch
+
+    return x.to(torch.float32) if torch.jit.is_tracing() else int(x)

@@ -33,7 +33,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+    safe_int,
+)
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 
@@ -910,8 +916,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         patch_height = patch_width = None
         if pixel_values is not None:
             patch_height, patch_width = (
-                (pixel_values.shape[2] / self.config.patch_size).to(torch.int64),
-                (pixel_values.shape[3] / self.config.patch_size).to(torch.int64),
+                safe_int(pixel_values.shape[2] / self.config.patch_size),
+                safe_int(pixel_values.shape[3] / self.config.patch_size),
             )
             visual_embeddings = self.forward_image(pixel_values)
             visual_attention_mask = torch.ones(

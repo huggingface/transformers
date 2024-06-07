@@ -39,7 +39,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, logging
+from ...utils import ModelOutput, logging, safe_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_dpt import DPTConfig
 
@@ -225,9 +225,6 @@ class DPTViTEmbeddings(nn.Module):
     def _resize_pos_embed(self, posemb, grid_size_height, grid_size_width, start_index=1):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
-
-        def safe_int(x):
-            return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
 
         old_grid_size = safe_int(posemb_grid.size(0) ** 0.5)
 

@@ -53,6 +53,8 @@ from .generic import (
     is_torch_dtype,
     is_torch_tensor,
     reshape,
+    safe_float,
+    safe_int,
     squeeze,
     strtobool,
     tensor_size,
