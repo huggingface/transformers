@@ -624,7 +624,8 @@ class SpmConverter(Converter):
 
         # Add user defined symbols
         user_defined_symbols = [
-            AddedToken(token, normalized=False, special=False) for token in self.proto.trainer_spec.user_defined_symbols
+            AddedToken(token, normalized=False, special=False)
+            for token in self.proto.trainer_spec.user_defined_symbols
         ]
         control_symbols = [
             AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
