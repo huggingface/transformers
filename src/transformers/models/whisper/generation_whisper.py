@@ -718,7 +718,7 @@ class WhisperGenerationMixin:
 
         if is_shortform:
             # add eos token:
-            if generation_config.max_new_tokens is None and generation_config.max_length is None: 
+            if generation_config.max_new_tokens is None and generation_config.max_length is None:
                 sequences = torch.cat(
                     [
                         sequences,
