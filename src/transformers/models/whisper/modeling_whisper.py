@@ -602,7 +602,7 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value is not None and cache_position[0]:
+        if is_cross_attention and past_key_value is not None and cache_position:
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
