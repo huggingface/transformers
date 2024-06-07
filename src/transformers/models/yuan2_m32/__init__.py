@@ -22,7 +22,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_yuan2_m32": ["Yuan2M32Config"],
-    "tokenization_yuan": ["YuanTokenizer"],
+    "tokenization_yuan": ["YuanTokenizer", "YuanTokenizerFast"],
 }
 
 
