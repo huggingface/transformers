@@ -2370,7 +2370,7 @@ class TrainingArguments:
         )
         return warmup_steps
 
-    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+    def _dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
@@ -2380,7 +2380,7 @@ class TrainingArguments:
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
-                self.dict_torch_dtype_to_str(value)
+                self._dict_torch_dtype_to_str(value)
 
     def to_dict(self):
         """
@@ -2400,7 +2400,7 @@ class TrainingArguments:
             # Handle the accelerator_config if passed
             if is_accelerate_available() and isinstance(v, AcceleratorConfig):
                 d[k] = v.to_dict()
-        self.dict_torch_dtype_to_str(d)
+        self._dict_torch_dtype_to_str(d)
 
         return d
 
