@@ -56,6 +56,9 @@ class Idefics2Processor(ProcessorMixin):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
             config.perceiver_config.resampler_n_latents value for the model used.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string. This argument is optional, and only relevant to processors that support
+            chat inputs.
     """
 
     attributes = ["image_processor", "tokenizer"]
