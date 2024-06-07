@@ -873,8 +873,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if getattr(self, "add_prefix_space", None) is None:
             if getattr(self, "_tokenizer", None) is None:
                 return True
-            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
-            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
+            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
+            prepend_normalizer = [n for n in curr_normalizer["normalizers"] if n["type"] == "Prepend"]
             if not prepend_normalizer:
                 return True
 
@@ -882,27 +882,32 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = json.loads(normalizers.Sequence([]).__getstate__())
         final_sequence = normalizers.Sequence([])
-        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) not in (normalizers.Sequence, normalizers.Prepend, normalizers.Precompiled):
+        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) not in (
+            normalizers.Sequence,
+            normalizers.Prepend,
+            normalizers.Precompiled,
+        ):
             return
         if type(self._tokenizer.normalizer) is normalizers.Sequence:
-            curr_state = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
-            curr_state['normalizers'] = [pt for pt in curr_state['normalizers'] if pt['type'] not in ['Prepend', 'Replace']]
+            curr_state = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
+            curr_state["normalizers"] = [
+                pt for pt in curr_state["normalizers"] if pt["type"] not in ["Prepend", "Replace"]
+            ]
             sequence = curr_state
         else:
-            sequence['normalizers'].append(json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8')))
+            sequence["normalizers"].append(json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8")))
         if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
-                new_prepend = json.loads(normalizers.Prepend(prepend="▁").__getstate__().decode('utf-8'))
-                sequence['normalizers'].append(new_prepend)
-            if not any(n['type'] == 'Replace' for n in sequence['normalizers']):
-                new_replace = json.loads(normalizers.Replace(pattern=" ", content="▁").__getstate__().decode('utf-8'))
-                sequence['normalizers'].append(new_replace)
-            final_sequence.__setstate__(json.dumps(sequence).encode('utf-8'))
+                new_prepend = json.loads(normalizers.Prepend(prepend="▁").__getstate__().decode("utf-8"))
+                sequence["normalizers"].append(new_prepend)
+            if not any(n["type"] == "Replace" for n in sequence["normalizers"]):
+                new_replace = json.loads(normalizers.Replace(pattern=" ", content="▁").__getstate__().decode("utf-8"))
+                sequence["normalizers"].append(new_replace)
+            final_sequence.__setstate__(json.dumps(sequence).encode("utf-8"))
             self._tokenizer.normalizer = final_sequence
 
         elif not getattr(self, "legacy", True):
             self._tokenizer.normalizer = final_sequence
-
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
@@ -910,16 +915,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if getattr(self, "add_prefix_space", None) == None:
             tokenizer_normalizer = getattr(self._tokenizer, "normalizer", None)
             if tokenizer_normalizer == None:
-                return # No add_prefix_space to set
+                return  # No add_prefix_space to set
 
-            curr_normalizer = json.loads(tokenizer_normalizer.__getstate__().decode('utf-8'))
-            if 'normalizers' not in curr_normalizer:
-                return # No add_prefix_space to set
+            curr_normalizer = json.loads(tokenizer_normalizer.__getstate__().decode("utf-8"))
+            if "normalizers" not in curr_normalizer:
+                return  # No add_prefix_space to set
 
-            if any(n['type'] == 'Prepend' for n in curr_normalizer['normalizers']):
-                self.add_prefix_space = True # Update add_prefix_space based on the current normalizer
+            if any(n["type"] == "Prepend" for n in curr_normalizer["normalizers"]):
+                self.add_prefix_space = True  # Update add_prefix_space based on the current normalizer
             else:
-                return # No add_prefix_space to set
+                return  # No add_prefix_space to set
 
         if getattr(self, "add_prefix_space", True):
             prepend_scheme = "always"
@@ -930,27 +935,34 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             prepend_scheme = "never"
 
         if isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
-            curr_state = json.loads(self._tokenizer.pre_tokenizer.__getstate__().decode('utf-8'))
+            curr_state = json.loads(self._tokenizer.pre_tokenizer.__getstate__().decode("utf-8"))
             update_normalizer = True
 
-            for i, pt in enumerate(curr_state['pretokenizers']):
-                if pt['type'] == 'Metaspace':
+            for i, pt in enumerate(curr_state["pretokenizers"]):
+                if pt["type"] == "Metaspace":
                     # Create a new Metaspace pre-tokenizer
-                    new_metaspace = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=False)
-                    curr_state['pretokenizers'][i] = json.loads(new_metaspace.__getstate__().decode('utf-8'))
-                elif pt['type'] == 'ByteLevel':
+                    new_metaspace = pre_tokenizers.Metaspace(
+                        replacement="▁", prepend_scheme=prepend_scheme, split=False
+                    )
+                    curr_state["pretokenizers"][i] = json.loads(new_metaspace.__getstate__().decode("utf-8"))
+                elif pt["type"] == "ByteLevel":
                     # Create a new ByteLevel pre-tokenizer
                     new_bytelevel = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
-                    curr_state['pretokenizers'][i] = json.loads(new_bytelevel.__getstate__().decode('utf-8'))
+                    curr_state["pretokenizers"][i] = json.loads(new_bytelevel.__getstate__().decode("utf-8"))
                     update_normalizer = False
 
             new_pretokenizer = pre_tokenizers.Sequence([])
-            new_pretokenizer.__setstate__(json.dumps(curr_state).encode('utf-8'))
+            new_pretokenizer.__setstate__(json.dumps(curr_state).encode("utf-8"))
             self._tokenizer.pre_tokenizer = new_pretokenizer
             self._update_normalizer() if update_normalizer else None
 
-        elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace) or self._tokenizer.pre_tokenizer is None:
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=True)
+        elif (
+            isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace)
+            or self._tokenizer.pre_tokenizer is None
+        ):
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+                replacement="▁", prepend_scheme=prepend_scheme, split=True
+            )
             self._update_normalizer()
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):

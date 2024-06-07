@@ -202,15 +202,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             single=single, pair=pair, special_tokens=special_tokens
         )
 
-    def force_from_slow(self):
-        if getattr(self, "add_prefix_space") == None:
-            if getattr(self, "_tokenizer", None) is None:
-                return True
-            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
-            prepend_normalizer = [n for n in curr_normalizer['normalizers'] if n['type'] == 'Prepend']
-            if not prepend_normalizer:
-                return True
-
     @property
     def add_eos_token(self):
         return self._add_eos_token
