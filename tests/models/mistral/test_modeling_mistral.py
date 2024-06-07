@@ -649,8 +649,8 @@ class MistralIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.3.0"):
             self.skipTest("This test requires torch >= 2.3 to run.")
 
-        if self.cuda_compute_capability_major_version == 7:
-            self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
+        # if self.cuda_compute_capability_major_version == 7:
+        #     self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = {
