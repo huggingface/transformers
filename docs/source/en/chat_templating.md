@@ -288,7 +288,7 @@ correctly as tools. Specifically, you should follow these rules:
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
   because most tool-use models ignore them.
 
-### Advanced: Passing tool results to the model
+### Passing tool results to the model
 
 The sample code above is enough to list the available tools for your model, but what happens if it wants to actually use
 one? If that happens, you should:
@@ -298,11 +298,11 @@ one? If that happens, you should:
 3. Call the corresponding function with those arguments.
 4. Add the result to the conversation, in the format `{"role": "tool", "content": tool_results}`
 
-### Advanced: A complete tool use example
+### A complete tool use example
 
 Let's walk through a tool use example, step by step. For this example, we will use an 8B `Hermes-2-Pro` model,
 as it is one of the highest-performing tool-use models in its size category at the time of writing. If you have the
-memory, you can consider using a larger model instead, like [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+memory, you can consider using a larger model instead like [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
 or [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1), both of which also support tool use.
 
 First, let's load our model and tokenizer:
@@ -393,10 +393,10 @@ Although this was a simple demo with only a single call, the same technique work
 multiple tools and longer conversations. This can be a powerful ways to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
 
-### Advanced: Understanding tool schemas
+### Understanding tool schemas
 
 Each function you pass to the `tools` argument of `apply_chat_template` is converted into a 
-[JSON schema](https://json-schema.org/learn/getting-started-step-by-step. These schemas
+[JSON schema](https://json-schema.org/learn/getting-started-step-by-step). These schemas
 are then passed to the model chat template. In other words, tool-use models do not see your functions directly, and they
 never see the actual code inside them. What they care about is the function **definitions** and the **arguments** they
 need to pass to them - they care about what the tools do and how to use them, not how they work! It is up to you
@@ -487,7 +487,7 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-## Retrieval-augmented generation
+## Advanced: Retrieval-augmented generation
 
 "Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
 to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
