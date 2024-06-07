@@ -753,12 +753,18 @@ def infer_framework(model_class):
 
 
 def safe_int(x):
+    if not is_torch_available():
+        return int(x)
+        
     import torch
 
     return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
 
 
 def safe_float(x):
+    if not is_torch_available():
+        return int(x)
+
     import torch
 
     return x.to(torch.float32) if torch.jit.is_tracing() else int(x)
