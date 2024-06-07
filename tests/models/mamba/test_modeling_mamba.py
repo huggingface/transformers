@@ -269,6 +269,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
     test_head_masking = False  # Mamba does not have attention heads
     test_model_parallel = False
+    test_mismatched_shapes = False  # MambaMixer follows a different initialization
     pipeline_model_mapping = (
         {
             "feature-extraction": MambaModel,
