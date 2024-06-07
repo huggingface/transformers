@@ -143,6 +143,7 @@ def _pad_to_max_length(
 
             sequences.append(sequence)
             max_total_length = max(max_total_length, len(sequences[-1]))
+            print(max_total_length)
         elif bos_token_tensor is not None:
             sequences.append(bos_token_tensor)
         else:
@@ -499,7 +500,6 @@ class WhisperGenerationMixin:
         self._set_return_outputs(
             return_dict_in_generate=return_dict_in_generate,
             return_token_timestamps=return_token_timestamps,
-            is_shortform=is_shortform,
             logprob_threshold=logprob_threshold,
             generation_config=generation_config,
         )
@@ -544,7 +544,6 @@ class WhisperGenerationMixin:
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
-            is_shortform=is_shortform,
             num_beams=kwargs.get("num_beams", 1),
             device=device,
         )
@@ -698,7 +697,11 @@ class WhisperGenerationMixin:
                 )
 
                 current_segments[prev_i] += segments
-                seek[prev_i] += segment_offset
+
+                if is_shortform:
+                    seek[prev_i] += max_frames[i]
+                else:
+                    seek[prev_i] += segment_offset
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -997,7 +1000,7 @@ class WhisperGenerationMixin:
                 needs_fallback = True
 
         if generation_config.logprob_threshold is not None:
-            if "sequences_scores" in seek_outputs[0]:
+            if hasattr(seek_outputs[0], "sequences_scores"):
                 logprobs = [s["sequences_scores"] for s in seek_outputs][index]
             else:
                 scores = seek_outputs[index]["scores"]
@@ -1108,9 +1111,7 @@ class WhisperGenerationMixin:
             )
 
     @staticmethod
-    def _set_return_outputs(
-        return_dict_in_generate, return_token_timestamps, is_shortform, logprob_threshold, generation_config
-    ):
+    def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
         if return_dict_in_generate is None:
             return_dict_in_generate = generation_config.return_dict_in_generate
 
@@ -1120,7 +1121,7 @@ class WhisperGenerationMixin:
             generation_config.output_attentions = True
             generation_config.output_scores = True
 
-        if not is_shortform and logprob_threshold is not None:
+        if logprob_threshold is not None:
             return_dict_in_generate = True
             generation_config.output_scores = True
 
@@ -1498,9 +1499,7 @@ class WhisperGenerationMixin:
 
         return max_frames, seek
 
-    def _retrieve_logit_processors(
-        self, generation_config, logits_processor, begin_index, is_shortform, num_beams, device
-    ):
+    def _retrieve_logit_processors(self, generation_config, logits_processor, begin_index, num_beams, device):
         if generation_config.return_timestamps is True:
             timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
@@ -1527,7 +1526,7 @@ class WhisperGenerationMixin:
             )
             generation_config.begin_suppress_tokens = None
 
-        if generation_config.no_speech_threshold is not None and not is_shortform:
+        if generation_config.no_speech_threshold is not None:
             no_speech_detector = WhisperNoSpeechDetection(
                 no_speech_token=generation_config.no_timestamps_token_id - 1,
                 begin_index=begin_index,
