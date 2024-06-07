@@ -245,6 +245,26 @@ class CommonKwargs(TypedDict, total=False):
 
 
 class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False):
+    """
+    Base class for kwargs passing to processors.
+    A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
+        1) Additional, typed keys and that this model requires to process inputs.
+        2) Default values for existing keys.
+    New keys have to be defined as follows to ensure type hinting is done correctly.
+
+    ```python
+    images_kwargs: ImagesKwargs = {"new_image_kwarg": Optional[bool]}
+
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "max_length": 64,
+        },
+    }
+
+    ```
+    """
+
     common_kwargs: CommonKwargs = {
         **CommonKwargs.__annotations__,
     }

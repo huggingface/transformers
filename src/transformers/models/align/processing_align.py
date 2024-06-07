@@ -35,35 +35,7 @@ from ...processing_utils import (
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 
 
-"""
-# TODO (@molbap) This is a bother, forward references from TypedDict are resolved and need this to work
-if is_vision_available():
-    import PIL  # noqa: F401
-if is_torch_available():
-    import torch  # noqa: F401
-"""
-
-
 class AlignProcessorKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
-    """
-    Inherits from `ProcessingKwargs` to provide:
-        1) Additional keys that this model requires to process inputs.
-        2) Default values for extra keys.
-    New keys have to be defined as follows to ensure type hinting is done correctly.
-
-    ```python
-    images_kwargs: ImagesKwargs = {"new_image_kwarg": Optional[bool]}
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 64,
-        },
-    }
-
-    ```
-    """
-
     _defaults = {
         "text_kwargs": {
             "padding": "max_length",
