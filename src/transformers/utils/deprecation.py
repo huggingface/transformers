@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 import warnings
 from functools import wraps
 from typing import Optional
@@ -104,27 +105,42 @@ def deprecate_kwarg(
         version_message = f"and will be removed in version {version}"
 
     def wrapper(func):
+        
+        # Required for better warning message
+        sig = inspect.signature(func)
+        function_named_args = set(sig.parameters.keys())
+        is_instance_method = "self" in function_named_args
+        is_class_method = "cls" in function_named_args
+
         @wraps(func)
         def wrapped_func(*args, **kwargs):
+
+            # Get class + function name (just for better warning message)
+            func_name = func.__name__
+            if is_instance_method:
+                func_name = f"{args[0].__class__.__name__}.{func_name}"
+            elif is_class_method:
+                func_name = f"{args[0].__name__}.{func_name}"
+
             minimum_action = Action.NONE
             message = None
 
             # deprecated kwarg and its new version are set for function call -> replace it with new name
             if old_name in kwargs and new_name in kwargs:
                 minimum_action = Action.RAISE if raise_if_both_names else Action.NOTIFY_ALWAYS
-                message = f"Both `{old_name}` and `{new_name}` are set. Using `{new_name}={kwargs[new_name]}` and ignoring deprecated `{old_name}={kwargs[old_name]}`."
+                message = f"Both `{old_name}` and `{new_name}` are set for `{func_name}`. Using `{new_name}={kwargs[new_name]}` and ignoring deprecated `{old_name}={kwargs[old_name]}`."
                 kwargs.pop(old_name)
 
             # only deprecated kwarg is set for function call -> replace it with new name
             elif old_name in kwargs and new_name is not None and new_name not in kwargs:
                 minimum_action = Action.NOTIFY
-                message = f"`{old_name}` is deprecated {version_message}. Use `{new_name}` instead."
+                message = f"`{old_name}` is deprecated {version_message} for `{func_name}`. Use `{new_name}` instead."
                 kwargs[new_name] = kwargs.pop(old_name)
 
             # deprecated kwarg is not set for function call and new name is not specified -> just notify
             elif old_name in kwargs:
                 minimum_action = Action.NOTIFY
-                message = f"`{old_name}` is deprecated {version_message}."
+                message = f"`{old_name}` is deprecated {version_message} for `{func_name}`."
 
             if message is not None and additional_message is not None:
                 message = f"{message} {additional_message}"
