@@ -261,7 +261,24 @@ class AlignProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
 
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertEqual(inputs["pixel_values"].shape[2], 214)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
+    def test_structured_kwargs_nested_from_dict(self):
+        processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
