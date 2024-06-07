@@ -20,7 +20,7 @@ from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
@@ -47,13 +47,18 @@ class LlavaNextProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+    ):
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
         super().__init__(image_processor, tokenizer)
-
-        self.image_size = self.image_processor.size["shortest_edge"]
-        self.patch_size = getattr(self.image_processor, "patch_size", None)
-        self.image_token = "<image>"
-        self.vision_feature_select_strategy = getattr(self.image_processor, "vision_feature_select_strategy", None)
 
     def __call__(
         self,
@@ -127,7 +132,8 @@ class LlavaNextProcessor(ProcessorMixin):
             prompt_strings = text
             logger.warning_once(
                 "Expanding inputs for image tokens in LLaVa should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
             )
         # cannot infer image expansion length if no images are found
@@ -135,11 +141,12 @@ class LlavaNextProcessor(ProcessorMixin):
             prompt_strings = text
         else:
             image_sizes = image_inputs["image_sizes"]
+            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
             prompt_strings = []
             for image_size, sample in zip(image_sizes, text):
                 # Replace the image token with the expanded image token sequence
-                height, width = image_size
-                num_image_tokens = self._get_number_of_features(height, width)
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
 
@@ -156,27 +163,27 @@ class LlavaNextProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
-    def _get_number_of_features(self, height: int, width: int) -> int:
+    def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
-        image_size = self.image_size
-        patch_size = self.patch_size
 
-        npatches = image_size // patch_size
+        height_best_resolution, width_best_resolution = select_best_resolution(
+            [orig_height, orig_width], image_grid_pinpoints
+        )
+        scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
 
-        height_best_resolution, width_best_resolution = select_best_resolution([height, width], image_grid_pinpoints)
-        num_patch_height, num_patch_width = height_best_resolution // image_size, width_best_resolution // image_size
-
+        patches_height = height // self.patch_size
+        patches_width = width // self.patch_size
         unpadded_features, newline_features = self._get_unpadded_features(
-            height, width, npatches, num_patch_height, num_patch_width
+            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
         )
         # The base patch covers the entire image (+1 for the CLS)
-        base_features = npatches**2 + 1
+        base_features = patches_height * patches_width + 1
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
-    def _get_unpadded_features(self, height, width, npatches, num_patch_height, num_patch_width):
-        current_width = npatches * num_patch_height
-        current_height = npatches * num_patch_width
+    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
+        current_width = patches_height * scale_height
+        current_height = patches_width * scale_width
 
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height

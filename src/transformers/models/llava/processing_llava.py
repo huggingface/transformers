@@ -19,7 +19,7 @@ Processor class for Llava.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
@@ -46,12 +46,18 @@ class LlavaProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+    ):
+        self.patch_size = patch_size
+        self.vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
         super().__init__(image_processor, tokenizer)
-        self.image_size = self.image_processor.size["shortest_edge"]
-        self.patch_size = getattr(self.image_processor, "patch_size", None)
-        self.image_token = "<image>"
-        self.vision_feature_select_strategy = getattr(self.image_processor, "vision_feature_select_strategy", None)
 
     def __call__(
         self,
@@ -118,9 +124,14 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
-        if self.patch_size is not None and self.vision_feature_select_strategy is not None:
+        if (
+            pixel_values is not None
+            and self.patch_size is not None
+            and self.vision_feature_select_strategy is not None
+        ):
             # Replace the image token with the expanded image token sequence
-            num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
+            height, width = get_image_size(to_numpy_array(pixel_values[0]))
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
 
@@ -128,11 +139,12 @@ class LlavaProcessor(ProcessorMixin):
             for sample in text:
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                 prompt_strings.append(sample)
-        else:
+        elif pixel_values is not None:
             prompt_strings = text
             logger.warning_once(
                 "Expanding inputs for image tokens in LLaVa should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
             )
 

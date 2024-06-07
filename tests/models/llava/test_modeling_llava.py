@@ -205,7 +205,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
             inputs["inputs_embeds"] = wte(input_ids)
 
             with torch.no_grad():
-                model(**inputs)[0]
+                model(**inputs)
 
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

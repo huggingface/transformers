@@ -19,7 +19,7 @@ Processor class for VideoLlava.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType, logging
@@ -46,13 +46,20 @@ class VideoLlavaProcessor(ProcessorMixin):
     image_processor_class = "VideoLlavaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size=None,
+        vision_feature_select_strategy=None,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        video_token="<video>",
+    ):
+        self._patch_size = patch_size
+        self._vision_feature_select_strategy = vision_feature_select_strategy
+        self.image_token = image_token
+        self.video_token = video_token
         super().__init__(image_processor, tokenizer)
-        self.image_size = self.image_processor.size["shortest_edge"]
-        self.patch_size = getattr(self.image_processor, "patch_size", None)
-        self.image_token = "<image>"
-        self.video_token = "<video>"
-        self.vision_feature_select_strategy = getattr(self.image_processor, "vision_feature_select_strategy", None)
 
     def __call__(
         self,
@@ -124,17 +131,26 @@ class VideoLlavaProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if self.patch_size is None or self.vision_feature_select_strategy is None:
+        if encoded_images is not None and self.patch_size is None or self.vision_feature_select_strategy is None:
             prompt_strings = text
             logger.warning_once(
                 "Expanding inputs for image tokens in LLaVa should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "
+                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
+                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
             )
-        else:
+        elif encoded_images is not None:
             # Replace the image token with the expanded image token sequence
-            num_image_tokens = (self.image_size // self.patch_size) ** 2 + 1
-            num_video_tokens = num_image_tokens * 8  # Always 8 frames, no `vision_feature_select_strategy`
+            if "pixel_values" in encoded_images:
+                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values")[0]))
+                num_frames = 1
+            else:
+                one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
+                height, width = get_image_size(one_video[0])
+                num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
 
