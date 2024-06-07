@@ -1370,7 +1370,8 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
-        cache_to_check = self._cache[0] if self.config.is_encoder_decoder else self._cache
+        if hasattr(self, "_cache"):
+            cache_to_check = self._cache[0] if self.config.is_encoder_decoder else self._cache
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
@@ -1390,16 +1391,16 @@ class GenerationMixin:
             else:
                 cache_dtype = self.dtype
             cache_kwargs = {
-                "config":self.config,
-                "max_batch_size":max_batch_size,
-                "max_cache_len":max_cache_len,
-                "device":self.device,
-                "dtype":cache_dtype,
+                "config": self.config,
+                "max_batch_size": max_batch_size,
+                "max_cache_len": max_cache_len,
+                "device": self.device,
+                "dtype": cache_dtype,
             }
             self._cache = cache_cls(**cache_kwargs)
             if self.config.is_encoder_decoder:
                 encoder_kwargs = cache_kwargs.copy()
-                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"].shape[1]
+                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
                 self._cache = (self._cache, cache_cls(**encoder_kwargs))
         else:
             if self.config.is_encoder_decoder:
