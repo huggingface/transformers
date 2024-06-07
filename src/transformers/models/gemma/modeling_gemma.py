@@ -521,7 +521,6 @@ class GemmaSdpaAttention(GemmaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_info: Optional[torch.LongTensor] = None,
-        _length: int = 0,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
@@ -625,7 +624,6 @@ class GemmaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_info: Optional[torch.LongTensor] = None,
-        _length: int = 0,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -654,7 +652,6 @@ class GemmaDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_info=cache_info,
-            _length=_length,
         )
         hidden_states = residual + hidden_states
 
@@ -842,7 +839,6 @@ class GemmaModel(GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_info: Optional[torch.LongTensor] = None,
-        _length: int = 0,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -922,7 +918,6 @@ class GemmaModel(GemmaPreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_info=cache_info,
-                    _length=_length,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1078,7 +1073,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_info: Optional[torch.LongTensor] = None,
-        _length: int = 0,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1123,7 +1117,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_info=cache_info,
-            _length=_length,
         )
 
         hidden_states = outputs[0]
@@ -1162,7 +1155,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
         inputs_embeds=None,
         cache_info=None,
         use_cache=True,
-        _length=None,
         **kwargs,
     ):
         past_length = 0
@@ -1230,7 +1222,6 @@ class GemmaForCausalLM(GemmaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
-                "_length": -1,
             }
         )
         return model_inputs
