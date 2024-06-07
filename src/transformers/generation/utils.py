@@ -1372,8 +1372,8 @@ class GenerationMixin:
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size < max_batch_size
+            or (not isinstance(self._cache[0], cache_cls))
+            or self._cache[0].max_batch_size < max_batch_size
         )
         if cache_implementation == "sliding_window":
             need_new_cache = need_new_cache or (
@@ -1381,23 +1381,31 @@ class GenerationMixin:
                 and max_cache_len > self._cache.max_cache_len
             )
         elif cache_implementation == "static":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+            need_new_cache = need_new_cache or self._cache[0].max_cache_len < max_cache_len
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._cache = cache_cls(
-                config=self.config,
-                max_batch_size=max_batch_size,
-                max_cache_len=max_cache_len,
-                device=self.device,
-                dtype=cache_dtype,
-            )
+            cache_args = {"config":self.config,"max_batch_size":max_batch_size,"max_cache_len":max_cache_len,"device":self.device,"dtype":cache_dtype}
+            decoder_cache = cache_cls(**cache_args)
+            if self.config.is_encoder_decoder:
+                encoder_args = cache_args.copy()
+                encoder_args["max_cache_len"] = 1500
+                print("USING TUPLE AS CACHE")
+                self._cache = (decoder_cache, cache_cls(**encoder_args))
+            else:
+                self._cache = decoder_cache
+
         else:
-            self._cache.reset()
-        return self._cache
+            if self.config.is_encoder_decoder:
+                print("Reseting the decoder cache.")
+                self._cache[0].reset()
+                self._cache[1].reset()
+            else:
+                self._cache.reset()
+                print("RESETING THE CACHE TO ZEROS")
 
     def _get_decoder_start_token_id(
         self, decoder_start_token_id: Union[int, List[int]] = None, bos_token_id: int = None
@@ -1673,10 +1681,7 @@ class GenerationMixin:
         )
 
         if generation_config.cache_implementation is not None and model_kwargs.get("past_key_values") is not None:
-            raise ValueError(
-                "Passing both `cache_implementation` (used to initialize certain caches) and `past_key_values` (a "
-                "Cache object) is unsupported. Please use only one of the two."
-            )
+            pass
         elif generation_config.cache_implementation is not None:
             if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING:
                 if generation_config.cache_implementation == "static" and not self._supports_static_cache:
@@ -1684,16 +1689,10 @@ class GenerationMixin:
                         "This model does not support `cache_implementation='static'`. Please check the following "
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
-                model_kwargs["past_key_values"] = self._get_cache(
+                self._get_cache(
                     generation_config.cache_implementation, batch_size, generation_config.max_length
                 )
-                if self.config.is_encoder_decoder:
-                    # manually set the cross-attention cache for encoder-decoder models
-                    encoder_outputs = model_kwargs["encoder_outputs"][0]
-                    model_kwargs["past_key_values"] = (
-                        model_kwargs["past_key_values"],
-                        self._get_cache(generation_config.cache_implementation, batch_size, encoder_outputs.shape[1]),
-                    )
+                model_kwargs["past_key_values"] = self._cache 
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
                     raise ValueError(

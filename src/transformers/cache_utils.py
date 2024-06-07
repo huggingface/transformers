@@ -765,18 +765,21 @@ class StaticCache(Cache):
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        self.is_initialized = []
-        cache_shape = (max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        for _ in range(config.num_hidden_layers):
-            # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            # breaks when updating the cache.
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
-            self.is_initialized.append(True)
+        self.is_initialized = torch.ones(config.num_hidden_layers, dtype=torch.bool, device=device)
+        torch._dynamo.mark_static_address(self.is_initialized)
+        cache_shape = (
+            config.num_hidden_layers,
+            max_batch_size,
+            self.num_key_value_heads,
+            self.max_cache_len,
+            self.head_dim,
+        )
+
+        self.key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+
+        torch._dynamo.mark_static_address(self.key_cache)
+        torch._dynamo.mark_static_address(self.value_cache)
 
     def update(
         self,
@@ -804,11 +807,18 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         cache_position = cache_kwargs.get("cache_position")
+
+
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 
-        k_out[:, :, cache_position] = key_states
-        v_out[:, :, cache_position] = value_states
+        if cache_position is None:
+            k_out.copy_(key_states)
+            v_out.copy_(value_states)
+        else:
+
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
 
         self.is_initialized[layer_idx] = False
 
@@ -827,10 +837,10 @@ class StaticCache(Cache):
 
     def reset(self):
         """Resets the cache values while preserving the objects"""
+        # In-place ops prevent breaking the static address
+        self.key_cache.zero_()
+        self.value_cache.zero_()
         for layer_idx in range(len(self.key_cache)):
-            # In-place ops prevent breaking the static address
-            self.key_cache[layer_idx].zero_()
-            self.value_cache[layer_idx].zero_()
             self.is_initialized[layer_idx] = True
 
 
