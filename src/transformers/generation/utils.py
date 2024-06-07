@@ -1362,7 +1362,7 @@ class GenerationMixin:
         model_kwargs["cache_position"] = torch.arange(past_length, cur_len, device=input_ids.device)
         return model_kwargs
 
-    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int) -> Cache:
+    def _get_cache(self, cache_implementation: str, max_batch_size: int, max_cache_len: int, model_kwargs) -> Cache:
         """
         Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
         new `generate` call requires a larger cache.
@@ -1370,33 +1370,43 @@ class GenerationMixin:
         Returns the resulting cache object.
         """
         cache_cls: Cache = NEED_SETUP_CACHE_CLASSES_MAPPING[cache_implementation]
+        cache_to_check = self._cache[0] if self.config.is_encoder_decoder else self._cache
         need_new_cache = (
             not hasattr(self, "_cache")
-            or (not isinstance(self._cache, cache_cls))
-            or self._cache.max_batch_size < max_batch_size
+            or (not isinstance(cache_to_check, cache_cls))
+            or cache_to_check.max_batch_size < max_batch_size
         )
         if cache_implementation == "sliding_window":
             need_new_cache = need_new_cache or (
-                self._cache.sliding_window_size < self._cache.model_sliding_window_size
-                and max_cache_len > self._cache.max_cache_len
+                cache_to_check.sliding_window_size < cache_to_check.model_sliding_window_size
+                and max_cache_len > cache_to_check.max_cache_len
             )
         elif cache_implementation == "static":
-            need_new_cache = need_new_cache or self._cache.max_cache_len < max_cache_len
+            need_new_cache = need_new_cache or cache_to_check.max_cache_len < max_cache_len
 
         if need_new_cache:
             if hasattr(self.config, "_pre_quantization_dtype"):
                 cache_dtype = self.config._pre_quantization_dtype
             else:
                 cache_dtype = self.dtype
-            self._cache = cache_cls(
-                config=self.config,
-                max_batch_size=max_batch_size,
-                max_cache_len=max_cache_len,
-                device=self.device,
-                dtype=cache_dtype,
-            )
+            cache_kwargs = {
+                "config":self.config,
+                "max_batch_size":max_batch_size,
+                "max_cache_len":max_cache_len,
+                "device":self.device,
+                "dtype":cache_dtype,
+            }
+            self._cache = cache_cls(**cache_kwargs)
+            if self.config.is_encoder_decoder:
+                encoder_kwargs = cache_kwargs.copy()
+                encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"].shape[1]
+                self._cache = (self._cache, cache_cls(**encoder_kwargs))
         else:
-            self._cache.reset()
+            if self.config.is_encoder_decoder:
+                self._cache[0].reset()
+                self._cache[1].reset()
+            else:
+                self._cache.reset()
         return self._cache
 
     def _get_decoder_start_token_id(
@@ -1687,13 +1697,6 @@ class GenerationMixin:
                 model_kwargs["past_key_values"] = self._get_cache(
                     generation_config.cache_implementation, batch_size, generation_config.max_length
                 )
-                if self.config.is_encoder_decoder:
-                    # manually set the cross-attention cache for encoder-decoder models
-                    encoder_outputs = model_kwargs["encoder_outputs"][0]
-                    model_kwargs["past_key_values"] = (
-                        model_kwargs["past_key_values"],
-                        self._get_cache(generation_config.cache_implementation, batch_size, encoder_outputs.shape[1]),
-                    )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
                     raise ValueError(
