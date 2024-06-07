@@ -193,12 +193,6 @@ class BeitEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
-            )
-
         embeddings, (patch_height, patch_width) = self.patch_embeddings(
             pixel_values, self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None
         )
