@@ -193,6 +193,19 @@ class GemmaIntegrationTest(unittest.TestCase):
             },
         )
 
+    def test_user_added_tokens(self):
+        # Ensure that user added tokens are not split in the fast tokenizer
+        slow_tokenizer = self.tokenizer
+        fast_tokenizer = self.rust_tokenizer
+
+        user_added_token = "<mask>"
+
+        slow_tokens = slow_tokenizer.convert_ids_to_tokens(slow_tokenizer.encode(user_added_token))
+        fast_tokens = slow_tokenizer.convert_ids_to_tokens(fast_tokenizer.encode(user_added_token))
+
+        self.assertTrue(user_added_token in fast_tokens)
+        self.assertEqual(slow_tokens, fast_tokens)
+
     def test_fast_special_tokens(self):
         slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer

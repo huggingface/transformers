@@ -624,12 +624,14 @@ class SpmConverter(Converter):
 
         # Add user defined symbols
         user_defined_symbols = [
-            AddedToken(token, normalized=True, special=False) for token in self.proto.trainer_spec.user_defined_symbols
+            AddedToken(token, normalized=False, special=False) for token in self.proto.trainer_spec.user_defined_symbols
         ]
         control_symbols = [
             AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
         ]
-        tokenizer.add_tokens(user_defined_symbols + control_symbols)
+
+        tokenizer.add_tokens(user_defined_symbols)
+        tokenizer.add_special_tokens(control_symbols)
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
@@ -1339,10 +1341,10 @@ class GemmaConvert(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-        user_defined_symbols = [
-            AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
-        ]
-        tokenizer.add_tokens(user_defined_symbols)
+        # user_defined_symbols = [
+        #     AddedToken(token, normalized=True, special=False) for token in proto.trainer_spec.user_defined_symbols
+        # ]
+        # tokenizer.add_tokens(user_defined_symbols)
         return tokenizer
 
 
