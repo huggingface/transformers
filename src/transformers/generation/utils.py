@@ -1696,7 +1696,7 @@ class GenerationMixin:
                         "issue: https://github.com/huggingface/transformers/issues/28981"
                     )
                 model_kwargs["past_key_values"] = self._get_cache(
-                    generation_config.cache_implementation, batch_size, generation_config.max_length
+                    generation_config.cache_implementation, batch_size, generation_config.max_length, model_kwargs
                 )
             elif generation_config.cache_implementation == "quantized":
                 if not self._supports_quantized_cache:
