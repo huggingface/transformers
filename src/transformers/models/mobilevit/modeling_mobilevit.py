@@ -437,8 +437,8 @@ class MobileViTLayer(nn.Module):
 
         batch_size, channels, orig_height, orig_width = features.shape
 
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
+        new_height = (torch.ceil(orig_height / patch_height) * patch_height).to(torch.int64)
+        new_width = (torch.ceil(orig_width / patch_width) * patch_width).to(torch.int64)
 
         interpolate = False
         if new_width != orig_width or new_height != orig_height:

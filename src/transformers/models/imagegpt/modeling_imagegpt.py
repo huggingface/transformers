@@ -229,7 +229,7 @@ class ImageGPTAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (float(value.size(-1)) ** 0.5)
+            attn_weights = attn_weights / (value.size(-1).to(torch.float) ** 0.5)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
