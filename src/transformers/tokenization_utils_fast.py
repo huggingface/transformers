@@ -890,11 +890,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return
         if type(self._tokenizer.normalizer) is normalizers.Sequence:
             curr_state = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
-            curr_state["normalizers"] = [
-                pt for pt in curr_state["normalizers"] if pt["type"] not in ["Prepend", "Replace"]
+            sequence["normalizers"] = [
+                pt for pt in curr_state["normalizers"] if pt["type"] not in ["Prepend"]
             ]
-            sequence = curr_state
-        else:
+        elif self._tokenizer.normalizer is not None:
             sequence["normalizers"].append(json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8")))
         if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
@@ -903,6 +902,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if not any(n["type"] == "Replace" for n in sequence["normalizers"]):
                 new_replace = json.loads(normalizers.Replace(pattern=" ", content="▁").__getstate__().decode("utf-8"))
                 sequence["normalizers"].append(new_replace)
+
             final_sequence.__setstate__(json.dumps(sequence).encode("utf-8"))
             self._tokenizer.normalizer = final_sequence
 
@@ -942,7 +942,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 if pt["type"] == "Metaspace":
                     # Create a new Metaspace pre-tokenizer
                     new_metaspace = pre_tokenizers.Metaspace(
-                        replacement="▁", prepend_scheme=prepend_scheme, split=False
+                        replacement="▁", prepend_scheme=prepend_scheme, split=pt["split"]
                     )
                     curr_state["pretokenizers"][i] = json.loads(new_metaspace.__getstate__().decode("utf-8"))
                 elif pt["type"] == "ByteLevel":
@@ -956,14 +956,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._tokenizer.pre_tokenizer = new_pretokenizer
             self._update_normalizer() if update_normalizer else None
 
-        elif (
-            isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace)
-            or self._tokenizer.pre_tokenizer is None
-        ):
+        elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace):
+            self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
+            self._update_normalizer()
+
+        elif self._tokenizer.pre_tokenizer is None:
             self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-                replacement="▁", prepend_scheme=prepend_scheme, split=True
+                replacement="▁", prepend_scheme=prepend_scheme, split=False
             )
             self._update_normalizer()
+
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):
             self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
