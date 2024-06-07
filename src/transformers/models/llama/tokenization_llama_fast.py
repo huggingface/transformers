@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+
 from shutil import copyfile
 from typing import Optional, Tuple
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -149,9 +150,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             )
             legacy = True
         self.legacy = legacy
-
-        if add_prefix_space is not None:
-            kwargs["from_slow"] = True
 
         super().__init__(
             vocab_file=vocab_file,
