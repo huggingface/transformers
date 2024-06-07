@@ -1729,6 +1729,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
+            device=input_ids.device,
         )
 
         # 10. prepare stopping criteria
@@ -1756,7 +1757,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         elif is_sample_gen_mode:
             # 11. prepare logits warper
-            logits_warper = self._get_logits_warper(generation_config)
+            logits_warper = self._get_logits_warper(generation_config, device=input_ids.device)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -2822,6 +2823,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
+            device=input_ids.device,
         )
 
         # 10. prepare stopping criteria
@@ -2849,7 +2851,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         elif is_sample_gen_mode:
             # 11. prepare logits warper
-            logits_warper = self._get_logits_warper(generation_config)
+            logits_warper = self._get_logits_warper(generation_config, device=input_ids.device)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
