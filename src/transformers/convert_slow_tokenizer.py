@@ -622,6 +622,15 @@ class SpmConverter(Converter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
+        # Add user defined symbols
+        user_defined_symbols = [
+            AddedToken(token, normalized=True, special=False) for token in self.proto.trainer_spec.user_defined_symbols
+        ]
+        control_symbols = [
+            AddedToken(token, normalized=False, special=True) for token in self.proto.trainer_spec.control_symbols
+        ]
+        tokenizer.add_tokens(user_defined_symbols + control_symbols)
+
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
