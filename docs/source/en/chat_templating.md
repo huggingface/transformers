@@ -371,7 +371,7 @@ result!
 
 ```python
 messages.append({"role": "assistant", "tool_calls": [{"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}]})
-messages.append({"role": "tool", "name": "get_current_temperature", "content": 22.})
+messages.append({"role": "tool", "name": "get_current_temperature", "content": "22.0"})
 ```
 
 Finally, let's let the assistant read the function outputs and continue chatting with the user:
