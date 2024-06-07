@@ -165,7 +165,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_missing_keys = True
     test_torchscript = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False

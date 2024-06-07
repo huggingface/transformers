@@ -143,7 +143,6 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
-    test_model_common_attributes = False
     test_gradient_checkpointing = False
     test_torchscript = False
 
