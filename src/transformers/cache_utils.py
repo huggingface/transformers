@@ -451,7 +451,7 @@ class OffloadedCache(DynamicCache):
     """
     A drop-in replacement for DynamicCache that conserves GPU memory at the expense of more CPU memory.
     Useful for generating from models with very long context.
-    
+
     When layer k is executing it moves the cache of layer k-1 to the CPU and prefetches the KV cache of layer k+1.
     """
 
@@ -474,8 +474,8 @@ class OffloadedCache(DynamicCache):
         "Moves the previous layer cache to the CPU"
         prev_layer_idx = layer_idx - 1 if layer_idx >= 1 else len(self) - 1
         if layer_idx >= 1 or len(self) > 2:
-            self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to('cpu', non_blocking=True)
-            self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to('cpu', non_blocking=True)
+            self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
+            self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
@@ -504,7 +504,13 @@ class OffloadedCache(DynamicCache):
         del self.beam_idx
         self.beam_idx = beam_idx.clone()
 
-    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, cache_kwargs: Optional[Dict[str, Any]] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
         Parameters:
