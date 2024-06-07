@@ -21,7 +21,7 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
-SPIECE_UNDERLINE = "®x"
+SPIECE_UNDERLINE = "‚ñÅ"
 
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
@@ -168,7 +168,7 @@ class YuanTokenizer(PreTrainedTokenizer):
 
         We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
         SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['®xHe', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `['H', 'e', 'y']` instead of `['‚ñÅHe', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
@@ -178,7 +178,7 @@ class YuanTokenizer(PreTrainedTokenizer):
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '®xHey']
+        # 2. Remove self.unk_token from ['<','unk','>', '‚ñÅHey']
         return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):

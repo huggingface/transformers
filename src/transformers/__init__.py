@@ -1055,6 +1055,7 @@ else:
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
+    _import_structure["models.yuan2_m32"].append("YuanTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
 
@@ -5435,7 +5436,7 @@ if TYPE_CHECKING:
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
-    from .models.yuan2_m32 import Yuan2M32Config
+    from .models.yuan2_m32 import Yuan2M32Config, YuanTokenizer
 
     # Pipelines
     from .pipelines import (
@@ -5685,6 +5686,7 @@ if TYPE_CHECKING:
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
+        from .models.yuan2_m32 import YuanTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     try:
