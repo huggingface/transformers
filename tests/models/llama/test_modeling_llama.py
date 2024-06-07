@@ -393,7 +393,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip("Llama buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="Llama buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 

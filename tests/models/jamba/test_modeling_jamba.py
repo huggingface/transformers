@@ -640,7 +640,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         """
         self.skipTest("Jamba flash attention does not support right padding")
 
-    @unittest.skip("Jamba has its own special cache type")
+    @unittest.skip(reason="Jamba has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass

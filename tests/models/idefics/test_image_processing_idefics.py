@@ -187,18 +187,18 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, atol=0.0)
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_numpy(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_numpy_4_channels(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_pil(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_pytorch(self):
         pass

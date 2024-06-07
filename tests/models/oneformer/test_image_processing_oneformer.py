@@ -211,6 +211,7 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         return inputs
 
+    @unittest.skip
     def test_init_without_params(self):
         pass
 

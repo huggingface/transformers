@@ -350,22 +350,21 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # Hubert cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -441,7 +440,7 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.skipTest("torch 2.1 breaks torch fx tests for wav2vec2/hubert.")
 
         if not is_torch_fx_available() or not self.fx_compatible:
-            return
+            self.skipTest("torch fx is not available or not compatible with this model")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -615,22 +614,19 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

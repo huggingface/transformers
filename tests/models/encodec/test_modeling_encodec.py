@@ -178,29 +178,35 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_torchscript_output_hidden_state(self):
         pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest("test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -288,7 +294,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_attention_outputs(self):
         pass
 
@@ -321,19 +329,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             hidden_states_with_chunk = model(**inputs)[0]
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 

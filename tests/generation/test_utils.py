@@ -667,7 +667,7 @@ class GenerationTesterMixin:
     def test_model_parallel_beam_search(self):
         for model_class in self.all_generative_model_classes:
             if "xpu" in torch_device:
-                return unittest.skip("device_map='auto' does not work with XPU devices")
+                return unittest.skip(reason="device_map='auto' does not work with XPU devices")
 
             if model_class._no_split_modules is None:
                 continue
@@ -765,7 +765,7 @@ class GenerationTesterMixin:
 
         # if no bos token id => cannot generate from None
         if config.bos_token_id is None:
-            return
+            self.skipTest("bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
         if config.bos_token_id == config.pad_token_id:

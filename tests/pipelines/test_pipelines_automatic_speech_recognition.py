@@ -71,8 +71,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
             self.skipTest("No tokenizer available")
-            return
-            # return None, None
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=processor
@@ -1855,7 +1853,7 @@ def require_ffmpeg(test_case):
         subprocess.check_output(["ffmpeg", "-h"], stderr=subprocess.DEVNULL)
         return test_case
     except Exception:
-        return unittest.skip("test requires ffmpeg")(test_case)
+        return unittest.skip(reason="test requires ffmpeg")(test_case)
 
 
 def bytes_iter(chunk_size, chunks):

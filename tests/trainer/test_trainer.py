@@ -3066,7 +3066,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         torchdynamo.reset()
 
-    @unittest.skip("torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
+    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
@@ -3668,7 +3668,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, backend_device_count(torch_device))
         if num_gpus > 2:
-            return
+            self.skipTest("More than 2 GPUs available")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(

@@ -95,7 +95,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         )
 
     @require_tf
-    @unittest.skip("Depth estimation is not implemented in TF")
+    @unittest.skip(reason="Depth estimation is not implemented in TF")
     def test_small_model_tf(self):
         pass
 

@@ -366,6 +366,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
 
     @require_tf
-    @unittest.skip("Document question answering not implemented in TF")
+    @unittest.skip(reason="Document question answering not implemented in TF")
     def test_small_model_tf(self):
         pass

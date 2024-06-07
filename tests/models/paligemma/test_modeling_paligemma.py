@@ -234,7 +234,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, unittest.Test
         pass
 
     # TODO extend valid outputs to include this test @Molbap
-    @unittest.skip("PaliGemma has currently one output format.")
+    @unittest.skip(reason="PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):
         pass
 
