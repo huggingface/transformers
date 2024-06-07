@@ -886,17 +886,28 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
-        sequence = []
-        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) is not (normalizers.Sequence or normalizers.Prepend or normalizers.Sequence):
+        sequence = json.loads(normalizers.Sequence([]).__getstate__())
+        final_sequence = normalizers.Sequence([])
+        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) not in (normalizers.Sequence, normalizers.Prepend, normalizers.Precompiled):
             return
-        elif getattr(self, "legacy", True):
+        if type(self._tokenizer.normalizer) is normalizers.Sequence:
+            curr_state = json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8'))
+            curr_state['normalizers'] = [pt for pt in curr_state['normalizers'] if pt['type'] not in ['Prepend', 'Replace']]
+            sequence = curr_state
+        else:
+            sequence['normalizers'].append(json.loads(self._tokenizer.normalizer.__getstate__().decode('utf-8')))
+        if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
-                sequence += [normalizers.Prepend(prepend="▁")]
-            sequence += [normalizers.Replace(pattern=" ", content="▁")]
-            self._tokenizer.normalizer = normalizers.Sequence(sequence)
+                new_prepend = json.loads(normalizers.Prepend(prepend="▁").__getstate__().decode('utf-8'))
+                sequence['normalizers'].append(new_prepend)
+            if not any(n['type'] == 'Replace' for n in sequence['normalizers']):
+                new_replace = json.loads(normalizers.Replace(pattern=" ", content="▁").__getstate__().decode('utf-8'))
+                sequence['normalizers'].append(new_replace)
+            final_sequence.__setstate__(json.dumps(sequence).encode('utf-8'))
+            self._tokenizer.normalizer = final_sequence
 
         elif not getattr(self, "legacy", True):
-            self._tokenizer.normalizer = normalizers.Sequence(sequence)
+            self._tokenizer.normalizer = final_sequence
 
 
     def _update_pre_tokenizer(self):
@@ -945,7 +956,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._update_normalizer() if update_normalizer else None
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace) or self._tokenizer.pre_tokenizer is None:
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=False)
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme,split=True)
             self._update_normalizer()
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):
