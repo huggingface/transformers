@@ -447,6 +447,123 @@ class DynamicCache(Cache):
             self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
+class OffloadedCache(DynamicCache):
+    """
+    A drop-in replacement for DynamicCache that conserves GPU memory at the expense of more CPU memory.
+    Useful for generating from models with very long context.
+
+    When layer k is executing it moves the cache of layer k-1 to the CPU and prefetches the KV cache of layer k+1.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.original_device = []
+        self.prefetch_stream = torch.cuda.Stream()
+        self.beam_idx = None  # used to delay beam search operations
+
+    def prefetch_layer(self, layer_idx: int):
+        "Starts prefetching the next layer cache"
+        if layer_idx < len(self):
+            with torch.cuda.stream(self.prefetch_stream):
+                # Prefetch next layer tensors to GPU
+                device = self.original_device[layer_idx]
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].to(device, non_blocking=True)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].to(device, non_blocking=True)
+
+    def evict_previous_layer(self, layer_idx: int):
+        "Moves the previous layer cache to the CPU"
+        prev_layer_idx = layer_idx - 1 if layer_idx >= 1 else len(self) - 1
+        if layer_idx >= 1 or len(self) > 2:
+            self.key_cache[prev_layer_idx] = self.key_cache[prev_layer_idx].to("cpu", non_blocking=True)
+            self.value_cache[prev_layer_idx] = self.value_cache[prev_layer_idx].to("cpu", non_blocking=True)
+
+    def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
+        "Gets the cache for this layer to the device. Prefetches the next and evicts the previous layer."
+        if layer_idx < len(self):
+            # Evict the previous layer if necessary
+            self.evict_previous_layer(layer_idx)
+            # Load current layer cache to its original device if not already there
+            original_device = self.original_device[layer_idx]
+            key_tensor = self.key_cache[layer_idx].to(original_device, non_blocking=True)
+            value_tensor = self.value_cache[layer_idx].to(original_device, non_blocking=True)
+            # Now deal with beam search ops which were delayed
+            if self.beam_idx is not None:
+                self.beam_idx = self.beam_idx.to(original_device)
+                key_tensor = key_tensor.index_select(0, self.beam_idx)
+                value_tensor = value_tensor.index_select(0, self.beam_idx)
+            # Prefetch the next layer
+            self.prefetch_layer(layer_idx + 1)
+            return (key_tensor, value_tensor)
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Saves the beam indices and reorders the cache when the tensor is back to its device."""
+        # We delay this operation until the tensors are back to their original
+        # device because performing torch.index_select on the CPU is very slow
+        del self.beam_idx
+        self.beam_idx = beam_idx.clone()
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `OffloadedCache`.
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+
+        # Update the cache
+        if len(self.key_cache) <= layer_idx:
+            self.key_cache.append(key_states)
+            self.value_cache.append(value_states)
+            self.original_device.append(key_states.device)
+            self.evict_previous_layer(layer_idx)
+        else:
+            key_tensor, value_tensor = self[layer_idx]
+            self.key_cache[layer_idx] = torch.cat([key_tensor, key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([value_tensor, value_states], dim=-2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "OffloadedCache":
+        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
+        cache = cls()
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.key_cache.append(key_states)
+                cache.value_cache.append(value_states)
+                cache.original_device.append(key_states.device)
+        return cache
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+        """Converts the `OffloadedCache` instance into the its equivalent in the legacy cache format."""
+        legacy_cache_lst = []
+        for layer_idx in range(len(self)):
+            original_device = self.original_device[layer_idx]
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(original_device)
+            legacy_cache_lst.append((self.key_cache[layer_idx], self.value_cache[layer_idx]))
+        return tuple(legacy_cache_lst)
+
+
 class QuantizedCache(DynamicCache):
     """
     A quantizer cache similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://arxiv.org/abs/2402.02750).
