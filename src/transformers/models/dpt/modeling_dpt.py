@@ -227,7 +227,8 @@ class DPTViTEmbeddings(nn.Module):
         posemb_grid = posemb[0, start_index:]
 
         def safe_int(x):
-          return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
+            return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
+
         old_grid_size = safe_int(posemb_grid.size(0) ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
