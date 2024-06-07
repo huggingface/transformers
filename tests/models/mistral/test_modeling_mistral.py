@@ -700,6 +700,10 @@ class MistralIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
 
+        del model._cache
+        backend_empty_cache(torch_device)
+        gc.collect()
+
         # Sliding Window Cache + compile
         torch._dynamo.reset()
         model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
