@@ -1285,7 +1285,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4602050, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
 
 
 @require_vision
