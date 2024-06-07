@@ -626,30 +626,31 @@ class ProcessorMixin(PushToHubMixin):
         """
         Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
         The order of operations is as follows:
-            1) kwargs passed as before have highest priority to preserve BC. They mix modalities and may not result in
-            correct behaviour.
+            1) kwargs passed as before have highest priority to preserve BC.
                 ```python
                 high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
                 processor(..., **high_priority_kwargs)
                 ```
-            2) kwargs specified as a dictionary and passed to the processor __call__ have second highest priority.
-            This is the recommended API.
-                ```python
-                recommended_priority_kwargs = {"text_kwargs": {"padding":"max_length"}, "images_kwargs": {"crop_size": (224, 224)}}
-                processor(..., **recommended_priority_kwargs)
-                ```
-            3) kwargs passed as modality-specific kwargs have third priority.
+            2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
                 ```python
                 processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
                 ```
-            4) kwargs passed during instantiation of a modality processor have fourth priority.
+            3) kwargs passed during instantiation of a modality processor have fourth priority.
                 ```python
                 tokenizer = tokenizer_class(..., {"padding": "max_length"})
                 image_processor = image_processor_class(...)
                 processor(tokenizer, image_processor) # will pass max_length unless overriden by kwargs at call
                 ```
-            5) defaults kwargs specified at processor level have lowest priority.
-
+            4) defaults kwargs specified at processor level have lowest priority.
+                ```python
+                class MyProcessingKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
+                    _defaults = {
+                        "text_kwargs": {
+                            "padding": "max_length",
+                            "max_length": 64,
+                        },
+                    }
+                ```
         Args:
             ModelProcessorKwargs (`ProcessingKwargs`):
                 Typed dictionary of kwargs specifically required by the model passed.

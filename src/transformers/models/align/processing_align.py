@@ -31,9 +31,10 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
+    is_vision_available,
 )
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import is_torch_available, is_vision_available
+from ...utils import is_torch_available
 
 
 # TODO (@molbap) This is a bother, forward references from TypedDict are resolved and need this to work
