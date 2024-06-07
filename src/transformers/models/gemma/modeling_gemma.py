@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, CacheInfo, DynamicCache, StaticCache
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_causal_attention_mask,
@@ -79,13 +79,6 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
-
-
-class CacheInfo:
-
-    def __init__(self, position, length):
-        self.position = position
-        self._length = length
 
 
 class GemmaRMSNorm(nn.Module):
