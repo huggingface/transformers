@@ -562,8 +562,11 @@ class DonutSwinLayer(nn.Module):
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
+            self.shift_size = torch.tensor(0, dtype=torch.int64)
+            input_resolution = (
+                torch.tensor(input_resolution) if not isinstance(input_resolution, torch.Tensor) else input_resolution
+            )
+            self.window_size = torch.min(input_resolution)
 
     def get_attn_mask(self, height, width, dtype):
         if self.shift_size > 0:
