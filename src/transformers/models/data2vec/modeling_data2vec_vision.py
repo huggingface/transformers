@@ -314,11 +314,8 @@ class Data2VecVisionSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-<<<<<<< HEAD
-        resolution: Optional[Tuple[int]] = None,
-=======
         interpolate_pos_encoding: bool = False,
->>>>>>> upstream/main
+        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -333,15 +330,11 @@ class Data2VecVisionSelfAttention(nn.Module):
 
         # Add relative position bias if present.
         if self.relative_position_bias is not None:
-<<<<<<< HEAD
             height, width = resolution
             window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            attention_scores = attention_scores + self.relative_position_bias(window_size)
-=======
             attention_scores = attention_scores + self.relative_position_bias(
-                interpolate_pos_encoding, attention_scores.shape[2]
-            ).unsqueeze(0)
->>>>>>> upstream/main
+                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+            )
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -420,17 +413,12 @@ class Data2VecVisionAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-<<<<<<< HEAD
+        interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions, relative_position_bias, resolution)
-=======
-        interpolate_pos_encoding: bool = False,
-    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_outputs = self.attention(
-            hidden_states, head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding
+            hidden_states, head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
         )
->>>>>>> upstream/main
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -499,22 +487,16 @@ class Data2VecVisionLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         relative_position_bias: Optional["Data2VecVisionRelativePositionBias"] = None,
-<<<<<<< HEAD
-        resolution: Optional[Tuple[int]] = None,
-=======
         interpolate_pos_encoding: bool = False,
->>>>>>> upstream/main
+        resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in Data2VecVision, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
             relative_position_bias=relative_position_bias,
-<<<<<<< HEAD
-            resolution=resolution,
-=======
             interpolate_pos_encoding=interpolate_pos_encoding,
->>>>>>> upstream/main
+            resolution=resolution,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -580,7 +562,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         relative_position_index[0, 0] = num_relative_distance - 1
         return relative_position_index
 
-    def forward(self, window_size) -> torch.Tensor:
+    def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
         """
         Modification of timm.models.beit.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
         """
@@ -592,7 +574,6 @@ class Data2VecVisionRelativePositionBias(nn.Module):
 
         old_relative_position_bias_table = self.relative_position_bias_table
 
-<<<<<<< HEAD
         old_num_relative_distance = self.num_relative_distance
         new_num_relative_distance = new_height * new_width + 3
 
@@ -619,14 +600,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         )
         # num_attention_heads, patch_size*num_patches_width, patch_size*num_patches_height
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
-        return relative_position_bias.unsqueeze(0)
-=======
-    def forward(self, interpolate_pos_encoding: bool = False, dim_size: Optional[int] = None) -> torch.Tensor:
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
-            self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1
-        )  # Wh*Ww,Wh*Ww,nH
 
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
         if interpolate_pos_encoding:
             relative_position_bias = nn.functional.interpolate(
                 relative_position_bias.unsqueeze(1),
@@ -635,8 +609,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-        return relative_position_bias
->>>>>>> upstream/main
+        return relative_position_bias.unsqueeze(0)
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitEncoder with Beit->Data2VecVision
@@ -669,11 +642,8 @@ class Data2VecVisionEncoder(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-<<<<<<< HEAD
-        resolution: Optional[Tuple[int]] = None,
-=======
         interpolate_pos_encoding: bool = False,
->>>>>>> upstream/main
+        resolution: Optional[Tuple[int]] = None,
         return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -696,19 +666,19 @@ class Data2VecVisionEncoder(nn.Module):
                 height, width = resolution
                 window_size = (height // self.config.patch_size, width // self.config.patch_size)
                 relative_position_bias = (
-<<<<<<< HEAD
-                    self.relative_position_bias(window_size) if self.relative_position_bias is not None else None
-                )
-                layer_outputs = layer_module(
-                    hidden_states, layer_head_mask, output_attentions, relative_position_bias, resolution
-=======
-                    self.relative_position_bias(interpolate_pos_encoding, hidden_states.shape[1])
+                    self.relative_position_bias(
+                        window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+                    )
                     if self.relative_position_bias is not None
                     else None
                 )
                 layer_outputs = layer_module(
-                    hidden_states, layer_head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding
->>>>>>> upstream/main
+                    hidden_states,
+                    layer_head_mask,
+                    output_attentions,
+                    relative_position_bias,
+                    interpolate_pos_encoding,
+                    resolution,
                 )
 
             hidden_states = layer_outputs[0]
@@ -862,14 +832,10 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-<<<<<<< HEAD
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos)
-        resolution = pixel_values.shape[2:]
-=======
-        embedding_output, (patch_height, patch_width) = self.embeddings(
+        embedding_output, _ = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
->>>>>>> upstream/main
+        resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
             embedding_output,

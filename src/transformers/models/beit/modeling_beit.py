@@ -331,7 +331,9 @@ class BeitSelfAttention(nn.Module):
         if self.relative_position_bias is not None:
             height, width = resolution
             window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            attention_scores = attention_scores + self.relative_position_bias(window_size, interpolate_pos_encoding)
+            attention_scores = attention_scores + self.relative_position_bias(
+                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+            )
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -551,7 +553,7 @@ class BeitRelativePositionBias(nn.Module):
         relative_position_index[0, 0] = num_relative_distance - 1
         return relative_position_index
 
-    def forward(self, window_size, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
         """
         Modification of timm.models.beit.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
         """
@@ -593,7 +595,7 @@ class BeitRelativePositionBias(nn.Module):
         if interpolate_pos_encoding:
             relative_position_bias = nn.functional.interpolate(
                 relative_position_bias.unsqueeze(1),
-                size=(window_size, window_size),
+                size=(dim_size, dim_size),
                 mode="bilinear",
                 align_corners=False,
             ).squeeze(1)
@@ -654,10 +656,19 @@ class BeitEncoder(nn.Module):
                 height, width = resolution
                 window_size = (height // self.config.patch_size, width // self.config.patch_size)
                 relative_position_bias = (
-                    self.relative_position_bias(window_size, interpolate_pos_encoding=interpolate_pos_encoding) if self.relative_position_bias is not None else None
+                    self.relative_position_bias(
+                        window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+                    )
+                    if self.relative_position_bias is not None
+                    else None
                 )
                 layer_outputs = layer_module(
-                    hidden_states, layer_head_mask, output_attentions, relative_position_bias, interpolate_pos_encoding, resolution
+                    hidden_states,
+                    layer_head_mask,
+                    output_attentions,
+                    relative_position_bias,
+                    interpolate_pos_encoding,
+                    resolution,
                 )
 
             hidden_states = layer_outputs[0]
@@ -808,7 +819,7 @@ class BeitModel(BeitPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        
+
         embedding_output, _ = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
