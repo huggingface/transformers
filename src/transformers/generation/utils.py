@@ -30,6 +30,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     HQQQuantizedCache,
     HybridCache,
+    OffloadedCache,
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
@@ -1792,6 +1793,8 @@ class GenerationMixin:
                     )
 
                 model_kwargs["past_key_values"] = cache_class(cache_config)
+            elif generation_config.cache_implementation == "offloaded":
+                model_kwargs["past_key_values"] = OffloadedCache()
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
         elif generation_config.cache_implementation is None and self._supports_default_dynamic_cache():
