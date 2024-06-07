@@ -548,13 +548,15 @@ class WhisperGenerationMixin:
         self._check_decoder_input_ids(kwargs=kwargs)
 
         # 3. Retrieve logits processors
+        device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
             is_shortform=is_shortform,
-            num_beams=generation_config.num_beams,
+            num_beams=kwargs.get("num_beams", 1),
+            device=device,
         )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
@@ -1400,7 +1402,9 @@ class WhisperGenerationMixin:
 
         return max_frames, seek
 
-    def _retrieve_logit_processors(self, generation_config, logits_processor, begin_index, is_shortform, num_beams):
+    def _retrieve_logit_processors(
+        self, generation_config, logits_processor, begin_index, is_shortform, num_beams, device
+    ):
         if generation_config.return_timestamps is True:
             timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
@@ -1408,7 +1412,7 @@ class WhisperGenerationMixin:
             )
 
         if generation_config.suppress_tokens is not None:
-            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens)
+            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens, device=device)
             logits_processor = (
                 [suppress_tokens_processor]
                 if logits_processor is None
@@ -1418,7 +1422,7 @@ class WhisperGenerationMixin:
 
         if generation_config.begin_suppress_tokens is not None:
             begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(
-                generation_config.begin_suppress_tokens, begin_index=begin_index
+                generation_config.begin_suppress_tokens, begin_index=begin_index, device=device
             )
             logits_processor = (
                 [begin_suppress_processor]
