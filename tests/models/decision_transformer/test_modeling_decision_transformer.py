@@ -183,6 +183,10 @@ class DecisionTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 @require_torch
 class DecisionTransformerModelIntegrationTest(unittest.TestCase):

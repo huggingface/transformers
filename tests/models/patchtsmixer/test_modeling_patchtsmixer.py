@@ -447,6 +447,10 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
+    @unittest.skip(reason="Model does not have input embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
 
 def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_batch.pt"):
     # TODO: Make repo public
