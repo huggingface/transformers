@@ -307,18 +307,15 @@ class WhisperAttention(nn.Module):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and (
-                past_key_value is not None
-                and (isinstance(past_key_value, DynamicCache) and past_key_value.get_seq_length(self.layer_idx))
-            ):
-                key_states = self._shape(self.k_proj(current_states), -1, bsz)
-                value_states = self._shape(self.v_proj(current_states), -1, bsz)
+        if is_cross_attention and past_key_value is not None and cache_position[0]:
+                key_states = past_key_value[self.layer_idx]
+                value_states = past_key_value[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = torch.arange(key_states.size(2), device=key_states.device) if is_cross_attention else cache_position
+                cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
@@ -404,11 +401,7 @@ class WhisperFlashAttention2(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and (
-                past_key_value is not None
-                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
-                or past_key_value.get_seq_length(self.layer_idx)
-            ):
+        if is_cross_attention and past_key_value is not None and cache_position[0]:
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
@@ -417,7 +410,7 @@ class WhisperFlashAttention2(WhisperAttention):
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = torch.arange(key_states.size(2), device=key_states.device) if is_cross_attention else cache_position
+                cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
@@ -609,11 +602,7 @@ class WhisperSdpaAttention(WhisperAttention):
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and (
-                past_key_value is not None
-                and (isinstance(past_key_value, StaticCache) and not past_key_value.is_initialized[self.layer_idx])
-                or past_key_value.get_seq_length(self.layer_idx)
-            ):
+        if is_cross_attention and past_key_value is not None and cache_position[0]:
                 # reuse k,v, cross_attentions
                 key_states = past_key_value.key_cache[self.layer_idx]
                 value_states = past_key_value.value_cache[self.layer_idx]
@@ -622,7 +611,7 @@ class WhisperSdpaAttention(WhisperAttention):
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = torch.arange(key_states.size(2), device=key_states.device) if is_cross_attention else cache_position
+                cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
@@ -1881,9 +1870,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
             )
         elif use_cache:
             cache_position = cache_position[-decoder_input_ids.shape[1]:]
-
-        print(f"decoder_input_ids.shape: {decoder_input_ids.shape}")
-        print(f"decoder_input_ids.strides: {decoder_input_ids.stride()}")
 
         return {
             "encoder_outputs": encoder_outputs,
