@@ -37,7 +37,7 @@ You can run Whisper in less than 4 lines of code and transcribe in less than a m
 import torch
 from transformers import pipeline
 
-whisper = pipeline("automatic-speech-recognition", "openai/whisper-large-v3", torch_dtype=torch.float16).to("cuda")
+whisper = pipeline("automatic-speech-recognition", "openai/whisper-large-v3", torch_dtype=torch.float16, device="cuda:0")
 
 transcription = whisper("<audio_file.mp3>")
 
