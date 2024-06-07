@@ -643,6 +643,7 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
+    @torch.no_grad
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -663,6 +664,9 @@ class MistralIntegrationTest(unittest.TestCase):
                 "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
             ],
         }
+
+        backend_empty_cache(torch_device)
+        gc.collect()
 
         prompts = ["My favourite condiment is "]
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
@@ -701,17 +705,21 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
 
         del model._cache
+        torch._dynamo.reset()
         backend_empty_cache(torch_device)
         gc.collect()
 
         # Sliding Window Cache + compile
-        torch._dynamo.reset()
         model.forward = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION[self.cuda_compute_capability_major_version], static_compiled_text)
+
+        # print("memory_allocated: %fGB" % (torch.cuda.memory_allocated(0) / 1024 / 1024 / 1024))
+        # print("memory_reserved: %fGB" % (torch.cuda.memory_reserved(0) / 1024 / 1024 / 1024))
+        # print("max_memory_reserved: %fGB" % (torch.cuda.max_memory_reserved(0) / 1024 / 1024 / 1024))
 
 
 @slow
