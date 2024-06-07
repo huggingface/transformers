@@ -39,8 +39,8 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    safe_float,
 )
-from ...utils.generic import safe_float
 from .configuration_mobilevit import MobileViTConfig
 
 

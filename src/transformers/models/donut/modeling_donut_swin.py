@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    safe_int,
 )
 from .configuration_donut_swin import DonutSwinConfig
 

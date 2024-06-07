@@ -37,6 +37,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    safe_int,
 )
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
