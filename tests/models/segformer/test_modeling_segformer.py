@@ -205,7 +205,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip("SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_attention_outputs(self):
