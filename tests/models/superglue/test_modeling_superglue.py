@@ -26,9 +26,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        SuperGlueForKeypointMatching,
-    )
+    from transformers import SuperGlueForKeypointMatching
 
 if is_vision_available():
     from PIL import Image
