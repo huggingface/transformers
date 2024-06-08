@@ -709,6 +709,27 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, KeypointMatchingOutput]:
+        """
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
+        >>> im1 = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
+        >>> im2 = Image.open(requests.get(url, stream=True).raw)
+        >>> images = [im1, im2]
+
+        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superglue_outdoor")
+        >>> model = AutoModel.from_pretrained("stevenbucaille/superglue_outdoor")
+
+        >>> inputs = processor(images, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
         loss = None
         if labels is not None:
             raise ValueError("SuperGlue is not trainable, no labels should be provided.")
