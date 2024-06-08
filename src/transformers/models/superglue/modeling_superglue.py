@@ -165,9 +165,17 @@ def batch_hidden_states(
 
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int):
-    """Normalize keypoints locations based on image image_shape"""
-    one = keypoints.new_tensor(1)
-    size = torch.stack([one * width, one * height])[None]
+    """
+    Normalize keypoints locations based on image image_shape
+
+    Args:
+        keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`): Keypoints locations.
+        height (`int`): Image height.
+        width (`int`): Image width.
+    Returns:
+          Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
+    """
+    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
     center = size / 2
     scaling = size.max(1, keepdim=True).values * 0.7
     return (keypoints - center[:, None, :]) / scaling[:, None, :]
@@ -179,7 +187,17 @@ def log_sinkhorn_iterations(
     log_target_distribution: torch.Tensor,
     num_iterations: int,
 ) -> torch.Tensor:
-    """Perform Sinkhorn Normalization in Log-space for stability"""
+    """
+    Perform Sinkhorn Normalization in Log-space for stability
+
+    Args:
+        log_cost_matrix (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the cost matrix.
+        log_source_distribution (`torch.Tensor` of shape `(batch_size, num_rows)`): Logarithm of the source distribution.
+        log_target_distribution (`torch.Tensor` of shape `(batch_size, num_columns)`): Logarithm of the target distribution.
+
+    Returns:
+        log_cost_matrix (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the optimal transport matrix.
+    """
     log_u_scaling = torch.zeros_like(log_source_distribution)
     log_v_scaling = torch.zeros_like(log_target_distribution)
     for _ in range(num_iterations):
@@ -189,7 +207,17 @@ def log_sinkhorn_iterations(
 
 
 def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterations: int) -> torch.Tensor:
-    """Perform Differentiable Optimal Transport in Log-space for stability"""
+    """
+    Perform Differentiable Optimal Transport in Log-space for stability
+
+    Args:
+        scores: (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Cost matrix.
+        reg_param: (`torch.Tensor` of shape `(batch_size, 1, 1)`): Regularization parameter.
+        iterations: (`int`): Number of Sinkhorn iterations.
+
+    Returns:
+        log_optimal_transport_matrix: (`torch.Tensor` of shape `(batch_size, num_rows, num_columns)`): Logarithm of the optimal transport matrix.
+    """
     batch_size, num_rows, num_columns = scores.shape
     one_tensor = scores.new_tensor(1)
     num_rows_tensor, num_columns_tensor = (num_rows * one_tensor).to(scores), (num_columns * one_tensor).to(scores)
