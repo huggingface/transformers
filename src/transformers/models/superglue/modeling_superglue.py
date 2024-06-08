@@ -641,6 +641,65 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             all_attentions,
         )
 
+    def batch_output(
+        self,
+        batch_size,
+        list_attentions,
+        list_hidden_states,
+        list_keypoints_0,
+        list_keypoints_1,
+        list_matches_0,
+        list_matches_1,
+        list_matching_scores_0,
+        list_matching_scores_1,
+        pixel_values,
+        output_attentions,
+        output_hidden_states,
+    ):
+        maximum_matches = max(
+            max([matches_0.shape[1] for matches_0 in list_matches_0]),
+            max([matches_1.shape[1] for matches_1 in list_matches_1]),
+        )
+        matches = torch.full((batch_size, 2, maximum_matches), -1, device=pixel_values.device, dtype=torch.int)
+        matching_scores = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device)
+        matches_mask = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device, dtype=torch.int)
+        keypoints = torch.zeros((batch_size, 2, maximum_matches, 2), device=pixel_values.device)
+        for i, (
+            _matches_0,
+            _matches_1,
+            _matching_scores_0,
+            _matching_scores_1,
+            _keypoints_0,
+            _keypoints_1,
+        ) in enumerate(
+            zip(
+                list_matches_0,
+                list_matches_1,
+                list_matching_scores_0,
+                list_matching_scores_1,
+                list_keypoints_0,
+                list_keypoints_1,
+            )
+        ):
+            matches[i, 0, : _matches_0.shape[1]] = _matches_0
+            matches[i, 1, : _matches_1.shape[1]] = _matches_1
+            matching_scores[i, 0, : _matching_scores_0.shape[1]] = _matching_scores_0
+            matching_scores[i, 1, : _matching_scores_1.shape[1]] = _matching_scores_1
+            matches_mask[i, 0, : _matches_0.shape[1]] = 1
+            matches_mask[i, 1, : _matches_1.shape[1]] = 1
+            keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
+            keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
+
+        if output_hidden_states:
+            hidden_states = batch_hidden_states(list_hidden_states)
+        else:
+            hidden_states = None
+        if output_attentions:
+            attentions = batch_attention_probs_list(list_attentions)
+        else:
+            attentions = None
+        return attentions, hidden_states, keypoints, matches, matches_mask, matching_scores
+
     @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -746,62 +805,3 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             hidden_states=hidden_states,
             attentions=attentions,
         )
-
-    def batch_output(
-        self,
-        batch_size,
-        list_attentions,
-        list_hidden_states,
-        list_keypoints_0,
-        list_keypoints_1,
-        list_matches_0,
-        list_matches_1,
-        list_matching_scores_0,
-        list_matching_scores_1,
-        pixel_values,
-        output_attentions,
-        output_hidden_states,
-    ):
-        maximum_matches = max(
-            max([matches_0.shape[1] for matches_0 in list_matches_0]),
-            max([matches_1.shape[1] for matches_1 in list_matches_1]),
-        )
-        matches = torch.full((batch_size, 2, maximum_matches), -1, device=pixel_values.device, dtype=torch.int)
-        matching_scores = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device)
-        matches_mask = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device, dtype=torch.int)
-        keypoints = torch.zeros((batch_size, 2, maximum_matches, 2), device=pixel_values.device)
-        for i, (
-            _matches_0,
-            _matches_1,
-            _matching_scores_0,
-            _matching_scores_1,
-            _keypoints_0,
-            _keypoints_1,
-        ) in enumerate(
-            zip(
-                list_matches_0,
-                list_matches_1,
-                list_matching_scores_0,
-                list_matching_scores_1,
-                list_keypoints_0,
-                list_keypoints_1,
-            )
-        ):
-            matches[i, 0, : _matches_0.shape[1]] = _matches_0
-            matches[i, 1, : _matches_1.shape[1]] = _matches_1
-            matching_scores[i, 0, : _matching_scores_0.shape[1]] = _matching_scores_0
-            matching_scores[i, 1, : _matching_scores_1.shape[1]] = _matching_scores_1
-            matches_mask[i, 0, : _matches_0.shape[1]] = 1
-            matches_mask[i, 1, : _matches_1.shape[1]] = 1
-            keypoints[i, 0, : _keypoints_0.shape[1], :] = _keypoints_0
-            keypoints[i, 1, : _keypoints_1.shape[1], :] = _keypoints_1
-
-        if output_hidden_states:
-            hidden_states = batch_hidden_states(list_hidden_states)
-        else:
-            hidden_states = None
-        if output_attentions:
-            attentions = batch_attention_probs_list(list_attentions)
-        else:
-            attentions = None
-        return attentions, hidden_states, keypoints, matches, matches_mask, matching_scores
