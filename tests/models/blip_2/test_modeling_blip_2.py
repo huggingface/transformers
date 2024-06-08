@@ -24,6 +24,7 @@ import requests
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_vision,
@@ -862,18 +863,18 @@ class Blip2TextModelWithProjectionTester:
         self.is_training = is_training
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+        )
+
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
         return config, input_ids, attention_mask
-
-    def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
-            vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
-        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -1025,18 +1026,18 @@ class Blip2VisionModelWithProjectionTester:
         self.hidden_size = self.vision_model_tester.hidden_size
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+        )
+
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
         return config, pixel_values
-
-    def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
-            vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
-        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -1192,6 +1193,12 @@ class Blip2TextRetrievalModelTester:
         self.is_training = is_training
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+        )
+
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -1199,12 +1206,6 @@ class Blip2TextRetrievalModelTester:
         config = self.get_config()
 
         return config, input_ids, attention_mask, pixel_values
-
-    def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
-            vision_config=self.vision_model_tester.get_config(),
-            qformer_config=self.qformer_model_tester.get_config(),
-        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = Blip2ForImageTextRetrieval(config).to(torch_device).eval()
@@ -1603,6 +1604,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
 
     @require_torch_gpu
+    @require_torch_fp16
     def test_inference_itm_fp16(self):
         model_name = "jpizarrom/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
@@ -1624,6 +1626,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
 
     @require_torch_gpu
+    @require_torch_fp16
     def test_inference_vision_with_projection_fp16(self):
         model_name = "jpizarrom/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
@@ -1647,6 +1650,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(out.image_embeds[0][0][:6].tolist(), expected_image_embeds, atol=1e-3))
 
     @require_torch_gpu
+    @require_torch_fp16
     def test_inference_text_with_projection_fp16(self):
         model_name = "jpizarrom/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)

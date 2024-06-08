@@ -354,6 +354,14 @@ class Blip2Config(PretrainedConfig):
         Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
         configurations.
 
+        Args:
+            vision_config (`dict`):
+                Dictionary of configuration options used to initialize [`Blip2VisionConfig`].
+            qformer_config (`dict`):
+                Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
+            text_config (`dict`, *optional*):
+                Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+
         Returns:
             [`Blip2Config`]: An instance of a configuration object
         """
