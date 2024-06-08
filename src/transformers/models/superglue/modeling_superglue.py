@@ -271,6 +271,10 @@ class KeypointMatchingOutput(ModelOutput):
             Scores of predicted matches.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Absolute (x, y) coordinates of predicted keypoints in a given image.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels, num_keypoints)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints, num_keypoints)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
