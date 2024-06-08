@@ -474,6 +474,7 @@ _import_structure = {
         "InstructBlipVisionConfig",
     ],
     "models.jamba": ["JambaConfig"],
+    "models.mamba2": ["Mamba2Config"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
@@ -2311,6 +2312,14 @@ else:
             "JambaForSequenceClassification",
             "JambaModel",
             "JambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mamba2"].extend(
+        [
+            "Mamba2ForCausalLM",
+            "Mamba2ForSequenceClassification",
+            "Mamba2Model",
+            "Mamba2PreTrainedModel",
         ]
     )
     _import_structure["models.jetmoe"].extend(
@@ -5058,6 +5067,7 @@ if TYPE_CHECKING:
         InstructBlipVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.mamba2 import Mamba2Config
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -6741,6 +6751,12 @@ if TYPE_CHECKING:
             JambaForSequenceClassification,
             JambaModel,
             JambaPreTrainedModel,
+        )
+        from .models.mamba2 import (
+            Mamba2ForCausalLM,
+            Mamba2ForSequenceClassification,
+            Mamba2Model,
+            Mamba2PreTrainedModel,
         )
         from .models.jetmoe import (
             JetMoeForCausalLM,

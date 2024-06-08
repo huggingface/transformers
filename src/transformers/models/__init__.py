@@ -112,6 +112,7 @@ from . import (
     informer,
     instructblip,
     jamba,
+    mamba2,
     jetmoe,
     kosmos2,
     layoutlm,

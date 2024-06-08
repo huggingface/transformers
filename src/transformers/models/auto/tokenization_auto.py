@@ -213,6 +213,12 @@ else:
                 ),
             ),
             (
+                "mamba2",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            (
                 "jetmoe",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
