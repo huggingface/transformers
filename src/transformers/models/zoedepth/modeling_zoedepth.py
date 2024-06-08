@@ -716,6 +716,9 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
 
     def forward(self, x, prev_bin, prev_bin_embedding=None, interpolate=True):
         """
+        The forward pass of the attractor layer. This layer predicts the new bin centers based on the previous bin centers
+        and the attractor points (the latter are predicted by the MLP).
+
         Args:
             x (`torch.Tensor` of shape (batch_size, num_channels, height, width)`):
                 Feature block.
