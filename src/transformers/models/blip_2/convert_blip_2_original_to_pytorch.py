@@ -247,7 +247,12 @@ def convert_blip2_checkpoint(
             original_logits = original_model(
                 {"image": original_pixel_values, "text_input": [caption]}, match_head="itm"
             )
-            logits = hf_model(pixel_values=original_pixel_values, input_ids=input_ids, attention_mask=attention_mask)
+            logits = hf_model(
+                pixel_values=original_pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_image_text_matching_head=True,
+            )
 
         assert original_logits.shape == logits.logits_per_image.shape
         print("First values of original logits:", original_logits[0, :3])
