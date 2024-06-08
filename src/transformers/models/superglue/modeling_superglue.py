@@ -287,11 +287,7 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
-    def __init__(
-        self,
-        config: SuperGlueConfig,
-        channels: List[int],
-    ):
+    def __init__(self, config: SuperGlueConfig, channels: List[int]):
         super().__init__()
         num_layers = len(channels)
         layers = []
@@ -302,11 +298,7 @@ class SuperGlueMultiLayerPerceptron(nn.Module):
                 layers.append(nn.ReLU())
         self.layers = nn.Sequential(*layers)
 
-    def forward(
-        self,
-        input: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-    ) -> Union[Tuple, torch.Tensor]:
+    def forward(self, input: torch.Tensor, output_hidden_states: Optional[bool] = False) -> Union[Tuple, torch.Tensor]:
         all_hidden_states = () if output_hidden_states else None
         for layer in self.layers:
             input = layer(input)
@@ -682,8 +674,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         list_hidden_states = []
         list_attentions = []
 
-        for i in range(pixel_values.size(0)):
-            image_pair = pixel_values[i]
+        for image_pair in pixel_values:
             keypoint_detection_output = self.keypoint_detector(
                 image_pair,
                 output_hidden_states=output_hidden_states,
@@ -714,14 +705,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 output_hidden_states=output_hidden_states,
             )
 
-            (
-                matches_0,
-                matches_1,
-                matching_scores_0,
-                matching_scores_1,
-                hidden_states,
-                attentions,
-            ) = match_image_output
+            matches_0, matches_1, matching_scores_0, matching_scores_1, hidden_states, attentions = match_image_output
             list_matches_0.append(matches_0)
             list_matches_1.append(matches_1)
             list_matching_scores_0.append(matching_scores_0)
@@ -779,27 +763,13 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states,
     ):
         maximum_matches = max(
-            [
-                max([matches_0.shape[1] for matches_0 in list_matches_0]),
-                max([matches_1.shape[1] for matches_1 in list_matches_1]),
-            ]
+            max([matches_0.shape[1] for matches_0 in list_matches_0]),
+            max([matches_1.shape[1] for matches_1 in list_matches_1]),
         )
-        matches = torch.full(
-            (batch_size, 2, maximum_matches),
-            -1,
-            device=pixel_values.device,
-            dtype=torch.int,
-        )
+        matches = torch.full((batch_size, 2, maximum_matches), -1, device=pixel_values.device, dtype=torch.int)
         matching_scores = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device)
-        matches_mask = torch.zeros(
-            (batch_size, 2, maximum_matches),
-            device=pixel_values.device,
-            dtype=torch.int,
-        )
-        keypoints = torch.zeros(
-            (batch_size, 2, maximum_matches, 2),
-            device=pixel_values.device,
-        )
+        matches_mask = torch.zeros((batch_size, 2, maximum_matches), device=pixel_values.device, dtype=torch.int)
+        keypoints = torch.zeros((batch_size, 2, maximum_matches, 2), device=pixel_values.device)
         for i, (
             _matches_0,
             _matches_1,
