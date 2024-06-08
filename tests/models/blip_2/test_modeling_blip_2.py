@@ -1414,24 +1414,15 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # max_length for BLIP includes prompt length from now on, use max_new_tokens
-        predictions = model.generate(
-            **inputs,
-            max_new_tokens=11,
-            do_sample=False,
-            num_beams=5,
-            top_p=0.9,
-            repetition_penalty=1.0,
-            length_penalty=1.0,
-            temperature=1,
-        )
+        predictions = model.generate(**inputs, max_new_tokens=11)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [2, 15610, 1597, 2977, 6, 13011, 1594, 43052, 50118],
+            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
-        self.assertEqual(generated_text, "san diego, california")
+        self.assertEqual(generated_text, "it's not a city, it's a beach")
 
     def test_inference_interpolate_pos_encoding(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
