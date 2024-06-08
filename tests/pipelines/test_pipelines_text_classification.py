@@ -20,9 +20,23 @@ from transformers import (
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_pipeline_test,
+    is_torch_available,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_torch_bf16,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 # These 2 model types require different inputs than those of the usual text models.
@@ -101,6 +115,32 @@ class TextClassificationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
             device=torch_device,
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+    @require_torch_fp16
+    def test_accepts_torch_fp16(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt",
+            device=torch_device,
+            torch_dtype=torch.float16,
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+    @require_torch_bf16
+    def test_accepts_torch_bf16(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt",
+            device=torch_device,
+            torch_dtype=torch.bfloat16,
         )
 
         outputs = text_classifier("This is great !")

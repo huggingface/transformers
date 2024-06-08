@@ -742,7 +742,12 @@ class BlipVisionModel(BlipPreTrainedModel):
         return self.embeddings
 
 
-@add_start_docstrings(BLIP_START_DOCSTRING)
+@add_start_docstrings(
+    """
+    This model is going to be deprecated in future versions. Please use `BlipForConditionalGeneration`, `BlipForQuestionAnswering` or `BlipForImageTextRetrieval` depending on your usecase.
+    """,
+    BLIP_START_DOCSTRING,
+)
 class BlipModel(BlipPreTrainedModel):
     config_class = BlipConfig
 
@@ -774,6 +779,10 @@ class BlipModel(BlipPreTrainedModel):
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+
+        logger.warning(
+            "`BlipModel` is going to be deprecated in future release, please use `BlipForConditionalGeneration`, `BlipForQuestionAnswering` or `BlipForImageTextRetrieval` depending on your usecase."
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
