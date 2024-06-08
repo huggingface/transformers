@@ -552,6 +552,41 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Tuple, Tuple]:
+        """
+        Perform keypoint matching between two images.
+        Args:
+            image0_keypoints (`torch.Tensor` of shape `(1, num_keypoints, 2)`):
+                Keypoints detected in the first image.
+            image0_descriptors (`torch.Tensor` of shape `(1, descriptor_dim, num_keypoints)`):
+                Descriptors of the keypoints detected in the first image.
+            image0_scores (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Confidence scores of the keypoints detected in the first image.
+            image1_keypoints (`torch.Tensor` of shape `(1, num_keypoints, 2)`):
+                Keypoints detected in the second image.
+            image1_descriptors (`torch.Tensor` of shape `(1, descriptor_dim, num_keypoints)`):
+                Descriptors of the keypoints detected in the second image.
+            image1_scores (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Confidence scores of the keypoints detected in the second image.
+            height (`int`): Image height.
+            width (`int`): Image width.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors. Default to `config.output_attentions`.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. Default to `config.output_hidden_states`.
+        Returns:
+            matches_0 (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Index of keypoint matched in the second image.
+            matches_1 (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Index of keypoint matched in the first image.
+            matching_scores_0 (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Scores of predicted matches from the first image.
+            matching_scores_1 (`torch.Tensor` of shape `(1, num_keypoints)`):
+                Scores of predicted matches from the second image.
+            all_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+                Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_channels, num_keypoints)`.
+            all_attentions (`tuple(torch.FloatTensor)`, *optional*):
+                Tuple of `torch.FloatTensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints, num_keypoints)`.
+        """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
