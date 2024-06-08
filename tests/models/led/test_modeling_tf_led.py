@@ -197,7 +197,6 @@ class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": TFLEDForConditionalGeneration,
             "feature-extraction": TFLEDModel,
             "summarization": TFLEDForConditionalGeneration,
             "text2text-generation": TFLEDForConditionalGeneration,
