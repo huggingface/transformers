@@ -91,7 +91,7 @@ def batch_attention_probs_list(
     -> [torch.stack([attention_probs_0_0, attention_probs_1_0, ...], dim=0), torch.stack([attention_probs_0_1, attention_probs_1_1, ...], dim=0), ...]
     """
 
-    list_of_tuples = [tuple([element[i] for element in attention_probs]) for i in range(len(attention_probs[0]))]
+    list_of_tuples = list(zip(*map(list, attention_probs)))
     return [stack_attention_probs_list(element) for element in list_of_tuples]
 
 
@@ -160,8 +160,7 @@ def batch_hidden_states(
     We stack the hidden states along the batch dimension for each tuple:
     -> [torch.stack([hidden_state_0_0, hidden_state_1_0, ...], dim=0), torch.stack([hidden_state_0_1, hidden_state_1_1, ...], dim=0), ...]
     """
-
-    list_of_tuples = [tuple([element[i] for element in hidden_states]) for i in range(len(hidden_states[0]))]
+    list_of_tuples = list(zip(*map(list, hidden_states)))
     return [stack_hidden_states_list(element) for element in list_of_tuples]
 
 
