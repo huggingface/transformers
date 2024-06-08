@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.import_utils import register
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -1021,6 +1022,7 @@ class AltCLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
+@register(backends=("torch",))
 class AltCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1136,6 +1138,7 @@ class AltCLIPVisionTransformer(nn.Module):
         )
 
 
+@register(backends=("torch",))
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1367,6 +1370,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPTextConfig
 
@@ -1459,6 +1463,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         )
 
 
+@register(backends=("torch",))
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPConfig
 
@@ -1694,3 +1699,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = ["AltCLIPPreTrainedModel", "AltCLIPVisionModel", "AltCLIPTextModel", "AltCLIPModel"]

@@ -1375,6 +1375,11 @@ explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+TORCHAUDIO_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
+runtime.
+"""
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
@@ -1550,6 +1555,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
@@ -1617,19 +1623,73 @@ class _LazyModule(ModuleType):
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
     def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
         super().__init__(name)
-        self._modules = set(import_structure.keys())
-        self._class_to_module = {}
-        for key, values in import_structure.items():
-            for value in values:
-                self._class_to_module[value] = key
-        # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
-        self.__file__ = module_file
-        self.__spec__ = module_spec
-        self.__path__ = [os.path.dirname(module_file)]
-        self._objects = {} if extra_objects is None else extra_objects
-        self._name = name
-        self._import_structure = import_structure
+
+        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+            PER_BACKEND_SPLIT = True
+        else:
+            PER_BACKEND_SPLIT = False
+
+        self._object_missing_backend = {}
+
+        if PER_BACKEND_SPLIT:
+            self._modules = set()
+            self._class_to_module = {}
+            self.__all__ = []
+
+            _import_structure = {}
+
+            for backends, item in import_structure.items():
+                lacking_backends = []
+                for backend in backends:
+                    if backend not in BACKENDS_MAPPING:
+                        raise ValueError(
+                            f"Error: the following backend: '{backend}' was specified around object {item} but isn't specified in the backends mapping."
+                        )
+                    callable, error = BACKENDS_MAPPING[backend]
+                    if not callable():
+                        lacking_backends.append(backend)
+
+                self._modules.union(set(item.keys()))
+                for key, values in item.items():
+                    for value in values:
+                        self._class_to_module[value] = key
+
+                    if key not in _import_structure:
+                        _import_structure[key] = values
+                    else:
+                        _import_structure[key].extend(values)
+
+                # Needed for autocompletion in an IDE
+                self.__all__.extend(list(item.keys()) + list(chain(*item.values())))
+
+                if len(lacking_backends):
+                    for module, objects in item.items():
+                        for obj in objects:
+                            self._object_missing_backend[obj] = lacking_backends
+                        self._object_missing_backend[module] = lacking_backends
+
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = _import_structure
+
+        # This can be removed once every exportable object has a `register()` export.
+        if not PER_BACKEND_SPLIT:
+            self._modules = set(import_structure.keys())
+            self._class_to_module = {}
+            for key, values in import_structure.items():
+                for value in values:
+                    self._class_to_module[value] = key
+            # Needed for autocompletion in an IDE
+            self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
@@ -1646,6 +1706,20 @@ class _LazyModule(ModuleType):
             return self._objects[name]
         if name in self._modules:
             value = self._get_module(name)
+        elif name in self._object_missing_backend.keys():
+            missing_backends = self._object_missing_backend[name]
+
+            class Placeholder(metaclass=DummyObject):
+                _backends = missing_backends
+
+                def __init__(self, *args, **kwargs):
+                    requires_backends(self, missing_backends)
+
+            # Placeholder.__class__.__name__ = name
+            Placeholder.__name__ = name
+            Placeholder.__module__ = self.__spec__
+
+            value = Placeholder
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
@@ -1689,3 +1763,173 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     spec.loader.exec_module(module)
     module = sys.modules[name]
     return module
+
+
+def register(*, backends=()):
+    """
+    This method enables two things:
+    - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
+      to execute correctly without instantiating it
+    - The '@register' string is used to dynamically import objects
+    """
+
+    if not isinstance(backends, tuple):
+        raise ValueError("Backends should be a tuple.")
+
+    def inner_fn(fun):
+        fun.__backends = backends
+        return fun
+
+    return inner_fn
+
+
+@lru_cache()
+def define_import_structure(module_path):
+    import_structure = {}
+    if os.path.isdir(module_path):
+        for f in os.listdir(module_path):
+            if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
+                import_structure[f] = define_import_structure(os.path.join(module_path, f))
+        directory = module_path
+    else:
+        directory = os.path.dirname(module_path)
+
+    adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+
+    if "__init__.py" in adjacent_modules:
+        adjacent_modules.remove("__init__.py")
+
+    module_requirements = {}
+    for module_name in adjacent_modules:
+        with open(os.path.join(directory, module_name)) as f:
+            file_content = f.read()
+
+        # Remove the .py suffix
+        if module_name.endswith(".py"):
+            module_name = module_name[:-3]
+
+        previous_line = ""
+        previous_index = 0
+
+        lines = file_content.split("\n")
+        for index, line in enumerate(lines):
+            # This allows registering items with other decorators. We'll take a look
+            # at the line that follows at the same indentation level.
+            if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@register"):
+                continue
+
+            # Skipping line enables putting whatever we want between the
+            # register() call and the actuall class/method definition.
+            # This is what enables having # Copied from statements, docs, etc.
+            skip_line = False
+
+            if "@register" in previous_line:
+                skip_line = False
+
+                # Backends are defined on the same line as register
+                if "backends" in previous_line:
+                    backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                    backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ")]))
+
+                # Backends are defined in the lines following register, for example such as:
+                # @register(
+                #     backends=(
+                #             "sentencepiece",
+                #             "torch",
+                #             "tf",
+                #     )
+                # )
+                #
+                # or
+                #
+                # @register(
+                #     backends=(
+                #             "sentencepiece", "tf"
+                #     )
+                # )
+                elif "backends" in lines[previous_index + 1]:
+                    backends = []
+                    for backend_line in lines[previous_index:index]:
+                        if "backends" in backend_line:
+                            backend_line = backend_line.split("=")[1]
+                        if '"' in backend_line or "'" in backend_line:
+                            if ", " in backend_line:
+                                backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
+                            else:
+                                backends.append(backend_line.strip("()\"', "))
+
+                        # If the line is only a ')', then we reached the end of the backends and we break.
+                        if backend_line.strip() == ")":
+                            break
+                    backends = tuple(backends)
+
+                # No backends are registered
+                else:
+                    backends = ()
+
+                backends = frozenset(backends)
+                if backends not in module_requirements:
+                    module_requirements[backends] = {}
+                if module_name not in module_requirements[backends]:
+                    module_requirements[backends][module_name] = []
+
+                if not line.startswith("class") and not line.startswith("def"):
+                    skip_line = True
+                else:
+                    start_index = 6 if line.startswith("class") else 4
+                    object_name = line[start_index:].split("(")[0].strip(":")
+                    module_requirements[backends][module_name].append(object_name)
+
+            if not skip_line:
+                previous_line = line
+                previous_index = index
+
+    import_structure = {**module_requirements, **import_structure}
+    return import_structure
+
+
+def spread_import_structure(nested_import_structure):
+    def propagate_tuple(unordered_import_structure):
+        tuple_first_import_structure = {}
+        for _key, _value in unordered_import_structure.items():
+            if not isinstance(_value, dict):
+                tuple_first_import_structure[_key] = _value
+
+            elif any(isinstance(v, tuple) for v in _value.keys()):
+                # Here we want to switch around key and v
+                for k, v in _value.items():
+                    if isinstance(k, tuple):
+                        if k not in tuple_first_import_structure:
+                            tuple_first_import_structure[k] = {}
+                        tuple_first_import_structure[k][_key] = v
+
+            else:
+                tuple_first_import_structure[_key] = propagate_tuple(_value)
+
+        return tuple_first_import_structure
+
+    def flatten_dict(_dict, previous_key=None):
+        items = []
+        for _key, _value in _dict.items():
+            _key = f"{previous_key}.{_key}" if previous_key is not None else _key
+            if isinstance(_value, dict):
+                items.extend(flatten_dict(_value, _key).items())
+            else:
+                items.append((_key, _value))
+        return dict(items)
+
+    # The tuples contain the necessary backends. We want these first, so we propagate them up the
+    # import structure.
+    ordered_import_structure = nested_import_structure
+    for i in range(6):
+        ordered_import_structure = propagate_tuple(ordered_import_structure)
+
+    # We then flatten the dict so that it references a module path.
+    flattened_import_structure = {}
+    for key, value in ordered_import_structure.copy().items():
+        if isinstance(key, str):
+            del ordered_import_structure[key]
+        else:
+            flattened_import_structure[key] = flatten_dict(value)
+
+    return flattened_import_structure

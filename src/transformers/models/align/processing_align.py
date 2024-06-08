@@ -16,7 +16,7 @@
 Image/Text processor class for ALIGN
 """
 
-from typing import List, Union
+from ...utils.import_utils import register
 
 
 try:
@@ -42,6 +42,7 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@register()
 class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
@@ -162,3 +163,6 @@ class AlignProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["AlignProcessor"]

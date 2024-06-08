@@ -56,6 +56,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import register
 from .configuration_albert import AlbertConfig
 
 
@@ -510,6 +511,7 @@ class TFAlbertTransformer(keras.layers.Layer):
                     layer.build(None)
 
 
+@register(backends=("tf",))
 class TFAlbertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -585,6 +587,7 @@ class TFAlbertMLMHead(keras.layers.Layer):
 
 
 @keras_serializable
+@register(backends=("tf",))
 class TFAlbertMainLayer(keras.layers.Layer):
     config_class = AlbertConfig
 
@@ -858,6 +861,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
     "The bare Albert Model transformer outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertModel(TFAlbertPreTrainedModel):
     def __init__(self, config: AlbertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -915,6 +919,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"predictions.decoder.weight"]
@@ -1046,6 +1051,7 @@ class TFAlbertSOPHead(keras.layers.Layer):
 
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING)
+@register(backends=("tf",))
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions.decoder.weight"]
@@ -1159,6 +1165,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"predictions"]
@@ -1253,6 +1260,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
@@ -1348,6 +1356,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
@@ -1455,6 +1464,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     """,
     ALBERT_START_DOCSTRING,
 )
+@register(backends=("tf",))
 class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
@@ -1558,3 +1568,16 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFAlbertPreTrainedModel",
+    "TFAlbertModel",
+    "TFAlbertForPreTraining",
+    "TFAlbertForMaskedLM",
+    "TFAlbertForSequenceClassification",
+    "TFAlbertForTokenClassification",
+    "TFAlbertForQuestionAnswering",
+    "TFAlbertForMultipleChoice",
+    "TFAlbertMainLayer",
+]
