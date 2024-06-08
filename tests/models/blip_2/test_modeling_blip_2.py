@@ -956,6 +956,10 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Blip2TextModelWithProjection does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -1122,6 +1126,10 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="Blip2VisionModelWithProjection does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -1262,6 +1270,10 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Blip2ForImageTextRetrieval does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
