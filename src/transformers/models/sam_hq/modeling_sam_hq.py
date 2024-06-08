@@ -385,7 +385,7 @@ class SAMHQTwoWayTransformer(nn.Module):
         keys = image_embeddings
 
         # Apply transformer blocks and final layernorm
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             if target_embedding is not None:
                 queries += target_embedding
 
@@ -476,22 +476,21 @@ class SAMHQMaskDecoder(nn.Module):
         # three conv fusion layers for obtaining HQ-Feature
         self.compress_vit_feat = nn.Sequential(
             nn.ConvTranspose2d(config.vision_encoder_dim, self.hidden_size, kernel_size=2, stride=2),
-            SAMHQLayerNorm(self.hidden_size),
+            SAMHQLayerNorm(self.hidden_size, data_format="channels_first"),
             nn.GELU(),
             nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 8, kernel_size=2, stride=2))
 
         self.embedding_encoder = nn.Sequential(
             nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2),
-            SAMHQLayerNorm(self.hidden_size // 4),
+            SAMHQLayerNorm(self.hidden_size // 4, data_format="channels_first"),
             nn.GELU(),
             nn.ConvTranspose2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=2, stride=2),
         )
         self.embedding_maskfeature = nn.Sequential(
             nn.Conv2d(self.hidden_size // 8, self.hidden_size // 4, 3, 1, 1),
-            SAMHQLayerNorm(self.hidden_size // 4),
+            SAMHQLayerNorm(self.hidden_size // 4, data_format="channels_first"),
             nn.GELU(),
             nn.Conv2d(self.hidden_size // 4, self.hidden_size // 8, 3, 1, 1))
-
 
     def forward(
         self,
@@ -500,6 +499,8 @@ class SAMHQMaskDecoder(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
+        hq_token_only: bool,
+        intermediate_embeddings: torch.Tensor,
         output_attentions: Optional[bool] = None,
         attention_similarity: torch.Tensor = None,
         target_embedding: torch.Tensor = None,
@@ -524,7 +525,7 @@ class SAMHQMaskDecoder(nn.Module):
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
         # Concatenate output tokens
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
+        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hf_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
 
         if sparse_prompt_embeddings.sum().item() != 0:
@@ -548,7 +549,7 @@ class SAMHQMaskDecoder(nn.Module):
             output_attentions=output_attentions,
         )
         iou_token_out = point_embedding[:, :, 0, :]
-        mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
+        mask_tokens_out = point_embedding[:, :, 1:(1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         image_embeddings = image_embeddings.transpose(2, 3).reshape(
@@ -559,28 +560,27 @@ class SAMHQMaskDecoder(nn.Module):
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
         upscaled_embedding = self.activation(self.upscale_conv2(upscaled_embedding))
 
-        hyper_in_list = []
+        vit_features = intermediate_embeddings.permute(0, 3, 1, 2) # early-layer ViT feature, after 1st global attention block in ViT
+        hq_features = self.embedding_encoder(image_embeddings) + self.compress_vit_feat(vit_features)
+        upscaled_embedding_hq = self.embedding_maskfeature(upscaled_embedding) + hq_features.repeat(batch_size, 1, 1, 1)
+        hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
-            current_mlp = self.output_hypernetworks_mlps[i]
-            hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
-        hyper_in = torch.stack(hyper_in_list, dim=2)
+            if i < self.num_mask_tokens - 1:
+                hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, :, i, :]))
+            else:
+                hyper_in_list.append(self.hf_mlp(mask_tokens_out[:, :, i, :]))
 
-        _, num_channels, height, width = upscaled_embedding.shape
-        upscaled_embedding = upscaled_embedding.reshape(batch_size, point_batch_size, num_channels, height * width)
-        masks = (hyper_in @ upscaled_embedding).reshape(batch_size, point_batch_size, -1, height, width)
+        hyper_in = torch.stack(hyper_in_list, dim=1)
+        b, c, h, w = upscaled_embedding.shape
+
+        masks_sam = (hyper_in[:,:self.num_mask_tokens-1] @ upscaled_embedding.view(b, c, h * w)).view(batch_size, b, -1, h, w)
+        masks_sam_hq = (hyper_in[:,self.num_mask_tokens-1:] @ upscaled_embedding_hq.view(b, c, h * w)).view(batch_size, b, -1, h, w)
+        masks = torch.cat([masks_sam,masks_sam_hq],dim=2)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        # Select the correct mask or masks for output
-        if multimask_output:
-            mask_slice = slice(1, None)
-        else:
-            mask_slice = slice(0, 1)
-        masks = masks[:, :, mask_slice, :, :]
-        iou_pred = iou_pred[:, :, mask_slice]
-
-        outputs = (masks, iou_pred)
+        outputs = self.hq_postprocess(masks, iou_pred, hq_token_only, multimask_output)
 
         if output_attentions:
             outputs = outputs + (attentions,)
@@ -588,6 +588,30 @@ class SAMHQMaskDecoder(nn.Module):
             outputs = outputs + (None,)
 
         return outputs
+
+
+    def hq_postprocess(self, masks, iou_pred, hq_token_only=None, multimask_output=None):
+        if multimask_output:
+            # mask with highest score
+            mask_slice = slice(1,self.num_mask_tokens-1)
+            iou_pred = iou_pred[:, :, mask_slice]
+            iou_pred, max_iou_idx = torch.max(iou_pred,dim=2)
+            iou_pred = iou_pred.unsqueeze(1)
+            masks_multi = masks[:, :, mask_slice]
+            masks_sam = masks_multi[:, torch.arange(masks_multi.size(1)),max_iou_idx].unsqueeze(1)
+        else:
+            # singale mask output, default
+            mask_slice = slice(0, 1)
+            iou_pred = iou_pred[:, :, mask_slice]
+            masks_sam = masks[:, :, mask_slice]
+
+        masks_hq = masks[:, :, slice(self.num_mask_tokens-1, self.num_mask_tokens)]
+        if hq_token_only:
+            masks = masks_hq
+        else:
+            masks = masks_sam + masks_hq
+        # Prepare output
+        return masks, iou_pred
 
 
 # Copied from transformers.models.sam.modeling_sam.SamPositionalEmbedding with Sam->SAMHQ
@@ -1223,13 +1247,15 @@ SAM_HQ_INPUTS_DOCSTRING = r"""
 class SAMHQModel(SAMHQPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
-    def __init__(self, config):
+    def __init__(self, config: SAMHQConfig):
         super().__init__(config)
         self.shared_image_embedding = SAMHQPositionalEmbedding(config.vision_config)
 
         self.vision_encoder = SAMHQVisionEncoder(config.vision_config)
         self.prompt_encoder = SAMHQPromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
         self.mask_decoder = SAMHQMaskDecoder(config.mask_decoder_config)
+
+        self.hq_features_index = config.vision_config.global_attn_indexes[0] + 1
 
         self.post_init()
 
@@ -1322,12 +1348,14 @@ class SAMHQModel(SAMHQPreTrainedModel):
         input_boxes: Optional[torch.FloatTensor] = None,
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
+        early_layer_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        hq_token_only: bool = False,
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
@@ -1361,8 +1389,8 @@ class SAMHQModel(SAMHQPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
+        if pixel_values is None and (image_embeddings is None or early_layer_embeddings is None):
+            raise ValueError("Either pixel_values or image_embeddings and early_layer_embeddings must be provided.")
 
         if pixel_values is not None and image_embeddings is not None:
             raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
@@ -1399,10 +1427,11 @@ class SAMHQModel(SAMHQPreTrainedModel):
             vision_outputs = self.vision_encoder(
                 pixel_values,
                 output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                output_hidden_states=True,
                 return_dict=return_dict,
             )
             image_embeddings = vision_outputs[0]
+            early_layer_embeddings = vision_outputs[1][self.hq_features_index]
 
             if output_hidden_states:
                 vision_hidden_states = vision_outputs[1]
@@ -1437,6 +1466,8 @@ class SAMHQModel(SAMHQPreTrainedModel):
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
+            intermediate_embeddings=early_layer_embeddings,
+            hq_token_only=hq_token_only
         )
 
         if not return_dict:
