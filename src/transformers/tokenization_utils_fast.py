@@ -110,7 +110,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None:
+        elif fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
@@ -961,7 +961,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         elif self._tokenizer.pre_tokenizer is None:
             self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-                replacement="▁", prepend_scheme=prepend_scheme, split=False
+                replacement="▁", prepend_scheme=prepend_scheme, split=False #TODO:ita True?
             )
             self._update_normalizer()
 
