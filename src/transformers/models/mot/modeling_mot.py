@@ -373,7 +373,7 @@ class MoTMLP(nn.Module):
 
         self.d_model: int = config.n_embd
         self.d_ff: int = config.n_inner if inner_dim is None else inner_dim
-        self.n_experts: int = config.n_experts
+        self.n_expert: int = config.n_expert
         self.group_size: int = config.group_size
         self.sparsity_dim: int = sparsity_dim
         self.expert_size: int = config.expert_size
@@ -391,22 +391,22 @@ class MoTMLP(nn.Module):
         ), f"d_ff = {self.d_ff} should be divisible by group size = {self.group_size}"
         self.d_ff *= self.group_size
 
-        if self.expert_size is None and self.n_experts is not None:
+        if self.expert_size is None and self.n_expert is not None:
             assert (
-                self.d_ff % self.n_experts == 0
-            ), f"dff = {self.d_ff} is not divisible by n_experts = {self.n_experts}"
-            self.expert_size = self.d_ff // self.n_experts
-        elif self.expert_size is not None and self.n_experts is None:
+                self.d_ff % self.n_expert == 0
+            ), f"dff = {self.d_ff} is not divisible by n_expert = {self.n_expert}"
+            self.expert_size = self.d_ff // self.n_expert
+        elif self.expert_size is not None and self.n_expert is None:
             assert (
                 self.d_ff % self.expert_size == 0
             ), f"dff = {self.d_ff} is not divisible by expert_size = {self.expert_size}"
-            self.n_experts = self.d_ff // self.expert_size
+            self.n_expert = self.d_ff // self.expert_size
         else:
-            raise ValueError("Either expert_size or n_experts should be provided")
+            raise ValueError("Either expert_size or n_expert should be provided")
 
         self.lin1 = nn.Parameter(
             self.get_init_weight(
-                (self.n_experts, self.d_model, self.expert_size),
+                (self.n_expert, self.d_model, self.expert_size),
                 fan_in=self.d_model,
                 init_type=self.init_type,
                 scale=self.init_scale,
@@ -415,7 +415,7 @@ class MoTMLP(nn.Module):
 
         self.lin2 = nn.Parameter(
             self.get_init_weight(
-                (self.n_experts, self.expert_size, self.d_model),
+                (self.n_expert, self.expert_size, self.d_model),
                 fan_in=self.expert_size,
                 init_type=self.init_type,
                 scale=self.init_scale,
@@ -424,7 +424,7 @@ class MoTMLP(nn.Module):
 
         self.controller = nn.Parameter(
             self.get_init_weight(
-                (self.d_model, self.n_experts),
+                (self.d_model, self.n_expert),
                 fan_in=self.d_model,
                 init_type=self.init_type,
                 scale=self.init_scale,
@@ -545,7 +545,7 @@ class MoTMLP(nn.Module):
         merge_logits = torch.matmul(x, self.controller)
         # self.update_cache_for_logging("merge_logits", merge_logits)
 
-        # shape of merge_logits is (free_dimension, aggr_dimension // group_size, group_size, n_experts)
+        # shape of merge_logits is (free_dimension, aggr_dimension // group_size, group_size, n_expert)
         temp_merge = self.temperature
         temp_emit = self.temperature
 
@@ -568,24 +568,24 @@ class MoTMLP(nn.Module):
     def merge_map_emit(self, x, merge_weights, emit_weights):
         """
         :param x: input reshaped to (free_dimension, split_dimension // group_size, group_size, dmodel)
-        :param merge_weights: weights for merging tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_experts)
-        :param emit_weights: weights for emitting tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_experts)
+        :param merge_weights: weights for merging tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_expert)
+        :param emit_weights: weights for emitting tokens within a group, shape (free_dimension, split_dimension // group_size, group_size, n_expert)
         :return: tensor of token updates of shape (free_dimension, split_dimension // group_size, group_size, dmodel)
         """
         x = torch.matmul(
             merge_weights.transpose(-1, -2),
             x,
         )
-        # x shape is (free_dimension, split_dimension // group_size, n_experts, dmodel) ||| lin1 shape is (n_experts, dmodel, expert_size)
-        x = torch.bmm(x.view(-1, self.n_experts, self.d_model).transpose(0, 1), self.lin1)
+        # x shape is (free_dimension, split_dimension // group_size, n_expert, dmodel) ||| lin1 shape is (n_expert, dmodel, expert_size)
+        x = torch.bmm(x.view(-1, self.n_expert, self.d_model).transpose(0, 1), self.lin1)
         x = self.act(x)
-        # x shape is (n_experts, free_dimension * aggr_dimension // group_size, expert_size) ||| lin2 shape is (n_experts, expert_size, dmodel)
+        # x shape is (n_expert, free_dimension * aggr_dimension // group_size, expert_size) ||| lin2 shape is (n_expert, expert_size, dmodel)
         x = torch.bmm(x, self.lin2)
-        # x shape is (n_experts, free_dimension * aggr_dimension // group_size, dmodel)
+        # x shape is (n_expert, free_dimension * aggr_dimension // group_size, dmodel)
 
-        # merge_weights shape is (free_dimension, aggr_dimension // group_size, group_size, n_experts)
-        # view x to be (n_experts, free_dimension, aggr_dimension // group_size, dmodel)
-        # permute it to be (free_dimension, aggr_dimension // group_size, n_experts, dmodel)
+        # merge_weights shape is (free_dimension, aggr_dimension // group_size, group_size, n_expert)
+        # view x to be (n_expert, free_dimension, aggr_dimension // group_size, dmodel)
+        # permute it to be (free_dimension, aggr_dimension // group_size, n_expert, dmodel)
         x = torch.matmul(
             emit_weights,
             x.view(x.size(0), emit_weights.size(0), -1, self.d_model).permute(1, 2, 0, 3),

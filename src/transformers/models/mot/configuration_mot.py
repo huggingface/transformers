@@ -57,7 +57,7 @@ class MoTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
-        n_experts (`int`, *optional*, defaults to 32):
+        n_expert (`int`, *optional*, defaults to 32):
             The number of experts.
         group_size (`int`, *optional*, defaults to 32):
             The number of tokens per expert.
@@ -158,7 +158,7 @@ class MoTConfig(PretrainedConfig):
         n_layer=12,
         n_head=12,
         n_inner=None,
-        n_experts=32,
+        n_expert=32,
         group_size=32,
         expert_size=None,
         init_scale=1.0,
@@ -189,7 +189,7 @@ class MoTConfig(PretrainedConfig):
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
-        self.n_experts = n_experts
+        self.n_expert = n_expert
         self.group_size = group_size
         self.expert_size = expert_size
         self.init_scale = init_scale
