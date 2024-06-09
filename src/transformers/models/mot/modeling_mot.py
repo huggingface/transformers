@@ -53,11 +53,11 @@ from .configuration_mot import MoTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "mot-base"
+_CHECKPOINT_FOR_DOC = "jaszczur/mixture_of_tokens"
 _CONFIG_FOR_DOC = "MoTConfig"
 
 MOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mot-base",
+    "jaszczur/mixture_of_tokens",
     # See all MixtureOfTokens models at https://huggingface.co/models?filter=mot
 ]
 
@@ -867,7 +867,7 @@ PARALLELIZE_DOCSTRING = r"""
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using mot-xl, which has a total of 48 attention modules:
-    model = MoTLMHeadModel.from_pretrained("mot-xl")
+    model = MoTLMHeadModel.from_pretrained("jaszczur/mixture_of_tokens")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -884,7 +884,7 @@ DEPARALLELIZE_DOCSTRING = r"""
 
     ```python
     # On a 4 GPU machine with mot-large:
-    model = MoTLMHeadModel.from_pretrained("mot-large")
+    model = MoTLMHeadModel.from_pretrained("jaszczur/mixture_of_tokens")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -1516,8 +1516,8 @@ class MoTDoubleHeadsModel(MoTPreTrainedModel):
         >>> import torch
         >>> from transformers import GPT2Tokenizer, MoTDoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("mot")
-        >>> model = MoTDoubleHeadsModel.from_pretrained("mot")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("jaszczur/mixture_of_tokens")
+        >>> model = MoTDoubleHeadsModel.from_pretrained("jaszczur/mixture_of_tokens")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})

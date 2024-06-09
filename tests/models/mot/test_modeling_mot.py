@@ -16,7 +16,6 @@
 
 import datetime
 import gc
-import itertools
 import math
 import tempfile
 import unittest
@@ -50,7 +49,6 @@ if is_torch_available():
         MoTForSequenceClassification,
         MoTForTokenClassification,
         MoTLMHeadModel,
-        MoTMLP,
         MoTModel,
     )
 
@@ -115,7 +113,7 @@ class MoTModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return MoTConfig.from_pretrained("mot")
+        return MoTConfig.from_pretrained("jaszczur/mixture_of_tokens")
 
     def check_sparsity_dim(self, model):
         if model.h[0].mlp.sparsity_dim == 1:
@@ -664,9 +662,9 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_batch_generation(self):
-        model = MoTLMHeadModel.from_pretrained("mot")
+        model = MoTLMHeadModel.from_pretrained("jaszczur/mixture_of_tokens")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("mot")
+        tokenizer = GPT2Tokenizer.from_pretrained("jaszczur/mixture_of_tokens")
 
         tokenizer.padding_side = "left"
 
@@ -723,9 +721,9 @@ class MoTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_batch_generation_2heads(self):
-        model = MoTDoubleHeadsModel.from_pretrained("mot")
+        model = MoTDoubleHeadsModel.from_pretrained("jaszczur/mixture_of_tokens")
         model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("mot")
+        tokenizer = GPT2Tokenizer.from_pretrained("jaszczur/mixture_of_tokens")
 
         tokenizer.padding_side = "left"
 
@@ -804,7 +802,7 @@ class MoTModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = MoTLMHeadModel.from_pretrained(
-            "mot",
+            "jaszczur/mixture_of_tokens",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -841,8 +839,8 @@ class MoTModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_mot_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("mot")
-        model = MoTLMHeadModel.from_pretrained("mot")
+        tokenizer = GPT2Tokenizer.from_pretrained("jaszczur/mixture_of_tokens")
+        model = MoTLMHeadModel.from_pretrained("jaszczur/mixture_of_tokens")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -869,8 +867,8 @@ class MoTModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_mot_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("mot")
-        model = MoTLMHeadModel.from_pretrained("mot")
+        tokenizer = GPT2Tokenizer.from_pretrained("jaszczur/mixture_of_tokens")
+        model = MoTLMHeadModel.from_pretrained("jaszczur/mixture_of_tokens")
         model.to(torch_device)
 
         torch.manual_seed(0)
