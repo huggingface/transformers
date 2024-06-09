@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -66,38 +66,31 @@ class MambaCache:
         device: torch.device
 
     Attributes:
-        seqlen_offset: int
         dtype: torch.dtype
-        conv_state_cache: List[torch.Tensor] # layer_idx -> [batch_size, intermediate_size, conv_kernel_size]
-        ssm_state_cache: List[torch.Tensor] # layer_idx -> [batch_size, intermediate_size, ssm_state_size]
+        conv_state_cache: torch.Tensor [layer_idx, batch_size, intermediate_size, conv_kernel_size]
+        ssm_state_cache: torch.Tensor [layer_idx, batch_size, intermediate_size, ssm_state_size]
         is_cache_initialized: List[bool]
     """
 
     def __init__(
         self, config: MambaConfig, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
     ):
-        self.seqlen_offset = 0
         self.dtype = dtype
         intermediate_size = config.intermediate_size
         ssm_state_size = config.state_size
         conv_kernel_size = config.conv_kernel
 
-        self.conv_state_cache: List[torch.Tensor] = []
-        self.ssm_state_cache: List[torch.Tensor] = []
+        self.conv_state_cache: torch.Tensor = torch.zeros(
+            config.num_hidden_layers, batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype
+        )
+        self.ssm_state_cache: torch.Tensor = torch.zeros(
+            config.num_hidden_layers, batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype
+        )
+
+        torch._dynamo.mark_static_address(self.conv_state_cache)
+        torch._dynamo.mark_static_address(self.ssm_state_cache)
 
         self.is_cache_initialized = [False for _ in range(config.num_hidden_layers)]
-
-        for i in range(config.num_hidden_layers):
-            new_layer_conv_cache = torch.zeros(
-                batch_size, intermediate_size, conv_kernel_size, device=device, dtype=dtype
-            )
-            new_layer_ssm_cache = torch.zeros(
-                batch_size, intermediate_size, ssm_state_size, device=device, dtype=dtype
-            )
-            torch._dynamo.mark_static_address(new_layer_conv_cache)
-            torch._dynamo.mark_static_address(new_layer_ssm_cache)
-            self.conv_state_cache.append(new_layer_conv_cache)
-            self.ssm_state_cache.append(new_layer_ssm_cache)
 
     def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor) -> torch.Tensor:
         conv_state = self.conv_state_cache[layer_idx]
@@ -129,10 +122,8 @@ class MambaCache:
         return self.is_cache_initialized[layer_idx]
 
     def reset(self):
-        for conv_state, ssm_state in zip(self.conv_state_cache, self.ssm_state_cache):
-            # In-place ops prevent breaking the static address
-            conv_state.zero_()
-            ssm_state.zero_()
+        self.conv_state_cache.zero_()
+        self.ssm_state_cache.zero_()
         self.is_cache_initialized = [False for _ in range(len(self.is_cache_initialized))]
 
 
@@ -685,13 +676,19 @@ class MambaForCausalLM(MambaPreTrainedModel):
         if use_cache and self.training and self.gradient_checkpointing:
             use_cache = False
         if cache_params is None and use_cache:
-            # will construct a cache for a different generation
-            cache_params = MambaCache(
-                self.config,
-                input_ids.shape[0],
-                dtype=self.config.torch_dtype,
-                device=input_ids.device,
-            )
+            batch_size, *_ = input_ids.size()
+            # we need to reuse the cache as much as possible because changing cache will lead to
+            # recompile between generations, which is very slow for mamba
+            if hasattr(self, "_cache") and self._cache.conv_state_cache.shape[1] == batch_size:
+                self._cache.reset()
+            else:
+                self._cache = MambaCache(
+                    self.config,
+                    batch_size,
+                    dtype=self.backbone.embeddings.weight.dtype,
+                    device=input_ids.device,
+                )
+            cache_params = self._cache
         # only last token for inputs_ids if the state is passed along.
         elif cache_params is not None and cache_params.is_initialized(0):
             input_ids = input_ids[:, -1].unsqueeze(-1)
