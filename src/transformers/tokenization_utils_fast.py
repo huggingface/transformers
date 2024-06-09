@@ -116,6 +116,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
+        elif fast_tokenizer_file is not None:
+            # When sentencepiece is not installed, we can't convert a slow tokenizer to a fast one
+            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
