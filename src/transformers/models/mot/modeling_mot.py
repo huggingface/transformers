@@ -392,9 +392,7 @@ class MoTMLP(nn.Module):
         self.d_ff *= self.group_size
 
         if self.n_expert is not None:
-            assert (
-                self.d_ff % self.n_expert == 0
-            ), f"dff = {self.d_ff} is not divisible by n_expert = {self.n_expert}"
+            assert self.d_ff % self.n_expert == 0, f"dff = {self.d_ff} is not divisible by n_expert = {self.n_expert}"
             self.expert_size = self.d_ff // self.n_expert
         elif self.expert_size is not None:
             assert (
