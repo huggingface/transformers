@@ -21,7 +21,7 @@ import pytest
 
 from transformers.agents.agent_types import AgentText
 from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
-from transformers.agents.default_tools import PythonInterpreterTool, FinalAnswerTool
+from transformers.agents.default_tools import PythonInterpreterTool
 from transformers.testing_utils import require_torch
 
 
