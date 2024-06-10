@@ -719,6 +719,7 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
+    "models.turbosparsemixtral": ["TurboSparseMixtralConfig"],
     "models.tvp": [
         "TvpConfig",
         "TvpProcessor",
@@ -4580,6 +4581,15 @@ else:
             "FlaxT5PreTrainedModel",
         ]
     )
+    _import_structure["models.turbosparsemixtral"].append(
+        [
+            "TurboSparseMixtralForCausalLM",
+            "TurboSparseMixtralForSequenceClassification",
+            "TurboSparseMixtralForTokenClassification",
+            "TurboSparseMixtralModel",
+            "TurboSparseMixtralPreTrainedModel",
+        ]
+    )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -5336,6 +5346,7 @@ if TYPE_CHECKING:
         TrOCRConfig,
         TrOCRProcessor,
     )
+    from .models.turbosparsemixtral import TurboSparseMixtralConfig
     from .models.tvp import (
         TvpConfig,
         TvpProcessor,
@@ -7455,6 +7466,13 @@ if TYPE_CHECKING:
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,
+        )
+        from .models.turbosparsemixtral import (
+            TurboSparseMixtralForCausalLM,
+            TurboSparseMixtralForSequenceClassification,
+            TurboSparseMixtralForTokenClassification,
+            TurboSparseMixtralModel,
+            TurboSparseMixtralPreTrainedModel,
         )
         from .models.tvp import (
             TvpForVideoGrounding,
