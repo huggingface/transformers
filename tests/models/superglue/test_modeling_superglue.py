@@ -15,6 +15,8 @@ import inspect
 import unittest
 from typing import List
 
+from datasets import load_dataset
+
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -29,8 +31,6 @@ if is_torch_available():
     from transformers import SuperGlueForKeypointMatching
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoImageProcessor
 
 
@@ -280,10 +280,11 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_imgs():
-    image1 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_78916675_4568141288.jpg")
-    image2 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_19481797_2295892421.jpg")
-    image3 = Image.open("./tests/fixtures/tests_samples/image_matching/tower_bridge_49190386_5209386933.jpg")
-    return [[image1, image2], [image1, image3]]
+    dataset = load_dataset("stevenbucaille/image_matching_fixtures", split="train")
+    image1 = dataset[0]["image"]
+    image2 = dataset[1]["image"]
+    image3 = dataset[2]["image"]
+    return [[image3, image1], [image3, image2]]
 
 
 @require_torch
