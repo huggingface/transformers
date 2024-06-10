@@ -453,7 +453,7 @@ class DABDETRSinePositionEmbedding(nn.Module):
     def forward(self, pixel_values, pixel_mask):
         if pixel_mask is None:
             raise ValueError("No pixel mask provided")
-        not_mask = ~pixel_mask
+        not_mask = pixel_mask # ~pixel_mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
@@ -695,7 +695,7 @@ class DABDETREncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_padding_mask: torch.Tensor = None, 
+        attention_mask: torch.Tensor = None,
         object_queries: torch.Tensor = None,
         output_attentions: bool = False,
         **kwargs,
@@ -728,18 +728,21 @@ class DABDETREncoderLayer(nn.Module):
             )
             object_queries = position_embeddings
 
-
+        residual = hidden_states
         q = k = self.with_pos_embed(hidden_states, object_queries)
-        hidden_states_2, attn_weights = self.self_attn(q, k, value=hidden_states, key_padding_mask=key_padding_mask, average_attn_weights=False)
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
-        hidden_states = hidden_states + hidden_states_2
+        hidden_states, attn_weights = self.self_attn(q, k, value=hidden_states, key_padding_mask=attention_mask, average_attn_weights=False)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
     
-        hidden_states_2 = nn.functional.dropout(self.activation_fn(self.fc1(hidden_states)), p=self.dropout, training=self.training)
-        hidden_states_2 = self.fc2(hidden_states_2)
-        hidden_states_2 = nn.functional.dropout(hidden_states_2, p=self.dropout, training=self.training)
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        hidden_states = hidden_states + hidden_states_2
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
@@ -1005,6 +1008,12 @@ class DABDETRPreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.q_linear.bias)
                 nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
                 nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
+            # elif isinstance(module, nn.MultiheadAttention):
+            #     module._reset_parameters()
+            #     # nn.init.zeros_(module.in_proj_bias)
+            #     # nn.init.zeros_(module.out_proj.bias)
+            #     # nn.init.xavier_uniform_(module.in_proj_weight)
+            #     # nn.init.xavier_uniform_(module.out_proj.weight)
             elif isinstance(module, DABDETRLearnedPositionEmbedding):
                 nn.init.uniform_(module.row_embeddings.weight)
                 nn.init.uniform_(module.column_embeddings.weight)
@@ -1105,7 +1114,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
     def forward(
         self,
         inputs_embeds=None,
-        key_padding_mask=None,
+        attention_mask=None,
         object_queries=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1183,7 +1192,7 @@ class DABDETREncoder(DABDETRPreTrainedModel):
                 # we add object_queries * pos_scaler as extra input to the encoder_layer
                 layer_outputs = encoder_layer(
                     hidden_states,
-                    key_padding_mask=key_padding_mask,
+                    attention_mask=attention_mask,
                     object_queries=object_queries * pos_scales,
                     output_attentions=output_attentions,
                 )
@@ -1224,10 +1233,10 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         self.config = config
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.num_layers = config.num_decoder_layers
+        self.num_layers = config.decoder_layers
         self.return_intermediate = True  # config.return_intermediate_decoder it's default true in the original code
 
-        self.layers = nn.ModuleList([DABDETRDecoderLayer(config) for _ in range(config.num_decoder_layers)])
+        self.layers = nn.ModuleList([DABDETRDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DAB-DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
         d_model = config.d_model
@@ -1241,7 +1250,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
         elif query_scale_type == 'cond_scalar':
             self.query_scale = MLP(d_model, d_model, 1, 2)
         elif query_scale_type == 'fix_elewise':
-            self.query_scale = nn.Embedding(config.num_decoder_layers, d_model)
+            self.query_scale = nn.Embedding(config.decoder_layers, d_model)
         else:
             raise NotImplementedError("Unknown query_scale_type: {}".format(query_scale_type))
         
@@ -1256,7 +1265,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
             self.ref_anchor_head = MLP(d_model, d_model, 2, 2)
 
         if not config.decoder_keep_query_pos:
-            for layer_id in range(config.num_decoder_layers - 1):
+            for layer_id in range(config.decoder_layers - 1):
                 self.layers[layer_id + 1].ca_qpos_proj = None
 
         # Initialize weights and apply final processing
@@ -1441,11 +1450,14 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
             output_intermediate_hidden_states = torch.stack(intermediate).transpose(1, 2),
             output_reference_points = reference_points.unsqueeze(0).transpose(1, 2)
 
+
+        num_q, bs, dim = hidden_states.shape
+
         if not return_dict:
             return tuple(
                 v
                 for v in [
-                    hidden_states.unsqueeze(0),
+                    hidden_states.view(bs, num_q, dim),
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1455,7 +1467,7 @@ class DABDETRDecoder(DABDETRPreTrainedModel):
                 if v is not None
             )
         return DABDETRDecoderOutput(
-            last_hidden_state=hidden_states.unsqueeze(0),
+            last_hidden_state=hidden_states.view(bs, num_q, dim),
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1477,7 +1489,6 @@ class DABDETRModel(DABDETRPreTrainedModel):
         super().__init__(config)
 
         self.auxiliary_loss = config.auxiliary_loss
-        
 
         # Create backbone + positional encoding
         backbone = DABDETRConvEncoder(config)
@@ -1518,11 +1529,11 @@ class DABDETRModel(DABDETRPreTrainedModel):
         # Not that simple prediction head
         self.bbox_embed_diff_each_layer = config.bbox_embed_diff_each_layer
         if config.bbox_embed_diff_each_layer:
-            self.bbox_embed = nn.ModuleList([MLP(config.hidden_dim, config.hidden_dim, 4, 3) for i in range(config.num_decoder_layers)])
+            self.bbox_embed = nn.ModuleList([MLP(config.d_model, config.d_model, 4, 3) for i in range(config.decoder_layers)])
             # TODO better solution? it's because of init these module or just init it here?
             self.bbox_embed.__setattr__('name', 'bbox_embed')
         else:
-            self.bbox_embed = MLP(config.hidden_dim, config.hidden_dim, 4, 3)
+            self.bbox_embed = MLP(config.d_model, config.d_model, 4, 3)
             self.bbox_embed.__setattr__('name', 'bbox_embed')
 
         # The reason why the model keeps bboxembed part
@@ -1559,7 +1570,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], DABDETRModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], DABDETRModelOutput]: 
         r"""
         Returns:
 
@@ -1598,7 +1609,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         device = pixel_values.device
 
         if pixel_mask is None:
-            pixel_mask = torch.zeros(((batch_size, height, width)), device=device)
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # pixel_values should be of shape (batch_size, num_channels, height, width)
@@ -1621,7 +1632,9 @@ class DABDETRModel(DABDETRPreTrainedModel):
         flattened_features = projected_feature_map.flatten(2).permute(2, 0, 1)
         object_queries = object_queries_list[-1].flatten(2).permute(2, 0, 1) # pos embed
         reference_position_embeddings = self.query_refpoint_embeddings.weight.unsqueeze(1).repeat(1, batch_size, 1)
-        
+
+        # hack the flattened masks
+        flattened_mask = ~flattened_mask
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
         # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
@@ -1629,7 +1642,7 @@ class DABDETRModel(DABDETRPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
-                key_padding_mask=flattened_mask,
+                attention_mask=flattened_mask,
                 object_queries=object_queries,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1798,6 +1811,10 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
         Detected remote with confidence 0.683 at location [334.48, 73.49, 366.37, 190.01]
         Detected couch with confidence 0.535 at location [0.52, 1.19, 640.35, 475.1]
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through CONDITIONAL_DETR base model to obtain encoder + decoder outputs
@@ -1812,6 +1829,8 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        
 
         outputs_coord = model_outputs[0] if not return_dict else model_outputs.outputs_coord
         intermediate_hidden_states = model_outputs[1] if not return_dict else model_outputs.intermediate_hidden_states
@@ -1843,7 +1862,9 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             outputs_loss["pred_boxes"] = pred_boxes
             
             if self.config.auxiliary_loss:
-                outputs_loss['auxiliary_outputs'] = self._set_aux_loss(logits, model_outputs.outputs_coord)
+                outputs_class = self.class_labels_classifier(intermediate_hidden_states)
+                auxiliary_outputs = self._set_aux_loss(outputs_class, model_outputs.outputs_coord)
+                outputs_loss['auxiliary_outputs'] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
@@ -1851,7 +1872,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
-                for i in range(self.config.num_decoder_layers - 1):
+                for i in range(self.config.decoder_layers - 1):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
@@ -1862,20 +1883,20 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             else:
                 output = model_outputs + (logits, pred_boxes)
             return ((loss, loss_dict) + output) if loss is not None else output
-
+        
         return DABDETRObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=model_outputs.last_hidden_state,
-            decoder_hidden_states=model_outputs.decoder_hidden_states,
-            decoder_attentions=model_outputs.decoder_attentions,
-            cross_attentions=model_outputs.cross_attentions,
-            encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
-            encoder_hidden_states=model_outputs.encoder_hidden_states,
-            encoder_attentions=model_outputs.encoder_attentions,
+            last_hidden_state=model_outputs.last_hidden_state if output_hidden_states else None,
+            decoder_hidden_states=model_outputs.decoder_hidden_states if output_hidden_states else None,
+            decoder_attentions=model_outputs.decoder_attentions if output_attentions else None,
+            cross_attentions=model_outputs.cross_attentions if output_attentions else None,
+            encoder_last_hidden_state=model_outputs.encoder_last_hidden_state if output_hidden_states else None,
+            encoder_hidden_states=model_outputs.encoder_hidden_states if output_hidden_states else None,
+            encoder_attentions=model_outputs.encoder_attentions if output_attentions else None,
         )
 
 
@@ -1998,6 +2019,8 @@ class DABDETRForSegmentation(DABDETRPreTrainedModel):
         object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
+        # hack the flattened masks
+        flattened_mask = ~flattened_mask
 
         # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
         # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)

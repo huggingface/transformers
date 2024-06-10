@@ -141,6 +141,8 @@ class DABDETRConfig(PretrainedConfig):
 
     def __init__(
         self,
+        output_attentions=True,
+        output_hidden_states=True,
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
@@ -149,7 +151,7 @@ class DABDETRConfig(PretrainedConfig):
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
-        num_decoder_layers=6,
+        decoder_layers=6,
         decoder_ffn_dim=2048,
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
@@ -192,7 +194,6 @@ class DABDETRConfig(PretrainedConfig):
         decoder_num_patterns=0,
         decoder_normalize_before=False,
         decoder_nhead=8,
-        hidden_dim=256,
         normalize_before=False,
         iter_update=True,
         **kwargs,
@@ -226,6 +227,8 @@ class DABDETRConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
@@ -235,7 +238,7 @@ class DABDETRConfig(PretrainedConfig):
         self.encoder_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_decoder_layers = num_decoder_layers
+        self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
@@ -275,7 +278,6 @@ class DABDETRConfig(PretrainedConfig):
         self.decoder_num_patterns = decoder_num_patterns
         self.decoder_normalize_before = decoder_normalize_before
         self.decoder_nhead = decoder_nhead
-        self.hidden_dim = hidden_dim
         self.normalize_before = normalize_before
         self.num_target_classes = num_target_classes
         self.iter_update = iter_update

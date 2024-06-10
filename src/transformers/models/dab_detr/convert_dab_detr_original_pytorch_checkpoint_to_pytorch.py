@@ -29,6 +29,7 @@ from transformers import (
     DABDETRForObjectDetection,
     DABDETRForSegmentation,
     DABDETRImageProcessor,
+    DABDETRModel
 )
 from transformers.utils import logging
 
@@ -258,23 +259,23 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
     """
 
     # load default config
-    config = DABDETRConfig()
-    # set backbone and dilation attributes
-    if "resnet101" in model_name:
-        config.backbone = "resnet101"
-    if "dc5" in model_name:
-        config.dilation = True
+    # config = DABDETRConfig()
+    # # set backbone and dilation attributes
+    # if "resnet101" in model_name:
+    #     config.backbone = "resnet101"
+    # if "dc5" in model_name:
+    #     config.dilation = True
     is_panoptic = "panoptic" in model_name
-    if is_panoptic:
-        config.num_labels = 250
-    else:
-        config.num_labels = 91
-        repo_id = "huggingface/label-files"
-        filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+    # if is_panoptic:
+    #     config.num_labels = 250
+    # else:
+    #     config.num_labels = 91
+    #     repo_id = "huggingface/label-files"
+    #     filename = "coco-detection-id2label.json"
+    #     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    #     id2label = {int(k): v for k, v in id2label.items()}
+    #     config.id2label = id2label
+    #     config.label2id = {v: k for k, v in id2label.items()}
 
     # load image processor
     format = "coco_panoptic" if is_panoptic else "coco_detection"
@@ -282,8 +283,7 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
 
     # prepare image
     img = prepare_img()
-    encoding = image_processor(images=img, return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
+    encoding = image_processor(images=[img, img], return_tensors="pt")
 
     logger.info(f"Converting model {model_name}...")
 
@@ -320,34 +320,117 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
             if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
+
     # finally, create HuggingFace model and load state dict
+    is_panoptic = False
+
+
+    batch_size=8
+    is_training=True
+    use_labels=True
+    hidden_size=32
+    num_hidden_layers=2
+    num_attention_heads=8
+    intermediate_size=4
+    hidden_act="gelu"
+    hidden_dropout_prob=0.1
+    attention_probs_dropout_prob=0.1
+    num_queries=12
+    num_channels=3
+    min_size=200
+    max_size=200
+    n_targets=8
+    num_labels=91
+   
+     
+    import math
+    import random
+    torch_device = torch.device('cpu')
+    global_rng = random.Random()
+
+    def floats_tensor(shape, scale=1.0, rng=None, name=None):
+        """Creates a random float32 tensor"""
+        if rng is None:
+            rng = global_rng
+
+        total_dims = 1
+        for dim in shape:
+            total_dims *= dim
+
+        values = []
+        for _ in range(total_dims):
+            values.append(rng.random() * scale)
+
+        return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+    
+
+    pixel_values = floats_tensor([batch_size, num_channels, min_size, max_size])
+
+    pixel_mask = torch.ones([batch_size, min_size, max_size], device=torch_device)
+
+
+    from transformers import ResNetConfig
+    resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
+    config = DABDETRConfig(
+            d_model=hidden_size,
+            encoder_layers=num_hidden_layers,
+            decoder_layers=num_hidden_layers,
+            encoder_attention_heads=num_attention_heads,
+            decoder_attention_heads=num_attention_heads,
+            encoder_ffn_dim=intermediate_size,
+            decoder_ffn_dim=intermediate_size,
+            dropout=hidden_dropout_prob,
+            attention_dropout=attention_probs_dropout_prob,
+            num_queries=num_queries,
+            num_labels=num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
+            backbone=None,
+            use_pretrained_backbone=False,
+        )
+    config.auxiliary_loss = True
+    config.output_attentions = True
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
-    model.load_state_dict(state_dict)
-    model.eval()
+    #model.load_state_dict(state_dict)
+    #model.eval()
     
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
     labels = [{'size': torch.tensor([800, 1066]), 'image_id': torch.tensor([39769]), 'class_labels': torch.tensor([75, 75, 63, 65, 17, 17]), 'boxes': torch.tensor([[0.5503, 0.2765, 0.0604, 0.2215], [0.1695, 0.2016, 0.2080, 0.0940], [0.5006, 0.4933, 0.9978, 0.9865], [0.5008, 0.5002, 0.9983, 0.9955], [0.2627, 0.5456, 0.4707, 0.8646], [0.7715, 0.4115, 0.4570, 0.7161]]), 'area': torch.tensor([5887.9600,  11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438]), 'iscrowd': torch.tensor([0, 0, 0, 0, 0, 0]), 'orig_size': torch.tensor([480, 640])}]
     
-    outputs = model(pixel_values) # , labels=labels)
-    model.save_pretrained('dab-detr-resnet-50', safe_serialization=False)
-    image_processor.save_pretrained('dab-detr-resnet-50')
-    # model.push_to_hub(repo_id='dab-detr-resnet-50', organization="davidhajdu", commit_message="Add model")
+    outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+    # model.save_pretrained('dab-detr-resnet-50', safe_serialization=False)
+    # image_processor.save_pretrained('dab-detr-resnet-50')
+    # # model.push_to_hub(repo_id='dab-detr-resnet-50', organization="davidhajdu", commit_message="Add model")
 
-    """
-    output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+    # """
+    # output_attentions: Optional[bool] = None,
+    #     output_hidden_states: Optional[bool] = None,
     
-    """
+    # """
 
-    # logits = outputs[-2]
-    # pred_boxes = outputs[-1]
+    # # logits = outputs[-2]
+    # # pred_boxes = outputs[-1]
+   
+    print(outputs.logits)
+    print(outputs.pred_boxes)
 
-    # print(logits)
-    # print(pred_boxes)
-
-    print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
-    print(outputs.pred_boxes.shape)
+   
+    # results = image_processor.post_process_object_detection(
+    #         outputs, threshold=0.3, target_sizes=[img.size[::-1]]
+    #     )[0]
+    
+    # print(outputs.logits.shape)  # ['pred_logits'][0, :3, :3])
+    # print(outputs.pred_boxes.shape)
     # torch.save(logits, 'logits.pth')
     # torch.save(pred_boxes, 'pred_boxes.pth')
     
