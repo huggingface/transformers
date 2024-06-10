@@ -17,7 +17,12 @@
 import inspect
 import json
 import tempfile
-import typing
+
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
 import unittest
 
 import numpy as np
@@ -108,7 +113,7 @@ class ProcessorTesterMixin:
         for param in call_signature.parameters.values():
             if param.kind == param.VAR_KEYWORD and param.annotation != param.empty:
                 is_kwargs_typed_dict = (
-                    hasattr(param.annotation, "__origin__") and param.annotation.__origin__ == typing.Unpack
+                    hasattr(param.annotation, "__origin__") and param.annotation.__origin__ == Unpack
                 )
         if not is_kwargs_typed_dict:
             self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
