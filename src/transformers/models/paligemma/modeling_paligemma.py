@@ -295,8 +295,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
         target_length = cache_position[-1] + 1
         causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+
+        # do causal diagonal mask only if training, otherwise attend to the whole prefix
+        # training-specific attn for prefix is handled below
         if sequence_length != 1:
-            causal_mask = torch.triu(causal_mask, diagonal=1)
+            if is_training:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            else:
+                causal_mask = torch.zeros_like(causal_mask)
 
         causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
@@ -313,6 +319,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
+
         return causal_mask
 
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
