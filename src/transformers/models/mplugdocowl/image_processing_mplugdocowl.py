@@ -15,7 +15,7 @@
 """Image processor class for MPLUGDocOwl."""
 
 from typing import Dict, List, Optional, Union, Tuple
-
+from einops import rearrange
 import numpy as np
 #FIXME change the import from transformers to import from ...
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -94,7 +94,7 @@ def box_area(boxes):
 
 def box_iou(boxes1, area1, boxes2, eps=1e-5):
     area2 = box_area(boxes2)
-
+    print(area2)
     lt = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
     rb = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
@@ -104,6 +104,7 @@ def box_iou(boxes1, area1, boxes2, eps=1e-5):
     union = area1[:, None] + area2 - inter
 
     iou = inter / (union + eps)
+    print(iou)
     return iou, union
 
 def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
@@ -121,12 +122,18 @@ def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
     shape_iou, _ = box_iou(boxes1, area1, boxes3)
     shape_iou = np.diag(shape_iou)  # Get diagonal for self-comparison
     index = np.argmax(shape_iou * 100 + iou)
+    print(index)
     return index
 #FIXME add this into shape adaptive cropping module
 
-def anchor_resize(img, anchors, size, interpolation=Image.BICUBIC):
+def anchor_resize(image:ImageInput,
+                  anchors: str = 'grid_9', 
+                  size:Dict[str, int] = None,
+                  grid_dict: Dict[str, List[Tuple[int, int]]] = GRID_DICT,
+                  resample=PILImageResampling.BICUBIC):
         # Convert anchors to xyxy format
-  
+        anchors = [tuple(_) for _ in grid_dict[anchors]] 
+        size = size['width']
         anchors = np.array(
             [[0, 0, anchor[1] * size, anchor[0] * size]
              for anchor in anchors]
@@ -134,41 +141,43 @@ def anchor_resize(img, anchors, size, interpolation=Image.BICUBIC):
         anchor_areas = box_area(anchors)
         
         # Resize image based on selected anchor
-        selected_anchor = anchor_rank(anchors, anchor_areas, (img.size[1], img.size[0]))
+        selected_anchor = anchor_rank(anchors, anchor_areas, (image.size[1], image.size[0]))
         target_size = anchors[selected_anchor][2:].astype(int)  # target width, height
-        resized_img = img.resize((target_size[0], target_size[1]), resample=interpolation)
-
-        return resized_img, selected_anchor
-def shape_adaptive_cropping(image: ImageInput,
+        resized_img = image.resize((target_size[0], target_size[1]), resample=resample)
+        resized_img = np.array(resized_img)
+       # image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
+        return [resized_img], selected_anchor
+def shape_adaptive_cropping(image_patches: ImageInput,
                             size: Dict[str, int] = None, 
                             anchors: str = 'grid_9', 
                             grid_dict: Dict[str, List[Tuple[int, int]]] = GRID_DICT,
                             add_global_img: bool = True, 
-                            interpolation: PILImageResampling = PILImageResampling.BICUBIC):
+                            selected_anchor: int = None,):
     
         anchors = [tuple(_) for _ in grid_dict[anchors]] 
-        size = size['shortest_edge']
+        size = size['width']
         #self.anchors = [tuple(_) for _ in grid_dict[anchors]]
         anchor_max = max(max(_) for _ in anchors)
-        image_patches, selected_anchor = anchor_resize(image, anchors, size, interpolation)
-        image_patches = image_patches.convert("RGB")
+        #breakpoint()
+        #image_patches, selected_anchor = anchor_resize(image, anchors, size, interpolation) #w,h
+        #image_patches = image_patches.convert("RGB")
 
-        h, w = image_patches.size[0],image_patches.size[1]
-        image_patches = np.array(image_patches).reshape(w,h,3)
-    
+        h, w = image_patches.shape[0],image_patches.shape[1] #w,h
+        
+        image_patches = image_patches.transpose(2,0,1)
+
         anchor_size = anchors[selected_anchor]
-        #resized_image = np.array(image.resize(new_size, Image.BICUBIC))
 
         # Reshape the image
         num_h, num_w = anchor_size
-        #image_input = np.array(image_patches)
-        image_input = image_patches.reshape(3, num_h, size, num_w, size)
         
+        image_input = image_patches.reshape(3, num_h, size, num_w, size)
         # Step 2: Transpose to get the correct order
-        image_input = image_input.transpose(1, 3, 0, 2, 4)
-        image_input = image_input.reshape((-1, size, size,3))
+        image_input = image_input.transpose(1, 3, 2, 4, 0)
+        breakpoint()
+        image_input = image_input.reshape((-1,size,size,3))
+        #image_input = image_input.transpose(0,2,3,1)
         image_patches_list = [image_input[i] for i in range(image_input.shape[0])]
-    
         anchor = anchors[selected_anchor]  # w,h
         patch_position = np.concatenate([
             np.repeat(np.arange(anchor[0])[:, np.newaxis], anchor[1], axis=1)[:, :, np.newaxis],
@@ -223,8 +232,8 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        do_center_crop: bool = False,
+        crop_size: Dict[str, int] = False,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -232,12 +241,13 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         do_shape_adaptive_cropping: bool = True,
+        do_anchor_resize: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
+        size = size if size is not None else {"height": 448, "width": 448}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = crop_size if crop_size is not None else {"height": 448, "width": 448}
         crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -252,6 +262,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
         self.do_shape_adaptive_cropping = do_shape_adaptive_cropping 
+        self.do_anchor_resize = do_anchor_resize
         self._valid_processor_keys = [
             "images",
             "do_resize",
@@ -270,14 +281,19 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
         #self.adaptive_cropping_module = ShapeAdaptiveCroppingModule()
+    def anchor_resize(self,
+                image:ImageInput,
+                size:Dict[str, int] = None,
+                resample: PILImageResampling = PILImageResampling.BICUBIC):
+        return anchor_resize(image=image, size=size, resample=resample)
 
     def adaptive_crop(
             self,
-            image: ImageInput,
+            image_patches: ImageInput,
             size: Dict[str, int] = None,
-            interpolation: PILImageResampling = PILImageResampling.BICUBIC,
+            selected_anchor: int = None,
         ):
-        return shape_adaptive_cropping(image=image, size=size)
+        return shape_adaptive_cropping(image_patches=image_patches, size=size, selected_anchor=selected_anchor)
 
     def resize(
         self,
@@ -333,9 +349,9 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_center_crop: bool = False,
+        crop_size: int = False,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
@@ -346,6 +362,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_shape_adaptive_cropping: bool = True,
+        do_anchor_resize: bool = True,
         #shape_adaptive_cropping: bool = True,
         **kwargs,
     ) -> PIL.Image.Image:
@@ -402,7 +419,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
+        size = get_size_dict(size, param_name="size", default_to_square=True)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
@@ -414,6 +431,7 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_shape_adaptive_cropping = do_shape_adaptive_cropping if do_shape_adaptive_cropping is not None else self.do_shape_adaptive_cropping
+        do_anchor_resize = do_anchor_resize if do_anchor_resize is not None else self.do_anchor_resize
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         images = make_list_of_images(images)
@@ -443,33 +461,34 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
         patch_images = images.copy()
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
+        
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
 
         if do_center_crop:
             images = [
                 self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
             ]
-
+        if do_resize:
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
+       # breakpoint()
+        if do_anchor_resize:
+            output = [self.anchor_resize(image, size) for image in patch_images][0] 
+            patch_images, selected_anchor = output[0], output[1]
+            images.extend(patch_images)
+           # breakpoint()
+            
         if do_rescale:
             images = [
                 self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
             
-        if do_shape_adaptive_cropping:
-            output = [self.adaptive_crop(image=image, size=size) for image in patch_images][0]
-            patch_images, patch_positions, num_patches, anchor_max = output[0], output[1], output[2], output[3]
-            images.extend(patch_images)
-        #breakpoint()
+       # breakpoint()
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
@@ -480,7 +499,12 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
-        
+        if do_shape_adaptive_cropping:
+            output = [self.adaptive_crop(image_patches=image, size=size, selected_anchor = selected_anchor) for image in images[1:]][0]
+            patch_images, patch_positions, num_patches, anchor_max = output[0], output[1], output[2], output[3]
+            breakpoint()
+            del images[1:]
+            images.extend(patch_images)
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
@@ -495,3 +519,4 @@ class MPLUGDocOwlImageProcessor(BaseImageProcessor):
 #pixel_values = image_processor(image, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=TensorType.PYTORCH,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)
 #breakpoint()
 #print(pixel_values)
+

@@ -149,6 +149,7 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_patches + 1, self.embed_dim))
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.pre_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps) #FIXME add this?
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -158,7 +159,9 @@ class MPLUGDocOwlVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        #embeddings = embeddings + self.position_embeddings[self.position_ids]
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1)].to(patch_embeds.dtype)
+        embeddings = self.pre_layernorm(embeddings)
         return embeddings
 
 class MPLUGDocOwlAttention(nn.Module):
@@ -176,7 +179,7 @@ class MPLUGDocOwlAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.dropout = nn.Dropout(config.attention_dropout)
 
         self.q_v_k_proj = nn.Linear(self.embed_dim, 3*self.embed_dim)
         #self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -191,15 +194,16 @@ class MPLUGDocOwlAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, embed_dim = hidden_states.size()
+        bsz, seq_len, embed_dim = hidden_states.size()
         
         mixed_qkv = self.q_v_k_proj(hidden_states)
 
-        mixed_qkv = mixed_qkv.reshape(bsz, self.seq_len, self.num_heads, 3, embed_dim // self.num_heads).permute(
+        mixed_qkv = mixed_qkv.reshape(bsz, seq_len, self.num_heads, 3, embed_dim // self.num_heads).permute(
             3, 0, 2, 1, 4
         )  # [3, b, np, sq, hn]
         query_states, key_states, value_states = (
@@ -292,7 +296,8 @@ class MPLUGDocOwlAttention(nn.Module):
 
         context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.embed_dim,)
+        print(new_context_layer_shape)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
         output = self.out_proj(context_layer)
@@ -575,7 +580,7 @@ class MPLUGDocOwlVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = MPLUGDocOwlVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        #self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MPLUGDocOwlEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
@@ -602,7 +607,7 @@ class MPLUGDocOwlVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layernorm(hidden_states)
+        #hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

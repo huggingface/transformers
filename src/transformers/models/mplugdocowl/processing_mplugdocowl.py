@@ -28,57 +28,6 @@ from transformers.utils import TensorType
 #from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
 import numpy as np
 
-def box_area(boxes):
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-def box_iou(boxes1, area1, boxes2, eps=1e-5):
-    area2 = box_area(boxes2)
-
-    lt = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    wh = np.clip(rb - lt, a_min=0, a_max=None)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / (union + eps)
-    return iou, union
-
-def anchor_rank(anchors, anchors_areas, input_image_size, eps=1e-5):
-    input_image_bbox = np.array([[0, 0, input_image_size[1], input_slider_image_size[0]]])
-
-    boxes1 = anchors
-    boxes2 = input_image_bbox
-    boxes3 = anchors.copy()
-    boxes3[:, 3] = input_image_size[0] / input_image_size[1] * anchors[:, 2]  # for resolution-independent iou
-    
-    area1 = anchors_areas
-    
-    iou, _ = box_iou(boxes1, area1, boxes2)
-    iou = iou.squeeze(1)
-    shape_iou, _ = box_iou(boxes1, area1, boxes3)
-    shape_iou = np.diag(shape_iou)  # Get diagonal for self-comparison
-    index = np.argmax(shape_iou * 100 + iou)
-    return index
-
-class AnchorResize:
-    def __init__(self, image_size, anchors):
-        self.anchors = np.array([[0, 0, x[1] * image_size[1], x[0] * image_size[0]] for x in anchors])
-        self.anchor_areas = box_area(self.anchors)
-        self.image_size = image_size
-
-    def forward(self, img, skip_resize=False):
-        selected_anchor = anchor_rank(self.anchors, self.anchor_areas, (img.shape[1], img.shape[0]))
-        target_size = self.anchors[selected_anchor][2:]  # w, h
-        if skip_resize:
-            return selected_anchor
-        return np.resize(img, (int(target_size[1]), int(target_strong_size[0]))), selected_anchor
-
-    def __repr__(self):
-        detail = f"(size={self.image_size}, anchors={self.anchors})"
-        return f"{self.__class__.__name__}{detail}"
-
 class MPLUGDocOwlProcessor(ProcessorMixin):
     r"""
     Constructs a MPLUGDocOwl processor which wraps a MPLUGDocOwl image processor and a MPLUGDocOwl tokenizer into a single processor.
@@ -105,9 +54,10 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
         add_textual_crop_indicator: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
+        do_rescale: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
@@ -158,11 +108,10 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         #FIXME need to add image processing class name properly
         
         if images is not None:
-            pixel_values = self.image_processor(images, do_rescale=False, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=return_tensors,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),resample=None,size=224)
+            pixel_values = self.image_processor(images, do_rescale=do_rescale, do_convert_rgb=True, do_shape_adaptive_cropping=True, do_resize=True, do_normalize=True, return_tensors=return_tensors,image_mean=(0.48145466, 0.4578275, 0.40821073), image_std=(0.26862954, 0.26130258, 0.27577711),size={'width':448, 'height':448}, do_anchor_resize=True)
         else:
             pixel_values = None
         #text prpeocessing
-        breakpoint()
         media_token = '<|image|>'
         assert media_token in text
         patch_positions = pixel_values['patch_positions']
@@ -184,16 +133,16 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
                         text += '<crop_img_'+row_col+'><|image|>'
             else: 
                 # generate successive image placeholders for a image, 1 crop img == 1 <|image|>
-                breakpoint()
                 text += '<|image|>'*num_patches
             text += next_text
             image_token_ptr += 1
-
+        print(text)
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
+        print(text_inputs)
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values['pixel_values']})
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values['pixel_values'], "patch_positions": patch_positions})
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -216,21 +165,3 @@ class MPLUGDocOwlProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 #test the code
-'''
-from PIL import Image
-from transformers.models.mplugdocowl.image_processing_mplugdocowl import MPLUGDocOwlImageProcessor
-from transformers import AutoTokenizer, AddedToken
-image_processor = MPLUGDocOwlImageProcessor()
-tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-hf')
-tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-tokenizer.add_special_tokens({"pad_token": "<pad>"})
-
-#add tokens for shape-adaptive cropping module related textual crop indicators
-new_tokens = [f'<crop_img_row{i}_col{j}>' for i in range(10) for j in range(10)]
-tokenizer.add_tokens(new_tokens, special_tokens=True)
-processor = MPLUGDocOwlProcessor(image_processor, tokenizer)
-image = Image.open("/home/dana_aubakirova/test_image.tif")
-query = "<|image|>How are you?"
-output = processor(images=image, text=query)
-breakpoint()
-'''

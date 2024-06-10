@@ -54,7 +54,7 @@ KEYS_TO_MODIFY_MAPPING = {
     r"model\.vision_model\.encoder\.layers\.(\d+)\.post_attention_layernorm": r"vision_tower.vision_model.encoder.layers.\1.layer_norm2",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.dense": r"vision_tower.vision_model.encoder.layers.\1.self_attn.out_proj",
     r"model\.vision_model\.encoder\.layers\.(\d+)\.self_attn.query_key_value": r"vision_tower.vision_model.encoder.layers.\1.self_attn.q_v_k_proj",
-    r"model\.vision_model\.embeddings\.pre_layernorm": r"vision_tower.vision_model.pre_layernorm",
+    r"model\.vision_model\.embeddings\.pre_layernorm": r"vision_tower.vision_model.embeddings.pre_layernorm",
     r"model\.vision_model\.embeddings\.patch_embed": r"vision_tower.vision_model.embeddings.patch_embedding",
     r"model\.vision_model\.embeddings\.cls_token": r"vision_tower.vision_model.embeddings.class_embedding",
     r"model\.vision_model\.": r"vision_tower.vision_model.",
@@ -93,7 +93,7 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
     #add tokens for shape-adaptive cropping module related textual crop indicators
     new_tokens = [f'<crop_img_row{i}_col{j}>' for i in range(10) for j in range(10)]
     tokenizer.add_tokens(new_tokens, special_tokens=True)
-    image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
+    #image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
     image_processor = MPLUGDocOwlImageProcessor()
     processor = MPLUGDocOwlProcessor(tokenizer=tokenizer, image_processor=image_processor)
     config = MPLUGDocOwlConfig(text_config=text_config)
@@ -133,6 +133,12 @@ def convert_mplugdocowl_llama_to_hf(text_model_id, vision_model_id, output_hub_p
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
+
+    from PIL import Image
+    image = Image.open("/home/dana_aubakirova/test_image.tif")
+    query = "<|image|>Recognize text in the image."
+    output = processor(images=image, text=query)
+    #image_outputs = model.vision_tower(output['pixel_values'], output_hidden_states=True)
     breakpoint()
     #model.push_to_hub(output_hub_path)
     #processor.push_to_hub(output_hub_path)
