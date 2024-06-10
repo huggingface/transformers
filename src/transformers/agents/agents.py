@@ -370,7 +370,9 @@ class Agent:
             self.tool_description_template,
         )
         if hasattr(self, "authorized_imports"):
-            self.system_prompt = format_prompt_with_imports(self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports)))
+            self.system_prompt = format_prompt_with_imports(
+                self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports))
+            )
         self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
         self.logger.warn("======== New task ========")
         self.logger.log(33, self.task)
@@ -577,7 +579,9 @@ class CodeAgent(Agent):
         try:
             _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
-            self.logger.debug(f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}")
+            self.logger.debug(
+                f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}"
+            )
             code_action = llm_output
 
         try:
