@@ -24,11 +24,13 @@ import time
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 import pytest
 from huggingface_hub import hf_hub_download
 
 import transformers
-from transformers import WhisperConfig
+from transformers import WhisperConfig, DynamicCache
+from transformers.cache_utils import EncoderDecoderCache
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
@@ -1536,6 +1538,98 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
+
+    def test_custom_4d_attention_mask(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).to(device=torch_device, dtype=torch.float32)
+        model.eval()
+
+        (
+            input_ids,
+            position_ids,
+            input_ids_shared_prefix,
+            mask_shared_prefix,
+            position_ids_shared_prefix,
+        ) = self._get_custom_4d_mask_test_data()
+
+        logits = model.forward(decoder_input_ids=input_ids, input_features=input_dict["input_features"], decoder_position_ids=position_ids).logits
+        # logits.shape == torch.Size([3, 4, ...])
+
+        logits_shared_prefix = model(
+            decoder_input_ids=input_ids_shared_prefix,
+            input_features=input_dict["input_features"],
+            decoder_attention_mask=mask_shared_prefix,
+            decoder_position_ids=position_ids_shared_prefix,
+        )[0]
+        # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+        out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+        out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+        # comparing greedily-chosen tokens:
+        assert torch.equal(out_last_tokens.max(axis=1).indices, out_shared_prefix_last_tokens.max(axis=1).indices)
+
+        # comparing softmax-normalized logits:
+        normalized_0 = torch.nn.functional.softmax(out_last_tokens)
+        normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
+        torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
+
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams=1, do_sample=False):
+        # Tests that generating with the new format is exactly the same as the legacy one (for models that support it).
+        # 👉 tests with and without beam search so that we can test with and without cache reordering.
+        # 👉 tests with and without sampling so we can cover the most common use cases.
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = True
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_new_tokens": 5,
+                "do_sample": do_sample,
+                "num_beams": num_beams,
+                "num_return_sequences": num_beams,
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            # Sets seed before calling `generate` for the case with do_sample=True
+            seed = torch.randint(0, 1000000, (1,)).item()
+            set_seed(seed)
+            legacy_results = model.generate(**input_dict, **generation_kwargs)
+            set_seed(seed)
+            new_results = model.generate(
+                **input_dict, past_key_values=EncoderDecoderCache(DynamicCache(), DynamicCache()), **generation_kwargs
+            )
+
+            # The two sets of generated sequences must match, despite the cache format between forward passes being
+            # different
+            self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
+            self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
+            self.assertTrue(isinstance(new_results.past_key_values, EncoderDecoderCache))
+
+            # The contents of the two caches, when converted to the same format (in both directions!), must match
+            legacy_cache = legacy_results.past_key_values
+            new_cache_converted = new_results.past_key_values.to_legacy_cache()
+            for layer_idx in range(len(legacy_cache)):
+                for kv_idx in range(len(legacy_cache[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            legacy_cache[layer_idx][kv_idx],
+                            new_cache_converted[layer_idx][kv_idx],
+                        )
+                    )
+
+            new_cache = new_results.past_key_values
+            legacy_cache_converted = EncoderDecoderCache.from_legacy_cache(legacy_results.past_key_values)
+            for layer_idx in range(len(new_cache)):
+                for kv_idx in range(len(new_cache[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            new_cache[layer_idx][kv_idx],
+                            legacy_cache_converted[layer_idx][kv_idx],
+                        )
+                    )
 
 
 @require_torch
