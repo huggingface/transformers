@@ -119,6 +119,10 @@ if is_accelerate_available():
         set_module_tensor_to_device,
     )
 
+    accelerate_version = version.parse(importlib.metadata.version("accelerate"))
+    if accelerate_version >= version.parse("0.31"):
+        from accelerate.utils.modeling import get_state_dict_from_offload
+
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
@@ -374,13 +378,12 @@ def shard_checkpoint(
             storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        if storage_id in storage_id_to_block:
+        if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
         if last_block_size + weight_size > max_shard_size and len(sharded_state_dicts[-1]) > 0:
@@ -2504,8 +2507,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+        # for offloaded modules
+        module_map = {}
+
         # Save the model
         if state_dict is None:
+            # if any model parameters are offloaded to the disk, make module map
+            if hasattr(self, "hf_device_map") and (
+                "cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values()
+            ):
+                warnings.warn(
+                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
+                )
+                for name, module in model_to_save.named_modules():
+                    if name == "":
+                        continue
+                    module_state_dict = module.state_dict()
+
+                    for key in module_state_dict:
+                        module_map[name + f".{key}"] = module
+
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -2531,12 +2552,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            error_names = []
-            to_delete_names = set()
+            # These are all the pointers of shared tensors
+            if hasattr(self, "hf_device_map"):
+                # if the model has offloaded parameters, we must check using find_tied_parameters()
+                tied_params = find_tied_parameters(self)
+                if tied_params:
+                    tied_names = tied_params[0]
+                    shared_ptrs = {
+                        ptr: names for ptr, names in ptrs.items() if any(name in tied_names for name in names)
+                    }
+                else:
+                    shared_ptrs = {}
+            else:
+                shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+
             # Recursively descend to find tied weight keys
             _tied_weights_keys = _get_tied_weight_keys(self)
+            error_names = []
+            to_delete_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
                 # load. This allows to make sure the name which is kept is consistent.
@@ -2609,6 +2642,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         for shard_file, shard in shards.items():
+            # remake shard with onloaded parameters if necessary
+            if module_map:
+                if accelerate_version < version.parse("0.31"):
+                    raise ImportError(
+                        f"You need accelerate version to be greater or equal than 0.31 to save models with offloaded parameters. Detected version {accelerate_version}. "
+                        f"Please upgrade accelerate with `pip install -U accelerate`"
+                    )
+                # init state_dict for this shard
+                state_dict = {name: "" for name in shard}
+                for module_name in shard:
+                    module = module_map[module_name]
+                    # update state dict with onloaded parameters
+                    state_dict = get_state_dict_from_offload(module, module_name, state_dict)
+
+                # assign shard to be the completed state dict
+                shard = state_dict
+                del state_dict
+                gc.collect()
+
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
@@ -3405,6 +3457,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     "revision": revision,
                                     "proxies": proxies,
                                     "token": token,
+                                    "cache_dir": cache_dir,
+                                    "local_files_only": local_files_only,
                                 }
                                 cached_file_kwargs = {
                                     "cache_dir": cache_dir,
@@ -3432,6 +3486,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 "revision": revision,
                                 "proxies": proxies,
                                 "token": token,
+                                "cache_dir": cache_dir,
+                                "local_files_only": local_files_only,
                             }
                             if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                                 raise EnvironmentError(
@@ -3459,6 +3515,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                                     f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                                 )
+
                 except EnvironmentError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.

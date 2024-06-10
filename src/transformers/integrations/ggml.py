@@ -25,7 +25,7 @@ from tokenizers import Tokenizer, decoders
 from tokenizers.models import BPE
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter
+from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -101,6 +101,21 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "qwen2": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
 }
 
 
@@ -133,8 +148,19 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
+    "qwen2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
     "tokenizer": {
-        "ggml.model": "model_type",
         "ggml.bos_token_id": "bos_token_id",
         "ggml.eos_token_id": "eos_token_id",
         "ggml.unknown_token_id": "unk_token_id",
@@ -490,14 +516,15 @@ class GGUFTokenizerSkeleton:
         for k, v in dict_.items():
             setattr(self, k, v)
 
-        if not hasattr(self, "tokens") or not hasattr(self, "scores"):
-            raise ValueError("tokens and scores need to be passed for a LLaMa tokenizer to be instantiated.")
-        else:
+        if not hasattr(self, "merges"):
+            if not hasattr(self, "tokens") or not hasattr(self, "scores"):
+                raise ValueError(
+                    "tokens and scores need to be passed for a LLaMa tokenizer without merges to be instantiated."
+                )
             tokens = self.tokens
             scores = self.scores
             vocab = {t: scores[i] for i, t in enumerate(tokens)}
 
-        if not hasattr(self, "merges"):
             logger.warning("Merges were not in checkpoint, building merges on the fly.")
             merges = []
             for merge, piece_score in tqdm(vocab.items()):
@@ -562,16 +589,37 @@ class GGUFLlamaConverter(LlamaConverter):
         return decoders.Sequence(sequence)
 
 
+class GGUFQwen2Converter(Qwen2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+        tokenizer = super().converted(vocab, merges)
+
+        tokenizer.add_special_tokens(
+            [
+                AddedToken("<|endoftext|>", normalized=False, special=True),
+                AddedToken("<|im_start|>", normalized=False, special=True),
+                AddedToken("<|im_end|>", normalized=False, special=True),
+            ]
+        )
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
+    "qwen2": GGUFQwen2Converter,
 }
 
 
-def convert_gguf_tokenizer(tokenizer_dict) -> Tokenizer:
+def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
     Args:
+        architecture (`str`): The model architecture derived from gguf file.
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
@@ -580,6 +628,6 @@ def convert_gguf_tokenizer(tokenizer_dict) -> Tokenizer:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
         [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
-    tokenizer_class_name = tokenizer_dict["tokenizer_type"]
+    tokenizer_class_name = architecture
     converter_class = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name]
     return converter_class(tokenizer_dict).converted()

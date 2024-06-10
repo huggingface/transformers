@@ -763,6 +763,12 @@ class BarkCausalModel(BarkPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError(
+                "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
+            )
+
         # Verify if input_embeds already exists
         # then compute embeddings.
         if input_ids is not None and input_embeds is not None:
@@ -869,12 +875,6 @@ class BarkCausalModel(BarkPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError(
-                "Training is not implemented yet for Bark - ensure you do not pass `labels` to the model."
-            )
 
         if not return_dict:
             return tuple(
@@ -1393,6 +1393,10 @@ class BarkFineModel(BarkPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        loss = None
+        if labels is not None:
+            raise NotImplementedError("Training is not implemented yet")
+
         if codebook_idx == 0:
             raise ValueError("Cannot predict 0th codebook - 0th codebook should be predicted by the coarse model")
 
@@ -1469,10 +1473,6 @@ class BarkFineModel(BarkPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         logits = self.lm_heads[codebook_idx - self.config.n_codes_given](hidden_states)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not implemented yet")
 
         if not return_dict:
             return tuple(v for v in [None, logits, all_hidden_states, all_self_attentions] if v is not None)
