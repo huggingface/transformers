@@ -32,7 +32,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
 
@@ -85,17 +84,28 @@ class MambaCache:
         self.conv_kernel_size = config.conv_kernel
 
         self.conv_states: torch.Tensor = torch.zeros(
-            config.num_hidden_layers, batch_size, self.intermediate_size, self.conv_kernel_size, device=device, dtype=dtype
+            config.num_hidden_layers,
+            batch_size,
+            self.intermediate_size,
+            self.conv_kernel_size,
+            device=device,
+            dtype=dtype,
         )
         self.ssm_states: torch.Tensor = torch.zeros(
-            config.num_hidden_layers, batch_size, self.intermediate_size, self.ssm_state_size, device=device, dtype=dtype
+            config.num_hidden_layers,
+            batch_size,
+            self.intermediate_size,
+            self.ssm_state_size,
+            device=device,
+            dtype=dtype,
         )
 
         torch._dynamo.mark_static_address(self.conv_states)
         torch._dynamo.mark_static_address(self.ssm_states)
 
-
-    def update_conv_state(self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor) -> torch.Tensor:
+    def update_conv_state(
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
+    ) -> torch.Tensor:
         conv_state = self.conv_states[layer_idx]
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
@@ -175,7 +185,12 @@ class MambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
-    def cuda_kernels_forward(self, hidden_states: torch.Tensor, cache_params: Optional[MambaCache] = None,  cache_position: Optional[torch.LongTensor] = None):
+    def cuda_kernels_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Optional[MambaCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
@@ -331,7 +346,12 @@ class MambaMixer(nn.Module):
         return contextualized_states
     # fmt: on
 
-    def forward(self, hidden_states, cache_params: Optional[MambaCache] = None, cache_position: Optional[torch.LongTensor]=None):
+    def forward(
+        self,
+        hidden_states,
+        cache_params: Optional[MambaCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position)
         return self.slow_forward(hidden_states, cache_params, cache_position)
@@ -363,7 +383,12 @@ class MambaBlock(nn.Module):
         self.norm = MambaRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.mixer = MambaMixer(config, layer_idx=layer_idx)
 
-    def forward(self, hidden_states, cache_params: Optional[MambaCache] = None, cache_position: Optional[torch.LongTensor] = None):
+    def forward(
+        self,
+        hidden_states,
+        cache_params: Optional[MambaCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
@@ -617,7 +642,9 @@ class MambaModel(MambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(mixer_block.__call__, hidden_states, cache_params, cache_position)
+                hidden_states = self._gradient_checkpointing_func(
+                    mixer_block.__call__, hidden_states, cache_params, cache_position
+                )
             else:
                 hidden_states = mixer_block(hidden_states, cache_params=cache_params, cache_position=cache_position)
 
