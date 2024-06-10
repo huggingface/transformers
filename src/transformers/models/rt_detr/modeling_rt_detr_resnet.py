@@ -394,7 +394,7 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
 
         >>> with torch.no_grad():
         ...     outputs = model(pixel_values)
-        
+
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
