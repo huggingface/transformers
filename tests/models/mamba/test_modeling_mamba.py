@@ -187,11 +187,11 @@ class MambaModelTester:
         outputs = model(input_ids)
         output_whole = outputs.last_hidden_state
 
-        outputs = model(input_ids[:, :-1], use_cache=True)
+        outputs = model(input_ids[:, :-1], use_cache=True, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device))
         output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
-        outputs = model(input_ids[:, -1:], cache_params=outputs.cache_params)
+        outputs = model(input_ids[:, -1:], use_cache=True, cache_params=outputs.cache_params, cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device))
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
@@ -211,7 +211,7 @@ class MambaModelTester:
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
+        outputs = model.layers[0].mixer.slow_forward(token_emb, cache, cache_position = torch.arange(0, config.conv_kernel, device=input_ids.device))
 
         loss = torch.log(1 + torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -387,8 +387,8 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_state_cache, dict_object.conv_state_cache)
-                        recursive_check(tuple_object.ssm_state_cache, dict_object.ssm_state_cache)
+                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
+                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
                     elif isinstance(tuple_object, (List, Tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
