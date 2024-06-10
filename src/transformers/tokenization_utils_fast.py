@@ -103,7 +103,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
-        self.add_prefix_space = kwargs.pop("add_prefix_space", None)
+        self.add_prefix_space = kwargs.get("add_prefix_space", None)
 
         if self.force_from_slow() is True:
             kwargs["from_slow"] = True
