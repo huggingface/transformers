@@ -875,13 +875,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return
         if getattr(self, "add_prefix_space", None) is None:
             if getattr(self, "_tokenizer", None) is None:
-                self.add_prefix_space = True #TODO:ita warning?
-                return
+                return True
             curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
             prepend_normalizer = [n for n in curr_normalizer["normalizers"] if n["type"] == "Prepend"]
             if not prepend_normalizer:
-                self.add_prefix_space = True #TODO:ita warning?
-                return
+                return True
 
     def _update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
