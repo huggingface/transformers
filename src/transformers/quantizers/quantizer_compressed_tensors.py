@@ -11,11 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .base import HfQuantizer
-
-
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
+from .base import HfQuantizer
 
 
 if is_torch_available():
@@ -38,23 +36,27 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
         from compressed_tensors.compressors import ModelCompressor
+
+        # self.compressor = ModelCompressor.from_compression_config(quantization_config.to_dict())
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
 
     def validate_environment(self, *args, **kwargs):
         # check torch and compressed_tensors are available, let ImportError raise otherwise
-        import torch
-        from compressed_tensors.compressors import ModelCompressor
+        pass
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with compressed_tensors.")
+            logger.info(
+                "We suggest you to set `torch_dtype=torch.float16` for better efficiency with compressed_tensors."
+            )
         return torch_dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         if self.quantization_config.quantization_config is not None:
             from compressed_tensors.quantization import apply_quantization_config
+
             apply_quantization_config(model, self.quantization_config.quantization_config)
 
     def _process_model_after_weight_loading(self, model, resolved_archive_file, **kwargs):

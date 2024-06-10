@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
+from compressed_tensors.quantization.quant_config import QuantizationStatus
+from compressed_tensors.quantization.quant_scheme import QuantizationScheme
 from packaging import version
 
 from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, logging
@@ -1059,7 +1061,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self,
         config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,
         quant_method: str = "sparseml",
-        format: str = "fakequant",
+        format: str = "dense",  # "fakequant" not in CompressionFormat
         quantization_status: "QuantizationStatus" = "initialized",
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
@@ -1070,19 +1072,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         from compressed_tensors.config import SparsityCompressionConfig
 
         self.quantization_config = None
-        self.sparsity_configq = None
+        self.sparsity_config = None
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups:
             self.quantization_config = QuantizationConfig.parse_obj(
-                dict(
-                    config_groups=config_groups,
-                    quant_method=quant_method,
-                    format=format,
-                    quantization_status=quantization_status,
-                    global_compression_ratio=global_compression_ratio,
-                    ignore=ignore,
-                )
+                {
+                    "config_groups": config_groups,
+                    "quant_method": quant_method,
+                    "format": format,
+                    "quantization_status": quantization_status,
+                    "global_compression_ratio": global_compression_ratio,
+                    "ignore": ignore,
+                }
             )
 
         if sparsity_config:
