@@ -400,6 +400,13 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             image_features = image_features / (self.config.hidden_size**0.5)
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+            if inputs_embeds[special_image_mask].numel() != image_features.numel():
+                image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
+                raise ValueError(
+                    f"Number of images does not match number of special image tokens in the input text. "
+                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
+                    "tokens from image embeddings."
+                )
             inputs_embeds[special_image_mask] = image_features.flatten()
 
         causal_mask = self._update_causal_mask(

@@ -13,6 +13,8 @@
 # limitations under the License.
 """PaliGemmamodel configuration"""
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -84,7 +86,7 @@ class PaliGemmaConfig(PretrainedConfig):
         hidden_size=2048,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
+        self._ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
@@ -128,3 +130,15 @@ class PaliGemmaConfig(PretrainedConfig):
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
+
+    @property
+    def ignore_index(self):
+        warnings.warn(
+            "The `ignore_index` attribute is deprecated and will be removed in v4.44.",
+            FutureWarning,
+        )
+        return self._ignore_index
+
+    @ignore_index.setter
+    def ignore_index(self, value):
+        self._ignore_index = value
