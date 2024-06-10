@@ -33,7 +33,7 @@ from transformers import (
     is_tokenizers_available,
 )
 from transformers.testing_utils import TOKEN, USER, is_staging_test, require_tokenizers
-from transformers.tokenization_utils import Trie
+from transformers.tokenization_utils import ExtensionsTrie, Trie
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -107,10 +107,6 @@ class TokenizerUtilTester(unittest.TestCase):
 
         finally:
             os.remove("tokenizer.json")
-
-    def test_legacy_load_from_url(self):
-        # This test is for deprecated behavior and can be removed in v5
-        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model")
 
 
 @is_staging_test
@@ -278,3 +274,35 @@ class TrieTest(unittest.TestCase):
         trie = Trie()
         parts = trie.cut_text("ABC", [0, 0, 2, 1, 2, 3])
         self.assertEqual(parts, ["AB", "C"])
+
+
+class ExtensionsTrieTest(unittest.TestCase):
+    def test_extensions(self):
+        # Test searching by prefix
+        trie = ExtensionsTrie()
+        trie.add("foo")
+        trie.add("food")
+        trie.add("foodie")
+        trie.add("helium")
+        self.assertEqual(trie.extensions("foo"), ["foo", "food", "foodie"])
+        self.assertEqual(trie.extensions("helium"), ["helium"])
+
+    def test_empty_prefix(self):
+        trie = ExtensionsTrie()
+        # Test searching with an empty prefix returns all values
+        trie.add("hello")
+        trie.add("bye")
+        self.assertEqual(trie.extensions(""), ["hello", "bye"])
+
+    def test_no_extension_match(self):
+        trie = ExtensionsTrie()
+        # Test searching for a prefix that doesn't match any key
+        with self.assertRaises(KeyError):
+            trie.extensions("unknown")
+
+    def test_update_value(self):
+        trie = ExtensionsTrie()
+        # Test updating the value of an existing key
+        trie.add("hi")
+        trie.add("hi")
+        self.assertEqual(trie.extensions("hi"), ["hi"])

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert ESM checkpoint."""
 
-
 import argparse
 import pathlib
 from pathlib import Path

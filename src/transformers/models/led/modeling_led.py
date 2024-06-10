@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LED model."""
-
+"""PyTorch LED model."""
 
 import math
 import warnings
@@ -51,12 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
-
-
-LED_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/led-base-16384",
-    # See all LED models at https://huggingface.co/models?filter=led
-]
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):

@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
+    "configuration_deformable_detr": ["DeformableDetrConfig"],
 }
 
 try:
@@ -37,7 +37,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_deformable_detr"] = [
-        "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DeformableDetrForObjectDetection",
         "DeformableDetrModel",
         "DeformableDetrPreTrainedModel",
@@ -45,7 +44,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
+    from .configuration_deformable_detr import DeformableDetrConfig
 
     try:
         if not is_vision_available():
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_deformable_detr import (
-            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,

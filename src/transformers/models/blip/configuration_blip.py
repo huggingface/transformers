@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Blip model configuration"""
+"""Blip model configuration"""
 
 import os
 from typing import Union
@@ -22,25 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Salesforce/blip-vqa-base": "https://huggingface.co/Salesforce/blip-vqa-base/resolve/main/config.json",
-    "Salesforce/blip-vqa-capfit-large": (
-        "https://huggingface.co/Salesforce/blip-vqa-base-capfit/resolve/main/config.json"
-    ),
-    "Salesforce/blip-image-captioning-base": (
-        "https://huggingface.co/Salesforce/blip-image-captioning-base/resolve/main/config.json"
-    ),
-    "Salesforce/blip-image-captioning-large": (
-        "https://huggingface.co/Salesforce/blip-image-captioning-large/resolve/main/config.json"
-    ),
-    "Salesforce/blip-itm-base-coco": "https://huggingface.co/Salesforce/blip-itm-base-coco/resolve/main/config.json",
-    "Salesforce/blip-itm-large-coco": "https://huggingface.co/Salesforce/blip-itm-large-coco/resolve/main/config.json",
-    "Salesforce/blip-itm-base-flikr": "https://huggingface.co/Salesforce/blip-itm-base-flikr/resolve/main/config.json",
-    "Salesforce/blip-itm-large-flikr": (
-        "https://huggingface.co/Salesforce/blip-itm-large-flikr/resolve/main/config.json"
-    ),
-}
 
 
 class BlipTextConfig(PretrainedConfig):

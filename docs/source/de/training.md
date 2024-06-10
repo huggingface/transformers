@@ -128,12 +128,12 @@ Rufen Sie [`~evaluate.compute`] auf `metric` auf, um die Genauigkeit Ihrer Vorhe
 ...     return metric.compute(predictions=predictions, references=labels)
 ```
 
-Wenn Sie Ihre Bewertungsmetriken während der Feinabstimmung überwachen möchten, geben Sie den Parameter `evaluation_strategy` in Ihren Trainingsargumenten an, um die Bewertungsmetrik am Ende jeder Epoche zu ermitteln:
+Wenn Sie Ihre Bewertungsmetriken während der Feinabstimmung überwachen möchten, geben Sie den Parameter `eval_strategy` in Ihren Trainingsargumenten an, um die Bewertungsmetrik am Ende jeder Epoche zu ermitteln:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer
 
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
+>>> training_args = TrainingArguments(output_dir="test_trainer", eval_strategy="epoch")
 ```
 
 ### Trainer

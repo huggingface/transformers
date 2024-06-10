@@ -325,7 +325,7 @@ Las respuestas a preguntas de documentos es una tarea que responde preguntas en 
 >>> from PIL import Image
 >>> import requests
 
->>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
+>>> url = "https://huggingface.co/datasets/hf-internal-testing/example-documents/resolve/main/jpeg_images/2.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")
@@ -337,11 +337,4 @@ Las respuestas a preguntas de documentos es una tarea que responde preguntas en 
 [{'score': 0.8531, 'answer': '17,000', 'start': 4, 'end': 4}]
 ```
 
-Con suerte, esta página te ha proporcionado más información de fondo sobre todos los tipos de tareas en cada modalidad y la importancia práctica de cada una. En la próxima [sección](https://huggingface.co/docs/transformers/tasks_explained), aprenderás **cómo** 🤗 Transformers trabaja para resolver estas tareas.
-
-<!--
-TO DO:
-
-Update this link "En la próxima [sección](https://huggingface.co/docs/transformers/tasks_explained),..."
-when the translation of "tasks_explained.md" was carried out.
--->
+Con suerte, esta página te ha proporcionado más información de fondo sobre todos los tipos de tareas en cada modalidad y la importancia práctica de cada una. En la próxima [sección](tasks_explained), aprenderás **cómo** 🤗 Transformers trabaja para resolver estas tareas.

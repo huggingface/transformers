@@ -75,7 +75,10 @@ python run_text_classification.py \
 --train_file training_data.json \
 --validation_file validation_data.json \
 --output_dir output/ \
---test_file data_to_predict.json
+--test_file data_to_predict.json \
+--do_train \
+--do_eval \
+--do_predict
 ```
 
 ## run_glue.py

@@ -16,6 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Nezha
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, we don't accept any new PRs changing its code.
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+You can do so by running the following command: `pip install -U transformers==4.40.2`.
+
+</Tip>
+
 ## Overview
 
 The Nezha model was proposed in [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://arxiv.org/abs/1909.00204) by Junqiu Wei et al.
@@ -25,8 +33,8 @@ The abstract from the paper is the following:
 *The pre-trained language models have achieved great successes in various natural language understanding (NLU) tasks
 due to its capacity to capture the deep contextualized information in text by pre-training on large-scale corpora.
 In this technical report, we present our practice of pre-training language models named NEZHA (NEural contextualiZed
-representation for CHinese lAnguage understanding) on Chinese corpora and finetuning for the Chinese NLU tasks. 
-The current version of NEZHA is based on BERT with a collection of proven improvements, which include Functional 
+representation for CHinese lAnguage understanding) on Chinese corpora and finetuning for the Chinese NLU tasks.
+The current version of NEZHA is based on BERT with a collection of proven improvements, which include Functional
 Relative Positional Encoding as an effective positional encoding scheme, Whole Word Masking strategy,
 Mixed Precision Training and the LAMB Optimizer in training the models. The experimental results show that NEZHA
 achieves the state-of-the-art performances when finetuned on several representative Chinese tasks, including

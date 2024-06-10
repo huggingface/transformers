@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AltCLIP model configuration"""
+"""AltCLIP model configuration"""
+
 import os
 from typing import Union
 
@@ -21,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/AltCLIP": "https://huggingface.co/BAAI/AltCLIP/resolve/main/config.json",
-    # See all AltCLIP models at https://huggingface.co/models?filter=altclip
-}
 
 
 class AltCLIPTextConfig(PretrainedConfig):

@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 XLNet model.
+TF 2.0 XLNet model.
 """
-
 
 from __future__ import annotations
 
@@ -59,12 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlnet/xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
-
-TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlnet/xlnet-base-cased",
-    "xlnet/xlnet-large-cased",
-    # See all XLNet models at https://huggingface.co/models?filter=xlnet
-]
 
 
 class TFXLNetRelativeAttention(keras.layers.Layer):

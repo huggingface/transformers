@@ -28,6 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "google/fnet-base"
     tokenizer_class = FNetTokenizer
     rust_tokenizer_class = FNetTokenizerFast
     test_rust_tokenizer = True

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPT Neo model."""
-
+"""PyTorch GPT Neo model."""
 
 import os
 from typing import Optional, Tuple, Union
@@ -67,10 +66,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
 
-GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-neo-1.3B",
-    # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
-]
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
@@ -407,7 +402,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)

@@ -33,19 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "clvp_dev": "https://huggingface.co/susnato/clvp_dev/blob/main/vocab.json",
-    },
-    "merges_file": {
-        "clvp_dev": "https://huggingface.co/susnato/clvp_dev/blob/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "clvp_dev": 1024,
-}
-
 
 @lru_cache()
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
@@ -145,8 +132,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = [
         "input_ids",
         "attention_mask",

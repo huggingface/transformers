@@ -452,7 +452,7 @@ CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 - `require_torch_multi_gpu` - `require_torch`에 추가로 적어도 2개의 GPU가 필요합니다.
 - `require_torch_non_multi_gpu` - `require_torch`에 추가로 0개 또는 1개의 GPU가 필요합니다.
 - `require_torch_up_to_2_gpus` - `require_torch`에 추가로 0개, 1개 또는 2개의 GPU가 필요합니다.
-- `require_torch_tpu` - `require_torch`에 추가로 적어도 1개의 TPU가 필요합니다.
+- `require_torch_xla` - `require_torch`에 추가로 적어도 1개의 TPU가 필요합니다.
 
 GPU 요구 사항을 표로 정리하면 아래와 같습니디ㅏ:
 

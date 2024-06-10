@@ -18,7 +18,7 @@ python run_asr.py \
 --num_train_epochs="30" \
 --per_device_train_batch_size="20" \
 --per_device_eval_batch_size="20" \
---evaluation_strategy="steps" \
+--eval_strategy="steps" \
 --save_steps="500" \
 --eval_steps="100" \
 --logging_steps="50" \
@@ -73,7 +73,7 @@ python run_asr.py \
 --per_device_train_batch_size="1" \
 --per_device_eval_batch_size="1" \
 --gradient_accumulation_steps="8" \
---evaluation_strategy="steps" \
+--eval_strategy="steps" \
 --save_steps="500" \
 --eval_steps="100" \
 --logging_steps="50" \
@@ -152,7 +152,7 @@ ZeRO-2:
 PYTHONPATH=../../../src deepspeed --num_gpus 2 \
 run_asr.py \
 --output_dir=output_dir --num_train_epochs=2 --per_device_train_batch_size=2 \
---per_device_eval_batch_size=2 --evaluation_strategy=steps --save_steps=500 --eval_steps=100 \
+--per_device_eval_batch_size=2 --eval_strategy=steps --save_steps=500 --eval_steps=100 \
 --logging_steps=5 --learning_rate=5e-4 --warmup_steps=3000 \
 --model_name_or_path=patrickvonplaten/wav2vec2_tiny_random_robust \
 --dataset_name=hf-internal-testing/librispeech_asr_dummy --dataset_config_name=clean \
@@ -176,7 +176,7 @@ ZeRO-3:
 PYTHONPATH=../../../src deepspeed --num_gpus 2 \
 run_asr.py \
 --output_dir=output_dir --num_train_epochs=2 --per_device_train_batch_size=2 \
---per_device_eval_batch_size=2 --evaluation_strategy=steps --save_steps=500 --eval_steps=100 \
+--per_device_eval_batch_size=2 --eval_strategy=steps --save_steps=500 --eval_steps=100 \
 --logging_steps=5 --learning_rate=5e-4 --warmup_steps=3000 \
 --model_name_or_path=patrickvonplaten/wav2vec2_tiny_random_robust \
 --dataset_name=hf-internal-testing/librispeech_asr_dummy --dataset_config_name=clean \

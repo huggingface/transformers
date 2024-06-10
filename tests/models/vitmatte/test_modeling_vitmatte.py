@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VitMatte model. """
-
+"""Testing suite for the PyTorch VitMatte model."""
 
 import unittest
 
@@ -21,6 +20,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import VitMatteConfig
 from transformers.testing_utils import (
+    require_timm,
     require_torch,
     slow,
     torch_device,
@@ -36,7 +36,6 @@ if is_torch_available():
     import torch
 
     from transformers import VitDetConfig, VitMatteForImageMatting
-    from transformers.models.vitmatte.modeling_vitmatte import VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -186,7 +185,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip(reason="ViTMatte does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_model(self):
@@ -195,9 +194,9 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VitMatteForImageMatting.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hustvl/vitmatte-small-composition-1k"
+        model = VitMatteForImageMatting.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
     def test_retain_grad_hidden_states_attentions(self):
@@ -237,6 +236,35 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             print("Hello we're here")
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @require_timm
+    def test_backbone_selection(self):
+        def _validate_backbone_init():
+            for model_class in self.all_model_classes:
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+
+                if model.__class__.__name__ == "VitMatteForImageMatting":
+                    # Confirm out_indices propogated to backbone
+                    self.assertEqual(len(model.backbone.out_indices), 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_pretrained_backbone = True
+        config.backbone_config = None
+        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        # Force load_backbone path
+        config.is_hybrid = False
+
+        # Load a timm backbone
+        config.backbone = "resnet18"
+        config.use_timm_backbone = True
+        _validate_backbone_init()
+
+        # Load a HF backbone
+        config.backbone = "facebook/dinov2-small"
+        config.use_timm_backbone = False
+        _validate_backbone_init()
 
 
 @require_torch

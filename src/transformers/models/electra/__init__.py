@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraOnnxConfig"],
+    "configuration_electra": ["ElectraConfig", "ElectraOnnxConfig"],
     "tokenization_electra": ["ElectraTokenizer"],
 }
 
@@ -44,7 +44,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_electra"] = [
-        "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ElectraForCausalLM",
         "ElectraForMaskedLM",
         "ElectraForMultipleChoice",
@@ -64,7 +63,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_electra"] = [
-        "TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFElectraForMaskedLM",
         "TFElectraForMultipleChoice",
         "TFElectraForPreTraining",
@@ -95,7 +93,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraOnnxConfig
+    from .configuration_electra import ElectraConfig, ElectraOnnxConfig
     from .tokenization_electra import ElectraTokenizer
 
     try:
@@ -113,7 +111,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_electra import (
-            ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,
             ElectraForMaskedLM,
             ElectraForMultipleChoice,
@@ -133,7 +130,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_electra import (
-            TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFElectraForMaskedLM,
             TFElectraForMultipleChoice,
             TFElectraForPreTraining,

@@ -15,7 +15,6 @@
 
 """English Normalizer class for CLVP."""
 
-
 import re
 
 

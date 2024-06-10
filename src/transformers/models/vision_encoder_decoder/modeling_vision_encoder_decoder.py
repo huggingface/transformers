@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Vision-Encoder-Text-Decoder architectures"""
-
+"""Classes to support Vision-Encoder-Text-Decoder architectures"""
 
 import gc
 import os
@@ -190,10 +189,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder)
+            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -336,8 +335,20 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 del tf_model
                 gc.collect()
 
+                attn_implementation = kwargs.get("attn_implementation", None)
+                kwargs_encoder_decoder = {}
+                if attn_implementation:
+                    kwargs_encoder_decoder = {
+                        "encoder_attn_implementation": attn_implementation,
+                        "decoder_attn_implementation": attn_implementation,
+                    }
+
                 model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                    encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
+                    encoder_dir,
+                    decoder_dir,
+                    encoder_from_tf=True,
+                    decoder_from_tf=True,
+                    **kwargs_encoder_decoder,
                 )
                 # This is only for copying some specific attributes of this particular model.
                 model.config = config
@@ -546,7 +557,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
         >>> # training
-        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
 
@@ -573,7 +584,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 raise ValueError("You have to specify pixel_values")
 
             encoder_outputs = self.encoder(
-                pixel_values,
+                pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,

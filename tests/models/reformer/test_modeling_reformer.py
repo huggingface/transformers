@@ -37,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerForMaskedLM,
         ReformerForQuestionAnswering,
         ReformerForSequenceClassification,
@@ -616,9 +615,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ReformerModelWithLMHead.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/reformer-crime-and-punishment"
+        model = ReformerModelWithLMHead.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -686,6 +685,18 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
     @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass
+
+    def _get_input_ids_and_config(self, batch_size=2):
+        # override because overwise we hit max possible seq length for model (4*8=32)
+        # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
+        # NOTE: seq_length has to be multiple of 4, otherwise it fails for other tests
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict[self.input_name]
+        input_ids = input_ids[:batch_size, :16]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :16]
+        config.eos_token_id = None
+        config.forced_eos_token_id = None
+        return config, input_ids, attention_mask
 
 
 @require_torch

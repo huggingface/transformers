@@ -286,7 +286,7 @@ BART adapts to translation by adding a separate randomly initialized encoder to 
 
 BART has since been followed up by a multilingual version, mBART, intended for translation and pretrained on many different languages.
 
-Ready to try your hand at translation? Check out our complete [translation guide](tasks/summarization) to learn how to finetune T5 and use it for inference!
+Ready to try your hand at translation? Check out our complete [translation guide](tasks/translation) to learn how to finetune T5 and use it for inference!
 
 <Tip>
 

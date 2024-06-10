@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLIPSeg model configuration"""
+"""CLIPSeg model configuration"""
 
 import os
 from typing import Union
@@ -22,10 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "CIDAS/clipseg-rd64": "https://huggingface.co/CIDAS/clipseg-rd64/resolve/main/config.json",
-}
 
 
 class CLIPSegTextConfig(PretrainedConfig):

@@ -24,6 +24,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_g2p_en
 class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "espnet/fastspeech2_conformer"
     tokenizer_class = FastSpeech2ConformerTokenizer
     test_rust_tokenizer = False
 

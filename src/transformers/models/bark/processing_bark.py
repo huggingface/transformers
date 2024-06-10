@@ -15,6 +15,7 @@
 """
 Processor class for Bark
 """
+
 import json
 import os
 from typing import Optional
@@ -92,7 +93,7 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", False),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
                 token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
@@ -188,7 +189,7 @@ class BarkProcessor(ProcessorMixin):
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
                 proxies=kwargs.pop("proxies", None),
-                resume_download=kwargs.pop("resume_download", False),
+                resume_download=kwargs.pop("resume_download", None),
                 local_files_only=kwargs.pop("local_files_only", False),
                 token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),

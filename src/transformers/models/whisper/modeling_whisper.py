@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Whisper model."""
+"""PyTorch Whisper model."""
+
 import math
 from typing import Optional, Tuple, Union
 
@@ -57,12 +58,6 @@ _HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "WhisperConfig"
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
-
-
-WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -536,7 +531,7 @@ class WhisperFlashAttention2(WhisperAttention):
             attention_mask (`torch.Tensor`):
                 The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
                 position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
+            dropout (`float`):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
@@ -692,6 +687,11 @@ class WhisperSdpaAttention(WhisperAttention):
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+
         # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
         # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
         attn_output = torch.nn.functional.scaled_dot_product_attention(
@@ -700,8 +700,7 @@ class WhisperSdpaAttention(WhisperAttention):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
+            is_causal=is_causal,
         )
 
         if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
@@ -1394,7 +1393,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 inputs_embeds, past_key_values_length=past_key_values_length, position_ids=position_ids
             )
 
-        hidden_states = inputs_embeds + positions
+        hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         if self.gradient_checkpointing and self.training:
@@ -1864,7 +1863,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Whisper decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    Whisper decoder with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     WHISPER_START_DOCSTRING,
 )

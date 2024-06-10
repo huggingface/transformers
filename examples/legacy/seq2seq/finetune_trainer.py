@@ -271,7 +271,7 @@ def main():
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
-        if training_args.do_eval or training_args.evaluation_strategy != EvaluationStrategy.NO
+        if training_args.do_eval or training_args.eval_strategy != EvaluationStrategy.NO
         else None
     )
     test_dataset = (

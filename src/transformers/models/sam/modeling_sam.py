@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SAM model."""
+"""PyTorch SAM model."""
 
 import collections
 import math
@@ -36,13 +36,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SamConfig"
 _CHECKPOINT_FOR_DOC = "facebook/sam-vit-huge"
-
-SAM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/sam-vit-huge",
-    "facebook/sam-vit-large",
-    "facebook/sam-vit-base",
-    # See all SAM models at https://huggingface.co/models?filter=sam
-]
 
 
 @dataclass
@@ -1078,6 +1071,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config_class = SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    _no_split_modules = ["SamVisionAttention"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
