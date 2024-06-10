@@ -124,6 +124,7 @@ from .trainer_utils import (
     enable_full_determinism,
     find_executable_batch_size,
     get_last_checkpoint,
+    get_checkpoints,
     has_length,
     neftune_post_forward_hook,
     number_of_arguments,
@@ -209,6 +210,7 @@ else:
 
 if is_safetensors_available():
     import safetensors.torch
+
 
 if is_peft_available():
     from peft import PeftModel
@@ -1881,28 +1883,18 @@ class Trainer:
 
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
-                # Try to load the checkpoints until we find one valid or we run out of checkpoints
-                while resume_from_checkpoint is not None:
+                checkpoints = get_checkpoints(args.output_dir, reverse=True)
+                for i, checkpoint in enumerate(checkpoints):
                     try:
-                        self._load_from_checkpoint(resume_from_checkpoint)
+                        self._load_from_checkpoint(checkpoint)
+                        if i > 0:
+                            logger.info(f"Checkpoints {checkpoints[i:]} failed to load. Loading from {checkpoint}.")
+                        resume_from_checkpoint = checkpoint
                         break
-                    except Exception as e:
-                        warnings.warn(
-                            f"loading model from {resume_from_checkpoint}: {e}. Trying an even older checkpoint.",
-                            RuntimeWarning,
-                        )
-                        if not args.ignore_checkpoint_errors:
-                            warnings.warn(
-                                "If you want to ignore this error, you can set `--ignore_checkpoint_errors`.",
-                                RuntimeWarning,
-                            )
-                            raise e
-                        if not os.path.isdir(os.path.join(args.output_dir, "corrupted_checkpoints")):
-                            os.makedirs(os.path.join(args.output_dir, "corrupted_checkpoints"))
-                        shutil.move(
-                            resume_from_checkpoint, os.path.join(args.output_dir, "corrupted_checkpoints", resume_from_checkpoint)
-                        )
-                        resume_from_checkpoint = get_last_checkpoint(args.output_dir)
+                    except (ValueError, safetensors.SafetensorError) as e:
+                        logger.warning(f"Error loading checkpoint {checkpoint}: {e}")
+                else:
+                    logger.warning(f"No valid checkpoint found in output directory ({args.output_dir}), starting from scratch")
 
             if resume_from_checkpoint is not None:
                 # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly

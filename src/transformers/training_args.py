@@ -1163,14 +1163,6 @@ class TrainingArguments:
             )
         },
     )
-    ignore_checkpoint_errors: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "When loading a checkpoint, whether or not to use a former valid checkpoint if an error occurs"
-            )
-        }
-    )
     fsdp: Optional[Union[List[FSDPOption], str]] = field(
         default="",
         metadata={
