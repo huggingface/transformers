@@ -540,15 +540,25 @@ class GGUFTokenizerSkeleton:
             self.merges = merges
         else:
             self.merges = [tuple(merge.split(" ")) for merge in self.merges]
-
+            if not hasattr(self, "scores"):
+                self.scores = [None for _ in range(len(self.tokens))]
+    
         if not hasattr(self, "added_tokens"):
             self.added_tokens = []
 
+        if not hasattr(self, "unk_token_id"):
+            self.unk_token_id = None
+
+        # Llama2 uses the field `unknown_token_id`
+        if hasattr(self, "unknown_token_id") and self.unk_token_id is None:
+            self.unk_token_id = self.unknown_token_id
 
 class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
         self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
         self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+        self.uses_byte_level_decoding = getattr(self.proto, "tokenizer_type", "llama") != "llama"
 
     def vocab(self, proto):
         return list(zip(proto.tokens, proto.scores))
@@ -560,30 +570,55 @@ class GGUFLlamaConverter(LlamaConverter):
         vocab_scores = self.vocab(self.proto)
         merges = self.merges(self.proto)
         bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-        tokenizer = Tokenizer(
-            BPE(bpe_vocab, merges, unk_token=proto.tokens[proto.unk_token_id], fuse_unk=True, byte_fallback=True)
-        )
-        tokenizer.add_special_tokens(
-            [
-                AddedToken("<unk>", normalized=False, special=True),
-                AddedToken("<s>", normalized=False, special=True),
-                AddedToken("</s>", normalized=False, special=True),
-            ]
-        )
+       
+        unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
+        bos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "bos_token_id", None) is not None else None
+        eos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
+       
+        tokenizer = Tokenizer(BPE(bpe_vocab, merges, unk_token=unk_token, fuse_unk=True, byte_fallback=True))
+        
+        special_tokens = []
+ 
+        if not hasattr(self.proto, "token_type"):
+            if unk_token is not None:
+                special_tokens.append(AddedToken(unk_token, normalized=False, special=True))
+
+            if bos_token is not None:
+                special_tokens.append(AddedToken(bos_token, normalized=False, special=True))
+
+            if eos_token is not None:
+                special_tokens.append(AddedToken(eos_token, normalized=False, special=True))
+        else:
+            # 3 stands for special tokens
+            special_tokens_idx = np.where(np.array(self.proto.token_type) == 3)[0]
+            
+            for idx in special_tokens_idx:
+                special_tokens.append(AddedToken(self.proto.tokens[idx], normalized=False, special=True))
+
+        if len(special_tokens) != 0:
+            tokenizer.add_special_tokens(special_tokens)
 
         if len(self.proto.added_tokens) != 0:
             tokenizer.add_special_tokens(
-                [AddedToken(added_token, normalized=False, special=False) for added_token in self.added_tokens]
+                [AddedToken(added_token, normalized=False, special=False) for added_token in self.proto.added_tokens]
             )
+
+        self.additional_kwargs["unk_token"] = unk_token
+        self.additional_kwargs["eos_token"] = bos_token
+        self.additional_kwargs["bos_token"] = eos_token
 
         return tokenizer
 
     def decoder(self, replacement, add_prefix_space):
-        sequence = [
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-            decoders.Replace("▁", " "),
-        ]
+        if not self.uses_byte_level_decoding:
+            sequence = [
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Replace("▁", " "),
+            ]
+        else:
+            sequence = [decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)]
+
         if add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
         return decoders.Sequence(sequence)
@@ -592,6 +627,7 @@ class GGUFLlamaConverter(LlamaConverter):
 class GGUFQwen2Converter(Qwen2Converter):
     def __init__(self, tokenizer_dict):
         self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
 
     def converted(self) -> Tokenizer:
         vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
@@ -629,5 +665,6 @@ def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
         [`~tokenization_utils_base.PreTrainedTokenizerFast`]
     """
     tokenizer_class_name = architecture
-    converter_class = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name]
-    return converter_class(tokenizer_dict).converted()
+    converter = GGUF_TO_FAST_CONVERTERS[tokenizer_class_name](tokenizer_dict)
+    fast_tokenizer = converter.converted()
+    return fast_tokenizer, converter.additional_kwargs
