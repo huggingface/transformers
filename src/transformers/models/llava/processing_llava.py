@@ -40,6 +40,13 @@ class LlavaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        patch_size (`int`, *optional*):
+            Patch size from the vision tower.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Shoudl be same as in model's config
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
     """
 
     attributes = ["image_processor", "tokenizer"]
