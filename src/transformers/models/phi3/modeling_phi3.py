@@ -129,7 +129,7 @@ class Phi3SuScaledRotaryEmbedding(Phi3RotaryEmbedding):
         short_factor = torch.tensor(config.rope_scaling["short_factor"], dtype=torch.float32, device=device)
         short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
         self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
-        
+
         long_factor = torch.tensor(config.rope_scaling["long_factor"], dtype=torch.float32, device=device)
         long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
         self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
@@ -176,13 +176,13 @@ class Phi3YarnScaledRotaryEmbedding(Phi3RotaryEmbedding):
         short_factor = torch.tensor(config.rope_scaling["short_factor"], dtype=torch.float32, device=device)
         short_inv_freq = 1.0 / (short_factor * self.base**inv_freq_shape)
         self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
-        
+
         long_factor = torch.tensor(config.rope_scaling["long_factor"], dtype=torch.float32, device=device)
         long_inv_freq = 1.0 / (long_factor * self.base**inv_freq_shape)
         self.register_buffer("long_inv_freq", long_inv_freq, persistent=False)
 
         self.original_max_position_embeddings = config.original_max_position_embeddings
-        
+
     @torch.no_grad()
     def forward(self, x, position_ids, seq_len=None):
         seq_len = torch.max(position_ids) + 1
