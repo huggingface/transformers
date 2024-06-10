@@ -106,10 +106,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", None)
 
-        #TODO:ita remove if
-        if self.force_from_slow(kwargs) is True:
-            kwargs["from_slow"] = True
-        # if not is_sentencepiece_available():
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif (fast_tokenizer_file is not None and not from_slow) or (from_slow and not is_sentencepiece_available()):
@@ -869,17 +865,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
-
-    def force_from_slow(self, kwargs):
-        if kwargs.get('vocab_file', None) is None:
-            return
-        if getattr(self, "add_prefix_space", None) is None:
-            if getattr(self, "_tokenizer", None) is None:
-                return True
-            curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
-            prepend_normalizer = [n for n in curr_normalizer["normalizers"] if n["type"] == "Prepend"]
-            if not prepend_normalizer:
-                return True
 
     def _update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
