@@ -1020,7 +1020,13 @@ class StaticCacheXLA(Cache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
-        raise NotImplementedError("StaticCacheXLA is not implemented yet")
+        key_cache = self.key_cache[layer_idx]
+        device = key_cache.device
+
+        item = key_cache.index_select(0, torch.tensor(0, device=device))
+        head = item.index_select(1, torch.tensor(0, device=device))
+
+        return head.any(dim=-1).sum()
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
