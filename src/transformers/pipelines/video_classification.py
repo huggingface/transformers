@@ -19,6 +19,8 @@ if is_av_available():
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -106,6 +108,8 @@ class VideoClassificationPipeline(Pipeline):
         video = list(video)
 
         model_inputs = self.image_processor(video, return_tensors=self.framework)
+        if self.framework == 'pt':
+            model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
         return model_inputs
 
     def _forward(self, model_inputs):

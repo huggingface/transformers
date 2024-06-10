@@ -31,6 +31,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -119,6 +121,8 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.framework == 'pt':
+            inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
         return inputs
 
     def postprocess(self, model_outputs):

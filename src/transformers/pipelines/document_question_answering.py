@@ -294,7 +294,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_features.update(self.image_processor(images=image, return_tensors=self.framework))
+                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == 'pt':
+                    image_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in image_inputs.items()}
+                image_features.update(image_inputs)
             elif self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             elif self.model_type == ModelType.VisionEncoderDecoder:

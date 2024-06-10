@@ -107,6 +107,8 @@ class ObjectDetectionPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.framework == 'pt':
+            inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size

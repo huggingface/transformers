@@ -12,6 +12,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
         MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES,
@@ -147,6 +149,8 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
+            if self.framework == 'pt':
+                inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
@@ -155,6 +159,8 @@ class ImageSegmentationPipeline(Pipeline):
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
+            if self.framework == 'pt':
+                inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in inputs.items()}
         inputs["target_size"] = target_size
         return inputs
 

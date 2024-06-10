@@ -138,6 +138,8 @@ class ImageToTextPipeline(Pipeline):
 
             if model_type == "git":
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == 'pt':
+                    model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
                 input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
                 input_ids = [self.tokenizer.cls_token_id] + input_ids
                 input_ids = torch.tensor(input_ids).unsqueeze(0)
@@ -145,10 +147,14 @@ class ImageToTextPipeline(Pipeline):
 
             elif model_type == "pix2struct":
                 model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
+                if self.framework == 'pt':
+                    model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
 
             elif model_type != "vision-encoder-decoder":
                 # vision-encoder-decoder does not support conditional generation
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == 'pt':
+                    model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
                 text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
                 model_inputs.update(text_inputs)
 
@@ -157,6 +163,8 @@ class ImageToTextPipeline(Pipeline):
 
         else:
             model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+            if self.framework == 'pt':
+                model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
 
         if self.model.config.model_type == "git" and prompt is None:
             model_inputs["input_ids"] = None

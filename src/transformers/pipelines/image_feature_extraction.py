@@ -1,12 +1,14 @@
 from typing import Dict
 
-from ..utils import add_end_docstrings, is_vision_available
+from ..utils import add_end_docstrings, is_vision_available, is_torch_available
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
     from ..image_utils import load_image
 
+if is_torch_available():
+    import torch
 
 @add_end_docstrings(
     build_pipeline_init_args(has_image_processor=True),
@@ -60,6 +62,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
     def preprocess(self, image, timeout=None, **image_processor_kwargs) -> Dict[str, GenericTensor]:
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
+        if self.framework == 'pt':
+            model_inputs = {k: v.type(self.torch_dtype) if v.dtype == torch.float32 else v for k, v in model_inputs.items()}
         return model_inputs
 
     def _forward(self, model_inputs):
