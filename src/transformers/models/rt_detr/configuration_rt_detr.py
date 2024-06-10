@@ -17,6 +17,7 @@
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 from .configuration_rt_detr_resnet import RTDetrResNetConfig
@@ -245,6 +246,14 @@ class RTDetrConfig(PretrainedConfig):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=False,
+            use_pretrained_backbone=False,
+            backbone=None,
+            backbone_config=backbone_config,
+            backbone_kwargs=None,
+        )
 
         self.backbone_config = backbone_config
         # encoder
