@@ -228,7 +228,6 @@ class RTDetrConfig(PretrainedConfig):
         self.batch_norm_eps = batch_norm_eps
         # backbone
         if backbone_config is None:
-            # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
             backbone_config = RTDetrResNetConfig(
                 num_channels=3,
                 embedding_size=64,
