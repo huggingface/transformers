@@ -52,6 +52,7 @@ DEFAULT_CODE_SYSTEM_PROMPT = """You will be given a task to solve, your job is t
 To help you, I will give you access to a set of tools that you can use. Each tool is a Python function and has a description explaining the task it performs, the inputs it expects and the outputs it returns.
 You should first explain which tool you will use to perform the task and for what reason, then write the code in Python.
 Each instruction in Python should be a simple assignment. You can print intermediate results if it makes sense to do so.
+You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
 Be sure to provide a 'Code:' token, else the system will be stuck in a loop.
 
 Tools:
@@ -355,6 +356,7 @@ Here are the rules you should always follow to solve your task:
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
+7. You can use imports in your code, but only from the following list of modules: <<authorized_imports>>
 
 Now Begin! If you solve the task correctly, you will receive a reward of $1,000,000.
 """

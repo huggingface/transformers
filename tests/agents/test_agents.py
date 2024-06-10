@@ -21,7 +21,7 @@ import pytest
 
 from transformers.agents.agent_types import AgentText
 from transformers.agents.agents import AgentMaxIterationsError, CodeAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
-from transformers.agents.default_tools import PythonInterpreterTool
+from transformers.agents.default_tools import PythonInterpreterTool, FinalAnswerTool
 from transformers.testing_utils import require_torch
 
 
@@ -141,15 +141,15 @@ Action:
     def test_init_agent_with_different_toolsets(self):
         toolset_1 = []
         agent = ReactCodeAgent(tools=toolset_1, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 1  # contains only final_answer tool
+        assert len(agent.toolbox.tools) == 1  # when no tools are provided, only the final_answer tool is added by default
 
         toolset_2 = [PythonInterpreterTool(), PythonInterpreterTool()]
         agent = ReactCodeAgent(tools=toolset_2, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 2  # added final_answer tool
+        assert len(agent.toolbox.tools) == 2  # deduplication of tools, so only one python_interpreter tool is added in addition to final_answer
 
         toolset_3 = Toolbox(toolset_2)
         agent = ReactCodeAgent(tools=toolset_3, llm_engine=fake_react_code_llm)
-        assert len(agent.toolbox.tools) == 2  # added final_answer tool
+        assert len(agent.toolbox.tools) == 2  # same as previous one, where toolset_3 is an instantiation of previous one
 
         # check that add_base_tools will not interfere with existing tools
         with pytest.raises(KeyError) as e:
