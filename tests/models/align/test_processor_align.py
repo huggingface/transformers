@@ -23,8 +23,10 @@ import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -34,7 +36,9 @@ if is_vision_available():
 
 
 @require_vision
-class AlignProcessorTest(unittest.TestCase):
+class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = AlignProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -204,92 +208,3 @@ class AlignProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
-
-    # TODO move these tests to a common Mixin
-    def test_defaults_preserved_kwargs(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer(max_length=117)
-
-        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertEqual(len(inputs["input_ids"]), 117)
-
-    @require_torch
-    def test_defaults_preserved_image_kwargs(self):
-        image_processor = self.get_image_processor(crop_size=(234, 234))
-        tokenizer = self.get_tokenizer(max_length=117)
-
-        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 234)
-
-    @require_torch
-    def test_structured_kwargs(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "return_tensors": "pt",
-            "crop_size": {"height": 214, "width": 214},
-            "padding": "max_length",
-            "max_length": 76,
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    def test_structured_kwargs_nested(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    def test_structured_kwargs_nested_from_dict(self):
-        processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[2], 214)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
