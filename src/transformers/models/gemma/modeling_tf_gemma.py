@@ -686,7 +686,7 @@ class TFGemmaMainLayer(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
+    @tf.function
     def _update_causal_mask(self, attention_mask, input_tensor):
         batch_size, seq_length = shape_list(input_tensor)[:2]
         dtype = input_tensor.dtype
