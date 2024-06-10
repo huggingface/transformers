@@ -632,9 +632,19 @@ class DataCollatorForSeq2Seq:
                     ]
                 else:
                     batch["labels"] = [
-                        np.concatenate([label, [self.label_pad_token_id] * (max_label_length - len(label))])
+                        np.concatenate(
+                            [
+                                label,
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                            ]
+                        )
                         if padding_side == "right"
-                        else np.concatenate([[self.label_pad_token_id] * (max_label_length - len(label)), label])
+                        else np.concatenate(
+                            [
+                                np.array([self.label_pad_token_id] * (max_label_length - len(label)), dtype=np.int64),
+                                label,
+                            ]
+                        )
                         for label in labels
                     ]
 
