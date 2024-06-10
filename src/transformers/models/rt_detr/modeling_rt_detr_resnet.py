@@ -384,22 +384,17 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> from transformers import RTDetrResNetConfig, RTDetrResNetBackbone
         >>> import torch
-        >>> from PIL import Image
-        >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> config = RTDetrResNetConfig()
+        >>> model = RTDetrResNetBackbone(config)
 
-        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-        >>> model = AutoBackbone.from_pretrained(
-        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
-        ... )
+        >>> pixel_values = torch.randn(1, 3, 224, 224)
 
-        >>> inputs = processor(image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(pixel_values)
+        
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
