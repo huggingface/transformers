@@ -118,7 +118,8 @@ Use the processor to prepare the inputs for the model. The processor combines an
 image for the model by resizing and normalizing it, and a tokenizer that takes care of the text inputs.
 
 ```py
->>> candidate_labels = ["tree", "car", "bike", "cat"]
+>>> candidate_labels = ["tree", "car", "bike", "cat"
+>>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]  # follows the training data template else the output will be off
 >>> inputs = processor(images=image, text=candidate_labels, return_tensors="pt", padding=True)
 ```
 
