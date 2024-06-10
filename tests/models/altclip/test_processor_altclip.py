@@ -6,6 +6,8 @@ from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -14,7 +16,9 @@ if is_vision_available():
 
 
 @require_vision
-class AltClipProcessorTest(unittest.TestCase):
+class AltClipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = AltCLIPProcessor
+
     def setUp(self):
         self.model_id = "BAAI/AltCLIP"
         pass
