@@ -17,8 +17,8 @@
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
 from .configuration_rt_detr_resnet import RTDetrResNetConfig
 
@@ -313,4 +313,3 @@ class RTDetrConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-

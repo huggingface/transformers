@@ -357,8 +357,7 @@ RESNET_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     """
     ResNet backbone, to be used with frameworks like DETR and MaskFormer.
-    The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer 
-    in the resnet-18/34 models.
+    The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
     """,
     RESNET_START_DOCSTRING,
 )
