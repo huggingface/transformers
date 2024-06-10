@@ -19,6 +19,8 @@ on:
         required: true
         type: string
 
+env:
+  TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
 
 jobs:
   send_results:
@@ -54,6 +56,7 @@ jobs:
         # empty string, and the called script still get one argument (which is the emtpy string).
         run: |
           sudo apt-get install -y curl
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ inputs.folder_slices }}"
@@ -81,6 +84,7 @@ jobs:
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
           sudo apt-get install -y curl
+          pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}" 
