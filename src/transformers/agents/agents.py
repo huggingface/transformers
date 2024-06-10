@@ -577,6 +577,7 @@ class CodeAgent(Agent):
         try:
             _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
+            self.logger.debug("Error in extracting action, trying to parse the whole output as code.")
             code_action = llm_output
 
         try:
@@ -886,6 +887,7 @@ class ReactCodeAgent(ReactAgent):
         try:
             rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
+            self.logger.debug("Error in extracting action, trying to parse the whole output.")
             rationale, raw_code_action = llm_output, llm_output
 
         try:
