@@ -46,12 +46,13 @@ with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
 
 target = {"image_id": 39769, "annotations": target}
 
-image_processing = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
-encoding = image_processing(images=image, annotations=target, return_tensors="pt")
+image_processor = RTDetrImageProcessor.from_pretrained("sbchoi/rtdetr_r50vd")
 model = RTDetrForObjectDetection.from_pretrained("sbchoi/rtdetr_r50vd")
 
+inputs = image_processor(images=image, annotations=target, return_tensors="pt")
+
 with torch.no_grad():
-   outputs = model(**encoding)
+   outputs = model(**inputs)
 
 results = image_processing.post_process_object_detection(outputs, target_sizes=torch.tensor([[480, 640]]), threshold=0.3)
 ```
