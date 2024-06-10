@@ -23,6 +23,7 @@ import os
 import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
+from .utils import is_sentencepiece_available
 
 from tokenizers import pre_tokenizers, normalizers, processors
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
@@ -105,12 +106,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", None)
 
+        #TODO:ita remove if
         if self.force_from_slow(kwargs) is True:
             kwargs["from_slow"] = True
-
+        # if not is_sentencepiece_available():
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None and not from_slow:
+        elif (fast_tokenizer_file is not None and not from_slow) or (from_slow and not is_sentencepiece_available()):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
@@ -870,14 +872,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def force_from_slow(self, kwargs):
         if kwargs.get('vocab_file', None) is None:
-            return False
+            return
         if getattr(self, "add_prefix_space", None) is None:
             if getattr(self, "_tokenizer", None) is None:
-                return True
+                self.add_prefix_space = True #TODO:ita warning?
+                return
             curr_normalizer = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
             prepend_normalizer = [n for n in curr_normalizer["normalizers"] if n["type"] == "Prepend"]
             if not prepend_normalizer:
-                return True
+                self.add_prefix_space = True #TODO:ita warning?
+                return
 
     def _update_normalizer(self):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
@@ -957,7 +961,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._update_normalizer() if update_normalizer else None
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace):
-            if self._tokenizer.pre_tokenizer.prepend_scheme == prepend_scheme:
+            if self._tokenizer.pre_tokenizer.prepend_scheme in ['always', 'first'] and prepend_scheme in ['always', 'first']:
                 return
             self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
             self._update_normalizer()
