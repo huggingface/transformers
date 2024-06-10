@@ -3,12 +3,6 @@ on:
 
 name: Secret Leaks
 
-permissions:
-  contents: read
-  id-token: write
-  issues: write
-  pull-requests: write
-
 jobs:
   trufflehog:
     runs-on: ubuntu-latest
