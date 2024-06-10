@@ -265,7 +265,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("VITS has no input embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass

@@ -377,7 +377,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         )
         self.model_tester.create_and_check_for_image_classification_conv(*config_and_inputs)
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             model = model_class(config)
