@@ -32,20 +32,19 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_mamba import MambaConfig
 
 
 logger = logging.get_logger(__name__)
 
-# if is_mamba_ssm_available():
-if False:
+if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-# if is_causal_conv1d_available():
-if False:
+if is_causal_conv1d_available():
     from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 else:
     causal_conv1d_update, causal_conv1d_fn = None, None
