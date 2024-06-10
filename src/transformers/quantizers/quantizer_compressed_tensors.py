@@ -37,12 +37,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         from compressed_tensors.compressors import ModelCompressor
 
-        # self.compressor = ModelCompressor.from_compression_config(quantization_config.to_dict())
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
 
     def validate_environment(self, *args, **kwargs):
         # check torch and compressed_tensors are available, let ImportError raise otherwise
-        pass
+        import torch  # noqa
+        from compressed_tensors.compressors import ModelCompressor  # noqa
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
