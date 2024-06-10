@@ -105,7 +105,6 @@ def deprecate_kwarg(
         version_message = f"and will be removed in version {version}"
 
     def wrapper(func):
-        
         # Required for better warning message
         sig = inspect.signature(func)
         function_named_args = set(sig.parameters.keys())
@@ -114,7 +113,6 @@ def deprecate_kwarg(
 
         @wraps(func)
         def wrapped_func(*args, **kwargs):
-
             # Get class + function name (just for better warning message)
             func_name = func.__name__
             if is_instance_method:
