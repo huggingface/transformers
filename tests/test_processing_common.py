@@ -14,8 +14,10 @@
 # limitations under the License.
 
 
+import inspect
 import json
 import tempfile
+import typing
 import unittest
 
 import numpy as np
@@ -97,6 +99,20 @@ class ProcessorTesterMixin:
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
+
+    def skip_processor_without_typed_kwargs(self, processor):
+        # TODO this signature check is to test only uniformized processors.
+        # Once all are updated, remove it.
+        is_kwargs_typed_dict = False
+        call_signature = inspect.signature(processor.__call__)
+        for param in call_signature.parameters.values():
+            if param.kind == param.VAR_KEYWORD and param.annotation != param.empty:
+                is_kwargs_typed_dict = (
+                    hasattr(param.annotation, "__origin__") and param.annotation.__origin__ == typing.Unpack
+                )
+        if not is_kwargs_typed_dict:
+            self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
+
     @require_vision
     @require_torch
     def test_defaults_preserved_kwargs(self):
@@ -106,13 +122,12 @@ class ProcessorTesterMixin:
         tokenizer = self.get_component("tokenizer", max_length=117)
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-
+        self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertEqual(len(inputs["input_ids"]), 117)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(len(inputs["input_ids"][0]), 117)
 
     @require_torch
     @require_vision
@@ -123,6 +138,7 @@ class ProcessorTesterMixin:
         tokenizer = self.get_component("tokenizer", max_length=117)
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -139,6 +155,7 @@ class ProcessorTesterMixin:
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -165,6 +182,8 @@ class ProcessorTesterMixin:
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
@@ -176,6 +195,8 @@ class ProcessorTesterMixin:
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
         self.assertEqual(inputs["pixel_values"].shape[2], 214)
 
         self.assertEqual(len(inputs["input_ids"][0]), 76)
@@ -185,10 +206,12 @@ class ProcessorTesterMixin:
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
