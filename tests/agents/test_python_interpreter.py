@@ -34,7 +34,7 @@ class PythonInterpreterToolTester(unittest.TestCase, ToolTesterMixin):
     def setUp(self):
         self.tool = load_tool("python_interpreter", authorized_imports=["sqlite3"])
         self.tool.setup()
-    
+
     def test_exact_match_input_spec(self):
         inputs_spec = self.tool.inputs
         expected_description = (

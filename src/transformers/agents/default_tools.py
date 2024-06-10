@@ -144,7 +144,7 @@ class PythonInterpreterTool(Tool):
 
     output_type = "text"
     available_tools = BASE_PYTHON_TOOLS.copy()
-    
+
     def __init__(self, *args, authorized_imports=None, **kwargs):
         if authorized_imports is None:
             authorized_imports = list(set(LIST_SAFE_MODULES))
