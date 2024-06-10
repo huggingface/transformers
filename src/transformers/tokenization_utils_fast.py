@@ -105,7 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", None)
 
-        if self.force_from_slow() is True:
+        if self.force_from_slow(kwargs) is True:
             kwargs["from_slow"] = True
 
         if tokenizer_object is not None:
@@ -116,9 +116,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif slow_tokenizer is not None:
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif fast_tokenizer_file is not None:
-            # When sentencepiece is not installed, we can't convert a slow tokenizer to a fast one
-            fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
@@ -871,7 +868,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
 
-    def force_from_slow(self):
+    def force_from_slow(self, kwargs):
+        if kwargs.get('vocab_file', None) is None:
+            return False
         if getattr(self, "add_prefix_space", None) is None:
             if getattr(self, "_tokenizer", None) is None:
                 return True
@@ -958,6 +957,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._update_normalizer() if update_normalizer else None
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace):
+            if self._tokenizer.pre_tokenizer.prepend_scheme == prepend_scheme:
+                return
             self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
             self._update_normalizer()
 
@@ -973,3 +974,4 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         else:
             warnings.warn(f"{type(self._tokenizer.pre_tokenizer)} does not support `add_prefix_space`. ")
+
