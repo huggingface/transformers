@@ -16,6 +16,7 @@
 Processor class for BLIP-2.
 """
 
+from operator import concat
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
@@ -119,17 +120,14 @@ class Blip2Processor(ProcessorMixin):
         # add pixel_values
         encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
 
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
         if text is not None:
-            # if we know how many query tokens, expand text inside processor
-            if self.num_query_tokens is not None:
-                text = self.image_token.content * self.num_query_tokens + text
-            else:
-                logger.warning_once(
-                    "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
-                    "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
-                )
-            text_encoding = self.tokenizer(
+            text_encoding = {}
+            _text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
@@ -144,9 +142,27 @@ class Blip2Processor(ProcessorMixin):
                 return_token_type_ids=return_token_type_ids,
                 return_length=return_length,
                 verbose=verbose,
-                return_tensors=return_tensors,
+                return_tensors=None,  # hardcode "None" here for prepending image tokens
                 **kwargs,
             )
+
+            # if we know how many query tokens, expand text inside processor. We need this hacky manipulation
+            # because BLIP expects image tokens to be at the beginning even before BOS token
+            if self.num_query_tokens is not None:
+                image_tokens = self.image_token.content * self.num_query_tokens
+                image_token_encoding = self.tokenizer([image_tokens], add_special_tokens=False, return_tensors=None)
+                for k in _text_encoding:
+                    text_encoding[k] = list(map(concat, image_token_encoding[k], _text_encoding[k]))
+            else:
+                text_encoding = _text_encoding
+                logger.warning_once(
+                    "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
+                    "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
+                    "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
+                )
+
+            # cast to desired return tensors type
+            text_encoding = BatchEncoding(text_encoding, tensor_type=return_tensors)
         else:
             text_encoding = None
 

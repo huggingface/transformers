@@ -1031,3 +1031,28 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
+
+    def test_expansion_in_processing(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ).to(torch_device)
+
+        image = prepare_img()
+        prompt = "Question: which city is this? Answer:"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        predictions = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Add args to the config to trigger new logic when inputs are expanded in processing file
+        processor.num_query_tokens = model.config.num_query_tokens
+        model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
+        model.config.image_token_index = processor.tokenizer.vocab_size
+
+        # Generate again with new inputs
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        predictions_expanded = model.generate(**inputs, do_sample=False, max_new_tokens=15)
+        generated_text_expanded = processor.batch_decode(predictions_expanded, skip_special_tokens=True)[0].strip()
+
+        self.assertTrue(generated_text_expanded == generated_text)
