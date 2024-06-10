@@ -163,7 +163,7 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="UnivNetModel does not use input embeddings and thus has no get_input_embeddings method.")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="UnivNetModel does not support all arguments tested, such as output_hidden_states.")

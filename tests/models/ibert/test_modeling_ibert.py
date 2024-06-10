@@ -296,8 +296,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is IBertEmbeddings.padding_idx + 1
@@ -315,9 +314,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
-
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is IBertEmbeddings.padding_idx + 1
         """
@@ -337,7 +334,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     # Override
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
