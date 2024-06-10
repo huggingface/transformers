@@ -574,7 +574,10 @@ class CodeAgent(Agent):
             return llm_output
 
         # Parse
-        _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        try:
+            _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        except Exception as e:
+            code_action = llm_output
 
         try:
             code_action = self.parse_code_blob(code_action)
@@ -880,7 +883,10 @@ class ReactCodeAgent(ReactAgent):
 
         # Parse
         self.logger.debug("===== Extracting action =====")
-        rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        try:
+            rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+        except Exception as e:
+            rationale, raw_code_action = llm_output, llm_output
 
         try:
             code_action = parse_code_blob(raw_code_action)
