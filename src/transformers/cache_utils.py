@@ -1020,6 +1020,7 @@ class StaticCacheXLA(Cache):
         # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
         # limit the check to the first batch member and head dimension.
         # TODO: deprecate this function in favor of `cache_position`
+        logger.debug("Use cache_position parameter in your model for better performance.")
         key_cache = self.key_cache[layer_idx]
         device = key_cache.device
 
