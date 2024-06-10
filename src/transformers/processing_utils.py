@@ -22,7 +22,7 @@ import json
 import os
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
