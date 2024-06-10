@@ -542,7 +542,7 @@ class GGUFTokenizerSkeleton:
             self.merges = [tuple(merge.split(" ")) for merge in self.merges]
             if not hasattr(self, "scores"):
                 self.scores = [None for _ in range(len(self.tokens))]
-    
+
         if not hasattr(self, "added_tokens"):
             self.added_tokens = []
 
@@ -552,6 +552,7 @@ class GGUFTokenizerSkeleton:
         # Llama2 uses the field `unknown_token_id`
         if hasattr(self, "unknown_token_id") and self.unk_token_id is None:
             self.unk_token_id = self.unknown_token_id
+
 
 class GGUFLlamaConverter(LlamaConverter):
     def __init__(self, tokenizer_dict):
@@ -570,15 +571,15 @@ class GGUFLlamaConverter(LlamaConverter):
         vocab_scores = self.vocab(self.proto)
         merges = self.merges(self.proto)
         bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-       
+
         unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
         bos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "bos_token_id", None) is not None else None
         eos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
-       
+
         tokenizer = Tokenizer(BPE(bpe_vocab, merges, unk_token=unk_token, fuse_unk=True, byte_fallback=True))
-        
+
         special_tokens = []
- 
+
         if not hasattr(self.proto, "token_type"):
             if unk_token is not None:
                 special_tokens.append(AddedToken(unk_token, normalized=False, special=True))
@@ -591,7 +592,7 @@ class GGUFLlamaConverter(LlamaConverter):
         else:
             # 3 stands for special tokens
             special_tokens_idx = np.where(np.array(self.proto.token_type) == 3)[0]
-            
+
             for idx in special_tokens_idx:
                 special_tokens.append(AddedToken(self.proto.tokens[idx], normalized=False, special=True))
 

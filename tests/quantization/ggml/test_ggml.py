@@ -185,7 +185,7 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I am new to this forum. I am"
 
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-    
+
     def test_tokenization_xnli(self):
         import tqdm
         from datasets import load_dataset
