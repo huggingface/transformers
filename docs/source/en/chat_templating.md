@@ -293,17 +293,18 @@ correctly as tools. Specifically, you should follow these rules:
 The sample code above is enough to list the available tools for your model, but what happens if it wants to actually use
 one? If that happens, you should:
 
-1. Parse the model's output to get the tool name and arguments.
-2. Add the model's tool call to the conversation, in the format `{role: "assistant", "tool_calls": [{"name": function_name, "arguments": arguments}]}`
-3. Call the corresponding function with those arguments.
-4. Add the result to the conversation, in the format `{"role": "tool", "content": tool_results}`
+1. Parse the model's output to get the tool name(s) and arguments.
+2. Add the model's tool call(s) to the conversation.
+3. Call the corresponding function(s) with those arguments.
+4. Add the result(s) to the conversation
 
 ### A complete tool use example
 
 Let's walk through a tool use example, step by step. For this example, we will use an 8B `Hermes-2-Pro` model,
 as it is one of the highest-performing tool-use models in its size category at the time of writing. If you have the
 memory, you can consider using a larger model instead like [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
-or [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1), both of which also support tool use.
+or [Mixtral-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1), both of which also support tool use
+and offer even stronger performance.
 
 First, let's load our model and tokenizer:
 
@@ -365,13 +366,23 @@ The model has called the function with valid arguments, in the format requested 
 inferred that we're most likely referring to the Paris in France, and it remembered that, as the home of SI units,
 the temperature in France should certainly be displayed in Celsius.
 
-Let's append the model's tool call to the conversation, followed by the result of calling the tool. Remember, in 
-reality this is the point where you'd actually call the function, rather than just using a dummy
-result!
+Let's append the model's tool call to the conversation. Note that we generate a random `tool_call_id` here. These IDs
+are not used by all models, but they allow models to issue multiple tool calls at once and keep track of which response
+corresponds to which call. You can generate them any way you like, but they should be unique within each chat.
 
 ```python
-messages.append({"role": "assistant", "tool_calls": [{"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}]})
-messages.append({"role": "tool", "name": "get_current_temperature", "content": "22.0"})
+tool_call_id = "vAHdf3"  # Random ID, should be unique for each tool call
+tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
+messages.append({"role": "assistant", "tool_calls": [{"id": tool_call_id, "type": "function", "function": tool_call}]})
+```
+
+
+Now that we've added the tool call to the conversation, we can call the function and append the result to the
+conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
+that result directly. Again, note the `tool_call_id` - this should match the ID used in the tool call above.
+
+```python
+messages.append({"role": "tool", "tool_call_id": tool_call_id, "name": "get_current_temperature", "content": "22.0"})
 ```
 
 Finally, let's let the assistant read the function outputs and continue chatting with the user:
@@ -392,6 +403,14 @@ The current temperature in Paris, France is 22.0°C (71.6°F).
 Although this was a simple demo with only a single call, the same technique works with 
 multiple tools and longer conversations. This can be a powerful ways to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
+
+<Tip>
+Not all of the tool-calling features shown above are used by all models. Some use tool call IDs, others simply use the function name and
+match tool calls to results using the ordering, and there are several models that use neither and only issue one tool 
+call at a time to avoid confusion. If you want your code to be compatible across as many models as possible, we 
+recommend structuring your tools calls like we've shown here, and returning tool results in the order that
+they were issued by the model. The chat templates on each model should handle the rest.
+</Tip>
 
 ### Understanding tool schemas
 
