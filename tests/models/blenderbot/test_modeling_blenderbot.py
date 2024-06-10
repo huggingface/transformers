@@ -237,7 +237,6 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": BlenderbotForConditionalGeneration,
             "feature-extraction": BlenderbotModel,
             "summarization": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,

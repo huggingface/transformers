@@ -19,9 +19,10 @@ URL: https://github.com/microsoft/CvT"""
 import argparse
 import json
 from collections import OrderedDict
+from pathlib import Path
 
 import torch
-from huggingface_hub import cached_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 
 from transformers import AutoImageProcessor, CvtConfig, CvtForImageClassification
 
@@ -283,7 +284,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

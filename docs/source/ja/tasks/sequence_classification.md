@@ -83,11 +83,12 @@ pip install -q datasets transformers evaluate
 
 ```py
 >>> import json
->>> from huggingface_hub import cached_download, hf_hub_url
+>>> from pathlib import Path
+>>> from huggingface_hub import hf_hub_download
 
 >>> repo_id = "huggingface/label-files"
 >>> filename = "ade20k-id2label.json"
->>> id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+>>> id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
 >>> id2label = {int(k): v for k, v in id2label.items()}
 >>> label2id = {v: k for k, v in id2label.items()}
 >>> num_labels = len(id2label)
@@ -95,13 +96,13 @@ pip install -q datasets transformers evaluate
 
 ## Preprocess
 
-次のステップでは、SegFormer 画像プロセッサをロードして、モデルの画像と注釈を準備します。このデータセットのような一部のデータセットは、バックグラウンド クラスとしてゼロインデックスを使用します。ただし、実際には背景クラスは 150 個のクラスに含まれていないため、`reduce_labels=True`を設定してすべてのラベルから 1 つを引く必要があります。ゼロインデックスは `255` に置き換えられるため、SegFormer の損失関数によって無視されます。
+次のステップでは、SegFormer 画像プロセッサをロードして、モデルの画像と注釈を準備します。このデータセットのような一部のデータセットは、バックグラウンド クラスとしてゼロインデックスを使用します。ただし、実際には背景クラスは 150 個のクラスに含まれていないため、`do_reduce_labels=True`を設定してすべてのラベルから 1 つを引く必要があります。ゼロインデックスは `255` に置き換えられるため、SegFormer の損失関数によって無視されます。
 
 ```py
 >>> from transformers import AutoImageProcessor
 
 >>> checkpoint = "nvidia/mit-b0"
->>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
+>>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
 <frameworkcontent>
