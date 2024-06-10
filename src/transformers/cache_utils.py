@@ -1002,7 +1002,18 @@ class StaticCacheXLA(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        raise NotImplementedError("StaticCacheXLA is not implemented yet")
+        cache_position = cache_kwargs.get("cache_position")
+
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+
+        k_out = k_out.index_copy(2, cache_position, key_states)
+        v_out = v_out.index_copy(2, cache_position, value_states)
+
+        self.key_cache[layer_idx] = k_out
+        self.value_cache[layer_idx] = v_out
+
+        return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model."""
