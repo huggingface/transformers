@@ -158,7 +158,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip("TimmBackbone models doesn't have inputs_embeds")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip("TimmBackbone model cannot be created without specifying a backbone checkpoint")

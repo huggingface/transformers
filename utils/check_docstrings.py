@@ -128,7 +128,6 @@ OBJECTS_TO_IGNORE = [
     "ConvBertTokenizerFast",
     "ConvNextConfig",
     "ConvNextV2Config",
-    "ConversationalPipeline",
     "CpmAntTokenizer",
     "CvtConfig",
     "CvtModel",
