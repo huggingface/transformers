@@ -329,7 +329,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-RESNET_START_DOCSTRING = r"""
+RTDETR_RESNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -340,11 +340,11 @@ RESNET_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-RESNET_INPUTS_DOCSTRING = r"""
+RTDETR_RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`ConvNextImageProcessor.__call__`] for details.
+            [`RTDetrImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -358,8 +358,9 @@ RESNET_INPUTS_DOCSTRING = r"""
     """
     ResNet backbone, to be used with frameworks like DETR and MaskFormer.
     The main difference between hugginface ResNet model is that this RTDetrResNet model forces to use shortcut at the first layer in the resnet-18/34 models.
+    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/rtdetr_pytorch/src/nn/backbone/presnet.py#L126 for details.
     """,
-    RESNET_START_DOCSTRING,
+    RTDETR_RESNET_START_DOCSTRING,
 )
 class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -373,7 +374,7 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RTDETR_RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
