@@ -41,10 +41,6 @@ from .utils import (
 )
 
 
-if TYPE_CHECKING:
-    from .pipelines.conversational import Conversation
-
-
 logger = logging.get_logger(__name__)
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
@@ -533,7 +529,7 @@ class ProcessorMixin(PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], "Conversation"],
+        conversation: Union[List[Dict[str, str]]],
         chat_template: Optional[str] = None,
         tokenize: bool = False,
         **kwargs,
