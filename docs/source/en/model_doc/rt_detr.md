@@ -39,8 +39,10 @@ from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
 from PIL import Image
 import json
 import torch
+import requests
 
-image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg' 
+image = Image.open(requests.get(url, stream=True).raw)
 with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
     target = json.loads(f.read())
 
