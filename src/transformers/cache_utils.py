@@ -935,7 +935,7 @@ class SlidingWindowCache(Cache):
         self.key_cache.zero_()
         self.value_cache.zero_()
 
-class StaticCacheXLA(Cache):
+class StaticCacheXLA(StaticCache):
     """
     Static Cache class to be used with `torch.compile(model)`.
 
@@ -953,7 +953,7 @@ class StaticCacheXLA(Cache):
     """
 
     def __init__(self, config: PretrainedConfig, max_batch_size: int, max_cache_len: int, device, dtype=None) -> None:
-        super().__init__()
+        super().__init__(config, max_batch_size, max_cache_len, device, dtype)
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
