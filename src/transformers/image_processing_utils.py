@@ -48,6 +48,12 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+INIT_SERVICE_KWARGS = [
+    "processor_class",
+    "image_processor_type",
+]
+
+
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
 # We override the class string here, but logic is the same.
 class BatchFeature(BaseBatchFeature):

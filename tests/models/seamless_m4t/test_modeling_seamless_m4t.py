@@ -645,7 +645,6 @@ class SeamlessM4TModelWithTextInputTest(
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": SeamlessM4TForSpeechToText,
-            "conversational": SeamlessM4TForTextToText,
             "feature-extraction": SeamlessM4TModel,
             "summarization": SeamlessM4TForTextToText,
             "text-to-audio": SeamlessM4TForTextToSpeech,

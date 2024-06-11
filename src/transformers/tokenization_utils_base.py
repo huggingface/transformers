@@ -72,8 +72,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
-    from .pipelines.conversational import Conversation
-
 
 if is_tokenizers_available():
     from tokenizers import AddedToken
@@ -1684,7 +1682,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"],
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         tokenize: bool = True,
@@ -1703,7 +1701,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         to the default_chat_template specified at the class level.
 
         Args:
-            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]], "Conversation"]): A list of dicts
+            conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.

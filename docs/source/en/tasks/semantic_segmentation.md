@@ -310,13 +310,13 @@ As an example, take a look at this [example dataset](https://huggingface.co/data
 
 ### Preprocess
 
-The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
+The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `do_reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
 
 ```py
 >>> from transformers import AutoImageProcessor
 
 >>> checkpoint = "nvidia/mit-b0"
->>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, reduce_labels=True)
+>>> image_processor = AutoImageProcessor.from_pretrained(checkpoint, do_reduce_labels=True)
 ```
 
 <frameworkcontent>
