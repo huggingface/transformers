@@ -133,7 +133,8 @@ Now Begin! If you solve the task correctly, you will receive a reward of $1,000,
 """
 
 
-DEFAULT_REACT_JSON_SYSTEM_PROMPT = """You will be given a task to solve as best you can. To do so, you have been given access to the following tools: <<tool_names>>
+DEFAULT_REACT_JSON_SYSTEM_PROMPT = """You are an expert assistant who can solve any task using JSON tool calls. You will be given a task to solve as best you can.
+To do so, you have been given access to the following tools: <<tool_names>>
 The way you use the tools is by specifying a json blob, ending with '<end_action>'.
 Specifically, this json should have an `action` key (name of the tool to use) and an `action_input` key (input to the tool).
 
@@ -261,7 +262,7 @@ Now Begin! If you solve the task correctly, you will receive a reward of $1,000,
 """
 
 
-DEFAULT_REACT_CODE_SYSTEM_PROMPT = """You will be given a task to solve as best you can.
+DEFAULT_REACT_CODE_SYSTEM_PROMPT = """You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
 To do so, you have been given access to *tools*: these tools are basically Python functions which you can call with code.
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
