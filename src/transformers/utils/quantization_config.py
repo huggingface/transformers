@@ -45,7 +45,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
-    COMPRESSED_TENSORS = "compressed_tensors"
+    COMPRESSED_TENSORS = "compressed-tensors"
 
 
 class AWQLinearVersion(str, Enum):
