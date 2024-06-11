@@ -358,7 +358,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            # Swin has a different seq_length
+            # Hiera has a different seq_length
             patch_size = config.patch_stride
 
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
