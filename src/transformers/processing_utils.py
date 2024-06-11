@@ -248,19 +248,25 @@ class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, Comm
     """
     Base class for kwargs passing to processors.
     A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
-        1) Additional, typed keys and that this model requires to process inputs.
-        2) Default values for existing keys.
+        1) Additional typed keys and that this model requires to process inputs.
+        2) Default values for existing keys under a `_defaults` attribute.
     New keys have to be defined as follows to ensure type hinting is done correctly.
 
     ```python
-    images_kwargs: ImagesKwargs = {"new_image_kwarg": Optional[bool]}
+    # adding a new image kwarg for this model
+    class ModelImagesKwargs(ImagesKwargs, total=False):
+        new_image_kwarg: Optional[bool]
 
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 64,
-        },
-    }
+    class ModelProcessorKwargs(ProcessingKwargs, total=False):
+        images_kwargs: ModelImagesKwargs
+        _defaults = {
+            "images_kwargs: {
+                "new_image_kwarg": False,
+            }
+            "text_kwargs": {
+                "padding": "max_length",
+            },
+        }
 
     ```
     """
