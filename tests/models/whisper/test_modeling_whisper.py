@@ -30,7 +30,6 @@ from huggingface_hub import hf_hub_download
 
 import transformers
 from transformers import WhisperConfig, DynamicCache
-from transformers.cache_utils import EncoderDecoderCache
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,

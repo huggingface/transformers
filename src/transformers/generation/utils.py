@@ -31,7 +31,7 @@ from ..cache_utils import (
     QuantizedCacheConfig,
     QuantoQuantizedCache,
     SlidingWindowCache,
-    StaticCache, EncoderDecoderCache,
+    StaticCache,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -1349,7 +1349,9 @@ class GenerationMixin:
         past_length = 0
         if "past_key_values" in model_kwargs:
             past_key_values = model_kwargs["past_key_values"]
-            if isinstance(past_key_values, (Cache, EncoderDecoderCache)):
+            if self.config.is_encoder_decoder and isinstance(past_key_values[0], Cache):
+                past_key_values = past_key_values[0]
+            if isinstance(past_key_values, Cache):
                 past_length = past_key_values.get_seq_length()
             else:
                 past_length = past_key_values[0][0].shape[2]
@@ -1399,9 +1401,13 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 encoder_kwargs = cache_kwargs.copy()
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
+                self._cache = (self._cache, cache_cls(**encoder_kwargs))
         else:
-            self._cache.reset()
+            if self.config.is_encoder_decoder:
+                self._cache[0].reset()
+                self._cache[1].reset()
+            else:
+                self._cache.reset()
         return self._cache
 
     def _get_decoder_start_token_id(
