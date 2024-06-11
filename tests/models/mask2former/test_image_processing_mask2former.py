@@ -149,6 +149,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     image_processing_class = Mask2FormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = Mask2FormerImageProcessingTester(self)
 
     @property
