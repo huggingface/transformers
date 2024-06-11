@@ -110,7 +110,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         elif (fast_tokenizer_file is not None and not from_slow) or (fast_tokenizer_file and not is_sentencepiece_available()):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
-        elif slow_tokenizer is not None:
+        elif slow_tokenizer is not None and is_sentencepiece_available():
             # We need to convert a slow tokenizer to build the backend
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif gguf_file is not None:
@@ -119,7 +119,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
-        elif self.slow_tokenizer_class is not None:
+        elif self.slow_tokenizer_class is not None and is_sentencepiece_available():
             # We need to create and convert a slow tokenizer to build the backend
             slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
