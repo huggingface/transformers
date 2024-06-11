@@ -177,6 +177,7 @@ class ProcessorTesterMixin:
             "do_center_crop": True,
             "padding": "max_length",
             "max_length": 76,
+            "model_max_length": 76,
         }
 
         inputs = processor(text=input_str, images=image_input, **all_kwargs)
