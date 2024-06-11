@@ -116,7 +116,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            gguf_param =  load_gguf_checkpoint(kwargs.get("vocab_file"))
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             fast_tokenizer = convert_gguf_tokenizer(architecture, tokenizer_dict)
@@ -893,9 +893,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
             final_sequence.__setstate__(json.dumps(sequence).encode("utf-8"))
             self._tokenizer.normalizer = final_sequence
+            return False
+
 
         elif not getattr(self, "legacy", True):
             self._tokenizer.normalizer = final_sequence
+
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
@@ -949,12 +952,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
             self._update_normalizer()
 
-        elif self._tokenizer.pre_tokenizer is None:
+        elif self._tokenizer.pre_tokenizer is None: # and not getattr(self, "legacy", True):
+            update_pre_tokenizer = self._update_normalizer()
+            if update_pre_tokenizer is False and prepend_scheme in ['always', 'first']:
+                return
             self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
                 replacement="▁", prepend_scheme=prepend_scheme, split=False #TODO:ita True?
             )
-            self._update_normalizer()
-
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):
             self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
