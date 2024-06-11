@@ -870,19 +870,23 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """Updates the underlying normalizer with the current `add_prefix_space` and `legacy` settings."""
         sequence = json.loads(normalizers.Sequence([]).__getstate__())
         final_sequence = normalizers.Sequence([])
-        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) not in (
-            normalizers.Sequence,
+        if not getattr(self, "legacy", True):
+            self._tokenizer.normalizer = final_sequence
+            return
+        if self._tokenizer.normalizer is not None and type(self._tokenizer.normalizer) in (
             normalizers.Prepend,
             normalizers.Precompiled,
         ):
-            return
-        if type(self._tokenizer.normalizer) is normalizers.Sequence:
+            # If normalizer is not a Sequence, add it to a sequence
+            sequence["normalizers"].append(json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8")))
+        elif type(self._tokenizer.normalizer) is normalizers.Sequence:
             curr_state = json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8"))
+            # Remove Prepend normalizer if it exists as we are updating it
             sequence["normalizers"] = [
                 pt for pt in curr_state["normalizers"] if pt["type"] not in ["Prepend"]
             ]
-        elif self._tokenizer.normalizer is not None:
-            sequence["normalizers"].append(json.loads(self._tokenizer.normalizer.__getstate__().decode("utf-8")))
+        else:
+            return
         if getattr(self, "legacy", True):
             if getattr(self, "add_prefix_space", True):
                 new_prepend = json.loads(normalizers.Prepend(prepend="▁").__getstate__().decode("utf-8"))
@@ -890,23 +894,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if not any(n["type"] == "Replace" for n in sequence["normalizers"]):
                 new_replace = json.loads(normalizers.Replace(pattern=" ", content="▁").__getstate__().decode("utf-8"))
                 sequence["normalizers"].append(new_replace)
-
             final_sequence.__setstate__(json.dumps(sequence).encode("utf-8"))
             self._tokenizer.normalizer = final_sequence
             return False
 
 
-        elif not getattr(self, "legacy", True):
-            self._tokenizer.normalizer = final_sequence
-
 
     def _update_pre_tokenizer(self):
         """Updates the underlying pre-tokenizer with the current `add_prefix_space` setting."""
 
+        # 'add_prefix_space' not passed, try to read from normalizer, otherwise do not set.
         if getattr(self, "add_prefix_space", None) == None:
             tokenizer_normalizer = getattr(self._tokenizer, "normalizer", None)
             if tokenizer_normalizer == None:
-                return  # No add_prefix_space to set
+                return
 
             curr_normalizer = json.loads(tokenizer_normalizer.__getstate__().decode("utf-8"))
             if "normalizers" not in curr_normalizer:
@@ -917,6 +918,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             else:
                 return  # No add_prefix_space to set
 
+        # 'add_prefix_space' passed, set the pre-tokenizer accordingly
         if getattr(self, "add_prefix_space", True):
             prepend_scheme = "always"
             if not getattr(self, "legacy", True):
@@ -931,13 +933,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
             for i, pt in enumerate(curr_state["pretokenizers"]):
                 if pt["type"] == "Metaspace":
-                    # Create a new Metaspace pre-tokenizer
-                    new_metaspace = pre_tokenizers.Metaspace(
-                        replacement="▁", prepend_scheme=prepend_scheme, split=pt["split"]
-                    )
-                    curr_state["pretokenizers"][i] = json.loads(new_metaspace.__getstate__().decode("utf-8"))
+                    curr_state["pretokenizers"][i]['prepend_scheme'] = prepend_scheme
+
                 elif pt["type"] == "ByteLevel":
-                    # Create a new ByteLevel pre-tokenizer
                     curr_state["pretokenizers"][i]['add_prefix_space'] = self.add_prefix_space
                     update_normalizer = False
 
@@ -947,22 +945,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._update_normalizer() if update_normalizer else None
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.Metaspace):
-            if self._tokenizer.pre_tokenizer.prepend_scheme in ['always', 'first'] and prepend_scheme in ['always', 'first']:
-                return
-            self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
-            self._update_normalizer()
+            # If prepend_scheme is already set to the desired value, do not update the pre-tokenizer
+            if not (self._tokenizer.pre_tokenizer.prepend_scheme in ['always', 'first'] and prepend_scheme in ['always', 'first']):
+                self._tokenizer.pre_tokenizer.prepend_scheme = prepend_scheme
+                self._update_normalizer()
 
-        elif self._tokenizer.pre_tokenizer is None: # and not getattr(self, "legacy", True):
+        elif self._tokenizer.pre_tokenizer is None:
             update_pre_tokenizer = self._update_normalizer()
-            if update_pre_tokenizer is False and prepend_scheme in ['always', 'first']:
-                return
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-                replacement="▁", prepend_scheme=prepend_scheme, split=False #TODO:ita True?
-            )
+            if update_pre_tokenizer is not False and prepend_scheme not in ['always', 'first']:
+                self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+                    replacement="▁", prepend_scheme=prepend_scheme, split=False
+                )
 
         elif isinstance(self._tokenizer.pre_tokenizer, pre_tokenizers.ByteLevel):
-            self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space)
-
+            self._tokenizer.pre_tokenizer.add_prefix_space=self.add_prefix_space
         else:
             warnings.warn(f"{type(self._tokenizer.pre_tokenizer)} does not support `add_prefix_space`. ")
 
