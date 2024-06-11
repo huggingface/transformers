@@ -26,6 +26,8 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -34,7 +36,9 @@ if is_vision_available():
 
 
 @require_vision
-class AlignProcessorTest(unittest.TestCase):
+class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = AlignProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 

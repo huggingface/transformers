@@ -210,7 +210,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         pass
 
     @unittest.skip(reason="ConvNextV2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="ConvNextV2 does not use feedforward chunking")

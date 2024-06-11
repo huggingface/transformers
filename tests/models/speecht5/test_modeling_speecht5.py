@@ -217,7 +217,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         pass
 
     # this model has no input embeddings
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -1654,7 +1654,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     # this model has no input embeddings
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
@@ -1848,7 +1848,7 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     # this model has no input embeddings
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # skip as this model doesn't support all arguments tested

@@ -244,12 +244,48 @@ class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
-class ProcessingKwargs(TypedDict, total=False):
-    common_kwargs: CommonKwargs
-    text_kwargs: TextKwargs
-    images_kwargs: ImagesKwargs
-    audio_kwargs: AudioKwargs
-    videos_kwargs: VideosKwargs
+class ProcessingKwargs(TextKwargs, ImagesKwargs, VideosKwargs, AudioKwargs, CommonKwargs, total=False):
+    """
+    Base class for kwargs passing to processors.
+    A model should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
+        1) Additional typed keys and that this model requires to process inputs.
+        2) Default values for existing keys under a `_defaults` attribute.
+    New keys have to be defined as follows to ensure type hinting is done correctly.
+
+    ```python
+    # adding a new image kwarg for this model
+    class ModelImagesKwargs(ImagesKwargs, total=False):
+        new_image_kwarg: Optional[bool]
+
+    class ModelProcessorKwargs(ProcessingKwargs, total=False):
+        images_kwargs: ModelImagesKwargs
+        _defaults = {
+            "images_kwargs: {
+                "new_image_kwarg": False,
+            }
+            "text_kwargs": {
+                "padding": "max_length",
+            },
+        }
+
+    ```
+    """
+
+    common_kwargs: CommonKwargs = {
+        **CommonKwargs.__annotations__,
+    }
+    text_kwargs: TextKwargs = {
+        **TextKwargs.__annotations__,
+    }
+    images_kwargs: ImagesKwargs = {
+        **ImagesKwargs.__annotations__,
+    }
+    videos_kwargs: VideosKwargs = {
+        **VideosKwargs.__annotations__,
+    }
+    audio_kwargs: AudioKwargs = {
+        **AudioKwargs.__annotations__,
+    }
 
 
 class ProcessorMixin(PushToHubMixin):
@@ -606,6 +642,109 @@ class ProcessorMixin(PushToHubMixin):
             return processor, kwargs
         else:
             return processor
+
+    def _merge_kwargs(
+        self,
+        ModelProcessorKwargs: ProcessingKwargs,
+        tokenizer_init_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ) -> Dict[str, Dict]:
+        """
+        Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
+        The order of operations is as follows:
+            1) kwargs passed as before have highest priority to preserve BC.
+                ```python
+                high_priority_kwargs = {"crop_size" = (224, 224), "padding" = "max_length"}
+                processor(..., **high_priority_kwargs)
+                ```
+            2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
+                ```python
+                processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": (224, 224)}})
+                ```
+            3) kwargs passed during instantiation of a modality processor have fourth priority.
+                ```python
+                tokenizer = tokenizer_class(..., {"padding": "max_length"})
+                image_processor = image_processor_class(...)
+                processor(tokenizer, image_processor) # will pass max_length unless overriden by kwargs at call
+                ```
+            4) defaults kwargs specified at processor level have lowest priority.
+                ```python
+                class MyProcessingKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
+                    _defaults = {
+                        "text_kwargs": {
+                            "padding": "max_length",
+                            "max_length": 64,
+                        },
+                    }
+                ```
+        Args:
+            ModelProcessorKwargs (`ProcessingKwargs`):
+                Typed dictionary of kwargs specifically required by the model passed.
+            tokenizer_init_kwargs (`Dict`, *optional*):
+                Dictionary of kwargs the tokenizer was instantiated with and need to take precedence over defaults.
+
+        Returns:
+            output_kwargs (`Dict`):
+                Dictionary of per-modality kwargs to be passed to each modality-specific processor.
+
+        """
+        # Initialize dictionaries
+        output_kwargs = {
+            "text_kwargs": {},
+            "images_kwargs": {},
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+            "common_kwargs": {},
+        }
+
+        default_kwargs = {
+            "text_kwargs": {},
+            "images_kwargs": {},
+            "audio_kwargs": {},
+            "videos_kwargs": {},
+            "common_kwargs": {},
+        }
+
+        # get defaults from set model processor kwargs if they exist
+        for modality in default_kwargs:
+            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+        # update modality kwargs with passed kwargs
+        non_modality_kwargs = set(kwargs) - set(output_kwargs)
+
+        for modality in set(output_kwargs):
+            output_kwargs[modality] = {
+                **default_kwargs[modality],
+            }
+            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
+                # init with tokenizer init kwargs if necessary
+                if modality_key in tokenizer_init_kwargs:
+                    output_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                # check if we received a structured kwarg dict or not to handle it correctly
+                if modality in kwargs:
+                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
+                    # check if this key was passed as a flat kwarg.
+                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+                        raise ValueError(
+                            f"Keyword argument {modality_key} was passed two times: in a dictionary for {modality} and as a **kwarg."
+                        )
+                elif modality_key in kwargs:
+                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                else:
+                    kwarg_value = "__empty__"
+                if kwarg_value != "__empty__":
+                    output_kwargs[modality][modality_key] = kwarg_value
+        # if something remains in kwargs, it belongs to common after flattening
+        if set(kwargs) & set(default_kwargs):
+            # here kwargs is dictionary-based since it shares keys with default set
+            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+        else:
+            # here it's a flat dict
+            output_kwargs["common_kwargs"].update(kwargs)
+
+        # all modality-specific kwargs are updated with common kwargs
+        for modality in output_kwargs:
+            output_kwargs[modality].update(output_kwargs["common_kwargs"])
+        return output_kwargs
 
     @classmethod
     def from_pretrained(

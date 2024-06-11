@@ -140,7 +140,6 @@ class ViTHybridImageProcessor(BaseImageProcessor):
             "input_data_format",
         ]
 
-    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,

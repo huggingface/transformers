@@ -504,7 +504,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "conversational": LongT5ForConditionalGeneration,
             "feature-extraction": LongT5Model,
             "summarization": LongT5ForConditionalGeneration,
             "text2text-generation": LongT5ForConditionalGeneration,
