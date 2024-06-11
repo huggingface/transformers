@@ -94,6 +94,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VitMatteImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = VitMatteImageProcessingTester(self)
 
     @property
