@@ -318,7 +318,7 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision="pr/13")
 model = AutoModelForCausalLM.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-Next, let's define a list of tools. For simplicity, we'll just have a single tool in this example:
+Next, let's define a list of tools:
 
 ```python
 def get_current_temperature(location: str, unit: str) -> float:
@@ -329,11 +329,22 @@ def get_current_temperature(location: str, unit: str) -> float:
         location: The location to get the temperature for, in the format "City, Country"
         unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
     Returns:
-        The current temperature in the specified units, as a float.
+        The current temperature at the specified location in the specified units, as a float.
     """
-    return 22.  # Your real function should probably actually get the temperature!
+    return 22.  # A real function should probably actually get the temperature!
 
-tools = [get_current_temperature]
+def get_current_wind_speed(location: str) -> float:
+    """
+    Get the current wind speed in km/h at a given location.
+    
+    Args:
+        location: The location to get the temperature for, in the format "City, Country"
+    Returns:
+        The current wind speed at the given location in km/h, as a float.
+    """
+    return 6.  # A real function should probably actually get the wind speed!
+
+tools = [get_current_temperature, get_current_wind_speed]
 ```
 
 Now, let's set up a conversation for our bot:
@@ -397,11 +408,11 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 And we get:
 
 ```text
-The current temperature in Paris, France is 22.0 degrees Celsius.<|im_end|>
+The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 ```
 
-Although this was a simple demo with only a single call, the same technique works with 
-multiple tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
+Although this was a simple demo with dummy tools and a single call, the same technique works with 
+multiple real tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
 
 <Tip>
