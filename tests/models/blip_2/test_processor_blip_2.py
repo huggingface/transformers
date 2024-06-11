@@ -21,6 +21,8 @@ import pytest
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
     from PIL import Image
@@ -29,7 +31,9 @@ if is_vision_available():
 
 
 @require_vision
-class Blip2ProcessorTest(unittest.TestCase):
+class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Blip2Processor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 

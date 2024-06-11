@@ -18,9 +18,32 @@ Processor class for Blip.
 
 from typing import List, Optional, Union
 
+
+try:
+    from typing import Unpack
+except ImportError:
+    from typing_extensions import Unpack
+
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+
+
+class BlipProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {},
+    }
 
 
 class BlipProcessor(ProcessorMixin):
@@ -45,25 +68,6 @@ class BlipProcessor(ProcessorMixin):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
-        self.processing_kwargs: ProcessingKwargs = {
-            "common_kwargs": {"return_tensors": None},
-            "text_kwargs": {
-                "add_special_tokens": True,
-                "padding": False,
-                "truncation": None,
-                "max_length": None,
-                "stride": 0,
-                "pad_to_multiple_of": None,
-                "return_attention_mask": None,
-                "return_overflowing_tokens": False,
-                "return_special_tokens_mask": False,
-                "return_offsets_mapping": False,
-                "return_token_type_ids": False,
-                "return_length": False,
-                "verbose": True,
-            },
-            "images_kwargs": {},
-        }
 
     def __call__(
         self,
@@ -71,7 +75,7 @@ class BlipProcessor(ProcessorMixin):
         text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
-        **kwargs,
+        **kwargs: Unpack[BlipProcessorKwargs],
     ) -> BatchEncoding:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -98,24 +102,18 @@ class BlipProcessor(ProcessorMixin):
 
         text_encoding = None
 
-        if text is not None:
-            text_kwargs = {
-                **self.processing_kwargs["text_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
-            text_encoding = self.tokenizer(text, **text_kwargs)
-
         # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
         # else, return the text encoding.
-
+        output_kwargs = self._merge_kwargs(
+            BlipProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if text is not None:
+            text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
         if images is not None:
-            images_kwargs = {
-                **self.processing_kwargs["images_kwargs"],
-                **self.processing_kwargs["common_kwargs"],
-                **kwargs,
-            }
-            encoding_image_processor = self.image_processor(images, **images_kwargs)
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+
             if text_encoding is not None:
                 encoding_image_processor.update(text_encoding)
             return encoding_image_processor

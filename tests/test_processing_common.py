@@ -141,7 +141,9 @@ class ProcessorTesterMixin:
     def test_defaults_preserved_image_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", crop_size=(234, 234))
+        image_processor = self.get_component(
+            "image_processor", size=(234, 234), crop_size=(234, 234), do_center_crop=True
+        )
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
@@ -171,6 +173,8 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "return_tensors": "pt",
             "crop_size": {"height": 214, "width": 214},
+            "size": {"height": 214, "width": 214},
+            "do_center_crop": True,
             "padding": "max_length",
             "max_length": 76,
         }
@@ -197,7 +201,11 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {
+                "crop_size": {"height": 214, "width": 214},
+                "size": {"height": 214, "width": 214},
+                "do_center_crop": True,
+            },
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -225,7 +233,11 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"crop_size": {"height": 214, "width": 214}},
+            "images_kwargs": {
+                "crop_size": {"height": 214, "width": 214},
+                "size": {"height": 214, "width": 214},
+                "do_center_crop": True,
+            },
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
