@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Mixtral model."""
+"""PyTorch TurboSparseMixtral model."""
 
 import inspect
 import math
@@ -165,7 +165,7 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
-class MixtralRMSNorm(nn.Module):
+class TurboSparseMixtralRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
         MixtralRMSNorm is equivalent to T5LayerNorm
@@ -184,7 +184,7 @@ class MixtralRMSNorm(nn.Module):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class MixtralRotaryEmbedding(nn.Module):
+class TurboSparseMixtralRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -273,7 +273,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class MixtralAttention(nn.Module):
+class TurboSparseMixtralAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
     and "Generating Long Sequences with Sparse Transformers".
@@ -310,7 +310,7 @@ class MixtralAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.rotary_emb = MixtralRotaryEmbedding(
+        self.rotary_emb = TurboSparseMixtralRotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -398,7 +398,7 @@ class MixtralAttention(nn.Module):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class MixtralFlashAttention2(MixtralAttention):
+class TurboSparseMixtralFlashAttention2(TurboSparseMixtralAttention):
     """
     Mixtral flash attention module. This module inherits from `MixtralAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
@@ -555,7 +555,6 @@ class MixtralFlashAttention2(MixtralAttention):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
-
         Args:
             query_states (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
@@ -570,7 +569,7 @@ class MixtralFlashAttention2(MixtralAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-            use_sliding_windows (`bool`, *optional*):
+            use_sliding_windows (`bool *optional*):
                 Whether to activate sliding window attention.
         """
         if not self._flash_attn_uses_top_left_mask:
@@ -663,10 +662,9 @@ class MixtralFlashAttention2(MixtralAttention):
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
             indices_q = indices_k
         elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
+            # macu_seqlens_q = torch.arange(
+            #     batch_size + 1, dtype=torch.int32, device=query_layer.device
+            # )  # There is a memcpy here, that is very bad.
             indices_q = cu_seqlens_q[:-1]
             query_layer = query_layer.squeeze(1)
         else:
@@ -686,7 +684,7 @@ class MixtralFlashAttention2(MixtralAttention):
 
 # copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention with Mistral->Mixtral
 # TODO @longjie no longer copied from Mistral after static cache
-class MixtralSdpaAttention(MixtralAttention):
+class TurboSparseMixtralSdpaAttention(TurboSparseMixtralAttention):
     """
     Mixtral attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `MixtralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
@@ -778,9 +776,9 @@ class MixtralSdpaAttention(MixtralAttention):
 
 
 MIXTRAL_ATTENTION_CLASSES = {
-    "eager": MixtralAttention,
-    "flash_attention_2": MixtralFlashAttention2,
-    "sdpa": MixtralSdpaAttention,
+    "eager": TurboSparseMixtralAttention,
+    "flash_attention_2": TurboSparseMixtralFlashAttention2,
+    "sdpa": TurboSparseMixtralSdpaAttention,
 }
 
 
@@ -799,7 +797,7 @@ class MLP(nn.Module):
         return x
 
 
-class MixtralBlockSparseTop2MLP(nn.Module):
+class TurboSparseMixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: TurboSparseMixtralConfig, layer_id):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -857,7 +855,7 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         return current_hidden_states
 
 
-class MixtralSparseMoeBlock(nn.Module):
+class TurboSparseMixtralSparseMoeBlock(nn.Module):
     """
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
@@ -879,7 +877,9 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config, layer_id) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList(
+            [TurboSparseMixtralBlockSparseTop2MLP(config, layer_id) for _ in range(self.num_experts)]
+        )
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
@@ -925,16 +925,16 @@ class MixtralSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class MixtralDecoderLayer(nn.Module):
+class TurboSparseMixtralDecoderLayer(nn.Module):
     def __init__(self, config: TurboSparseMixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.block_sparse_moe = MixtralSparseMoeBlock(config, layer_idx)
-        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.block_sparse_moe = TurboSparseMixtralSparseMoeBlock(config, layer_idx)
+        self.input_layernorm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1019,12 +1019,12 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->TurboSparseMixtral
 class TurboSparseMixtralPreTrainedModel(PreTrainedModel):
     config_class = TurboSparseMixtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MixtralDecoderLayer"]
+    _no_split_modules = ["TurboSparseMixtralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1117,7 +1117,7 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
 # TODO @longjie no longer copied from Mistral after static cache
 class TurboSparseMixtralModel(TurboSparseMixtralPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MixtralDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`TurboSparseMixtralDecoderLayer`]
 
     Args:
         config: TurboSparseMixtralConfig
@@ -1130,10 +1130,10 @@ class TurboSparseMixtralModel(TurboSparseMixtralPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [TurboSparseMixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = TurboSparseMixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
