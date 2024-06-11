@@ -719,21 +719,20 @@ class WhisperGenerationMixin:
             return {"sequences": sequences, "segments": final_segments}
 
         if is_shortform:
-            # add eos token:
-            # if generation_config.max_new_tokens is None and generation_config.max_length is None:
-            #     sequences = torch.cat(
-            #         [
-            #             sequences,
-            #             torch.full(
-            #                 (
-            #                     sequences.shape[0],
-            #                     1,
-            #                 ),
-            #                 generation_config.eos_token_id,
-            #             ).to(sequences.device),
-            #         ],
-            #         dim=-1,
-            #     )
+            if generation_config.max_new_tokens is None and generation_config.max_length is None:
+                sequences = torch.cat(
+                    [
+                        sequences,
+                        torch.full(
+                            (
+                                sequences.shape[0],
+                                1,
+                            ),
+                            generation_config.eos_token_id,
+                        ).to(sequences.device),
+                    ],
+                    dim=-1,
+                )
 
             if return_token_timestamps:
                 outputs = {}
@@ -840,7 +839,7 @@ class WhisperGenerationMixin:
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
 
                 # remove eos token id
-                if not is_shortform and is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
+                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
@@ -848,7 +847,6 @@ class WhisperGenerationMixin:
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
