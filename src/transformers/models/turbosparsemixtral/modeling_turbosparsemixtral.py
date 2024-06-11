@@ -783,19 +783,21 @@ MIXTRAL_ATTENTION_CLASSES = {
     "sdpa": MixtralSdpaAttention,
 }
 
-class MLP(nn.Module):                                                                                                                                                                                      
-    def __init__(self, input_dim, hidden_dim, output_dim):                                                                                                                                                 
-        super(MLP, self).__init__()                                                                                                                                                                        
-        self.fc1 = nn.Linear(input_dim, hidden_dim,bias=False)                                                                                                                                             
-        self.relu = nn.ReLU()                                                                                                                                                                              
-        self.fc2 = nn.Linear(hidden_dim, output_dim,bias=False)                                                                                                                                            
-                                                                                                                                                                                                           
-    def forward(self, x):                                                                                                                                                                                  
-        x = self.fc1(x)                                                                                                                                                                                    
-        x = self.relu(x)                                                                                                                                                                                   
-        x = self.fc2(x)                                                                                                                                                                                    
-        x = x.sigmoid()                                                                                                                                                                                    
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(MLP, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, output_dim, bias=False)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = x.sigmoid()
         return x
+
 
 class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: TurboSparseMixtralConfig, layer_id):
@@ -807,7 +809,40 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
         self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
         self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.predictor_dim = [896, 896, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1088, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1088, 1088, 1088, 1088, 1344]
+        self.predictor_dim = [
+            896,
+            896,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1088,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1024,
+            1088,
+            1088,
+            1088,
+            1088,
+            1344,
+        ]
         self.predictor = MLP(self.hidden_dim, self.predictor_dim[layer_id], self.ffn_dim)
 
         self.act_fn = ACT2FN[config.hidden_act]
@@ -820,6 +855,7 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         current_hidden_states = torch.mul(current_hidden_states, mask)
         current_hidden_states = self.w2(current_hidden_states)
         return current_hidden_states
+
 
 class MixtralSparseMoeBlock(nn.Module):
     """

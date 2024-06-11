@@ -3226,13 +3226,13 @@ else:
             "TrOCRPreTrainedModel",
         ]
     )
-    _import_structure['models.turbosparsemixtral'].extend(
+    _import_structure["models.turbosparsemixtral"].extend(
         [
             "TurboSparseMixtralForCausalLM",
             "TurboSparseMixtralForSequenceClassification",
             "TurboSparseMixtralForTokenClassification",
-            "TurboSparseMixtralPreTrainedModel",
             "TurboSparseMixtralModel",
+            "TurboSparseMixtralPreTrainedModel",
         ]
     )
     _import_structure["models.tvp"].extend(

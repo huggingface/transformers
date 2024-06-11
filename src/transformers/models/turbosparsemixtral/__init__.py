@@ -51,16 +51,16 @@ if TYPE_CHECKING:
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
-        
+
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .modeling_turbosparsemixtral import (
-            TurboSparseMixtralPreTrainedModel,
-            TurboSparseMixtralModel,
             TurboSparseMixtralForCausalLM,
             TurboSparseMixtralForSequenceClassification,
             TurboSparseMixtralForTokenClassification,
+            TurboSparseMixtralModel,
+            TurboSparseMixtralPreTrainedModel,
         )
 
 

@@ -235,6 +235,7 @@ docs/source/en/model_doc/timesformer.md
 docs/source/en/model_doc/trajectory_transformer.md
 docs/source/en/model_doc/transfo-xl.md
 docs/source/en/model_doc/trocr.md
+docs/source/en/model_doc/turbosparse-mixtral.md
 docs/source/en/model_doc/tvlt.md
 docs/source/en/model_doc/ul2.md
 docs/source/en/model_doc/umt5.md
@@ -841,6 +842,8 @@ src/transformers/models/timesformer/convert_timesformer_to_pytorch.py
 src/transformers/models/timm_backbone/configuration_timm_backbone.py
 src/transformers/models/timm_backbone/modeling_timm_backbone.py
 src/transformers/models/trocr/convert_trocr_unilm_to_pytorch.py
+src/transformers/models/turbosparsemixtral/configuration_turbosparsemixtral.py
+src/transformers/models/turbosparsemixtral/modeling_turbosparsemixtral.py
 src/transformers/models/umt5/configuration_umt5.py
 src/transformers/models/umt5/convert_umt5_checkpoint_to_pytorch.py
 src/transformers/models/umt5/modeling_umt5.py

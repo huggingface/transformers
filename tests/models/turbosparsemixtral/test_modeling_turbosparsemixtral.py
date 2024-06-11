@@ -291,7 +291,12 @@ class TurboSparseMixtralModelTester:
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->TurboSparseMixtral
 class TurboSparseMixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TurboSparseMixtralModel, TurboSparseMixtralForCausalLM, TurboSparseMixtralForSequenceClassification, TurboSparseMixtralForTokenClassification)
+        (
+            TurboSparseMixtralModel,
+            TurboSparseMixtralForCausalLM,
+            TurboSparseMixtralForSequenceClassification,
+            TurboSparseMixtralForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -547,9 +552,9 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
         model_id = "PowerInfer/TurboSparse-Mixtral"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = TurboSparseMixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = TurboSparseMixtralForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks impelmentation.
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -584,9 +589,9 @@ class TurboSparseMixtralIntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = TurboSparseMixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = TurboSparseMixtralForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         #
