@@ -123,7 +123,7 @@ class NemotronConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
-        hidden_act="squared-relu",
+        hidden_act="relu2",
         max_position_embeddings=2048,
         initializer_range=0.02,
         normalization='layernorm1p',

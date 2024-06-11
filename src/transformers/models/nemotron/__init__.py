@@ -41,6 +41,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_nemotron"] = [
+        "NemotronForQuestionAnswering",
         "NemotronForCausalLM",
         "NemotronModel",
         "NemotronPreTrainedModel",
