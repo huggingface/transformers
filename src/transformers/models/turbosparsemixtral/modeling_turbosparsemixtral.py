@@ -1274,7 +1274,7 @@ class TurboSparseMixtralBlockSparseTop2MLP(nn.Module):
         self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
         self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
         self.predictor_dim = [896, 896, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1088, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1088, 1088, 1088, 1088, 1344]
-        self.predictor = MLP(4096, self.predictor_dim[layer_id], 14336)
+        self.predictor = MLP(self.hidden_dim, self.predictor_dim[layer_id], self.ffn_dim)
 
         self.act_fn = ACT2FN[config.hidden_act]
 

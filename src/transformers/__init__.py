@@ -3228,6 +3228,15 @@ else:
             "TrOCRPreTrainedModel",
         ]
     )
+    _import_structure['models.turbosparsemixtral'].extend(
+        [
+            "TurboSparseMixtralForCausalLM",
+            "TurboSparseMixtralForSequenceClassification",
+            "TurboSparseMixtralForTokenClassification",
+            "TurboSparseMixtralPreTrainedModel",
+            "TurboSparseMixtralModel",
+        ]
+    )
     _import_structure["models.tvp"].extend(
         [
             "TvpForVideoGrounding",
@@ -4579,15 +4588,6 @@ else:
             "FlaxT5ForConditionalGeneration",
             "FlaxT5Model",
             "FlaxT5PreTrainedModel",
-        ]
-    )
-    _import_structure["models.turbosparsemixtral"].append(
-        [
-            "TurboSparseMixtralForCausalLM",
-            "TurboSparseMixtralForSequenceClassification",
-            "TurboSparseMixtralForTokenClassification",
-            "TurboSparseMixtralModel",
-            "TurboSparseMixtralPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
