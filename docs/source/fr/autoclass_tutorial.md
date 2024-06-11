@@ -64,6 +64,50 @@ Pour les tâches de vision, un processeur d'image traite l'image pour la formate
 >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
+## AutoBackbone
+
+<div style="text-align: center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stages.png">
+    <figcaption class="mt-2 text-center text-sm text-gray-500">Un backbone Swin avec plusieurs étapes pour produire une carte de caractéristiques.</figcaption>
+</div>
+
+[`AutoBackbone`] vous permet d'utiliser des modèles pré-entraînés comme backbones pour obtenir des cartes de caractéristiques à partir de différentes étapes du backbone. Vous devez spécifier l'un des paramètres suivants dans [`~PretrainedConfig.from_pretrained`] :
+
+* `out_indices` est l'index de la couche dont vous souhaitez obtenir la carte de caractéristiques
+* `out_features` est le nom de la couche dont vous souhaitez obtenir la carte de caractéristiques
+
+Ces paramètres peuvent être utilisés de manière interchangeable, mais si vous utilisez les deux, assurez-vous qu'ils sont alignés l'un avec l'autre ! Si vous ne passez aucun de ces paramètres, le backbone renvoie la carte de caractéristiques de la dernière couche.
+
+<div style="text-align: center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stage%201.png">
+    <figcaption class="mt-2 text-center text-sm text-gray-500">Une carte de caractéristiques de la première étape du backbone. La partition de patch fait référence à la tige du modèle.</figcaption>
+</div>
+
+Par exemple, dans le diagramme ci-dessus, pour renvoyer la carte de caractéristiques de la première étape du backbone Swin, vous pouvez définir `out_indices=(1,)` :
+
+```py
+>>> from transformers import AutoImageProcessor, AutoBackbone
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+>>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+>>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_indices=(1,))
+
+>>> inputs = processor(image, return_tensors="pt")
+>>> outputs = model(**inputs)
+>>> feature_maps = outputs.feature_maps
+```
+
+Vous pouvez maintenant accéder à l'objet `feature_maps` de la première étape du backbone :
+
+
+```py
+>>> list(feature_maps[0].shape)
+[1, 96, 56, 56]
+```
+
 ## AutoFeatureExtractor
 
 Pour les tâches audio, un extracteur de caractéristiques (aussi appelés "features" en anglais) traite le signal audio pour le formater correctement.
