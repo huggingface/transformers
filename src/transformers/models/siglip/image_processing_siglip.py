@@ -216,6 +216,10 @@ class SiglipImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
+        # if inputs are all PIL.Image, it is in channel last after conversion to np.ndarray. Save that information to avoid ambiguity.
+        if all(isinstance(image, PIL.Image.Image) for image in images):
+            input_data_format = ChannelDimension.LAST
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
