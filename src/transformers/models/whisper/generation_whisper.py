@@ -720,20 +720,20 @@ class WhisperGenerationMixin:
 
         if is_shortform:
             # add eos token:
-            if generation_config.max_new_tokens is None and generation_config.max_length is None:
-                sequences = torch.cat(
-                    [
-                        sequences,
-                        torch.full(
-                            (
-                                sequences.shape[0],
-                                1,
-                            ),
-                            generation_config.eos_token_id,
-                        ).to(sequences.device),
-                    ],
-                    dim=-1,
-                )
+            # if generation_config.max_new_tokens is None and generation_config.max_length is None:
+            #     sequences = torch.cat(
+            #         [
+            #             sequences,
+            #             torch.full(
+            #                 (
+            #                     sequences.shape[0],
+            #                     1,
+            #                 ),
+            #                 generation_config.eos_token_id,
+            #             ).to(sequences.device),
+            #         ],
+            #         dim=-1,
+            #     )
 
             if return_token_timestamps:
                 outputs = {}
@@ -840,7 +840,7 @@ class WhisperGenerationMixin:
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
 
                 # remove eos token id
-                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
+                if not is_shortform and is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
                     if return_token_timestamps and not is_shortform:
                         seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
@@ -850,7 +850,7 @@ class WhisperGenerationMixin:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
                     if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
+                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -908,23 +908,20 @@ class WhisperGenerationMixin:
         self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
     ):
         # remove all previously passed decoder input ids
+        start_idx = decoder_input_ids.shape[-1] if not is_shortform else torch.tensor(0)
+
         if isinstance(seek_outputs, torch.Tensor):
-            if not is_shortform:
-                seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
-                return seek_outputs, seek_outputs
-            else:
-                return seek_outputs, seek_outputs
+            seek_outputs = seek_outputs[:, start_idx:]
+            return seek_outputs, seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
                 seek_outputs, generation_config.alignment_heads, num_frames=num_frames
             )
-            if not is_shortform:
-                seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, decoder_input_ids.shape[-1] :]
+            seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, start_idx:]
 
-        if not is_shortform:
-            seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
+        seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
         def split_by_batch_index(values, key, batch_idx, is_shortform):
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
