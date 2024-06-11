@@ -268,6 +268,17 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    # Overriding as Hiera `get_input_embeddings` returns HieraPatchEmbeddings
+    def test_model_get_set_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    # Overriding as attention shape depends on patch_stride and mask_unit_size
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -330,6 +341,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
             )
 
+    # Overriding as attention shape depends on patch_stride and mask_unit_size
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class, image_size):
             model = model_class(config)
@@ -388,6 +400,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class, image_size)
 
+    # Overriding since HieraForPreTraining outputs bool_masked_pos which has to be converted to float in the msg
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
