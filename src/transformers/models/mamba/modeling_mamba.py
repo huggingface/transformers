@@ -443,10 +443,14 @@ class MambaSequenceClassifierOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        cache_params (`MambaCache`):
+            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
+            avoid providing the old `input_ids`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    cache_params: Optional[MambaCache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
@@ -802,9 +806,11 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_params: Optional[MambaCache] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_cache: Optional[bool] = None
     ) -> Union[MambaSequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -817,9 +823,11 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
 
         mamba_outputs = self.backbone(
             input_ids,
+            cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_cache=use_cache,
         )
 
         last_hidden_states = mamba_outputs[0]
@@ -883,5 +891,6 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         return MambaSequenceClassifierOutput(
             loss=loss,
             logits=pooled_logits,
+            cache_params=mamba_outputs.cache_params,
             hidden_states=mamba_outputs.hidden_states,
         )
