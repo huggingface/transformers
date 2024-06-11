@@ -38,7 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
-    safe_int,
+    torch_int,
 )
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -916,8 +916,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         patch_height = patch_width = None
         if pixel_values is not None:
             patch_height, patch_width = (
-                safe_int(pixel_values.shape[2] / self.config.patch_size),
-                safe_int(pixel_values.shape[3] / self.config.patch_size),
+                torch_int(pixel_values.shape[2] / self.config.patch_size),
+                torch_int(pixel_values.shape[3] / self.config.patch_size),
             )
             visual_embeddings = self.forward_image(pixel_values)
             visual_attention_mask = torch.ones(

@@ -753,7 +753,10 @@ def infer_framework(model_class):
         raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
-def safe_int(x):
+def torch_int(x):
+    """
+    Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
+    """
     if not is_torch_available():
         return int(x)
 
@@ -762,7 +765,10 @@ def safe_int(x):
     return x.to(torch.int64) if torch.jit.is_tracing() else int(x)
 
 
-def safe_float(x):
+def torch_float(x):
+    """
+    Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
+    """
     if not is_torch_available():
         return int(x)
 

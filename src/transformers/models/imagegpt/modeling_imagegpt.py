@@ -38,7 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
-    safe_float,
+    torch_float,
 )
 from .configuration_imagegpt import ImageGPTConfig
 
@@ -235,7 +235,7 @@ class ImageGPTAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / safe_float(value.size(-1) ** 0.5)
+            attn_weights = attn_weights / torch_float(value.size(-1) ** 0.5)
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
