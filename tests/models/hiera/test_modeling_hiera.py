@@ -566,11 +566,12 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
 
-    @slow
     def test_inference_interpolate_pos_encoding(self):
         model = HieraModel.from_pretrained("EduardoPacheco/hiera-tiny-224").to(torch_device)
 
-        image_processor = AutoImageProcessor.from_pretrained("EduardoPacheco/hiera-tiny-224", size=448, crop_size=448)
+        image_processor = AutoImageProcessor.from_pretrained(
+            "EduardoPacheco/hiera-tiny-224", size={"shortest_edge": 448}, crop_size={"height": 448, "width": 448}
+        )
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
