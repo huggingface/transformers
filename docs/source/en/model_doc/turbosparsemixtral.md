@@ -35,3 +35,27 @@ TurboSparse-Mixtral 47B is a decoder-only Transformer with the following archite
 ### License
 
 `TurboSparse-Mixtral` is released under the Apache 2.0 license.
+
+## TurboSparseMixtralConfig
+
+[[autodoc]] TurboSparseMixtralConfig
+
+## TurboSparseMixtralModel
+
+[[autodoc]] TurboSparseMixtralModel
+    - forward
+
+## TurboSparseMixtralForCausalLM
+
+[[autodoc]] TurboSparseMixtralForCausalLM
+    - forward
+
+## TurboSparseMixtralForSequenceClassification
+
+[[autodoc]] TurboSparseMixtralForSequenceClassification
+    - forward
+
+## TurboSparseMixtralForTokenClassification
+
+[[autodoc]] TurboSparseMixtralForTokenClassification
+    - forward
