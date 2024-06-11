@@ -629,9 +629,9 @@ def undo_windowing(hidden_states: torch.Tensor, shape: List[int], mask_unit_shap
     Restore spatial organization by undoing windowed organization of mask units.
 
     Args:
-        hidden_states (torch.Tensor): The hidden states tensor of shape [batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size].
-        shape (List[int]): The original shape of the hidden states tensor before windowing.
-        mask_unit_shape (List[int]): The shape of the mask units used for windowing.
+        hidden_states (`torch.Tensor`): The hidden states tensor of shape `[batch_size, num_mask_unit_height*num_mask_unit_width, hidden_size]`.
+        shape (`List[int]`): The original shape of the hidden states tensor before windowing.
+        mask_unit_shape (`List[int]`): The shape of the mask units used for windowing.
 
     Returns:
         torch.Tensor: The restored hidden states tensor of shape [batch_size, num_mask_unit_height*mask_unit_height, num_mask_unit_width*mask_unit_width, hidden_size].
