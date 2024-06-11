@@ -285,7 +285,6 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [Swin2SR](model_doc/swin2sr)                       |       ✅        |         ❌         |      ❌      |
 |           [SwitchTransformers](model_doc/switch_transformers)            |       ✅        |         ❌         |      ❌      |
 |                            [T5](model_doc/t5)                            |       ✅        |         ✅         |      ✅      |
-|           [TurboSparse-Mixtral](model_doc/turbosparse-mixtral)           |       ✅        |         ❌         |      ❌      |
 |                        [T5v1.1](model_doc/t5v1.1)                        |       ✅        |         ✅         |      ✅      |
 |             [Table Transformer](model_doc/table-transformer)             |       ✅        |         ❌         |      ❌      |
 |                         [TAPAS](model_doc/tapas)                         |       ✅        |         ✅         |      ❌      |
@@ -295,6 +294,7 @@ Flax), PyTorch, and/or TensorFlow.
 |        [Trajectory Transformer](model_doc/trajectory_transformer)        |       ✅        |         ❌         |      ❌      |
 |                  [Transformer-XL](model_doc/transfo-xl)                  |       ✅        |         ✅         |      ❌      |
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
+|            [TurboSparseMixtral](model_doc/turbosparsemixtral)            |       ✅        |         ❌         |      ❌      |
 |                          [TVLT](model_doc/tvlt)                          |       ✅        |         ❌         |      ❌      |
 |                           [TVP](model_doc/tvp)                           |       ✅        |         ❌         |      ❌      |
 |                          [UDOP](model_doc/udop)                          |       ✅        |         ❌         |      ❌      |
