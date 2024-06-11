@@ -802,7 +802,6 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -818,7 +817,6 @@ class MambaForSequenceClassification(MambaPreTrainedModel):
 
         mamba_outputs = self.backbone(
             input_ids,
-            cache_params=cache_params,
             inputs_embeds=inputs_embeds,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
