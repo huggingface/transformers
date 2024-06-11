@@ -1019,12 +1019,12 @@ MIXTRAL_START_DOCSTRING = r"""
     "The bare Mixtral Model outputting raw hidden-states without any specific head on top.",
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->Mixtral
+# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2PreTrainedModel with Qwen2->TurboSparseMixtral
 class TurboSparseMixtralPreTrainedModel(PreTrainedModel):
     config_class = TurboSparseMixtralConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MixtralDecoderLayer"]
+    _no_split_modules = ["TurboSparseMixtralDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1540,7 +1540,7 @@ class TurboSparseMixtralForCausalLM(TurboSparseMixtralPreTrainedModel):
     """,
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Mixtral, LLAMA->MIXTRAL
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->TurboSparseMixtral, LLAMA->MIXTRAL
 class TurboSparseMixtralForSequenceClassification(TurboSparseMixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1656,7 +1656,7 @@ class TurboSparseMixtralForSequenceClassification(TurboSparseMixtralPreTrainedMo
     """,
     MIXTRAL_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->Mixtral, LLAMA->MIXTRAL
+# Copied from transformers.models.llama.modeling_llama.LlamaForTokenClassification with Llama->TurboSparseMixtral, LLAMA->MIXTRAL
 class TurboSparseMixtralForTokenClassification(TurboSparseMixtralPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
