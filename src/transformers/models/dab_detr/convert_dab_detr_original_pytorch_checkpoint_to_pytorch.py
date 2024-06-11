@@ -397,17 +397,18 @@ def convert_dab_detr_checkpoint(model_name, pytorch_dump_folder_path):
             backbone=None,
             use_pretrained_backbone=False,
         )
-    config.auxiliary_loss = True
+    config.auxiliary_loss = False
     config.output_attentions = True
+    config.output_hidden_states = False
     model = DABDETRForSegmentation(config) if is_panoptic else DABDETRForObjectDetection(config)
     #model.load_state_dict(state_dict)
-    #model.eval()
+    model.eval()
     
     # verify our conversion
     # original_outputs = dab_detr(pixel_values)
     labels = [{'size': torch.tensor([800, 1066]), 'image_id': torch.tensor([39769]), 'class_labels': torch.tensor([75, 75, 63, 65, 17, 17]), 'boxes': torch.tensor([[0.5503, 0.2765, 0.0604, 0.2215], [0.1695, 0.2016, 0.2080, 0.0940], [0.5006, 0.4933, 0.9978, 0.9865], [0.5008, 0.5002, 0.9983, 0.9955], [0.2627, 0.5456, 0.4707, 0.8646], [0.7715, 0.4115, 0.4570, 0.7161]]), 'area': torch.tensor([5887.9600,  11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438]), 'iscrowd': torch.tensor([0, 0, 0, 0, 0, 0]), 'orig_size': torch.tensor([480, 640])}]
     
-    outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+    outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask) #, labels=labels)
     # model.save_pretrained('dab-detr-resnet-50', safe_serialization=False)
     # image_processor.save_pretrained('dab-detr-resnet-50')
     # # model.push_to_hub(repo_id='dab-detr-resnet-50', organization="davidhajdu", commit_message="Add model")

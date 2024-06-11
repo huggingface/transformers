@@ -141,8 +141,6 @@ class DABDETRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        output_attentions=True,
-        output_hidden_states=True,
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
@@ -227,8 +225,6 @@ class DABDETRConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
 
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels

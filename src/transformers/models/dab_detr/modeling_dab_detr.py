@@ -1704,12 +1704,12 @@ class DABDETRModel(DABDETRPreTrainedModel):
 
         return DABDETRModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            decoder_hidden_states=decoder_outputs.hidden_states if output_hidden_states else None,
+            decoder_attentions=decoder_outputs.attentions if output_attentions else None,
+            cross_attentions=decoder_outputs.cross_attentions if output_attentions else None,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state if output_hidden_states else None,
+            encoder_hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            encoder_attentions=encoder_outputs.attentions if output_attentions else None,
             intermediate_hidden_states=intermediate_hidden_states,
             reference_points=reference_points,
             outputs_coord=outputs_coord
@@ -1830,8 +1830,6 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             return_dict=return_dict,
         )
 
-        
-
         outputs_coord = model_outputs[0] if not return_dict else model_outputs.outputs_coord
         intermediate_hidden_states = model_outputs[1] if not return_dict else model_outputs.intermediate_hidden_states
 
@@ -1890,7 +1888,7 @@ class DABDETRForObjectDetection(DABDETRPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=model_outputs.last_hidden_state if output_hidden_states else None,
+            last_hidden_state=model_outputs.last_hidden_state,
             decoder_hidden_states=model_outputs.decoder_hidden_states if output_hidden_states else None,
             decoder_attentions=model_outputs.decoder_attentions if output_attentions else None,
             cross_attentions=model_outputs.cross_attentions if output_attentions else None,
